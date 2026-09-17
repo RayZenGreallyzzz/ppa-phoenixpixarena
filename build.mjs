@@ -5,17 +5,25 @@ import zlib from 'node:zlib';
 
 const ROOT = process.cwd();
 const PART_PREFIX = 'PPA_V278_SOURCE.gz.part';
+const EXPECTED_PARTS = 12;
+const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
+
 const parts = fs.readdirSync(ROOT)
   .filter((name) => name.startsWith(PART_PREFIX))
   .sort((a,b) => Number(a.slice(PART_PREFIX.length)) - Number(b.slice(PART_PREFIX.length)));
 
-if (!parts.length) {
-  throw new Error('PPA source parts not found. Upload PPA_V278_SOURCE.gz.part1 ... part4 to the repository root.');
+if (parts.length !== EXPECTED_PARTS) {
+  throw new Error(`PPA source parts incomplete: found ${parts.length}, expected ${EXPECTED_PARTS}. Upload part01 ... part12 to the repository root.`);
 }
 
 console.log(`PPA build: joining ${parts.length} source parts...`);
 const packed = Buffer.concat(parts.map((name) => fs.readFileSync(path.join(ROOT, name))));
-const source = zlib.gunzipSync(packed).toString('utf8');
+const sourceBuffer = zlib.gunzipSync(packed);
+const sourceHash = crypto.createHash('sha256').update(sourceBuffer).digest('hex');
+if (sourceHash !== EXPECTED_SOURCE_SHA256) {
+  throw new Error(`PPA source checksum mismatch: ${sourceHash}`);
+}
+const source = sourceBuffer.toString('utf8');
 
 const publicDir = path.join(ROOT, 'public');
 const assetsDir = path.join(publicDir, 'assets');
