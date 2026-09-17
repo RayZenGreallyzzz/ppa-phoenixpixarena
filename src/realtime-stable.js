@@ -17,6 +17,28 @@ function wsJson(ws, data) {
   try { ws.send(JSON.stringify(data)); return true; } catch (_) { return false; }
 }
 
+function packetFromAtt(a) {
+  return {
+    i: String(a.pid || ''),
+    n: cleanName(a.name || 'Игрок'),
+    c: String(a.classKey || 'ГЕРОЙ').slice(0, 24),
+    g: String(a.clanId || '').slice(0, 80),
+    cn: '',
+    r: cleanRoom(a.room),
+    x: Number(a.x) || 0,
+    y: Number(a.y) || 0,
+    h: Math.max(0, Number(a.h) || 0),
+    m: Math.max(1, Number(a.m) || 1),
+    f: Number(a.f) || 1,
+    a: String(a.a || 'idle').slice(0, 12),
+    l: Math.max(1, Math.min(999, Math.round(Number(a.l) || 1))),
+    b: Math.max(0, Math.round(Number(a.b) || 0)),
+    p: String(a.partyId || ''),
+    q: Number(a.q) || 0,
+    t: Date.now(),
+  };
+}
+
 export class RealtimeHub extends BaseRealtimeHub {
   hasReplacement(pid, except) {
     pid = String(pid || '');
@@ -27,6 +49,50 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (String(a.pid || '') === pid) return true;
     }
     return false;
+  }
+
+  countRoom(room) {
+    room = cleanRoom(room);
+    const ids = new Set();
+    for (const ws of this.sockets()) {
+      const a = attOf(ws);
+      if (a.pid && cleanRoom(a.room) === room) ids.add(String(a.pid));
+    }
+    return ids.size;
+  }
+
+  roomBroadcast(room, data, except) {
+    room = cleanRoom(room);
+    const raw = JSON.stringify(data);
+    for (const ws of this.sockets()) {
+      if (ws === except) continue;
+      const a = attOf(ws);
+      if (cleanRoom(a.room) !== room) continue;
+      try { ws.send(raw); } catch (_) {}
+    }
+  }
+
+  sendRoomSnapshot(ws, room) {
+    room = cleanRoom(room);
+    const byPid = new Map();
+    for (const other of this.sockets()) {
+      if (other === ws) continue;
+      const a = attOf(other);
+      const pid = String(a.pid || '');
+      if (!pid || cleanRoom(a.room) !== room) continue;
+      if (!Number.isFinite(Number(a.x)) || !Number.isFinite(Number(a.y))) continue;
+      const prev = byPid.get(pid);
+      if (!prev || Number(a.lastSeenAt || 0) >= Number(prev.lastSeenAt || 0)) byPid.set(pid, a);
+    }
+    const players = [...byPid.values()].map(packetFromAtt);
+    wsJson(ws, {
+      type: 'snapshot',
+      room,
+      serverRoom: room,
+      roomCount: this.countRoom(room),
+      players,
+      ts: Date.now(),
+    });
   }
 
   async fetch(request) {
@@ -41,8 +107,6 @@ export class RealtimeHub extends BaseRealtimeHub {
     const classKey = String(request.headers.get('x-ppa-class-key') || '').slice(0, 24);
     if (!pid || !telegramId) return new Response('Unauthorized', { status: 401 });
 
-    // Important: accept the replacement socket BEFORE closing the previous one.
-    // Otherwise the close event can briefly announce a false leave to everybody.
     const oldSockets = [];
     for (const old of this.sockets()) {
       const a = attOf(old);
@@ -55,10 +119,11 @@ export class RealtimeHub extends BaseRealtimeHub {
     server.serializeAttachment({
       pid, telegramId, name, clanId, classKey,
       room: 'safe', partyId: '', lastChat: 0, lastMove: 0,
+      lastSeenAt: Date.now(), lastSnapshotPush: 0,
       q: 0, l: 1, b: 0,
     });
 
-    wsJson(server, { type: 'hello', pid, name, clanId, ts: Date.now() });
+    wsJson(server, { type: 'hello', pid, name, clanId, serverRoom: 'safe', ts: Date.now() });
 
     for (const old of oldSockets) {
       try { old.close(4001, 'Reconnected'); } catch (_) {}
@@ -66,6 +131,83 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     this.sendOnlineCount();
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(ws, message) {
+    if (typeof message !== 'string' || message.length > 4096) return;
+    let m = null;
+    try { m = JSON.parse(message); } catch (_) { return; }
+    if (!m || typeof m !== 'object') return;
+
+    const a = attOf(ws);
+    const now = Date.now();
+
+    if (m.type === 'ping') {
+      a.lastSeenAt = now;
+      ws.serializeAttachment(a);
+      wsJson(ws, {
+        type: 'pong',
+        ts: now,
+        clientTs: Number(m.clientTs) || 0,
+        room: cleanRoom(a.room),
+        roomCount: this.countRoom(a.room),
+      });
+      return;
+    }
+
+    if (m.type === 'room') {
+      const oldRoom = cleanRoom(a.room);
+      const room = cleanRoom(m.room);
+      if (oldRoom !== room) {
+        this.roomBroadcast(oldRoom, { type: 'leave', id: a.pid, room: oldRoom, ts: now }, ws);
+        a.room = room;
+        this.roomBroadcast(room, { type: 'join', player: packetFromAtt(a), room, ts: now }, ws);
+      } else {
+        a.room = room;
+      }
+      a.lastSeenAt = now;
+      ws.serializeAttachment(a);
+      this.sendRoomSnapshot(ws, room);
+      if (a.partyId) this.sendPartyState(a.partyId);
+      return;
+    }
+
+    if (m.type === 'move') {
+      if (now - (Number(a.lastMove) || 0) < 90) return;
+
+      const oldRoom = cleanRoom(a.room);
+      const wantedRoom = m.room != null ? cleanRoom(m.room) : oldRoom;
+      if (wantedRoom !== oldRoom) {
+        this.roomBroadcast(oldRoom, { type: 'leave', id: a.pid, room: oldRoom, ts: now }, ws);
+        a.room = wantedRoom;
+      }
+
+      a.lastMove = now;
+      a.lastSeenAt = now;
+      a.x = Number.isFinite(Number(m.x)) ? Math.round(Number(m.x) * 10) / 10 : Number(a.x) || 0;
+      a.y = Number.isFinite(Number(m.y)) ? Math.round(Number(m.y) * 10) / 10 : Number(a.y) || 0;
+      a.h = Math.max(0, Math.round(Number(m.h) || 0));
+      a.m = Math.max(1, Math.round(Number(m.m) || 1));
+      a.f = Math.max(1, Math.min(8, Math.round(Number(m.f) || 1)));
+      a.a = String(m.a || 'idle').slice(0, 12);
+      a.l = Math.max(1, Math.min(999, Math.round(Number(m.l) || Number(a.l) || 1)));
+      a.b = Math.max(0, Math.round(Number(m.b) || Number(a.b) || 0));
+      a.q = (Number(a.q) || 0) + 1;
+
+      const pushSnapshot = now - (Number(a.lastSnapshotPush) || 0) >= 1200;
+      if (pushSnapshot) a.lastSnapshotPush = now;
+      ws.serializeAttachment(a);
+
+      const currentRoom = cleanRoom(a.room);
+      if (wantedRoom !== oldRoom) {
+        this.roomBroadcast(currentRoom, { type: 'join', player: packetFromAtt(a), room: currentRoom, ts: now }, ws);
+      }
+      this.roomBroadcast(currentRoom, { type: 'move', player: packetFromAtt(a) }, ws);
+      if (pushSnapshot) this.sendRoomSnapshot(ws, currentRoom);
+      return;
+    }
+
+    return super.webSocketMessage(ws, message);
   }
 
   scheduleGoneCheck(ws) {
@@ -78,9 +220,6 @@ export class RealtimeHub extends BaseRealtimeHub {
       return;
     }
 
-    // A Telegram/WebView reconnect must not make the character disappear.
-    // Keep the old presence for a short grace period and only announce LEAVE
-    // if no replacement socket for the same Telegram player exists.
     setTimeout(() => {
       if (this.hasReplacement(pid, ws)) {
         this.sendOnlineCount();
