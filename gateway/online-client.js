@@ -74,23 +74,46 @@
     }catch(_){}
   }
 
+  function pushClanState(r){if(r&&r.state&&window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state);return r}
+  async function clanCall(req){
+    req=Object.assign({},req||{});
+    if(req.action==='join')req.action='apply';
+    if(req.action==='acceptMember')req.action='acceptApplication';
+    return pushClanState(await PPA.ppaClanAction(req));
+  }
+
   function install(){
     if(installed)return true;
     if(!online())return false;
     if(!window.PPA||!PPA.ppaClanState||!PPA.ppaAuctionList||!PPA.ppaWalletState)return false;
     installed=true;
 
-    window.PPA_CLAN_HANDLER=async function(req){
-      var r=await PPA.ppaClanAction(req||{});if(r&&r.state&&window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state);return r;
-    };
+    window.PPA_CLAN_HANDLER=clanCall;
     window.PPA_CLAN_STORAGE_HANDLER=async function(req){
-      var r=await PPA.ppaClanAction(req||{});if(r&&r.balances&&Number.isFinite(Number(r.balances.gold)))INV.gold=Math.max(0,Number(r.balances.gold));if(r&&r.state&&window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state);return r;
+      req=Object.assign({},req||{});
+      if(req.action==='acceptMember')req.action='acceptApplication';
+      if(req.action==='putMany'||req.action==='takeMany'){
+        var items=Array.isArray(req.items)?req.items:[],one=req.action==='putMany'?'put':'take',last={ok:true};
+        for(var i=0;i<items.length;i++)last=await clanCall({action:one,item:items[i],source:req.source||'keeper'});
+        return last;
+      }
+      var r=await clanCall(req);
+      if(r&&r.balances&&Number.isFinite(Number(r.balances.gold)))INV.gold=Math.max(0,Number(r.balances.gold));
+      return r;
     };
-    window.PPA_CLAN_BOSS_HANDLER=async function(req){
-      var r=await PPA.ppaClanAction(req||{});if(r&&r.state&&window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state);if(r&&r.bossState&&window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(r.bossState);return r;
-    };
-    window.PPA_CLAN_SIEGE_HANDLER=async function(req){var r=await PPA.ppaClanAction(req||{});if(r&&r.state&&window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state);return r};
-    window.PPA_CLAN_TRADE_HANDLER=async function(req){var r=await PPA.ppaClanAction(req||{});return Object.assign({},r,{clanState:r&&r.state?r.state:null})};
+    window.PPA_CLAN_BOSS_HANDLER=async function(req){var r=await clanCall(req||{});if(r&&r.bossState&&window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(r.bossState);return r};
+    window.PPA_CLAN_SIEGE_HANDLER=clanCall;
+    window.PPA_CLAN_TRADE_HANDLER=async function(req){var r=await clanCall(req||{});return Object.assign({},r,{clanState:r&&r.state?r.state:null})};
+
+    // Replace the old local-only clan administration with authenticated server actions.
+    try{
+      clanSetAuthority=function(memberId,authority){clanCall({action:'setAuthority',memberId:memberId,authority:authority||{}}).then(function(r){clanNotice((r&&r.message)||'Права сохранены')}).catch(function(e){clanNotice(msg(e))});return true};
+      clanTransferLeadership=function(memberId){clanCall({action:'transferLeadership',memberId:memberId}).then(function(r){clanNotice((r&&r.message)||'Права главы переданы')}).catch(function(e){clanNotice(msg(e))});return true};
+      clanAcceptApplication=function(appId){clanCall({action:'acceptApplication',appId:appId,applicationId:appId}).then(function(r){clanNotice((r&&r.message)||'Игрок принят')}).catch(function(e){clanNotice(msg(e))});return true};
+      clanRejectApplication=function(appId){clanCall({action:'rejectApplication',appId:appId,applicationId:appId}).then(function(r){clanNotice((r&&r.message)||'Заявка отклонена')}).catch(function(e){clanNotice(msg(e))});return true};
+      clanKickMember=function(memberId){clanCall({action:'kickMember',memberId:memberId}).then(function(r){clanNotice((r&&r.message)||'Игрок исключён')}).catch(function(e){clanNotice(msg(e))});return true};
+      clanSetMemberPermission=function(memberId,perm){clanCall({action:'setPermissions',memberId:memberId,permissions:perm||{}}).then(function(r){clanNotice((r&&r.message)||'Права склада сохранены')}).catch(function(e){clanNotice(msg(e))});return true};
+    }catch(e){console.warn('Clan admin hooks',e)}
 
     var _auctionPlace=auctionPlaceLot;
     auctionPlaceLot=function(ref,qty,price,currency,durationHours){
