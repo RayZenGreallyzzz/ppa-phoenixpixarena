@@ -30,11 +30,14 @@
       var players=d.connected?Math.max(1,Number(d.online)||1):1;
       var age=Number.isFinite(Number(d.serverAge))?Math.max(0,Math.round(Number(d.serverAge))):null;
       var room=d.connected?String(d.room||'safe'):'offline';
+      var serverRoom=d.connected?String(d.serverRoom||'—'):'offline';
+      var roomPeers=Number.isFinite(Number(d.roomPeers))?Math.max(1,Math.round(Number(d.roomPeers))):'—';
 
       box.innerHTML='<div><span class="'+fcls+'">FPS '+fps+'</span> &nbsp; <span class="'+clsPing(ping)+'">PING '+(ping==null?'—':ping+' ms')+'</span></div>'+
-        '<div class="d">PLAYERS '+players+' · VISIBLE '+visible+' / '+drawn+'</div>'+
+        '<div class="d">PLAYERS '+players+' · ROOM '+roomPeers+' · VISIBLE '+visible+' / '+drawn+'</div>'+
         '<div class="d">WS '+(d.connected?'✓':'×')+' · SERVER '+(age==null?'—':age+' ms')+'</div>'+
-        '<div class="d">ROOM '+esc(room)+'</div>';
+        '<div class="d">CLIENT '+esc(room)+'</div>'+
+        '<div class="d">SERVER '+esc(serverRoom)+'</div>';
     }catch(_){}
   }
 
