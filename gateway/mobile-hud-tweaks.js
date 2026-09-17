@@ -5,7 +5,7 @@
     if(!mobile())return;
     try{
       var m=document.getElementById('mmap');
-      if(m)m.style.setProperty('top','calc(var(--ppa-tg-top-safe, 0px) + 52px)','important');
+      if(m)m.style.setProperty('top','calc(var(--ppa-tg-top-safe, 0px) + 32px)','important');
     }catch(_){}
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
