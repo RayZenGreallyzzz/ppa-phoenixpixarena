@@ -24,8 +24,10 @@ const source = sourceBuffer.toString('utf8');
 
 const publicDir = path.join(ROOT, 'public');
 const assetsDir = path.join(publicDir, 'assets');
+const gameDir = path.join(publicDir, 'game');
 fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
+fs.mkdirSync(gameDir, { recursive: true });
 
 const extByMime = { png: 'png', webp: 'webp', jpeg: 'jpg' };
 const seen = new Map();
@@ -44,6 +46,16 @@ const output = source.replace(dataUri, (full, mime, b64) => {
   return url;
 });
 
+// V278 Cloudflare/Telegram activation:
+// the release HTML already contains <script src="/game/ppa-bridge.js"></script>.
+// Keep the game source untouched and publish the verified bridge at that exact path.
+const bridgeSource = path.join(ROOT, 'gateway', 'ppa-bridge.js');
+if (!fs.existsSync(bridgeSource)) {
+  throw new Error('Telegram gateway bridge missing: gateway/ppa-bridge.js');
+}
+fs.copyFileSync(bridgeSource, path.join(gameDir, 'ppa-bridge.js'));
+
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
+console.log(`Telegram bridge: /game/ppa-bridge.js`);
 console.log(`index.html: ${(Buffer.byteLength(output)/1024/1024).toFixed(2)} MiB`);
