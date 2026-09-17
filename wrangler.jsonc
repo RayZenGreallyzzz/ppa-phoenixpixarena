@@ -2,7 +2,9 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "ppa-phoenixpixarena",
   "compatibility_date": "2026-09-17",
+  "main": "./src/worker.js",
   "assets": {
-    "directory": "./public"
+    "directory": "./public",
+    "binding": "ASSETS"
   }
 }
