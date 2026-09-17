@@ -14,9 +14,8 @@
   }
   function rtDiag(){try{return window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null}catch(_){return null}}
   function room(){var d=rtDiag();return canonicalRoom(d&&d.room||'safe')}
-  function selfId(){
-    try{return String((window.PPA_ONLINE&&PPA_ONLINE.selfId)||'')}catch(_){return ''}
-  }
+  function onlineState(){try{return (typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE)?PPA_ONLINE:null}catch(_){return null}}
+  function selfId(){var o=onlineState();return String((o&&o.selfId)||'')}
   function entities(){try{return (typeof EN!=='undefined'&&Array.isArray(EN))?EN:[]}catch(_){return []}}
   function player(){try{return (typeof P!=='undefined'&&P)?P:null}catch(_){return null}}
   function active(){
@@ -35,10 +34,6 @@
     var a=entities();
     for(var i=0;i<a.length;i++)if(mobKey(a[i])===key)return a[i];
     return null;
-  }
-  function currentRespawnMs(){
-    try{if(typeof MOB_RESPAWN_MS!=='undefined'&&Number.isFinite(Number(MOB_RESPAWN_MS)))return Math.max(1000,Number(MOB_RESPAWN_MS))}catch(_){}
-    return 10000;
   }
   function send(o){
     try{
@@ -74,6 +69,7 @@
           var nv=Number(v);if(!Number.isFinite(nv))return;
           var old=hp;hp=nv;
           if(APPLYING||!active()||!(nv<old)||old<=0)return;
+          S.hp.set(key,{hp:Math.max(0,nv),at:Date.now()});
           sendDamage(e,key,old,nv);
         }
       });
@@ -90,10 +86,10 @@
   }
 
   function candidates(){
-    var out=[],p=player(),sid=selfId(),now=Date.now();
+    var out=[],p=player(),sid=selfId(),now=Date.now(),o=onlineState();
     if(p&&sid&&Number.isFinite(Number(p.x))&&Number.isFinite(Number(p.y)))out.push({id:sid,x:Number(p.x),y:Number(p.y)});
     try{
-      if(window.PPA_ONLINE&&PPA_ONLINE.remotes)PPA_ONLINE.remotes.forEach(function(r,id){
+      if(o&&o.remotes)o.remotes.forEach(function(r,id){
         if(!r)return;
         var x=Number(r.x),y=Number(r.y),rid=String(r.id||r.i||id||'');
         if(!rid||rid===sid||!Number.isFinite(x)||!Number.isFinite(y))return;
