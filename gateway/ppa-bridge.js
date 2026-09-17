@@ -43,6 +43,16 @@
     }catch(_){return null}
   }
 
+  function currentSaveSnapshot(){
+    try{
+      if(typeof window.ppaBuildSaveObject==='function'){
+        var built=window.ppaBuildSaveObject();
+        if(built&&typeof built==='object')return built;
+      }
+    }catch(_){}
+    return localSave();
+  }
+
   function localNickname(){
     try{
       var s=localSave();
@@ -93,9 +103,39 @@
       if(wait)await new Promise(function(resolve){setTimeout(resolve,wait)});
       var result=await call('/api/save',{state:state,version:version==null?null:Number(version)});
       lastSaveAt=Date.now();
+      try{
+        if(window.PPA_CLOUD&&Number.isFinite(Number(result&&result.version)))window.PPA_CLOUD.version=Number(result.version);
+      }catch(_){}
       return result;
     });
     return saveQueue;
+  }
+
+  async function renameWithSyncedCard(nickname,requestId){
+    await auth();
+
+    // The rename card lives in the game save. Flush the current in-memory save
+    // immediately before rename so D1 sees the same card count as the UI.
+    // This also fixes legacy/imported saves where the normal debounced cloud
+    // save has not fired yet.
+    var snapshot=currentSaveSnapshot();
+    if(snapshot&&typeof snapshot==='object'){
+      var version=null;
+      try{version=window.PPA_CLOUD&&window.PPA_CLOUD.version}catch(_){}
+      try{await queueSave(snapshot,version)}catch(syncErr){
+        // If this is a real network/auth failure, keep the rename card local.
+        throw syncErr;
+      }
+    }
+
+    try{
+      return await call('/api/profile/rename',{nickname:nickname,requestId:requestId});
+    }catch(err){
+      // Business rejections (nick occupied, no card, etc.) should be shown by
+      // the existing rename modal instead of being mislabeled as “no server”.
+      if(err&&err.data&&err.data.ok===false)return err.data;
+      throw err;
+    }
   }
 
   window.PPA=window.PPA||{};
@@ -107,6 +147,6 @@
     ppaSaveGame:async function(state,version){await auth();return queueSave(state,version)},
     ppaRegisterCharacter:async function(nickname,classKey){await auth();return call('/api/character/register',{nickname:nickname,classKey:classKey||''})},
     ppaSyncNicknameFromSave:async function(){await auth();return call('/api/profile/sync-nickname',{nickname:localNickname()})},
-    ppaRequestNicknameChange:async function(nickname,requestId){await auth();return call('/api/profile/rename',{nickname:nickname,requestId:requestId})}
+    ppaRequestNicknameChange:renameWithSyncedCard
   });
 })();
