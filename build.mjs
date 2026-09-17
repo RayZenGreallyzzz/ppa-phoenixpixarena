@@ -7,6 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
+const CLIENT_BUILD = 'v281-social-class-20260917-2225';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -82,7 +83,8 @@ for (const [srcName,dstName,err] of filesToPublish) {
 }
 
 if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
-output = output.replace('</body>', '<script src="/game/telegram-safe-ui.js"></script>\n<script src="/game/mobile-hud-tweaks.js"></script>\n<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/remote-sprite-renderer.js"></script>\n<script src="/game/class-sync-client.js"></script>\n<script src="/game/social-ui.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
+const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
+output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -95,6 +97,7 @@ console.log('Remote player sprites: /game/remote-sprite-renderer.js');
 console.log('Realtime class sync: /game/class-sync-client.js');
 console.log('Social UI: /game/social-ui.js');
 console.log('Realtime identity sync: /game/realtime-identity-sync.js');
+console.log(`Client build cache key: ${CLIENT_BUILD}`);
 console.log('Telegram migration lockout guard: enabled');
 console.log('Portable save buttons: removed');
 console.log(`index.html: ${(Buffer.byteLength(output)/1024/1024).toFixed(2)} MiB`);
