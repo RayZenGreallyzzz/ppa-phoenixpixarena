@@ -13,6 +13,12 @@
 
   function topInset(){
     var t=tg(),n=0;
+    /* In Telegram Fullsize the native title bar is already OUTSIDE the web
+       viewport. Re-applying Telegram's safe-area top here created a second
+       empty strip and pushed HP/MP/PPA/level/BM too far down in dungeons. */
+    try{
+      if(t&&t.isExpanded&&!t.isFullscreen)return 6;
+    }catch(_){}
     try{n=Math.max(n,Number(t&&t.contentSafeAreaInset&&t.contentSafeAreaInset.top)||0)}catch(_){}
     try{n=Math.max(n,Number(t&&t.safeAreaInset&&t.safeAreaInset.top)||0)}catch(_){}
     if(mobile())n=Math.max(n,46);
@@ -194,8 +200,6 @@
         html.ppa-tg-mobile-safe #mmap{top:calc(var(--ppa-tg-top-safe) + 76px)!important}
         html.ppa-tg-mobile-safe #ppaOnlineBadge{top:calc(var(--ppa-tg-top-safe) + 2px)!important}
 
-        /* Huawei / older Android WebView can auto-zoom a focused input whose
-           text size is below 16px. Keep the invisible keyboard input neutral. */
         html.ppa-tg-mobile-safe #ppaChatNativeInput{
           position:fixed!important;
           left:50%!important;
@@ -217,8 +221,6 @@
           overflow:hidden!important;
         }
 
-        /* Only the chat follows the reduced visual viewport above Android's
-           keyboard. The game canvas and controls stay on the original frame. */
         html.ppa-tg-mobile-safe #ppaChatRoot.nativeTyping{
           left:7px!important;
           right:auto!important;
@@ -230,7 +232,6 @@
           max-width:calc(100vw - 14px)!important;
         }
 
-        /* Windows that are actually open use the Telegram-safe viewport. */
         html.ppa-tg-mobile-safe #gramWalletPanel.open,
         html.ppa-tg-mobile-safe #eventsPanel.open,
         html.ppa-tg-mobile-safe #premiumPanel.open,
@@ -260,8 +261,6 @@
           border-radius:0!important;
         }
 
-        /* A closed wallet must stay truly invisible even when Android changes
-           the CSS viewport while the native keyboard opens. */
         html.ppa-tg-mobile-safe #gramWalletPanel:not(.open){
           visibility:hidden!important;
           opacity:0!important;
