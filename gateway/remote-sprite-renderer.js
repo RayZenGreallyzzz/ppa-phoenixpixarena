@@ -63,6 +63,12 @@
         var a=cfg.anim,frame=Math.floor(now/(1000/Math.max(1,a.fps)))%Math.max(1,a.frames);
         var drawY=sy+body*.40-cfg.foot*dh+bob;
 
+        // Used by the social overlay to recognize a tap on this exact player.
+        r.__ppaHitX=sx;
+        r.__ppaHitY=sy;
+        r.__ppaHitBody=Math.max(26,body*.72);
+        r.__ppaHitAt=now;
+
         cx.save();
         cx.imageSmoothingEnabled=false;
         cx.fillStyle='rgba(0,0,0,.40)';cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.38,body*.14,0,0,Math.PI*2);cx.fill();
