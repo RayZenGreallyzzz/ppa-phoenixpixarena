@@ -1,16 +1,23 @@
 (function(){
   'use strict';
-  var RT={ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,lastAnim:'',lastLevel:null,lastBm:null,onlineCount:0,started:false,pingSent:0,pingMs:null};
+  var RT={ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastRoomSync:0,pendingRoom:'',pendingSince:0,lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,lastAnim:'',lastLevel:null,lastBm:null,onlineCount:0,started:false,pingSent:0,pingMs:null};
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var t=tg();return t&&t.initData?String(t.initData):''}
+  function socialOpen(){
+    try{
+      var c=document.getElementById('ppaPlayerCard'),p=document.getElementById('ppaFriendsPanel');
+      return !!((c&&c.classList.contains('on'))||(p&&p.classList.contains('on')));
+    }catch(_){return false}
+  }
   function room(){
     try{
+      if(socialOpen()&&RT.lastRoom)return RT.lastRoom;
       var r=typeof ppaOnlineRoomKey==='function'?String(ppaOnlineRoomKey()||'safe'):'safe';
       var k=r.trim().toLowerCase();
       if(!k||k==='offline'||k==='local'||k==='none'||k==='null'||k==='undefined')return 'safe';
       return r;
-    }catch(_){return 'safe'}
+    }catch(_){return RT.lastRoom||'safe'}
   }
   function mobileUi(){try{return innerWidth<=900||matchMedia('(pointer:coarse)').matches}catch(_){return false}}
   function selfLevel(){try{return Math.max(1,Math.floor(Number(P&&P.lvl)||1))}catch(_){return 1}}
@@ -94,7 +101,7 @@
     try{
       if(typeof PPA_ONLINE!=='undefined'){
         PPA_ONLINE.connected=!!on;PPA_ONLINE.enabled=!!on;
-        if(on){PPA_ONLINE.roomKey=room();PPA_ONLINE.selfName=selfName()}
+        if(on){PPA_ONLINE.roomKey=RT.lastRoom||room();PPA_ONLINE.selfName=selfName()}
       }
     }catch(_){}
     if(on)refreshBadge();
@@ -102,10 +109,29 @@
   }
 
   function sendRoom(force){
-    var r=room();
-    if(!force&&r===RT.lastRoom)return;
-    RT.lastRoom=r;clearRemotes();send({type:'room',room:r});
-    try{if(typeof PPA_ONLINE!=='undefined')PPA_ONLINE.roomKey=r}catch(_){}
+    var now=Date.now(),wanted=room();
+    if(!RT.lastRoom){
+      RT.lastRoom=wanted;RT.pendingRoom='';RT.pendingSince=0;
+    }else if(wanted!==RT.lastRoom){
+      if(force){
+        RT.lastRoom=wanted;RT.pendingRoom='';RT.pendingSince=0;
+      }else{
+        if(RT.pendingRoom!==wanted){RT.pendingRoom=wanted;RT.pendingSince=now;return}
+        if(now-RT.pendingSince<420)return;
+        RT.lastRoom=wanted;RT.pendingRoom='';RT.pendingSince=0;
+      }
+    }else{RT.pendingRoom='';RT.pendingSince=0}
+    if(!force&&now-RT.lastRoomSync<2400)return;
+    if(send({type:'room',room:RT.lastRoom}))RT.lastRoomSync=now;
+    try{if(typeof PPA_ONLINE!=='undefined')PPA_ONLINE.roomKey=RT.lastRoom}catch(_){}
+  }
+
+  function resyncRoom(){
+    if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN)return false;
+    if(!RT.lastRoom)RT.lastRoom=room();
+    var ok=send({type:'room',room:RT.lastRoom});
+    if(ok)RT.lastRoomSync=Date.now();
+    return ok;
   }
 
   function sendMove(force){
@@ -148,7 +174,8 @@
     }
     if(m.type==='online'){RT.onlineCount=Math.max(0,Number(m.count)||0);refreshBadge();return}
     if(m.type==='snapshot'){
-      if(String(m.room||'')!==RT.lastRoom)return;clearRemotes();(Array.isArray(m.players)?m.players:[]).forEach(function(p){applyPlayer(p,true)});return;
+      if(String(m.room||'')!==RT.lastRoom)return;
+      clearRemotes();(Array.isArray(m.players)?m.players:[]).forEach(function(p){applyPlayer(p,true)});return;
     }
     if(m.type==='move'){if(m.player)applyPlayer(m.player,false);return}
     if(m.type==='join'){if(m.player)applyPlayer(m.player,true);return}
@@ -180,9 +207,9 @@
       var proto=location.protocol==='https:'?'wss:':'ws:';
       var ws=new WebSocket(proto+'//'+location.host+'/api/realtime/ws?ticket='+encodeURIComponent(t.ticket));
       RT.ws=ws;
-      ws.onopen=function(){RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;setConnected(true);sendRoom(true);sendMove(true)};
+      ws.onopen=function(){RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;RT.lastRoomSync=0;setConnected(true);sendRoom(true);sendMove(true)};
       ws.onmessage=function(ev){try{receive(JSON.parse(ev.data))}catch(_){}};
-      ws.onclose=function(){if(RT.ws===ws)RT.ws=null;RT.connecting=false;RT.pingMs=null;RT.pingSent=0;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
+      ws.onclose=function(){if(RT.ws===ws)RT.ws=null;RT.connecting=false;RT.pingMs=null;RT.pingSent=0;RT.lastRoomSync=0;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
       ws.onerror=function(){};
     }catch(e){RT.connecting=false;console.warn('PPA realtime connect',e);setConnected(false);scheduleReconnect()}
   }
@@ -203,6 +230,7 @@
   },5000);
 
   window.PPA_RT_SEND=send;
+  window.PPA_REALTIME_RESYNC=resyncRoom;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
   window.PPA_REALTIME_DIAG=function(){return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||''}};
 
