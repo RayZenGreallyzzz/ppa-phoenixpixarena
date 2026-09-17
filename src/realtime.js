@@ -86,6 +86,7 @@ function cleanRoom(v) {
 function cleanName(v) { return String(v || 'Игрок').trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 24) || 'Игрок'; }
 function cleanText(v) { return String(v || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, 180); }
 function lowerName(v) { return cleanName(v).toLocaleLowerCase('ru-RU'); }
+function cleanPid(v) { v = String(v || '').trim(); return /^tg:\d{1,24}$/.test(v) ? v : ''; }
 
 async function playerIdentity(env, user) {
   const id = String(user.id);
@@ -113,7 +114,10 @@ function packetFromAtt(a) {
     i: a.pid, n: a.name, c: a.classKey || 'ГЕРОЙ', g: a.clanId || '', cn: '',
     x: Number(a.x) || 0, y: Number(a.y) || 0,
     h: Math.max(0, Number(a.h) || 0), m: Math.max(1, Number(a.m) || 1),
-    f: Number(a.f) || 1, a: String(a.a || 'idle').slice(0, 12), q: Number(a.q) || 0, t: Date.now(),
+    f: Number(a.f) || 1, a: String(a.a || 'idle').slice(0, 12),
+    l: Math.max(1, Math.min(999, Math.round(Number(a.l) || 1))),
+    b: Math.max(0, Math.round(Number(a.b) || 0)),
+    p: String(a.partyId || ''), q: Number(a.q) || 0, t: Date.now(),
   };
 }
 
@@ -124,6 +128,13 @@ export class RealtimeHub {
   }
 
   sockets() { return this.ctx.getWebSockets(); }
+
+  socketByPid(pid) {
+    pid = cleanPid(pid);
+    if (!pid) return null;
+    for (const ws of this.sockets()) if (attOf(ws).pid === pid) return ws;
+    return null;
+  }
 
   sendOnlineCount() {
     const ids = new Set();
@@ -152,6 +163,18 @@ export class RealtimeHub {
     }
   }
 
+  sendPartyState(partyId) {
+    partyId = String(partyId || '');
+    if (!partyId) return;
+    const live = [];
+    for (const ws of this.sockets()) {
+      const a = attOf(ws);
+      if (a.partyId === partyId) live.push({ ws, a });
+    }
+    const members = live.map(({ a }) => ({ id: a.pid, name: a.name, cls: a.classKey || '', level: Math.max(1, Number(a.l) || 1), bm: Math.max(0, Number(a.b) || 0), room: cleanRoom(a.room) }));
+    for (const x of live) wsJson(x.ws, { type: 'party-state', partyId, members, ts: Date.now() });
+  }
+
   async fetch(request) {
     if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') return new Response('WebSocket required', { status: 426 });
     const pid = String(request.headers.get('x-ppa-player-id') || '');
@@ -169,7 +192,7 @@ export class RealtimeHub {
     const pair = new WebSocketPair();
     const client = pair[0], server = pair[1];
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ pid, telegramId, name, clanId, classKey, room: 'safe', lastChat: 0, lastMove: 0, q: 0 });
+    server.serializeAttachment({ pid, telegramId, name, clanId, classKey, room: 'safe', partyId: '', lastChat: 0, lastMove: 0, q: 0, l: 1, b: 0 });
     wsJson(server, { type: 'hello', pid, name, clanId, ts: Date.now() });
     this.sendOnlineCount();
     return new Response(null, { status: 101, webSocket: client });
@@ -193,6 +216,7 @@ export class RealtimeHub {
         this.roomBroadcast(room, { type: 'join', player: packetFromAtt(a), room, ts: now }, ws);
       }
       this.sendRoomSnapshot(ws, room);
+      if (a.partyId) this.sendPartyState(a.partyId);
       return;
     }
 
@@ -205,9 +229,62 @@ export class RealtimeHub {
       a.m = Math.max(1, Math.round(Number(m.m) || 1));
       a.f = Math.max(1, Math.min(8, Math.round(Number(m.f) || 1)));
       a.a = String(m.a || 'idle').slice(0, 12);
+      a.l = Math.max(1, Math.min(999, Math.round(Number(m.l) || Number(a.l) || 1)));
+      a.b = Math.max(0, Math.round(Number(m.b) || Number(a.b) || 0));
       a.q = (Number(a.q) || 0) + 1;
       ws.serializeAttachment(a);
       this.roomBroadcast(cleanRoom(a.room), { type: 'move', player: packetFromAtt(a) }, ws);
+      return;
+    }
+
+    if (m.type === 'party-invite') {
+      const targetPid = cleanPid(m.target);
+      const targetWs = this.socketByPid(targetPid);
+      if (!targetWs) { wsJson(ws, { type: 'party-notice', ok: false, message: 'Игрок уже не в сети.' }); return; }
+      if (targetPid === a.pid) { wsJson(ws, { type: 'party-notice', ok: false, message: 'Себя пригласить нельзя.' }); return; }
+      if (a.partyId) {
+        let count = 0;
+        for (const x of this.sockets()) if (attOf(x).partyId === a.partyId) count++;
+        if (count >= 5) { wsJson(ws, { type: 'party-notice', ok: false, message: 'В группе уже 5 игроков.' }); return; }
+      }
+      const ta = attOf(targetWs);
+      if (a.partyId && ta.partyId && a.partyId === ta.partyId) { wsJson(ws, { type: 'party-notice', ok: false, message: 'Игрок уже в твоей группе.' }); return; }
+      wsJson(targetWs, { type: 'party-invite', from: { id: a.pid, name: a.name, level: Math.max(1, Number(a.l) || 1), bm: Math.max(0, Number(a.b) || 0) }, ts: now });
+      wsJson(ws, { type: 'party-notice', ok: true, message: 'Приглашение отправлено игроку ' + ta.name + '.' });
+      return;
+    }
+
+    if (m.type === 'party-accept') {
+      const fromPid = cleanPid(m.from);
+      const inviterWs = this.socketByPid(fromPid);
+      if (!inviterWs) { wsJson(ws, { type: 'party-notice', ok: false, message: 'Пригласивший игрок уже не в сети.' }); return; }
+      const ia = attOf(inviterWs);
+      if (a.partyId && ia.partyId && a.partyId !== ia.partyId) { wsJson(ws, { type: 'party-notice', ok: false, message: 'Сначала покинь текущую группу.' }); return; }
+      const partyId = ia.partyId || a.partyId || ('party_' + crypto.randomUUID());
+      let members = 0;
+      for (const x of this.sockets()) if (attOf(x).partyId === partyId) members++;
+      const addCount = (ia.partyId === partyId ? 0 : 1) + (a.partyId === partyId ? 0 : 1);
+      if (members + addCount > 5) { wsJson(ws, { type: 'party-notice', ok: false, message: 'В группе уже 5 игроков.' }); return; }
+      ia.partyId = partyId; a.partyId = partyId;
+      inviterWs.serializeAttachment(ia); ws.serializeAttachment(a);
+      this.sendPartyState(partyId);
+      wsJson(inviterWs, { type: 'party-notice', ok: true, message: a.name + ' вступил(а) в группу.' });
+      wsJson(ws, { type: 'party-notice', ok: true, message: 'Ты вступил(а) в группу.' });
+      return;
+    }
+
+    if (m.type === 'party-decline') {
+      const fromPid = cleanPid(m.from), inviterWs = this.socketByPid(fromPid);
+      if (inviterWs) wsJson(inviterWs, { type: 'party-notice', ok: false, message: a.name + ' отклонил(а) приглашение.' });
+      return;
+    }
+
+    if (m.type === 'party-leave') {
+      const oldParty = String(a.partyId || '');
+      if (!oldParty) { wsJson(ws, { type: 'party-state', partyId: '', members: [], ts: now }); return; }
+      a.partyId = ''; ws.serializeAttachment(a);
+      wsJson(ws, { type: 'party-state', partyId: '', members: [], ts: now });
+      this.sendPartyState(oldParty);
       return;
     }
 
@@ -226,11 +303,12 @@ export class RealtimeHub {
         let ok = false;
         if (channel === 'general') ok = true;
         else if (channel === 'clan') ok = !!a.clanId && a.clanId === b.clanId;
-        else if (channel === 'party') ok = !!a.room && a.room === b.room;
+        else if (channel === 'party') ok = !!a.partyId && a.partyId === b.partyId;
         else if (channel === 'private') ok = !!target && lowerName(b.name) === lowerName(target);
         if (ok && wsJson(other, payload)) delivered++;
       }
       if (channel === 'clan' && !a.clanId) wsJson(ws, { type: 'chat-error', channel, message: 'Ты не состоишь в клане.' });
+      else if (channel === 'party' && !a.partyId) wsJson(ws, { type: 'chat-error', channel, message: 'Сначала создай группу или прими приглашение.' });
       else if (channel === 'private' && delivered === 0) wsJson(ws, { type: 'chat-error', channel, message: 'Игрок «' + target + '» сейчас не в сети.' });
       return;
     }
@@ -239,12 +317,16 @@ export class RealtimeHub {
   async webSocketClose(ws) {
     const a = attOf(ws);
     if (a && a.room && a.pid) this.roomBroadcast(cleanRoom(a.room), { type: 'leave', id: a.pid, room: cleanRoom(a.room), ts: Date.now() }, ws);
+    const partyId = String((a && a.partyId) || '');
+    if (partyId) setTimeout(() => this.sendPartyState(partyId), 0);
     this.sendOnlineCount();
   }
 
   async webSocketError(ws) {
     const a = attOf(ws);
     if (a && a.room && a.pid) this.roomBroadcast(cleanRoom(a.room), { type: 'leave', id: a.pid, room: cleanRoom(a.room), ts: Date.now() }, ws);
+    const partyId = String((a && a.partyId) || '');
+    if (partyId) setTimeout(() => this.sendPartyState(partyId), 0);
     this.sendOnlineCount();
   }
 }
