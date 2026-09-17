@@ -1,7 +1,8 @@
 import base from './worker.js';
 import { handleOnlineRequest } from './online.js';
 import { handleClanOnline } from './clan-online.js';
-import { handleRealtimeRequest, RealtimeHub } from './realtime.js';
+import { handleRealtimeRequest } from './realtime.js';
+import { RealtimeHub } from './realtime-stable.js';
 import { handleSocialRequest } from './social.js';
 import { handleClassSyncRequest } from './class-sync.js';
 
