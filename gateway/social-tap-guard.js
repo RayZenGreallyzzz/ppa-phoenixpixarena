@@ -10,6 +10,9 @@
 
   function interactiveTarget(t){
     if(!t||!t.closest)return false;
+    // The social UI itself places transparent .ppaRemoteHit buttons above player sprites.
+    // They are player hit targets, not ordinary UI buttons, so never block them here.
+    if(t.closest('.ppaRemoteHit,#ppaRemoteHitLayer'))return false;
     return !!t.closest('#ppaPlayerCard,#ppaFriendsPanel,#ppaSocialShade,#ppaChatBox,#chatBox,#premiumPanel,#gramWalletPanel,#invPanel,#inventoryPanel,#charPanel,#eventsPanel,#auctionPanel,#smithPanel,#clanPanel,button,input,textarea,select,a,[role="button"]');
   }
 
@@ -25,18 +28,17 @@
     var out=[];
     function push(x,y,rad){if(Number.isFinite(x)&&Number.isFinite(y))out.push({x:x,y:y,rad:rad})}
 
-    var cx=Number(remote&&remote.__ppaClientX),cy=Number(remote&&remote.__ppaClientY),cr=Number(remote&&remote.__ppaClientRadius);
-    if(Number.isFinite(cx)&&Number.isFinite(cy))push(cx,cy,Number.isFinite(cr)?cr:56);
+    // Preferred path: exact CSS pixel coordinate stamped by the renderer on the frame actually drawn.
+    var cx=Number(remote&&remote.__ppaClientX),cy=Number(remote&&remote.__ppaClientY),cr=Number(remote&&remote.__ppaClientRadius),cat=Number(remote&&remote.__ppaClientAt);
+    if(Number.isFinite(cx)&&Number.isFinite(cy)&&(!Number.isFinite(cat)||Date.now()-cat<1800))push(cx,cy,Number.isFinite(cr)?cr:60);
 
     var hx=Number(remote&&remote.__ppaHitX),hy=Number(remote&&remote.__ppaHitY),hb=Number(remote&&remote.__ppaHitBody);
     if(Number.isFinite(hx)&&Number.isFinite(hy)){
-      push(info.r.left+hx*info.z*info.kx,info.r.top+hy*info.z*info.ky,Math.max(44,(Number.isFinite(hb)?hb:30)*info.z*Math.max(info.kx,info.ky)*2));
+      push(info.r.left+hx*info.z*info.kx,info.r.top+hy*info.z*info.ky,Math.max(46,(Number.isFinite(hb)?hb:30)*info.z*Math.max(info.kx,info.ky)*2.15));
     }
 
     var wx=Number(remote&&remote.x),wy=Number(remote&&remote.y);
-    if(Number.isFinite(wx)&&Number.isFinite(wy)){
-      push(info.r.left+(wx-info.camX)*info.z*info.kx,info.r.top+(wy-info.camY)*info.z*info.ky,58);
-    }
+    if(Number.isFinite(wx)&&Number.isFinite(wy))push(info.r.left+(wx-info.camX)*info.z*info.kx,info.r.top+(wy-info.camY)*info.z*info.ky,62);
     return out;
   }
 
@@ -49,7 +51,7 @@
       var id=remoteId(remote,key);if(!id)return;
       var pts=pointsFor(remote,info);
       for(var i=0;i<pts.length;i++){
-        var d=Math.hypot(x-pts[i].x,y-pts[i].y),rad=Math.max(42,Math.min(92,Number(pts[i].rad)||56));
+        var d=Math.hypot(x-pts[i].x,y-pts[i].y),rad=Math.max(44,Math.min(100,Number(pts[i].rad)||60));
         if(d<=rad&&d<bestD){bestD=d;best=remote}
       }
     });
@@ -74,17 +76,13 @@
     return r?openRemote(r,e):false;
   }
 
-  function onPointer(e){
-    if(e.button!=null&&e.button!==0)return;
-    handlePoint(e.clientX,e.clientY,e);
-  }
-  function onTouchStart(e){
-    if(!e.touches||!e.touches.length)return;
-    var t=e.touches[0];handlePoint(t.clientX,t.clientY,e);
-  }
+  function onPointer(e){if(e.button!=null&&e.button!==0)return;handlePoint(e.clientX,e.clientY,e)}
+  function onTouchStart(e){if(!e.touches||!e.touches.length)return;var t=e.touches[0];handlePoint(t.clientX,t.clientY,e)}
+  function onClick(e){if(Date.now()-lastOpenAt<260)return;handlePoint(e.clientX,e.clientY,e)}
 
   window.addEventListener('pointerdown',onPointer,true);
   window.addEventListener('touchstart',onTouchStart,{capture:true,passive:false});
+  window.addEventListener('click',onClick,true);
 
   window.PPA_SOCIAL_TAP_DIAG=function(x,y){
     var r=findRemoteAt(Number(x),Number(y));
