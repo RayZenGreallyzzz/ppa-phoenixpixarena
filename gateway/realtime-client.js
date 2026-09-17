@@ -1,6 +1,6 @@
 (function(){
   'use strict';
-  var RT={ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,lastAnim:'',onlineCount:0,started:false};
+  var RT={ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,lastAnim:'',onlineCount:0,started:false,lastFullscreenAsk:0};
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var t=tg();return t&&t.initData?String(t.initData):''}
@@ -25,21 +25,38 @@
   function applyPlayer(p,presence){try{if(typeof ppaOnlineApplyPacket==='function')ppaOnlineApplyPacket(p,!!presence)}catch(e){console.warn('Realtime player packet',e)}}
   function selfName(){try{return String((INV&&INV.playerName)||window.PPA_PLAYER_NAME||'Игрок').slice(0,24)}catch(_){return 'Игрок'}}
 
+  function requestGameFullscreen(){
+    var t=tg();if(!t||!mobileUi())return;
+    try{if(typeof t.ready==='function')t.ready()}catch(_){}
+    try{if(typeof t.expand==='function')t.expand()}catch(_){}
+    try{if(typeof t.disableVerticalSwipes==='function')t.disableVerticalSwipes()}catch(_){}
+    try{if(t.isFullscreen)return}catch(_){}
+    var now=Date.now();if(now-RT.lastFullscreenAsk<900)return;RT.lastFullscreenAsk=now;
+    try{if(typeof t.requestFullscreen==='function')t.requestFullscreen()}catch(_){}
+  }
+
   function telegramGameMode(){
     var t=tg();if(!t)return;
     try{if(typeof t.ready==='function')t.ready()}catch(_){}
     try{if(typeof t.expand==='function')t.expand()}catch(_){}
     try{if(typeof t.disableVerticalSwipes==='function')t.disableVerticalSwipes()}catch(_){}
-    if(!mobileUi())return;
-    try{
-      if(typeof t.requestFullscreen==='function'&&!t.isFullscreen)t.requestFullscreen();
-    }catch(_){}
+    requestGameFullscreen();
   }
+
   function armFullscreenRetry(){
     try{
-      window.addEventListener('pointerdown',function(){telegramGameMode()},{once:true,capture:true,passive:true});
+      window.addEventListener('pointerdown',function(){requestGameFullscreen()},{capture:true,passive:true});
+      window.addEventListener('pageshow',function(){setTimeout(requestGameFullscreen,80)},{passive:true});
+      document.addEventListener('visibilitychange',function(){if(!document.hidden)setTimeout(requestGameFullscreen,100)},{passive:true});
       window.addEventListener('resize',fixOnlineBadge,{passive:true});
-      window.addEventListener('orientationchange',function(){setTimeout(fixOnlineBadge,180)},{passive:true});
+      window.addEventListener('orientationchange',function(){setTimeout(function(){fixOnlineBadge();requestGameFullscreen()},180)},{passive:true});
+      var t=tg();
+      if(t&&typeof t.onEvent==='function'){
+        t.onEvent('activated',function(){setTimeout(requestGameFullscreen,80)});
+        t.onEvent('viewportChanged',function(){setTimeout(requestGameFullscreen,120)});
+        t.onEvent('fullscreenChanged',function(){if(!t.isFullscreen)setTimeout(requestGameFullscreen,250)});
+        t.onEvent('fullscreenFailed',function(e){try{if(e&&e.error!=='ALREADY_FULLSCREEN')console.warn('Telegram fullscreen failed',e.error||e)}catch(_){}});
+      }
     }catch(_){}
   }
 
@@ -138,8 +155,8 @@
   setInterval(function(){if(RT.ws&&RT.ws.readyState===WebSocket.OPEN)send({type:'ping'})},25000);
 
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
-  window.PPA_REALTIME_DIAG=function(){return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,online:RT.onlineCount,retry:RT.retry}};
+  window.PPA_REALTIME_DIAG=function(){return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,online:RT.onlineCount,retry:RT.retry,fullscreen:!!(tg()&&tg().isFullscreen)}};
 
-  function boot(){if(RT.started)return;RT.started=true;telegramGameMode();armFullscreenRetry();setTimeout(fixOnlineBadge,350);setTimeout(connect,250)}
+  function boot(){if(RT.started)return;RT.started=true;telegramGameMode();armFullscreenRetry();setTimeout(requestGameFullscreen,250);setTimeout(requestGameFullscreen,1100);setTimeout(fixOnlineBadge,350);setTimeout(connect,250)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
