@@ -236,6 +236,10 @@
     if(m.type==='move'){if(m.player)applyPlayer(m.player,false);return}
     if(m.type==='join'){if(m.player)applyPlayer(m.player,true);return}
     if(m.type==='leave'){deleteRemote(m.id);return}
+    if(m.type==='mob-state'||m.type==='mob-hp'||m.type==='mob-dead'){
+      try{if(window.PPA_DUNGEON_MOB_NET_RECEIVE)window.PPA_DUNGEON_MOB_NET_RECEIVE(m)}catch(_){}
+      return;
+    }
     if(m.type==='party-invite'){
       try{
         if(window.PPA_SOCIAL_ON_PARTY_INVITE){window.PPA_SOCIAL_ON_PARTY_INVITE(m.from||{});return}
