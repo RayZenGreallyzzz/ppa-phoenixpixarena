@@ -13,6 +13,10 @@ function cleanName(v) {
   return String(v || 'Игрок').trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 24) || 'Игрок';
 }
 
+function cleanPet(v) {
+  return String(v || '').trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 48);
+}
+
 function cleanMobKey(v) {
   v = String(v || '');
   return /^s\d{1,4}$/.test(v) ? v : '';
@@ -45,6 +49,7 @@ function packetFromAtt(a) {
     l: Math.max(1, Math.min(999, Math.round(Number(a.l) || 1))),
     b: Math.max(0, Math.round(Number(a.b) || 0)),
     p: String(a.partyId || ''),
+    pt: cleanPet(a.pet || ''),
     q: Number(a.q) || 0,
     t: Date.now(),
   };
@@ -134,7 +139,9 @@ export class RealtimeHub extends BaseRealtimeHub {
     const { dead } = this.mobStores();
     const out = [];
     for (const d of dead.values()) {
-      if (d && d.room === room && Number(d.at) > now) out.push([d.key, Number(d.at)]);
+      if (d && d.room === room && Number(d.at) > now) {
+        out.push([d.key, Number(d.at), String(d.killer || ''), String(d.party || '')]);
+      }
       if (out.length >= 64) break;
     }
     return out;
@@ -163,7 +170,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({
       pid, telegramId, name, clanId, classKey,
-      room: 'safe', partyId: '', lastChat: 0, lastMove: 0,
+      room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
       lastSeenAt: Date.now(), lastSnapshotPush: 0,
       q: 0, l: 1, b: 0,
     });
@@ -186,6 +193,18 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     const a = attOf(ws);
     const now = Date.now();
+
+    if (m.type === 'pet-state') {
+      const room = cleanRoom(a.room);
+      const pet = cleanPet(m.pet || '');
+      if (pet !== cleanPet(a.pet || '')) {
+        a.pet = pet;
+        a.lastSeenAt = now;
+        ws.serializeAttachment(a);
+        this.roomBroadcast(room, { type: 'move', player: packetFromAtt(a), room }, ws);
+      }
+      return;
+    }
 
     if (m.type === 'mob-state') {
       const room = cleanRoom(a.room);
@@ -247,8 +266,13 @@ export class RealtimeHub extends BaseRealtimeHub {
       const { health, dead, events } = this.mobStores();
       const ck = this.mobCompound(room, key);
       let rec = health.get(ck);
+      const killer = String(a.pid || '');
+      const killerParty = String(a.partyId || '');
       if (event && events.has(event)) {
-        if (rec) wsJson(ws, { type: 'mob-hp', room, key, hp: rec.hp, mhp: rec.mhp, event, ts: now });
+        if (rec) wsJson(ws, {
+          type: 'mob-hp', room, key, hp: rec.hp, mhp: rec.mhp,
+          killer, party: killerParty, event, ts: now,
+        });
         return;
       }
       if (event) events.set(event, now);
@@ -268,24 +292,31 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       let respawnAt = null;
       let firstDeath = false;
+      let deathInfo = null;
       if (rec.hp <= 0) {
         let d = dead.get(ck);
         if (!d || Number(d.at) <= now) {
-          d = { room, key, at: now + 10000 };
+          d = { room, key, at: now + 10000, killer, party: killerParty };
           dead.set(ck, d);
           firstDeath = true;
         }
+        deathInfo = d;
         respawnAt = Number(d.at);
       }
 
+      const rewardKiller = deathInfo ? String(deathInfo.killer || '') : killer;
+      const rewardParty = deathInfo ? String(deathInfo.party || '') : killerParty;
       this.roomBroadcast(room, {
         type: 'mob-hp', room, key,
         hp: Math.round(rec.hp * 100) / 100,
         mhp: Math.round((Number(rec.mhp) || Math.max(1, before)) * 100) / 100,
-        respawnAt, event, ts: now,
+        respawnAt, killer: rewardKiller, party: rewardParty, event, ts: now,
       }, null);
       if (firstDeath) {
-        this.roomBroadcast(room, { type: 'mob-dead', room, key, respawnAt, ts: now }, null);
+        this.roomBroadcast(room, {
+          type: 'mob-dead', room, key, respawnAt,
+          killer: rewardKiller, party: rewardParty, ts: now,
+        }, null);
       }
       return;
     }
