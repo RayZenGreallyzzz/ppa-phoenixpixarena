@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v287-social-tap-guard-20260917-2328';
+const CLIENT_BUILD = 'v288-realtime-rootfix-20260917-2340';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -51,6 +51,21 @@ output = output.replace(
   'https://telegram.org/js/telegram-web-app.js"',
   'https://telegram.org/js/telegram-web-app.js?63"'
 );
+
+if (!output.includes('<head>')) throw new Error('PPA <head> not found');
+output = output.replace('<head>', '<head>\n<script>window.PPA_REALTIME_V2_ACTIVE=true;</script>');
+
+const legacyInitNeedle = 'async function PPAOnlineInit(){\n';
+if (!output.includes(legacyInitNeedle)) throw new Error('Legacy PPAOnlineInit patch target not found');
+output = output.replace(legacyInitNeedle, "async function PPAOnlineInit(){\n  if(window.PPA_REALTIME_V2_ACTIVE)return;\n");
+
+const legacyTickNeedle = 'function PPAOnlineTick(){\n';
+if (!output.includes(legacyTickNeedle)) throw new Error('Legacy PPAOnlineTick patch target not found');
+output = output.replace(legacyTickNeedle, "function PPAOnlineTick(){\n  if(window.PPA_REALTIME_V2_ACTIVE)return;\n");
+
+const legacyCleanupNeedle = 'function ppaOnlineCleanup(){\n';
+if (!output.includes(legacyCleanupNeedle)) throw new Error('Legacy ppaOnlineCleanup patch target not found');
+output = output.replace(legacyCleanupNeedle, "function ppaOnlineCleanup(){\n  if(window.PPA_REALTIME_V2_ACTIVE)return;\n");
 
 const migrationNeedle = 'var migrationState=ppaMigrationSaveObject();\n      if(ppaSaveHasCharacterState(migrationState)){';
 const migrationPatch = "var migrationState=ppaMigrationSaveObject();\n      if(profileNick&&/^[A-Za-zА-Яа-яЁё0-9_]{3,18}$/u.test(profileNick))migrationState.playerName=profileNick;\n      if(ppaSaveHasCharacterState(migrationState)){";
@@ -104,6 +119,7 @@ console.log('Social UI: /game/social-ui.js');
 console.log('Social tap guard: /game/social-tap-guard.js');
 console.log('Realtime identity sync: /game/realtime-identity-sync.js');
 console.log(`Client build cache key: ${CLIENT_BUILD}`);
+console.log('Legacy Supabase realtime: disabled');
 console.log('Telegram migration lockout guard: enabled');
 console.log('Portable save buttons: removed');
 console.log(`index.html: ${(Buffer.byteLength(output)/1024/1024).toFixed(2)} MiB`);
