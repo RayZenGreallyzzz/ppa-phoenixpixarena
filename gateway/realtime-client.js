@@ -10,7 +10,7 @@
     try{
       var el=document.getElementById('ppaOnlineBadge');if(!el)return;
       if(mobileUi()){
-        el.style.left='50%';el.style.right='auto';el.style.top='86px';el.style.transform='translateX(-50%)';
+        el.style.left='50%';el.style.right='auto';el.style.top='10px';el.style.transform='translateX(-50%)';
         el.style.padding='3px 7px';el.style.fontSize='9px';el.style.maxWidth='170px';el.style.whiteSpace='nowrap';
         el.style.zIndex='118';
       }else{
