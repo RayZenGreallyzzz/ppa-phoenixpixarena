@@ -27,6 +27,17 @@
     return Number(r.__ppaRemoteDir)||0;
   }
 
+  function stampClientHit(r,sx,sy,body){
+    try{
+      var rect=cv.getBoundingClientRect(),z=Math.max(.1,Number(cameraZoom())||1);
+      var kx=rect.width/Math.max(1,cv.width),ky=rect.height/Math.max(1,cv.height);
+      r.__ppaClientX=rect.left+sx*z*kx;
+      r.__ppaClientY=rect.top+sy*z*ky;
+      r.__ppaClientRadius=Math.max(42,Math.min(82,Math.max(28,body*.78)*z*Math.max(kx,ky)*2.15));
+      r.__ppaClientAt=Date.now();
+    }catch(_){}
+  }
+
   function install(){
     try{
       if(window.__PPA_REMOTE_CLASS_SPRITES_V280)return true;
@@ -63,11 +74,11 @@
         var a=cfg.anim,frame=Math.floor(now/(1000/Math.max(1,a.fps)))%Math.max(1,a.frames);
         var drawY=sy+body*.40-cfg.foot*dh+bob;
 
-        // Used by the social overlay to recognize a tap on this exact player.
         r.__ppaHitX=sx;
         r.__ppaHitY=sy;
         r.__ppaHitBody=Math.max(26,body*.72);
         r.__ppaHitAt=now;
+        stampClientHit(r,sx,sy,body);
 
         cx.save();
         cx.imageSmoothingEnabled=false;
