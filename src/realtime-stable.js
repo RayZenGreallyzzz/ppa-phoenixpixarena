@@ -13,6 +13,17 @@ function cleanName(v) {
   return String(v || 'Игрок').trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 24) || 'Игрок';
 }
 
+function cleanMobKey(v) {
+  v = String(v || '');
+  return /^s\d{1,4}$/.test(v) ? v : '';
+}
+
+function finite(v, min, max, fallback = 0) {
+  v = Number(v);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.max(min, Math.min(max, v));
+}
+
 function wsJson(ws, data) {
   try { ws.send(JSON.stringify(data)); return true; } catch (_) { return false; }
 }
@@ -95,6 +106,40 @@ export class RealtimeHub extends BaseRealtimeHub {
     });
   }
 
+  mobStores() {
+    if (!this._mobHealth) this._mobHealth = new Map();
+    if (!this._mobDead) this._mobDead = new Map();
+    if (!this._mobEvents) this._mobEvents = new Map();
+    return { health: this._mobHealth, dead: this._mobDead, events: this._mobEvents };
+  }
+
+  mobCompound(room, key) {
+    return cleanRoom(room) + '|' + cleanMobKey(key);
+  }
+
+  pruneMobStores(now = Date.now()) {
+    const { health, dead, events } = this.mobStores();
+    for (const [ck, d] of dead) {
+      if (!d || Number(d.at) <= now) {
+        dead.delete(ck);
+        health.delete(ck);
+      }
+    }
+    for (const [id, at] of events) if (now - Number(at || 0) > 15000) events.delete(id);
+  }
+
+  mobDeadRows(room, now = Date.now()) {
+    room = cleanRoom(room);
+    this.pruneMobStores(now);
+    const { dead } = this.mobStores();
+    const out = [];
+    for (const d of dead.values()) {
+      if (d && d.room === room && Number(d.at) > now) out.push([d.key, Number(d.at)]);
+      if (out.length >= 64) break;
+    }
+    return out;
+  }
+
   async fetch(request) {
     if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
       return new Response('WebSocket required', { status: 426 });
@@ -141,6 +186,109 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     const a = attOf(ws);
     const now = Date.now();
+
+    if (m.type === 'mob-state') {
+      const room = cleanRoom(a.room);
+      if (!room.startsWith('dungeon-') || cleanRoom(m.room || room) !== room) return;
+      this.pruneMobStores(now);
+      const { health, dead } = this.mobStores();
+      const rows = [];
+      const input = Array.isArray(m.rows) ? m.rows.slice(0, 16) : [];
+      for (const row of input) {
+        if (!Array.isArray(row) || row.length < 5) continue;
+        const key = cleanMobKey(row[0]);
+        if (!key) continue;
+        const x = finite(row[1], -100000, 100000, NaN);
+        const y = finite(row[2], -100000, 100000, NaN);
+        const clientHp = finite(row[3], 0, 10000000, NaN);
+        const mhp = Math.max(1, finite(row[4], 1, 10000000, 1));
+        if (![x, y, clientHp, mhp].every(Number.isFinite)) continue;
+        const ck = this.mobCompound(room, key);
+        const tomb = dead.get(ck);
+        let rec = health.get(ck);
+        if (tomb && Number(tomb.at) > now) {
+          rec = { hp: 0, mhp, updatedAt: now };
+          health.set(ck, rec);
+        } else if (!rec || now - Number(rec.updatedAt || 0) > 30000) {
+          rec = { hp: Math.min(clientHp, mhp), mhp, updatedAt: now };
+          health.set(ck, rec);
+        } else {
+          rec.mhp = Math.max(1, Number(rec.mhp) || mhp);
+          rec.hp = Math.max(0, Math.min(Number(rec.hp) || 0, rec.mhp));
+          rec.updatedAt = now;
+        }
+        rows.push([
+          key, Math.round(x * 10) / 10, Math.round(y * 10) / 10,
+          Math.round(rec.hp * 100) / 100, Math.round(rec.mhp * 100) / 100,
+          row[5] ? 1 : 0,
+          row[6] == null ? null : finite(row[6], -8, 8, 0),
+          row[7] ? 1 : 0,
+          row[8] == null ? null : finite(row[8], -8, 8, 0),
+          row[9] ? 1 : 0,
+        ]);
+      }
+      this.roomBroadcast(room, {
+        type: 'mob-state', from: a.pid, room, rows,
+        dead: this.mobDeadRows(room, now), ts: now,
+      }, ws);
+      return;
+    }
+
+    if (m.type === 'mob-damage') {
+      const room = cleanRoom(a.room);
+      if (!room.startsWith('dungeon-') || cleanRoom(m.room || room) !== room) return;
+      const key = cleanMobKey(m.key);
+      const amount = finite(m.amount, 0, 10000000, 0);
+      const before = finite(m.before, 0, 10000000, NaN);
+      const event = String(m.event || '').slice(0, 96);
+      if (!key || !(amount > 0) || !Number.isFinite(before)) return;
+
+      this.pruneMobStores(now);
+      const { health, dead, events } = this.mobStores();
+      const ck = this.mobCompound(room, key);
+      let rec = health.get(ck);
+      if (event && events.has(event)) {
+        if (rec) wsJson(ws, { type: 'mob-hp', room, key, hp: rec.hp, mhp: rec.mhp, event, ts: now });
+        return;
+      }
+      if (event) events.set(event, now);
+
+      const tomb = dead.get(ck);
+      if (tomb && Number(tomb.at) > now) {
+        rec = rec || { hp: 0, mhp: Math.max(1, before), updatedAt: now };
+        rec.hp = 0;rec.updatedAt = now;health.set(ck, rec);
+      } else {
+        if (!rec) rec = { hp: before, mhp: Math.max(1, before), updatedAt: now };
+        let cur = Math.max(0, Number(rec.hp) || 0);
+        cur = Math.min(cur, before);
+        rec.hp = Math.max(0, cur - amount);
+        rec.updatedAt = now;
+        health.set(ck, rec);
+      }
+
+      let respawnAt = null;
+      let firstDeath = false;
+      if (rec.hp <= 0) {
+        let d = dead.get(ck);
+        if (!d || Number(d.at) <= now) {
+          d = { room, key, at: now + 10000 };
+          dead.set(ck, d);
+          firstDeath = true;
+        }
+        respawnAt = Number(d.at);
+      }
+
+      this.roomBroadcast(room, {
+        type: 'mob-hp', room, key,
+        hp: Math.round(rec.hp * 100) / 100,
+        mhp: Math.round((Number(rec.mhp) || Math.max(1, before)) * 100) / 100,
+        respawnAt, event, ts: now,
+      }, null);
+      if (firstDeath) {
+        this.roomBroadcast(room, { type: 'mob-dead', room, key, respawnAt, ts: now }, null);
+      }
+      return;
+    }
 
     if (m.type === 'ping') {
       a.lastSeenAt = now;
