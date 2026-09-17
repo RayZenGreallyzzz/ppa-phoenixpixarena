@@ -1,6 +1,13 @@
 (function(){
   'use strict';
-  var RT={ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastRoomSync:0,pendingRoom:'',pendingSince:0,lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,lastAnim:'',lastLevel:null,lastBm:null,onlineCount:0,started:false,pingSent:0,pingMs:null};
+  window.PPA_REALTIME_V2_ACTIVE=true;
+
+  var RT={
+    ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastRoomSync:0,
+    pendingRoom:'',pendingSince:0,lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,
+    lastAnim:'',lastLevel:null,lastBm:null,onlineCount:0,started:false,pingSent:0,pingMs:null,
+    lastServerAt:0,lastSnapshotAt:0
+  };
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var t=tg();return t&&t.initData?String(t.initData):''}
@@ -10,19 +17,36 @@
       return !!((c&&c.classList.contains('on'))||(p&&p.classList.contains('on')));
     }catch(_){return false}
   }
+  function canonicalRoom(v){
+    var r=String(v||'safe'),k=r.trim().toLowerCase();
+    if(!k||k==='offline'||k==='local'||k==='none'||k==='null'||k==='undefined')return 'safe';
+    return r;
+  }
   function room(){
     try{
       if(socialOpen()&&RT.lastRoom)return RT.lastRoom;
-      var r=typeof ppaOnlineRoomKey==='function'?String(ppaOnlineRoomKey()||'safe'):'safe';
-      var k=r.trim().toLowerCase();
-      if(!k||k==='offline'||k==='local'||k==='none'||k==='null'||k==='undefined')return 'safe';
-      return r;
+      return canonicalRoom(typeof ppaOnlineRoomKey==='function'?ppaOnlineRoomKey():'safe');
     }catch(_){return RT.lastRoom||'safe'}
   }
   function mobileUi(){try{return innerWidth<=900||matchMedia('(pointer:coarse)').matches}catch(_){return false}}
   function selfLevel(){try{return Math.max(1,Math.floor(Number(P&&P.lvl)||1))}catch(_){return 1}}
   function selfBm(){try{return Math.max(0,Math.round(Number(P&&P.bm)||0))}catch(_){return 0}}
   function badgeText(){var s='ONLINE · '+Math.max(1,RT.onlineCount||1);if(Number.isFinite(RT.pingMs))s+=' · '+Math.round(RT.pingMs)+' ms';return s}
+
+  function disableLegacyOnline(){
+    try{
+      window.PPA_REALTIME_V2_ACTIVE=true;
+      if(typeof window.PPAOnlineTick==='function')window.PPAOnlineTick=function(){};
+      if(typeof window.ppaOnlineCleanup==='function')window.ppaOnlineCleanup=function(){};
+      if(typeof window.PPAOnlineInit==='function')window.PPAOnlineInit=function(){return Promise.resolve()};
+      if(window.PPA_ONLINE){
+        var old=PPA_ONLINE;
+        try{if(old.channel&&old.channel.untrack)old.channel.untrack()}catch(_){}
+        try{if(old.supabase&&old.channel&&old.supabase.removeChannel)old.supabase.removeChannel(old.channel)}catch(_){}
+        old.channel=null;old.pendingChannel=null;old.supabase=null;old.connecting=false;old.retryAt=0;
+      }
+    }catch(_){}
+  }
 
   function fixOnlineBadge(){
     try{
@@ -42,6 +66,8 @@
   function refreshBadge(){if(RT.ws&&RT.ws.readyState===WebSocket.OPEN)status(badgeText(),'#9fffc1')}
   function send(o){try{if(RT.ws&&RT.ws.readyState===WebSocket.OPEN){RT.ws.send(JSON.stringify(o));return true}}catch(_){}return false}
   function clearRemotes(){try{if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes)PPA_ONLINE.remotes.clear()}catch(_){}}
+  function deleteRemote(id){try{if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes)PPA_ONLINE.remotes.delete(String(id||''))}catch(_){}}
+
   function applyPlayer(p,presence){
     try{
       if(typeof ppaOnlineApplyPacket==='function')ppaOnlineApplyPacket(p,!!presence);
@@ -53,10 +79,29 @@
           if(Number.isFinite(lv))r.level=Math.max(1,Math.floor(lv));
           if(Number.isFinite(bm))r.bm=Math.max(0,Math.round(bm));
           if(p.p!==undefined)r.partyId=String(p.p||'');
+          r.id=id;r.i=id;r.__ppaPid=id;r.__ppaRtAt=Date.now();r.__ppaRoom=RT.lastRoom;
         }
       }
     }catch(e){console.warn('Realtime player packet',e)}
   }
+
+  function reconcileSnapshot(players){
+    var now=Date.now(),seen=new Set();
+    (Array.isArray(players)?players:[]).forEach(function(p){
+      var id=String((p&&(p.i||p.id))||'');if(id)seen.add(id);applyPlayer(p,true);
+    });
+    RT.lastSnapshotAt=now;
+    try{
+      if(typeof PPA_ONLINE==='undefined'||!PPA_ONLINE.remotes)return;
+      PPA_ONLINE.remotes.forEach(function(r,id){
+        id=String(id||'');
+        if(seen.has(id))return;
+        var at=Number(r&&r.__ppaRtAt)||0;
+        if(at&&now-at>7000)PPA_ONLINE.remotes.delete(id);
+      });
+    }catch(_){}
+  }
+
   function selfName(){try{return String((INV&&INV.playerName)||window.PPA_PLAYER_NAME||'Игрок').slice(0,24)}catch(_){return 'Игрок'}}
 
   function ensureFullsize(){
@@ -108,29 +153,34 @@
     else status('ONLINE · переподключение…','#ffb37d');
   }
 
+  function commitRoom(wanted){
+    wanted=canonicalRoom(wanted);
+    if(RT.lastRoom&&wanted!==RT.lastRoom)clearRemotes();
+    RT.lastRoom=wanted;RT.pendingRoom='';RT.pendingSince=0;
+    try{if(typeof PPA_ONLINE!=='undefined')PPA_ONLINE.roomKey=RT.lastRoom}catch(_){}
+  }
+
   function sendRoom(force){
     var now=Date.now(),wanted=room();
-    if(!RT.lastRoom){
-      RT.lastRoom=wanted;RT.pendingRoom='';RT.pendingSince=0;
-    }else if(wanted!==RT.lastRoom){
-      if(force){
-        RT.lastRoom=wanted;RT.pendingRoom='';RT.pendingSince=0;
-      }else{
+    if(!RT.lastRoom){commitRoom(wanted)}
+    else if(wanted!==RT.lastRoom){
+      if(force)commitRoom(wanted);
+      else{
         if(RT.pendingRoom!==wanted){RT.pendingRoom=wanted;RT.pendingSince=now;return}
         if(now-RT.pendingSince<420)return;
-        RT.lastRoom=wanted;RT.pendingRoom='';RT.pendingSince=0;
+        commitRoom(wanted);
       }
     }else{RT.pendingRoom='';RT.pendingSince=0}
-    if(!force&&now-RT.lastRoomSync<2400)return;
+    if(!force&&now-RT.lastRoomSync<1800)return;
     if(send({type:'room',room:RT.lastRoom}))RT.lastRoomSync=now;
-    try{if(typeof PPA_ONLINE!=='undefined')PPA_ONLINE.roomKey=RT.lastRoom}catch(_){}
   }
 
   function resyncRoom(){
     if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN)return false;
-    if(!RT.lastRoom)RT.lastRoom=room();
+    var wanted=room();
+    if(!RT.lastRoom||wanted!==RT.lastRoom)commitRoom(wanted);
     var ok=send({type:'room',room:RT.lastRoom});
-    if(ok)RT.lastRoomSync=Date.now();
+    if(ok){RT.lastRoomSync=Date.now();sendMove(true)}
     return ok;
   }
 
@@ -140,7 +190,7 @@
     try{
       var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),f=Number(P.face)||1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm();
       var changed=RT.lastX===null||Math.abs(x-RT.lastX)>.35||Math.abs(y-RT.lastY)>.35||h!==RT.lastHp||m!==RT.lastMhp||f!==RT.lastFace||a!==RT.lastAnim||l!==RT.lastLevel||b!==RT.lastBm;
-      if(!force&&!changed&&now-RT.lastMove<1300)return;
+      if(!force&&!changed&&now-RT.lastMove<1100)return;
       RT.lastMove=now;RT.lastX=x;RT.lastY=y;RT.lastHp=h;RT.lastMhp=m;RT.lastFace=f;RT.lastAnim=a;RT.lastLevel=l;RT.lastBm=b;
       send({type:'move',x:x,y:y,h:h,m:m,f:f,a:a,l:l,b:b});
     }catch(_){}
@@ -164,22 +214,23 @@
 
   function receive(m){
     if(!m||typeof m!=='object')return;
+    RT.lastServerAt=Date.now();
     if(m.type==='hello'){
       try{if(typeof PPA_ONLINE!=='undefined'){PPA_ONLINE.selfId=String(m.pid||PPA_ONLINE.selfId||'');PPA_ONLINE.selfName=String(m.name||selfName())}}catch(_){}
       sendRoom(true);sendMove(true);return;
     }
     if(m.type==='pong'){
-      if(RT.pingSent){var ms=Math.max(0,Date.now()-RT.pingSent);RT.pingMs=Number.isFinite(RT.pingMs)?(RT.pingMs*0.65+ms*0.35):ms;RT.pingSent=0;refreshBadge()}
+      if(RT.pingSent){var ms=Math.max(0,Date.now()-RT.pingSent);RT.pingMs=Number.isFinite(RT.pingMs)?(RT.pingMs*.65+ms*.35):ms;RT.pingSent=0;refreshBadge()}
       return;
     }
     if(m.type==='online'){RT.onlineCount=Math.max(0,Number(m.count)||0);refreshBadge();return}
     if(m.type==='snapshot'){
-      if(String(m.room||'')!==RT.lastRoom)return;
-      clearRemotes();(Array.isArray(m.players)?m.players:[]).forEach(function(p){applyPlayer(p,true)});return;
+      if(canonicalRoom(m.room)!==canonicalRoom(RT.lastRoom))return;
+      reconcileSnapshot(m.players);return;
     }
     if(m.type==='move'){if(m.player)applyPlayer(m.player,false);return}
     if(m.type==='join'){if(m.player)applyPlayer(m.player,true);return}
-    if(m.type==='leave'){try{if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes)PPA_ONLINE.remotes.delete(String(m.id||''))}catch(_){}return}
+    if(m.type==='leave'){deleteRemote(m.id);return}
     if(m.type==='party-invite'){
       try{
         if(window.PPA_SOCIAL_ON_PARTY_INVITE){window.PPA_SOCIAL_ON_PARTY_INVITE(m.from||{});return}
@@ -190,26 +241,22 @@
     }
     if(m.type==='party-state'){syncPartyAllies(m);return}
     if(m.type==='party-notice'){partyNotice(m.message,m.ok);return}
-    if(m.type==='chat'){
-      try{if(window.PPA_CHAT_RECEIVE)window.PPA_CHAT_RECEIVE(m.channel,m.from,m.text,{target:m.target||''})}catch(_){}return;
-    }
-    if(m.type==='chat-error'){
-      try{if(window.PPA_CHAT_RECEIVE)window.PPA_CHAT_RECEIVE(m.channel||'general','Система',m.message||'Ошибка чата',{system:true})}catch(_){}return;
-    }
+    if(m.type==='chat'){try{if(window.PPA_CHAT_RECEIVE)window.PPA_CHAT_RECEIVE(m.channel,m.from,m.text,{target:m.target||''})}catch(_){}return}
+    if(m.type==='chat-error'){try{if(window.PPA_CHAT_RECEIVE)window.PPA_CHAT_RECEIVE(m.channel||'general','Система',m.message||'Ошибка чата',{system:true})}catch(_){}return}
   }
 
   async function connect(){
     if(RT.connecting||!initData())return;
     if(RT.ws&&(RT.ws.readyState===WebSocket.OPEN||RT.ws.readyState===WebSocket.CONNECTING))return;
+    disableLegacyOnline();
     RT.connecting=true;status('ONLINE · подключение…','#cceeff');
     try{
-      var t=await ticket();
-      var proto=location.protocol==='https:'?'wss:':'ws:';
+      var t=await ticket(),proto=location.protocol==='https:'?'wss:':'ws:';
       var ws=new WebSocket(proto+'//'+location.host+'/api/realtime/ws?ticket='+encodeURIComponent(t.ticket));
       RT.ws=ws;
-      ws.onopen=function(){RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;RT.lastRoomSync=0;setConnected(true);sendRoom(true);sendMove(true)};
+      ws.onopen=function(){RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;RT.lastServerAt=Date.now();RT.lastRoomSync=0;setConnected(true);sendRoom(true);sendMove(true)};
       ws.onmessage=function(ev){try{receive(JSON.parse(ev.data))}catch(_){}};
-      ws.onclose=function(){if(RT.ws===ws)RT.ws=null;RT.connecting=false;RT.pingMs=null;RT.pingSent=0;RT.lastRoomSync=0;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
+      ws.onclose=function(){if(RT.ws===ws)RT.ws=null;RT.connecting=false;RT.pingMs=null;RT.pingSent=0;RT.lastServerAt=0;RT.lastRoomSync=0;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
       ws.onerror=function(){};
     }catch(e){RT.connecting=false;console.warn('PPA realtime connect',e);setConnected(false);scheduleReconnect()}
   }
@@ -223,17 +270,27 @@
 
   setInterval(function(){
     if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN)return;
-    sendRoom(false);sendMove(false);
+    disableLegacyOnline();sendRoom(false);sendMove(false);
   },120);
+
   setInterval(function(){
-    if(RT.ws&&RT.ws.readyState===WebSocket.OPEN&&!RT.pingSent){RT.pingSent=Date.now();send({type:'ping',clientTs:RT.pingSent})}
+    if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN)return;
+    var now=Date.now();
+    if(RT.pingSent&&now-RT.pingSent>10000){
+      try{RT.ws.close(4002,'Ping timeout')}catch(_){}
+      return;
+    }
+    if(!RT.pingSent){RT.pingSent=now;send({type:'ping',clientTs:now})}
   },5000);
 
   window.PPA_RT_SEND=send;
   window.PPA_REALTIME_RESYNC=resyncRoom;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
-  window.PPA_REALTIME_DIAG=function(){return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||''}};
+  window.PPA_REALTIME_DIAG=function(){return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null}};
 
-  function boot(){if(RT.started)return;RT.started=true;ensureFullsize();armFullsize();setTimeout(ensureFullsize,300);setTimeout(fixOnlineBadge,350);setTimeout(connect,250)}
+  function boot(){
+    if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();
+    setTimeout(ensureFullsize,300);setTimeout(fixOnlineBadge,350);setTimeout(connect,250);
+  }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
