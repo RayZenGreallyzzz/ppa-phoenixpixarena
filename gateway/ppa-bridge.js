@@ -137,6 +137,7 @@
     ppaWalletLink:function(address){return authed('/api/wallet/link',{address:address||''})},
     ppaWalletUnlink:function(){return authed('/api/wallet/unlink')},
     ppaWalletDeposit:function(payload){return authed('/api/wallet/deposit',payload||{})},
-    ppaWalletWithdraw:function(payload){return authed('/api/wallet/withdraw',payload||{})}
+    ppaWalletWithdraw:function(payload){return authed('/api/wallet/withdraw',payload||{})},
+    ppaResetOwnTestGram:function(){return authed('/api/wallet/reset-test-gram',{confirm:'RESET_ONLY_GRAM'})}
   });
 })();
