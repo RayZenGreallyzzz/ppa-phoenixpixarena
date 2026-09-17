@@ -104,17 +104,10 @@ if (!fs.existsSync(realtimeIdentitySource)) {
 }
 fs.copyFileSync(realtimeIdentitySource, path.join(gameDir, 'realtime-identity-sync.js'));
 
-// Temporary owner/test tool: visible one-click Gram reset. Remove after test cleanup.
-const testGramResetSource = path.join(ROOT, 'gateway', 'test-gram-reset.js');
-if (!fs.existsSync(testGramResetSource)) {
-  throw new Error('Test Gram reset helper missing: gateway/test-gram-reset.js');
-}
-fs.copyFileSync(testGramResetSource, path.join(gameDir, 'test-gram-reset.js'));
-
 if (!output.includes('</body>')) {
   throw new Error('PPA main </body> not found');
 }
-output = output.replace('</body>', '<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n<script src="/game/test-gram-reset.js"></script>\n</body>');
+output = output.replace('</body>', '<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -122,7 +115,6 @@ console.log('Telegram bridge: /game/ppa-bridge.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
 console.log('Realtime identity sync: /game/realtime-identity-sync.js');
-console.log('Temporary test Gram reset: enabled');
 console.log('Telegram migration lockout guard: enabled');
 console.log('Portable save buttons: removed');
 console.log(`index.html: ${(Buffer.byteLength(output)/1024/1024).toFixed(2)} MiB`);
