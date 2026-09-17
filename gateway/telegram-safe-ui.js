@@ -8,8 +8,6 @@
     var t=tg(),n=0;
     try{n=Math.max(n,Number(t&&t.contentSafeAreaInset&&t.contentSafeAreaInset.top)||0)}catch(_){}
     try{n=Math.max(n,Number(t&&t.safeAreaInset&&t.safeAreaInset.top)||0)}catch(_){}
-    // Telegram keeps native collapse/menu controls in this strip even in fullscreen.
-    // Keep at least 46px clear on touch phones, as other Telegram games do.
     if(mobile())n=Math.max(n,46);
     return Math.round(n);
   }
@@ -40,18 +38,26 @@
         html.ppa-tg-mobile-safe #mmap{top:calc(var(--ppa-tg-top-safe) + 76px)!important}
         html.ppa-tg-mobile-safe #ppaOnlineBadge{top:calc(var(--ppa-tg-top-safe) + 2px)!important}
 
-        /* Full-screen game windows start below Telegram's native arrow/menu strip. */
-        html.ppa-tg-mobile-safe #eventsPanel,
-        html.ppa-tg-mobile-safe #premiumPanel,
-        html.ppa-tg-mobile-safe #gramWalletPanel,
-        html.ppa-tg-mobile-safe #charFrame,
-        html.ppa-tg-mobile-safe #blacksmithFrame,
-        html.ppa-tg-mobile-safe #storageFrame,
-        html.ppa-tg-mobile-safe #merchantFrame,
-        html.ppa-tg-mobile-safe #auctionFrame,
-        html.ppa-tg-mobile-safe #blackmarketFrame,
-        html.ppa-tg-mobile-safe #clanFrame,
-        html.ppa-tg-mobile-safe #arenaMenuFrame{
+        /* Windows that are actually open use the Telegram-safe viewport. */
+        html.ppa-tg-mobile-safe #gramWalletPanel.open,
+        html.ppa-tg-mobile-safe #eventsPanel.open,
+        html.ppa-tg-mobile-safe #premiumPanel.open,
+        html.ppa-tg-mobile-safe #charFrame[style*="display: block"],
+        html.ppa-tg-mobile-safe #charFrame[style*="display:block"],
+        html.ppa-tg-mobile-safe #blacksmithFrame[style*="display: block"],
+        html.ppa-tg-mobile-safe #blacksmithFrame[style*="display:block"],
+        html.ppa-tg-mobile-safe #storageFrame[style*="display: block"],
+        html.ppa-tg-mobile-safe #storageFrame[style*="display:block"],
+        html.ppa-tg-mobile-safe #merchantFrame[style*="display: block"],
+        html.ppa-tg-mobile-safe #merchantFrame[style*="display:block"],
+        html.ppa-tg-mobile-safe #auctionFrame[style*="display: block"],
+        html.ppa-tg-mobile-safe #auctionFrame[style*="display:block"],
+        html.ppa-tg-mobile-safe #blackmarketFrame[style*="display: block"],
+        html.ppa-tg-mobile-safe #blackmarketFrame[style*="display:block"],
+        html.ppa-tg-mobile-safe #clanFrame[style*="display: block"],
+        html.ppa-tg-mobile-safe #clanFrame[style*="display:block"],
+        html.ppa-tg-mobile-safe #arenaMenuFrame[style*="display: block"],
+        html.ppa-tg-mobile-safe #arenaMenuFrame[style*="display:block"]{
           left:0!important;
           top:var(--ppa-tg-top-safe)!important;
           transform:none!important;
@@ -60,6 +66,20 @@
           max-width:none!important;
           max-height:none!important;
           border-radius:0!important;
+        }
+
+        /* Critical keyboard fix: a closed wallet must stay truly invisible even
+           when Android changes the CSS viewport while the native keyboard opens. */
+        html.ppa-tg-mobile-safe #gramWalletPanel:not(.open){
+          visibility:hidden!important;
+          opacity:0!important;
+          pointer-events:none!important;
+          transform:translate(120vw,-50%)!important;
+        }
+        html.ppa-tg-mobile-safe #gramWalletBackdrop:not(.open){
+          visibility:hidden!important;
+          opacity:0!important;
+          pointer-events:none!important;
         }
       }
     `;
