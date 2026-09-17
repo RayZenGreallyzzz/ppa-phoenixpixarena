@@ -62,9 +62,6 @@ if (!output.includes(migrationNeedle)) {
 output = output.replace(migrationNeedle, migrationPatch);
 
 // Gateway/cloud problems must never hard-lock a valid local character.
-// If a local save exists, continue locally and keep the migration marker so a
-// later Telegram launch can retry the cloud transfer. If no local character
-// exists, show the safe error code/message instead of the old generic screen.
 const catchNeedle = "  }catch(err){\n    console.error('PPA Gateway bootstrap:',err);\n    ppaShowGatewayError('Не удалось подтвердить Telegram-сессию. Закройте Mini App и откройте игру снова через бота.');\n    return true;\n  }finally{";
 const catchPatch = "  }catch(err){\n    console.error('PPA Gateway bootstrap:',err);\n    var _ppaErrCode=String((err&&err.code)||('HTTP_'+String((err&&err.status)||'ERR')));\n    var _ppaErrMsg=String((err&&err.message)||'Ошибка Gateway');\n    var _ppaLocalClass=(P&&P._saved&&P._saved.cls)?classKeyFromName(P._saved.cls):'';\n    if(_ppaLocalClass&&CLASS_BASE[_ppaLocalClass]){\n      PPA_CLOUD.ready=false;\n      try{showPickup('ОБЛАКО НЕДОСТУПНО · ЛОКАЛЬНЫЙ СЕЙВ','#ffb36b')}catch(_){}\n      applyClass({name:CLASS_BASE[_ppaLocalClass].name});\n      beginGame();\n      return true;\n    }\n    ppaShowGatewayError('Gateway: '+_ppaErrCode+' · '+_ppaErrMsg);\n    return true;\n  }finally{";
 if (!output.includes(catchNeedle)) {
@@ -72,17 +69,27 @@ if (!output.includes(catchNeedle)) {
 }
 output = output.replace(catchNeedle, catchPatch);
 
-// V278 Cloudflare/Telegram activation:
-// the release HTML already contains <script src="/game/ppa-bridge.js"></script>.
-// Keep the game source untouched and publish the verified bridge at that exact path.
+// Publish the verified Telegram bridge at the path already referenced by V278.
 const bridgeSource = path.join(ROOT, 'gateway', 'ppa-bridge.js');
 if (!fs.existsSync(bridgeSource)) {
   throw new Error('Telegram gateway bridge missing: gateway/ppa-bridge.js');
 }
 fs.copyFileSync(bridgeSource, path.join(gameDir, 'ppa-bridge.js'));
 
+// Publish online clan / auction / wallet hooks and load them after the game code.
+const onlineClientSource = path.join(ROOT, 'gateway', 'online-client.js');
+if (!fs.existsSync(onlineClientSource)) {
+  throw new Error('Online client bridge missing: gateway/online-client.js');
+}
+fs.copyFileSync(onlineClientSource, path.join(gameDir, 'online-client.js'));
+if (!output.includes('</body>')) {
+  throw new Error('PPA main </body> not found');
+}
+output = output.replace('</body>', '<script src="/game/online-client.js"></script>\n</body>');
+
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
-console.log(`Telegram bridge: /game/ppa-bridge.js`);
+console.log('Telegram bridge: /game/ppa-bridge.js');
+console.log('Online bridge: /game/online-client.js');
 console.log('Telegram migration lockout guard: enabled');
 console.log(`index.html: ${(Buffer.byteLength(output)/1024/1024).toFixed(2)} MiB`);
