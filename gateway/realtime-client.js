@@ -259,9 +259,9 @@
       var t=await ticket(),proto=location.protocol==='https:'?'wss:':'ws:';
       var ws=new WebSocket(proto+'//'+location.host+'/api/realtime/ws?ticket='+encodeURIComponent(t.ticket));
       RT.ws=ws;
-      ws.onopen=function(){RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;RT.lastServerAt=Date.now();RT.lastRoomSync=0;RT.serverRoom='';RT.roomPeers=null;setConnected(true);sendRoom(true);sendMove(true)};
-      ws.onmessage=function(ev){try{receive(JSON.parse(ev.data))}catch(_){}};
-      ws.onclose=function(){if(RT.ws===ws)RT.ws=null;RT.connecting=false;RT.pingMs=null;RT.pingSent=0;RT.lastServerAt=0;RT.lastRoomSync=0;RT.serverRoom='';RT.roomPeers=null;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
+      ws.onopen=function(){if(RT.ws!==ws)return;RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;RT.lastServerAt=Date.now();RT.lastRoomSync=0;RT.serverRoom='';RT.roomPeers=null;setConnected(true);sendRoom(true);sendMove(true)};
+      ws.onmessage=function(ev){if(RT.ws!==ws)return;try{receive(JSON.parse(ev.data))}catch(_){}};
+      ws.onclose=function(){if(RT.ws!==ws)return;RT.ws=null;RT.connecting=false;RT.pingMs=null;RT.pingSent=0;RT.lastServerAt=0;RT.lastRoomSync=0;RT.serverRoom='';RT.roomPeers=null;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
       ws.onerror=function(){};
     }catch(e){RT.connecting=false;console.warn('PPA realtime connect',e);setConnected(false);scheduleReconnect()}
   }
