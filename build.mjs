@@ -4,16 +4,13 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 
 const ROOT = process.cwd();
-const PART_PREFIX = 'PPA_V278_SOURCE.gz.part';
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
+const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
 
-const parts = fs.readdirSync(ROOT)
-  .filter((name) => name.startsWith(PART_PREFIX))
-  .sort((a,b) => Number(a.slice(PART_PREFIX.length)) - Number(b.slice(PART_PREFIX.length)));
-
-if (parts.length !== EXPECTED_PARTS) {
-  throw new Error(`PPA source parts incomplete: found ${parts.length}, expected ${EXPECTED_PARTS}. Upload part01 ... part12 to the repository root.`);
+const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
+if (missing.length) {
+  throw new Error(`PPA source parts incomplete. Missing: ${missing.join(', ')}`);
 }
 
 console.log(`PPA build: joining ${parts.length} source parts...`);
