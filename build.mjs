@@ -69,6 +69,71 @@ if (!output.includes(catchNeedle)) {
 }
 output = output.replace(catchNeedle, catchPatch);
 
+// Telegram Android WebView may swallow <a download>. Call the parent exporter
+// directly from the inventory iframe so transient user activation is preserved
+// for the Android Web Share / "Save to files" sheet.
+const exportButtonNeedle = "onclick=&quot;parent.postMessage({type:&#x27;exportSave&#x27;},&#x27;*&#x27;)&quot;";
+const exportButtonPatch = "onclick=&quot;parent.PPA_EXPORT_SAVE&amp;&amp;parent.PPA_EXPORT_SAVE()&quot;";
+if (!output.includes(exportButtonNeedle)) {
+  throw new Error('PPA save export button target not found');
+}
+output = output.replace(exportButtonNeedle, exportButtonPatch);
+
+const exportStart = output.indexOf('function ppaExportSave(){');
+const exportEnd = output.indexOf('function ppaImportSaveText(txt){', exportStart);
+if (exportStart < 0 || exportEnd < 0) {
+  throw new Error('PPA save export function target not found');
+}
+const exportPatch = `async function ppaExportSave(){
+  try{
+    var data={format:'PPA_PORTABLE_SAVE_V1',createdAt:new Date().toISOString(),values:{}};
+    PPA_SAVE_EXPORT_KEYS.forEach(function(k){
+      var v=localStorage.getItem(k);
+      if(v!==null)data.values[k]=v;
+    });
+    var text=JSON.stringify(data,null,2);
+    var name='PPA_SAVE_BACKUP_'+new Date().toISOString().slice(0,10)+'.json';
+
+    // Best path for Telegram/Android: native share sheet. It lets the player
+    // choose Files/Downloads, Drive, Telegram Saved Messages, etc.
+    try{
+      if(typeof File==='function'&&navigator&&typeof navigator.share==='function'){
+        var file=new File([text],name,{type:'application/json'});
+        var can=true;
+        try{if(typeof navigator.canShare==='function')can=navigator.canShare({files:[file]})}catch(_){can=true}
+        if(can){
+          try{
+            await navigator.share({files:[file],title:'PPA · резервный сейв'});
+            showPickup('СЕЙВ СОХРАНЁН','#7dff9f');
+            return true;
+          }catch(shareErr){
+            if(shareErr&&shareErr.name==='AbortError'){
+              showPickup('СОХРАНЕНИЕ ОТМЕНЕНО','#ffcc77');
+              return false;
+            }
+          }
+        }
+      }
+    }catch(_){}
+
+    // Browser/file fallback.
+    var blob=new Blob([text],{type:'application/json'});
+    var a=document.createElement('a');
+    var u=URL.createObjectURL(blob);
+    a.href=u;a.download=name;a.style.display='none';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){try{URL.revokeObjectURL(u)}catch(_){}},5000);
+    showPickup('СЕЙВ ОТПРАВЛЕН В ЗАГРУЗКИ','#7dff9f');
+    return true;
+  }catch(e){
+    console.warn('PPA save export:',e);
+    showPickup('НЕ УДАЛОСЬ СОХРАНИТЬ СЕЙВ','#ff7777');
+    return false;
+  }
+}
+`;
+output = output.slice(0, exportStart) + exportPatch + output.slice(exportEnd);
+
 // Publish the verified Telegram bridge at the path already referenced by V278.
 const bridgeSource = path.join(ROOT, 'gateway', 'ppa-bridge.js');
 if (!fs.existsSync(bridgeSource)) {
@@ -92,4 +157,5 @@ console.log(`PPA build complete: ${count} unique embedded images externalized.`)
 console.log('Telegram bridge: /game/ppa-bridge.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Telegram migration lockout guard: enabled');
+console.log('Android Telegram save export: native share enabled');
 console.log(`index.html: ${(Buffer.byteLength(output)/1024/1024).toFixed(2)} MiB`);
