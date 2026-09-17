@@ -35,12 +35,55 @@
     return cachedAuth;
   }
 
-  function localNickname(){
+  function localSave(){
     try{
       var raw=localStorage.getItem('pxSave')||localStorage.getItem('pxSaveLastGood')||'';
       var s=raw?JSON.parse(raw):null;
+      return s&&typeof s==='object'?s:null;
+    }catch(_){return null}
+  }
+
+  function localNickname(){
+    try{
+      var s=localSave();
       return String((s&&s.playerName)||localStorage.getItem('ppaPlayerNameV205')||'').trim();
     }catch(_){return String(localStorage.getItem('ppaPlayerNameV205')||'').trim()}
+  }
+
+  function validNick(v){return /^[A-Za-zА-Яа-яЁё0-9_]{3,18}$/u.test(String(v||'').trim())}
+
+  async function loadProfileWithSafeFirstMigration(){
+    await auth();
+    var result=await call('/api/profile/load');
+    var profile=result&&result.profile?result.profile:null;
+    if(!profile||profile.nickname)return result;
+
+    // First Telegram-ID activation only: never silently delete a valid local
+    // character. Ask the player whether the current local character belongs
+    // to this verified Telegram account. If accepted, register the nickname;
+    // the existing V278 bootstrap will then upload the full local save.
+    var s=localSave();
+    var nick=String((s&&s.playerName)||localNickname()||'').trim();
+    if(!s||!validNick(nick))return result;
+
+    var decision='';
+    try{decision=sessionStorage.getItem('ppaTgMigrationDecisionV278')||''}catch(_){}
+    if(decision==='new')return result;
+
+    if(decision!=='keep'){
+      var ok=false;
+      try{
+        ok=window.confirm('Найден персонаж «'+nick+'» на этом устройстве.\n\nПривязать его к вашему Telegram ID и перенести сохранение в облако?');
+      }catch(_){ok=false}
+      decision=ok?'keep':'new';
+      try{sessionStorage.setItem('ppaTgMigrationDecisionV278',decision)}catch(_){}
+      if(!ok)return result;
+    }
+
+    var cls=String((s&&s.cls)||'');
+    var registered=await call('/api/character/register',{nickname:nick,classKey:cls});
+    if(registered&&registered.profile)return {ok:true,profile:registered.profile};
+    return result;
   }
 
   function queueSave(state,version){
@@ -59,7 +102,7 @@
   Object.assign(window.PPA,{
     isAvailable:available,
     ppaAuthTelegram:auth,
-    ppaLoadProfile:async function(){await auth();return call('/api/profile/load')},
+    ppaLoadProfile:loadProfileWithSafeFirstMigration,
     ppaLoadSave:async function(){await auth();return call('/api/save/load')},
     ppaSaveGame:async function(state,version){await auth();return queueSave(state,version)},
     ppaRegisterCharacter:async function(nickname,classKey){await auth();return call('/api/character/register',{nickname:nickname,classKey:classKey||''})},
