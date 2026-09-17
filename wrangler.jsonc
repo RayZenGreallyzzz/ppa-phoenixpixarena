@@ -6,5 +6,12 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ppa-phoenix-db",
+      "database_id": "53d15b19-362d-4850-a6b8-df058ac1fba7"
+    }
+  ]
 }
