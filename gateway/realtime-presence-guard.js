@@ -7,7 +7,7 @@
   };
 
   function canonical(v){
-    var s=String(v==null?'':v).trim();
+    var s=String(v==null?'':v).trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,72);
     var k=s.toLowerCase();
     if(!k||k==='offline'||k==='local'||k==='none'||k==='null'||k==='undefined')return 'safe';
     return s;
@@ -88,7 +88,7 @@
       var x=Number(p.x),y=Number(p.y);if(!Number.isFinite(x)||!Number.isFinite(y))return null;
       var hp=Number(p.hp),mhp=Number(p.mhp),face=Number(p.face),lvl=Number(p.lvl),bm=Number(p.bm);
       return {
-        type:'move',x:x,y:y,
+        type:'move',room:canonical(rawRoom()),x:x,y:y,
         h:Number.isFinite(hp)?Math.max(0,Math.round(hp)):0,
         m:Number.isFinite(mhp)?Math.max(1,Math.round(mhp)):1,
         f:Number.isFinite(face)?Math.max(1,Math.min(8,Math.round(face))):1,
@@ -101,13 +101,13 @@
 
   function heartbeat(d){
     if(!d||!d.connected||typeof window.PPA_RT_SEND!=='function')return;
-    var now=Date.now();if(now-state.lastHeartbeat<850)return;
+    var now=Date.now();if(now-state.lastHeartbeat<1700)return;
     var s=selfState();if(!s)return;
     if(window.PPA_RT_SEND(s))state.lastHeartbeat=now;
   }
 
   function healShadow(d){
-    var now=Date.now();if(now-state.lastHeal<320)return;state.lastHeal=now;
+    var now=Date.now();if(now-state.lastHeal<450)return;state.lastHeal=now;
     if(!state.applyOriginal||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return;
     var room=canonical((d&&d.room)||rawRoom());
     state.shadow.forEach(function(v,id){
@@ -126,11 +126,11 @@
     var now=Date.now(),localRoom=canonical(rawRoom());
     if(state.lastSeenRoom!==localRoom){
       state.lastSeenRoom=localRoom;state.shadow.clear();
-      if(now-state.lastResync>150){state.lastResync=now;try{window.PPA_REALTIME_RESYNC()}catch(_){}}
+      if(now-state.lastResync>180){state.lastResync=now;try{window.PPA_REALTIME_RESYNC()}catch(_){}}
       return;
     }
     var online=Math.max(0,Number(d.online)||0),empty=visibleCount()===0;
-    var wait=empty&&online>1?650:2200;
+    var wait=empty&&online>1?1800:5000;
     if(now-state.lastResync>wait){state.lastResync=now;try{window.PPA_REALTIME_RESYNC()}catch(_){}}
   }
 
@@ -142,7 +142,7 @@
   function boot(){
     if(state.started)return;state.started=true;
     captureRoomSource();installRoomBridge();installApplyBridge();
-    setTimeout(tick,180);setInterval(tick,240);
+    setTimeout(tick,180);setInterval(tick,300);
     document.addEventListener('visibilitychange',function(){if(!document.hidden){state.lastResync=0;state.lastHeartbeat=0;setTimeout(tick,60)}},{passive:true});
     window.addEventListener('pageshow',function(){state.lastResync=0;state.lastHeartbeat=0;setTimeout(tick,60)},{passive:true});
   }
