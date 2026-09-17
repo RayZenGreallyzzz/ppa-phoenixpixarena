@@ -83,21 +83,30 @@ if (!fs.existsSync(bridgeSource)) {
 }
 fs.copyFileSync(bridgeSource, path.join(gameDir, 'ppa-bridge.js'));
 
-// Publish online clan / auction / wallet hooks and load them after the game code.
+// Publish persistent clan / auction / wallet hooks.
 const onlineClientSource = path.join(ROOT, 'gateway', 'online-client.js');
 if (!fs.existsSync(onlineClientSource)) {
   throw new Error('Online client bridge missing: gateway/online-client.js');
 }
 fs.copyFileSync(onlineClientSource, path.join(gameDir, 'online-client.js'));
+
+// Publish Cloudflare Durable Object WebSocket realtime client.
+const realtimeClientSource = path.join(ROOT, 'gateway', 'realtime-client.js');
+if (!fs.existsSync(realtimeClientSource)) {
+  throw new Error('Realtime client bridge missing: gateway/realtime-client.js');
+}
+fs.copyFileSync(realtimeClientSource, path.join(gameDir, 'realtime-client.js'));
+
 if (!output.includes('</body>')) {
   throw new Error('PPA main </body> not found');
 }
-output = output.replace('</body>', '<script src="/game/online-client.js"></script>\n</body>');
+output = output.replace('</body>', '<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n</body>');
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
 console.log('Telegram bridge: /game/ppa-bridge.js');
 console.log('Online bridge: /game/online-client.js');
+console.log('Realtime bridge: /game/realtime-client.js');
 console.log('Telegram migration lockout guard: enabled');
 console.log('Portable save buttons: removed');
 console.log(`index.html: ${(Buffer.byteLength(output)/1024/1024).toFixed(2)} MiB`);
