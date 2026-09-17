@@ -1,13 +1,21 @@
 (function(){
   'use strict';
-  var RT={ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,lastAnim:'',lastLevel:null,lastBm:null,onlineCount:0,started:false};
+  var RT={ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,lastAnim:'',lastLevel:null,lastBm:null,onlineCount:0,started:false,pingSent:0,pingMs:null};
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var t=tg();return t&&t.initData?String(t.initData):''}
-  function room(){try{return typeof ppaOnlineRoomKey==='function'?String(ppaOnlineRoomKey()||'safe'):'safe'}catch(_){return 'safe'}}
+  function room(){
+    try{
+      var r=typeof ppaOnlineRoomKey==='function'?String(ppaOnlineRoomKey()||'safe'):'safe';
+      var k=r.trim().toLowerCase();
+      if(!k||k==='offline'||k==='local'||k==='none'||k==='null'||k==='undefined')return 'safe';
+      return r;
+    }catch(_){return 'safe'}
+  }
   function mobileUi(){try{return innerWidth<=900||matchMedia('(pointer:coarse)').matches}catch(_){return false}}
   function selfLevel(){try{return Math.max(1,Math.floor(Number(P&&P.lvl)||1))}catch(_){return 1}}
   function selfBm(){try{return Math.max(0,Math.round(Number(P&&P.bm)||0))}catch(_){return 0}}
+  function badgeText(){var s='ONLINE · '+Math.max(1,RT.onlineCount||1);if(Number.isFinite(RT.pingMs))s+=' · '+Math.round(RT.pingMs)+' ms';return s}
 
   function fixOnlineBadge(){
     try{
@@ -15,7 +23,7 @@
       if(mobileUi()){
         el.style.position='fixed';el.style.display='block';el.style.visibility='visible';
         el.style.left='50%';el.style.right='auto';el.style.top='8px';el.style.transform='translateX(-50%)';
-        el.style.padding='2px 6px';el.style.fontSize='9px';el.style.lineHeight='1.1';el.style.maxWidth='150px';el.style.whiteSpace='nowrap';
+        el.style.padding='2px 6px';el.style.fontSize='9px';el.style.lineHeight='1.1';el.style.maxWidth='190px';el.style.whiteSpace='nowrap';
         el.style.opacity='0.95';el.style.pointerEvents='none';el.style.zIndex='9999';
       }else{
         el.style.position='fixed';el.style.left='8px';el.style.right='auto';el.style.top='8px';el.style.transform='none';
@@ -24,6 +32,7 @@
     }catch(_){}
   }
   function status(text,col){try{if(typeof ppaOnlineSetStatus==='function'){ppaOnlineSetStatus(text,col);fixOnlineBadge()}}catch(_){}}
+  function refreshBadge(){if(RT.ws&&RT.ws.readyState===WebSocket.OPEN)status(badgeText(),'#9fffc1')}
   function send(o){try{if(RT.ws&&RT.ws.readyState===WebSocket.OPEN){RT.ws.send(JSON.stringify(o));return true}}catch(_){}return false}
   function clearRemotes(){try{if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes)PPA_ONLINE.remotes.clear()}catch(_){}}
   function applyPlayer(p,presence){
@@ -88,7 +97,7 @@
         if(on){PPA_ONLINE.roomKey=room();PPA_ONLINE.selfName=selfName()}
       }
     }catch(_){}
-    if(on)status('ONLINE · '+Math.max(1,RT.onlineCount||1),'#9fffc1');
+    if(on)refreshBadge();
     else status('ONLINE · переподключение…','#ffb37d');
   }
 
@@ -133,7 +142,11 @@
       try{if(typeof PPA_ONLINE!=='undefined'){PPA_ONLINE.selfId=String(m.pid||PPA_ONLINE.selfId||'');PPA_ONLINE.selfName=String(m.name||selfName())}}catch(_){}
       sendRoom(true);sendMove(true);return;
     }
-    if(m.type==='online'){RT.onlineCount=Math.max(0,Number(m.count)||0);status('ONLINE · '+RT.onlineCount,'#9fffc1');return}
+    if(m.type==='pong'){
+      if(RT.pingSent){var ms=Math.max(0,Date.now()-RT.pingSent);RT.pingMs=Number.isFinite(RT.pingMs)?(RT.pingMs*0.65+ms*0.35):ms;RT.pingSent=0;refreshBadge()}
+      return;
+    }
+    if(m.type==='online'){RT.onlineCount=Math.max(0,Number(m.count)||0);refreshBadge();return}
     if(m.type==='snapshot'){
       if(String(m.room||'')!==RT.lastRoom)return;clearRemotes();(Array.isArray(m.players)?m.players:[]).forEach(function(p){applyPlayer(p,true)});return;
     }
@@ -167,9 +180,9 @@
       var proto=location.protocol==='https:'?'wss:':'ws:';
       var ws=new WebSocket(proto+'//'+location.host+'/api/realtime/ws?ticket='+encodeURIComponent(t.ticket));
       RT.ws=ws;
-      ws.onopen=function(){RT.connecting=false;RT.retry=0;setConnected(true);sendRoom(true);sendMove(true)};
+      ws.onopen=function(){RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;setConnected(true);sendRoom(true);sendMove(true)};
       ws.onmessage=function(ev){try{receive(JSON.parse(ev.data))}catch(_){}};
-      ws.onclose=function(){if(RT.ws===ws)RT.ws=null;RT.connecting=false;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
+      ws.onclose=function(){if(RT.ws===ws)RT.ws=null;RT.connecting=false;RT.pingMs=null;RT.pingSent=0;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
       ws.onerror=function(){};
     }catch(e){RT.connecting=false;console.warn('PPA realtime connect',e);setConnected(false);scheduleReconnect()}
   }
@@ -185,11 +198,13 @@
     if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN)return;
     sendRoom(false);sendMove(false);
   },120);
-  setInterval(function(){if(RT.ws&&RT.ws.readyState===WebSocket.OPEN)send({type:'ping'})},25000);
+  setInterval(function(){
+    if(RT.ws&&RT.ws.readyState===WebSocket.OPEN&&!RT.pingSent){RT.pingSent=Date.now();send({type:'ping',clientTs:RT.pingSent})}
+  },5000);
 
   window.PPA_RT_SEND=send;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
-  window.PPA_REALTIME_DIAG=function(){return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,online:RT.onlineCount,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||''}};
+  window.PPA_REALTIME_DIAG=function(){return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||''}};
 
   function boot(){if(RT.started)return;RT.started=true;ensureFullsize();armFullsize();setTimeout(ensureFullsize,300);setTimeout(fixOnlineBadge,350);setTimeout(connect,250)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
