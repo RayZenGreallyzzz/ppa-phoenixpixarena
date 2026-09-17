@@ -34,7 +34,7 @@ const seen = new Map();
 const dataUri = /data:image\/(png|webp|jpeg);base64,([A-Za-z0-9+/=]+)/g;
 let count = 0;
 
-const output = source.replace(dataUri, (full, mime, b64) => {
+let output = source.replace(dataUri, (full, mime, b64) => {
   if (seen.has(full)) return seen.get(full);
   const bytes = Buffer.from(b64, 'base64');
   const hash = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 16);
@@ -45,6 +45,32 @@ const output = source.replace(dataUri, (full, mime, b64) => {
   count++;
   return url;
 });
+
+// Keep the Telegram Mini App SDK current so initData is populated reliably.
+output = output.replace(
+  'https://telegram.org/js/telegram-web-app.js"',
+  'https://telegram.org/js/telegram-web-app.js?63"'
+);
+
+// An explicitly imported portable save may replace progress, but it must not
+// bypass the nickname already bound to this verified Telegram profile.
+const migrationNeedle = 'var migrationState=ppaMigrationSaveObject();\n      if(ppaSaveHasCharacterState(migrationState)){';
+const migrationPatch = "var migrationState=ppaMigrationSaveObject();\n      if(profileNick&&/^[A-Za-zА-Яа-яЁё0-9_]{3,18}$/u.test(profileNick))migrationState.playerName=profileNick;\n      if(ppaSaveHasCharacterState(migrationState)){";
+if (!output.includes(migrationNeedle)) {
+  throw new Error('PPA Telegram migration patch target not found');
+}
+output = output.replace(migrationNeedle, migrationPatch);
+
+// Gateway/cloud problems must never hard-lock a valid local character.
+// If a local save exists, continue locally and keep the migration marker so a
+// later Telegram launch can retry the cloud transfer. If no local character
+// exists, show the safe error code/message instead of the old generic screen.
+const catchNeedle = "  }catch(err){\n    console.error('PPA Gateway bootstrap:',err);\n    ppaShowGatewayError('Не удалось подтвердить Telegram-сессию. Закройте Mini App и откройте игру снова через бота.');\n    return true;\n  }finally{";
+const catchPatch = "  }catch(err){\n    console.error('PPA Gateway bootstrap:',err);\n    var _ppaErrCode=String((err&&err.code)||('HTTP_'+String((err&&err.status)||'ERR')));\n    var _ppaErrMsg=String((err&&err.message)||'Ошибка Gateway');\n    var _ppaLocalClass=(P&&P._saved&&P._saved.cls)?classKeyFromName(P._saved.cls):'';\n    if(_ppaLocalClass&&CLASS_BASE[_ppaLocalClass]){\n      PPA_CLOUD.ready=false;\n      try{showPickup('ОБЛАКО НЕДОСТУПНО · ЛОКАЛЬНЫЙ СЕЙВ','#ffb36b')}catch(_){}\n      applyClass({name:CLASS_BASE[_ppaLocalClass].name});\n      beginGame();\n      return true;\n    }\n    ppaShowGatewayError('Gateway: '+_ppaErrCode+' · '+_ppaErrMsg);\n    return true;\n  }finally{";
+if (!output.includes(catchNeedle)) {
+  throw new Error('PPA Gateway fallback patch target not found');
+}
+output = output.replace(catchNeedle, catchPatch);
 
 // V278 Cloudflare/Telegram activation:
 // the release HTML already contains <script src="/game/ppa-bridge.js"></script>.
@@ -58,4 +84,5 @@ fs.copyFileSync(bridgeSource, path.join(gameDir, 'ppa-bridge.js'));
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
 console.log(`Telegram bridge: /game/ppa-bridge.js`);
+console.log('Telegram migration lockout guard: enabled');
 console.log(`index.html: ${(Buffer.byteLength(output)/1024/1024).toFixed(2)} MiB`);
