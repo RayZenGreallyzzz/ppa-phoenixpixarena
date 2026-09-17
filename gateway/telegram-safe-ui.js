@@ -1,6 +1,13 @@
 (function(){
   'use strict';
 
+  var kbOpen=false,fullW=0,fullH=0,gameResizeFn=null,frozen=[];
+  var freezeSelectors=[
+    '#joy','#btns','#combatConsumables','#timedBuffHud',
+    '#eventsSideTab','#premiumSideTab','#gramWalletSideTab',
+    '#locName','#pvpCountdown'
+  ];
+
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function mobile(){try{return innerWidth<=900||matchMedia('(pointer:coarse)').matches}catch(_){return false}}
 
@@ -12,11 +19,143 @@
     return Math.round(n);
   }
 
+  function rememberViewport(){
+    if(kbOpen||!mobile())return;
+    try{
+      var c=document.getElementById('c');
+      fullW=Math.max(1,Math.round((c&&c.width)||innerWidth||document.documentElement.clientWidth||1));
+      fullH=Math.max(1,Math.round((c&&c.height)||innerHeight||document.documentElement.clientHeight||1));
+      document.documentElement.style.setProperty('--ppa-game-full-w',fullW+'px');
+      document.documentElement.style.setProperty('--ppa-game-full-h',fullH+'px');
+    }catch(_){}
+  }
+
+  function lockCanvas(){
+    if(!kbOpen)return;
+    try{
+      var c=document.getElementById('c');
+      if(!c)return;
+      if(fullW>0&&c.width!==fullW)c.width=fullW;
+      if(fullH>0&&c.height!==fullH)c.height=fullH;
+      c.style.setProperty('width',fullW+'px','important');
+      c.style.setProperty('height',fullH+'px','important');
+    }catch(_){}
+  }
+
+  function freezeGameControls(){
+    frozen=[];
+    freezeSelectors.forEach(function(sel){
+      var el=null;try{el=document.querySelector(sel)}catch(_){}
+      if(!el)return;
+      var r=null;try{r=el.getBoundingClientRect()}catch(_){r=null}
+      if(!r)return;
+      var saved={el:el,css:{}};
+      ['position','left','top','right','bottom','transform'].forEach(function(k){
+        saved.css[k]={value:el.style.getPropertyValue(k),priority:el.style.getPropertyPriority(k)};
+      });
+      frozen.push(saved);
+      try{
+        el.style.setProperty('position','fixed','important');
+        el.style.setProperty('left',Math.round(r.left)+'px','important');
+        el.style.setProperty('top',Math.round(r.top)+'px','important');
+        el.style.setProperty('right','auto','important');
+        el.style.setProperty('bottom','auto','important');
+        el.style.setProperty('transform','none','important');
+      }catch(_){}
+    });
+  }
+
+  function restoreGameControls(){
+    frozen.forEach(function(s){
+      if(!s||!s.el)return;
+      Object.keys(s.css).forEach(function(k){
+        var v=s.css[k];
+        try{
+          if(v&&v.value)s.el.style.setProperty(k,v.value,v.priority||'');
+          else s.el.style.removeProperty(k);
+        }catch(_){}
+      });
+    });
+    frozen=[];
+  }
+
+  function beginKeyboardFreeze(){
+    if(kbOpen||!mobile())return;
+    rememberViewport();
+    kbOpen=true;
+    try{
+      document.documentElement.classList.add('ppa-native-kb-open');
+      document.documentElement.style.setProperty('--ppa-game-full-w',fullW+'px');
+      document.documentElement.style.setProperty('--ppa-game-full-h',fullH+'px');
+    }catch(_){}
+    freezeGameControls();
+    lockCanvas();
+  }
+
+  function finishKeyboardFreeze(force){
+    if(!kbOpen)return;
+    if(!force){
+      try{
+        var vv=window.visualViewport;
+        var vh=Math.round(vv?vv.height:innerHeight);
+        if(fullH>0&&vh<fullH*.78){setTimeout(function(){finishKeyboardFreeze(false)},90);return}
+      }catch(_){}
+    }
+    kbOpen=false;
+    try{document.documentElement.classList.remove('ppa-native-kb-open')}catch(_){}
+    restoreGameControls();
+    try{
+      var c=document.getElementById('c');
+      if(c){c.style.removeProperty('width');c.style.removeProperty('height')}
+    }catch(_){}
+    setTimeout(function(){
+      rememberViewport();
+      try{if(gameResizeFn)gameResizeFn()}catch(_){}
+    },80);
+  }
+
+  function armGameResizeGuard(){
+    try{
+      gameResizeFn=typeof window.resize==='function'?window.resize:null;
+      if(gameResizeFn){
+        try{window.removeEventListener('resize',gameResizeFn)}catch(_){}
+        window.addEventListener('resize',function(){
+          if(kbOpen){lockCanvas();return}
+          try{gameResizeFn()}catch(_){}
+          rememberViewport();
+        },{passive:true});
+      }else{
+        window.addEventListener('resize',function(){if(kbOpen)lockCanvas();else rememberViewport()},{passive:true});
+      }
+      if(window.visualViewport){
+        window.visualViewport.addEventListener('resize',function(){if(kbOpen)lockCanvas()},{passive:true});
+        window.visualViewport.addEventListener('scroll',function(){if(kbOpen)lockCanvas()},{passive:true});
+      }
+    }catch(_){}
+  }
+
+  function armChatKeyboardFreeze(){
+    document.addEventListener('focusin',function(e){
+      try{if(e&&e.target&&e.target.id==='ppaChatNativeInput')beginKeyboardFreeze()}catch(_){}
+    },true);
+    document.addEventListener('focusout',function(e){
+      try{
+        if(!e||!e.target||e.target.id!=='ppaChatNativeInput')return;
+        setTimeout(function(){
+          try{if(document.activeElement&&document.activeElement.id==='ppaChatNativeInput')return}catch(_){}
+          finishKeyboardFreeze(false);
+        },160);
+      }catch(_){}
+    },true);
+    document.addEventListener('visibilitychange',function(){if(document.hidden)finishKeyboardFreeze(true)},{passive:true});
+  }
+
   function apply(){
     try{
       var px=topInset()+'px';
       document.documentElement.style.setProperty('--ppa-tg-top-safe',px);
       document.documentElement.classList.toggle('ppa-tg-mobile-safe',mobile());
+      if(!kbOpen)rememberViewport();
     }catch(_){}
   }
 
@@ -25,12 +164,25 @@
     var st=document.createElement('style');
     st.id='ppaTelegramSafeUi';
     st.textContent=`
-      :root{--ppa-tg-top-safe:0px}
+      :root{--ppa-tg-top-safe:0px;--ppa-game-full-w:100vw;--ppa-game-full-h:100vh}
       @media (max-width:900px), (pointer:coarse){
         html.ppa-tg-mobile-safe{
           -webkit-text-size-adjust:100%!important;
           text-size-adjust:100%!important;
         }
+        html.ppa-tg-mobile-safe.ppa-native-kb-open,
+        html.ppa-tg-mobile-safe.ppa-native-kb-open body{
+          width:var(--ppa-game-full-w)!important;
+          height:var(--ppa-game-full-h)!important;
+          min-height:var(--ppa-game-full-h)!important;
+          max-height:var(--ppa-game-full-h)!important;
+          overflow:hidden!important;
+        }
+        html.ppa-tg-mobile-safe.ppa-native-kb-open #c{
+          width:var(--ppa-game-full-w)!important;
+          height:var(--ppa-game-full-h)!important;
+        }
+
         html.ppa-tg-mobile-safe #hud{top:calc(var(--ppa-tg-top-safe) + 5px)!important}
         html.ppa-tg-mobile-safe #stats{top:calc(var(--ppa-tg-top-safe) + 6px)!important}
         html.ppa-tg-mobile-safe #waveInfo{top:calc(var(--ppa-tg-top-safe) + 7px)!important}
@@ -43,9 +195,7 @@
         html.ppa-tg-mobile-safe #ppaOnlineBadge{top:calc(var(--ppa-tg-top-safe) + 2px)!important}
 
         /* Huawei / older Android WebView can auto-zoom a focused input whose
-           text size is below 16px. Our chat uses an almost invisible native
-           input only to summon the keyboard; keep it at 16px and in the middle
-           of the viewport so focusing it never zooms or pans the whole game. */
+           text size is below 16px. Keep the invisible keyboard input neutral. */
         html.ppa-tg-mobile-safe #ppaChatNativeInput{
           position:fixed!important;
           left:50%!important;
@@ -67,8 +217,8 @@
           overflow:hidden!important;
         }
 
-        /* Keyboard mode is allowed to move the chat vertically above the
-           keyboard, but it must not squeeze or slide it sideways. */
+        /* Only the chat follows the reduced visual viewport above Android's
+           keyboard. The game canvas and controls stay on the original frame. */
         html.ppa-tg-mobile-safe #ppaChatRoot.nativeTyping{
           left:7px!important;
           right:auto!important;
@@ -128,10 +278,9 @@
     document.head.appendChild(st);
   }
 
-  function boot(){installStyle();apply()}
+  function boot(){installStyle();apply();armGameResizeGuard();armChatKeyboardFreeze();rememberViewport()}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
-  window.addEventListener('resize',apply,{passive:true});
-  window.addEventListener('orientationchange',function(){setTimeout(apply,120)},{passive:true});
+  window.addEventListener('orientationchange',function(){setTimeout(function(){if(!kbOpen){apply();try{if(gameResizeFn)gameResizeFn()}catch(_){}}},180)},{passive:true});
   try{
     var t=tg();
     if(t&&typeof t.onEvent==='function'){
