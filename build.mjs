@@ -97,6 +97,14 @@ if (!fs.existsSync(realtimeClientSource)) {
 }
 fs.copyFileSync(realtimeClientSource, path.join(gameDir, 'realtime-client.js'));
 
+// Replace the old colored-circle remote placeholder with the same approved
+// class sprite sheets used by the local player and AI fighters.
+const remoteSpriteSource = path.join(ROOT, 'gateway', 'remote-sprite-renderer.js');
+if (!fs.existsSync(remoteSpriteSource)) {
+  throw new Error('Remote sprite renderer missing: gateway/remote-sprite-renderer.js');
+}
+fs.copyFileSync(remoteSpriteSource, path.join(gameDir, 'remote-sprite-renderer.js'));
+
 // Refresh realtime identity when nickname or clan membership changes.
 const realtimeIdentitySource = path.join(ROOT, 'gateway', 'realtime-identity-sync.js');
 if (!fs.existsSync(realtimeIdentitySource)) {
@@ -115,7 +123,7 @@ fs.copyFileSync(telegramSafeUiSource, path.join(gameDir, 'telegram-safe-ui.js'))
 if (!output.includes('</body>')) {
   throw new Error('PPA main </body> not found');
 }
-output = output.replace('</body>', '<script src="/game/telegram-safe-ui.js"></script>\n<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
+output = output.replace('</body>', '<script src="/game/telegram-safe-ui.js"></script>\n<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/remote-sprite-renderer.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -123,6 +131,7 @@ console.log('Telegram bridge: /game/ppa-bridge.js');
 console.log('Telegram safe UI: /game/telegram-safe-ui.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
+console.log('Remote player sprites: /game/remote-sprite-renderer.js');
 console.log('Realtime identity sync: /game/realtime-identity-sync.js');
 console.log('Telegram migration lockout guard: enabled');
 console.log('Portable save buttons: removed');
