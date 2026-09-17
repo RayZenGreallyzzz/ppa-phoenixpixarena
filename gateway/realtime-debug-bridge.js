@@ -26,18 +26,23 @@
       var fcls=fps>=55?'g':(fps>=40?'w':'b');
       var ping=stablePing(d.ping);
       var visible=0,drawn=0;
-      try{visible=window.PPA_ONLINE&&PPA_ONLINE.remotes?PPA_ONLINE.remotes.size:0;drawn=window.PPA_ONLINE?Number(PPA_ONLINE.drawnLast||0):0}catch(_){}
+      try{
+        var o=(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE)?PPA_ONLINE:null;
+        visible=o&&o.remotes?o.remotes.size:0;drawn=o?Number(o.drawnLast||0):0;
+      }catch(_){}
       var players=d.connected?Math.max(1,Number(d.online)||1):1;
       var age=Number.isFinite(Number(d.serverAge))?Math.max(0,Math.round(Number(d.serverAge))):null;
       var room=d.connected?String(d.room||'safe'):'offline';
       var serverRoom=d.connected?String(d.serverRoom||'—'):'offline';
       var roomPeers=Number.isFinite(Number(d.roomPeers))?Math.max(1,Math.round(Number(d.roomPeers))):'—';
+      var md=null;try{md=window.PPA_MOB_SYNC_DIAG?window.PPA_MOB_SYNC_DIAG():null}catch(_){}
+      var mobLine=(md&&md.active)?('<div class="d">MOBS SYNC '+Math.max(0,Number(md.synced)||0)+' · REM '+Math.max(0,Number(md.remoteOwned)||0)+' · DEAD '+Math.max(0,Number(md.tombs)||0)+'</div>'):'';
 
       box.innerHTML='<div><span class="'+fcls+'">FPS '+fps+'</span> &nbsp; <span class="'+clsPing(ping)+'">PING '+(ping==null?'—':ping+' ms')+'</span></div>'+
         '<div class="d">PLAYERS '+players+' · ROOM '+roomPeers+' · VISIBLE '+visible+' / '+drawn+'</div>'+
         '<div class="d">WS '+(d.connected?'✓':'×')+' · SERVER '+(age==null?'—':age+' ms')+'</div>'+
         '<div class="d">CLIENT '+esc(room)+'</div>'+
-        '<div class="d">SERVER '+esc(serverRoom)+'</div>';
+        '<div class="d">SERVER '+esc(serverRoom)+'</div>'+mobLine;
     }catch(_){}
   }
 
