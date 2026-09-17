@@ -67,29 +67,19 @@
     var result=await call('/api/profile/load');
     var profile=result&&result.profile?result.profile:null;
     if(!profile||profile.nickname)return result;
-
-    // First Telegram-ID activation only: never silently delete a valid local
-    // character. Ask the player whether the current local character belongs
-    // to this verified Telegram account. If accepted, register the nickname;
-    // the existing V278 bootstrap will then upload the full local save.
     var s=localSave();
     var nick=String((s&&s.playerName)||localNickname()||'').trim();
     if(!s||!validNick(nick))return result;
-
     var decision='';
     try{decision=sessionStorage.getItem('ppaTgMigrationDecisionV278')||''}catch(_){}
     if(decision==='new')return result;
-
     if(decision!=='keep'){
       var ok=false;
-      try{
-        ok=window.confirm('Найден персонаж «'+nick+'» на этом устройстве.\n\nПривязать его к вашему Telegram ID и перенести сохранение в облако?');
-      }catch(_){ok=false}
+      try{ok=window.confirm('Найден персонаж «'+nick+'» на этом устройстве.\n\nПривязать его к вашему Telegram ID и перенести сохранение в облако?')}catch(_){ok=false}
       decision=ok?'keep':'new';
       try{sessionStorage.setItem('ppaTgMigrationDecisionV278',decision)}catch(_){}
       if(!ok)return result;
     }
-
     var cls=String((s&&s.cls)||'');
     var registered=await call('/api/character/register',{nickname:nick,classKey:cls});
     if(registered&&registered.profile)return {ok:true,profile:registered.profile};
@@ -103,9 +93,7 @@
       if(wait)await new Promise(function(resolve){setTimeout(resolve,wait)});
       var result=await call('/api/save',{state:state,version:version==null?null:Number(version)});
       lastSaveAt=Date.now();
-      try{
-        if(window.PPA_CLOUD&&Number.isFinite(Number(result&&result.version)))window.PPA_CLOUD.version=Number(result.version);
-      }catch(_){}
+      try{if(window.PPA_CLOUD&&Number.isFinite(Number(result&&result.version)))window.PPA_CLOUD.version=Number(result.version)}catch(_){}
       return result;
     });
     return saveQueue;
@@ -113,30 +101,17 @@
 
   async function renameWithSyncedCard(nickname,requestId){
     await auth();
-
-    // The rename card lives in the game save. Flush the current in-memory save
-    // immediately before rename so D1 sees the same card count as the UI.
-    // This also fixes legacy/imported saves where the normal debounced cloud
-    // save has not fired yet.
     var snapshot=currentSaveSnapshot();
     if(snapshot&&typeof snapshot==='object'){
       var version=null;
       try{version=window.PPA_CLOUD&&window.PPA_CLOUD.version}catch(_){}
-      try{await queueSave(snapshot,version)}catch(syncErr){
-        // If this is a real network/auth failure, keep the rename card local.
-        throw syncErr;
-      }
+      try{await queueSave(snapshot,version)}catch(syncErr){throw syncErr}
     }
-
-    try{
-      return await call('/api/profile/rename',{nickname:nickname,requestId:requestId});
-    }catch(err){
-      // Business rejections (nick occupied, no card, etc.) should be shown by
-      // the existing rename modal instead of being mislabeled as “no server”.
-      if(err&&err.data&&err.data.ok===false)return err.data;
-      throw err;
-    }
+    try{return await call('/api/profile/rename',{nickname:nickname,requestId:requestId})}
+    catch(err){if(err&&err.data&&err.data.ok===false)return err.data;throw err}
   }
+
+  async function authed(path,payload){await auth();return call(path,payload||{})}
 
   window.PPA=window.PPA||{};
   Object.assign(window.PPA,{
@@ -145,8 +120,23 @@
     ppaLoadProfile:loadProfileWithSafeFirstMigration,
     ppaLoadSave:async function(){await auth();return call('/api/save/load')},
     ppaSaveGame:async function(state,version){await auth();return queueSave(state,version)},
-    ppaRegisterCharacter:async function(nickname,classKey){await auth();return call('/api/character/register',{nickname:nickname,classKey:classKey||''})},
-    ppaSyncNicknameFromSave:async function(){await auth();return call('/api/profile/sync-nickname',{nickname:localNickname()})},
-    ppaRequestNicknameChange:renameWithSyncedCard
+    ppaRegisterCharacter:async function(nickname,classKey){return authed('/api/character/register',{nickname:nickname,classKey:classKey||''})},
+    ppaSyncNicknameFromSave:async function(){return authed('/api/profile/sync-nickname',{nickname:localNickname()})},
+    ppaRequestNicknameChange:renameWithSyncedCard,
+
+    ppaClanState:function(){return authed('/api/clan/state')},
+    ppaClanAction:function(req){return authed('/api/clan/action',req||{})},
+
+    ppaAuctionList:function(){return authed('/api/auction/list')},
+    ppaAuctionPlace:function(payload){return authed('/api/auction/place',payload||{})},
+    ppaAuctionCancel:function(payload){return authed('/api/auction/cancel',payload||{})},
+    ppaAuctionBuy:function(payload){return authed('/api/auction/buy',payload||{})},
+    ppaAuctionAckCredits:function(ids){return authed('/api/auction/ack-credits',{ids:Array.isArray(ids)?ids:[]})},
+
+    ppaWalletState:function(){return authed('/api/wallet/state')},
+    ppaWalletLink:function(address){return authed('/api/wallet/link',{address:address||''})},
+    ppaWalletUnlink:function(){return authed('/api/wallet/unlink')},
+    ppaWalletDeposit:function(payload){return authed('/api/wallet/deposit',payload||{})},
+    ppaWalletWithdraw:function(payload){return authed('/api/wallet/withdraw',payload||{})}
   });
 })();
