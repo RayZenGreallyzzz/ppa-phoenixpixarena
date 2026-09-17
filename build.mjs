@@ -104,14 +104,23 @@ if (!fs.existsSync(realtimeIdentitySource)) {
 }
 fs.copyFileSync(realtimeIdentitySource, path.join(gameDir, 'realtime-identity-sync.js'));
 
+// Reserve the native Telegram arrow/menu strip on touch devices so HUD and
+// close buttons sit underneath it, like Telegram games/tappers normally do.
+const telegramSafeUiSource = path.join(ROOT, 'gateway', 'telegram-safe-ui.js');
+if (!fs.existsSync(telegramSafeUiSource)) {
+  throw new Error('Telegram safe UI helper missing: gateway/telegram-safe-ui.js');
+}
+fs.copyFileSync(telegramSafeUiSource, path.join(gameDir, 'telegram-safe-ui.js'));
+
 if (!output.includes('</body>')) {
   throw new Error('PPA main </body> not found');
 }
-output = output.replace('</body>', '<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
+output = output.replace('</body>', '<script src="/game/telegram-safe-ui.js"></script>\n<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
 console.log('Telegram bridge: /game/ppa-bridge.js');
+console.log('Telegram safe UI: /game/telegram-safe-ui.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
 console.log('Realtime identity sync: /game/realtime-identity-sync.js');
