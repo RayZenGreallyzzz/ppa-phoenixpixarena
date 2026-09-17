@@ -1,11 +1,13 @@
 (function(){
   'use strict';
-  var RT={ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,lastAnim:'',onlineCount:0,started:false};
+  var RT={ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,lastAnim:'',lastLevel:null,lastBm:null,onlineCount:0,started:false};
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var t=tg();return t&&t.initData?String(t.initData):''}
   function room(){try{return typeof ppaOnlineRoomKey==='function'?String(ppaOnlineRoomKey()||'safe'):'safe'}catch(_){return 'safe'}}
   function mobileUi(){try{return innerWidth<=900||matchMedia('(pointer:coarse)').matches}catch(_){return false}}
+  function selfLevel(){try{return Math.max(1,Math.floor(Number(P&&P.lvl)||1))}catch(_){return 1}}
+  function selfBm(){try{return Math.max(0,Math.round(Number(P&&P.bm)||0))}catch(_){return 0}}
 
   function fixOnlineBadge(){
     try{
@@ -24,12 +26,23 @@
   function status(text,col){try{if(typeof ppaOnlineSetStatus==='function'){ppaOnlineSetStatus(text,col);fixOnlineBadge()}}catch(_){}}
   function send(o){try{if(RT.ws&&RT.ws.readyState===WebSocket.OPEN){RT.ws.send(JSON.stringify(o));return true}}catch(_){}return false}
   function clearRemotes(){try{if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes)PPA_ONLINE.remotes.clear()}catch(_){}}
-  function applyPlayer(p,presence){try{if(typeof ppaOnlineApplyPacket==='function')ppaOnlineApplyPacket(p,!!presence)}catch(e){console.warn('Realtime player packet',e)}}
+  function applyPlayer(p,presence){
+    try{
+      if(typeof ppaOnlineApplyPacket==='function')ppaOnlineApplyPacket(p,!!presence);
+      var id=String((p&&(p.i||p.id))||'');
+      if(id&&typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes){
+        var r=PPA_ONLINE.remotes.get(id);
+        if(r){
+          var lv=Number(p.l!=null?p.l:p.level),bm=Number(p.b!=null?p.b:p.bm);
+          if(Number.isFinite(lv))r.level=Math.max(1,Math.floor(lv));
+          if(Number.isFinite(bm))r.bm=Math.max(0,Math.round(bm));
+          if(p.p!==undefined)r.partyId=String(p.p||'');
+        }
+      }
+    }catch(e){console.warn('Realtime player packet',e)}
+  }
   function selfName(){try{return String((INV&&INV.playerName)||window.PPA_PLAYER_NAME||'Игрок').slice(0,24)}catch(_){return 'Игрок'}}
 
-  // Telegram Fullsize mode: the game occupies the largest app viewport, while
-  // Telegram's own arrow/menu controls stay in their native top strip instead
-  // of floating over the game's HUD.
   function ensureFullsize(){
     var t=tg();if(!t)return;
     try{if(typeof t.ready==='function')t.ready()}catch(_){}
@@ -90,12 +103,28 @@
     if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN)return;
     var now=Date.now();if(!force&&now-RT.lastMove<220)return;
     try{
-      var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),f=Number(P.face)||1,a=String(P.anim||'idle').slice(0,12);
-      var changed=RT.lastX===null||Math.abs(x-RT.lastX)>.35||Math.abs(y-RT.lastY)>.35||h!==RT.lastHp||m!==RT.lastMhp||f!==RT.lastFace||a!==RT.lastAnim;
+      var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),f=Number(P.face)||1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm();
+      var changed=RT.lastX===null||Math.abs(x-RT.lastX)>.35||Math.abs(y-RT.lastY)>.35||h!==RT.lastHp||m!==RT.lastMhp||f!==RT.lastFace||a!==RT.lastAnim||l!==RT.lastLevel||b!==RT.lastBm;
       if(!force&&!changed&&now-RT.lastMove<1300)return;
-      RT.lastMove=now;RT.lastX=x;RT.lastY=y;RT.lastHp=h;RT.lastMhp=m;RT.lastFace=f;RT.lastAnim=a;
-      send({type:'move',x:x,y:y,h:h,m:m,f:f,a:a});
+      RT.lastMove=now;RT.lastX=x;RT.lastY=y;RT.lastHp=h;RT.lastMhp=m;RT.lastFace=f;RT.lastAnim=a;RT.lastLevel=l;RT.lastBm=b;
+      send({type:'move',x:x,y:y,h:h,m:m,f:f,a:a,l:l,b:b});
     }catch(_){}
+  }
+
+  function syncPartyAllies(m){
+    try{
+      window.PPA_PARTY_STATE=m||{partyId:'',members:[]};
+      var ids=new Set((m&&Array.isArray(m.members)?m.members:[]).map(function(x){return String(x.id||'')}));
+      var arr=[];
+      if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes)PPA_ONLINE.remotes.forEach(function(r,id){if(ids.has(String(id)))arr.push(r)});
+      window.PPA_PARTY_ALLIES=arr;
+      if(window.PPA_SOCIAL_ON_PARTY_STATE)window.PPA_SOCIAL_ON_PARTY_STATE(window.PPA_PARTY_STATE);
+    }catch(_){}
+  }
+
+  function partyNotice(text,ok){
+    try{if(typeof showPickup==='function')showPickup(String(text||''),ok===false?'#ff8d8d':'#8dffad')}catch(_){}
+    try{if(window.PPA_SOCIAL_NOTICE)window.PPA_SOCIAL_NOTICE(String(text||''),ok)}catch(_){}
   }
 
   function receive(m){
@@ -111,6 +140,16 @@
     if(m.type==='move'){if(m.player)applyPlayer(m.player,false);return}
     if(m.type==='join'){if(m.player)applyPlayer(m.player,true);return}
     if(m.type==='leave'){try{if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes)PPA_ONLINE.remotes.delete(String(m.id||''))}catch(_){}return}
+    if(m.type==='party-invite'){
+      try{
+        if(window.PPA_SOCIAL_ON_PARTY_INVITE){window.PPA_SOCIAL_ON_PARTY_INVITE(m.from||{});return}
+        var f=m.from||{},ok=window.confirm('Игрок '+String(f.name||'Игрок')+' приглашает в группу.\nПринять?');
+        send({type:ok?'party-accept':'party-decline',from:String(f.id||'')});
+      }catch(_){}
+      return;
+    }
+    if(m.type==='party-state'){syncPartyAllies(m);return}
+    if(m.type==='party-notice'){partyNotice(m.message,m.ok);return}
     if(m.type==='chat'){
       try{if(window.PPA_CHAT_RECEIVE)window.PPA_CHAT_RECEIVE(m.channel,m.from,m.text,{target:m.target||''})}catch(_){}return;
     }
@@ -130,7 +169,7 @@
       RT.ws=ws;
       ws.onopen=function(){RT.connecting=false;RT.retry=0;setConnected(true);sendRoom(true);sendMove(true)};
       ws.onmessage=function(ev){try{receive(JSON.parse(ev.data))}catch(_){}};
-      ws.onclose=function(){if(RT.ws===ws)RT.ws=null;RT.connecting=false;clearRemotes();setConnected(false);scheduleReconnect()};
+      ws.onclose=function(){if(RT.ws===ws)RT.ws=null;RT.connecting=false;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
       ws.onerror=function(){};
     }catch(e){RT.connecting=false;console.warn('PPA realtime connect',e);setConnected(false);scheduleReconnect()}
   }
@@ -148,8 +187,9 @@
   },120);
   setInterval(function(){if(RT.ws&&RT.ws.readyState===WebSocket.OPEN)send({type:'ping'})},25000);
 
+  window.PPA_RT_SEND=send;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
-  window.PPA_REALTIME_DIAG=function(){return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,online:RT.onlineCount,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen)}};
+  window.PPA_REALTIME_DIAG=function(){return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,online:RT.onlineCount,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||''}};
 
   function boot(){if(RT.started)return;RT.started=true;ensureFullsize();armFullsize();setTimeout(ensureFullsize,300);setTimeout(fixOnlineBadge,350);setTimeout(connect,250)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
