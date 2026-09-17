@@ -46,84 +46,41 @@ let output = source.replace(dataUri, (full, mime, b64) => {
   return url;
 });
 
-// Keep the Telegram Mini App SDK current so initData is populated reliably.
 output = output.replace(
   'https://telegram.org/js/telegram-web-app.js"',
   'https://telegram.org/js/telegram-web-app.js?63"'
 );
 
-// An explicitly imported portable save may replace progress, but it must not
-// bypass the nickname already bound to this verified Telegram profile.
 const migrationNeedle = 'var migrationState=ppaMigrationSaveObject();\n      if(ppaSaveHasCharacterState(migrationState)){';
 const migrationPatch = "var migrationState=ppaMigrationSaveObject();\n      if(profileNick&&/^[A-Za-zА-Яа-яЁё0-9_]{3,18}$/u.test(profileNick))migrationState.playerName=profileNick;\n      if(ppaSaveHasCharacterState(migrationState)){";
-if (!output.includes(migrationNeedle)) {
-  throw new Error('PPA Telegram migration patch target not found');
-}
+if (!output.includes(migrationNeedle)) throw new Error('PPA Telegram migration patch target not found');
 output = output.replace(migrationNeedle, migrationPatch);
 
-// Gateway/cloud problems must never hard-lock a valid local character.
 const catchNeedle = "  }catch(err){\n    console.error('PPA Gateway bootstrap:',err);\n    ppaShowGatewayError('Не удалось подтвердить Telegram-сессию. Закройте Mini App и откройте игру снова через бота.');\n    return true;\n  }finally{";
 const catchPatch = "  }catch(err){\n    console.error('PPA Gateway bootstrap:',err);\n    var _ppaErrCode=String((err&&err.code)||('HTTP_'+String((err&&err.status)||'ERR')));\n    var _ppaErrMsg=String((err&&err.message)||'Ошибка Gateway');\n    var _ppaLocalClass=(P&&P._saved&&P._saved.cls)?classKeyFromName(P._saved.cls):'';\n    if(_ppaLocalClass&&CLASS_BASE[_ppaLocalClass]){\n      PPA_CLOUD.ready=false;\n      try{showPickup('ОБЛАКО НЕДОСТУПНО · ЛОКАЛЬНЫЙ СЕЙВ','#ffb36b')}catch(_){}\n      applyClass({name:CLASS_BASE[_ppaLocalClass].name});\n      beginGame();\n      return true;\n    }\n    ppaShowGatewayError('Gateway: '+_ppaErrCode+' · '+_ppaErrMsg);\n    return true;\n  }finally{";
-if (!output.includes(catchNeedle)) {
-  throw new Error('PPA Gateway fallback patch target not found');
-}
+if (!output.includes(catchNeedle)) throw new Error('PPA Gateway fallback patch target not found');
 output = output.replace(catchNeedle, catchPatch);
 
-// Release UI: portable save import/export controls are removed completely.
 const saveToolsRe = /&lt;div id=&quot;saveTools&quot;&gt;[\s\S]*?&lt;\/div&gt;\s*&lt;\/section&gt;/;
-if (!saveToolsRe.test(output)) {
-  throw new Error('PPA save tools block not found');
-}
+if (!saveToolsRe.test(output)) throw new Error('PPA save tools block not found');
 output = output.replace(saveToolsRe, '&lt;/section&gt;');
 
-// Publish the verified Telegram bridge at the path already referenced by V278.
-const bridgeSource = path.join(ROOT, 'gateway', 'ppa-bridge.js');
-if (!fs.existsSync(bridgeSource)) {
-  throw new Error('Telegram gateway bridge missing: gateway/ppa-bridge.js');
+const filesToPublish = [
+  ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
+  ['gateway/online-client.js','online-client.js','Online client bridge missing'],
+  ['gateway/realtime-client.js','realtime-client.js','Realtime client bridge missing'],
+  ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],
+  ['gateway/realtime-identity-sync.js','realtime-identity-sync.js','Realtime identity sync missing'],
+  ['gateway/telegram-safe-ui.js','telegram-safe-ui.js','Telegram safe UI helper missing'],
+  ['gateway/social-ui.js','social-ui.js','Social UI missing']
+];
+for (const [srcName,dstName,err] of filesToPublish) {
+  const src=path.join(ROOT,srcName);if(!fs.existsSync(src))throw new Error(`${err}: ${srcName}`);
+  fs.copyFileSync(src,path.join(gameDir,dstName));
 }
-fs.copyFileSync(bridgeSource, path.join(gameDir, 'ppa-bridge.js'));
 
-// Publish persistent clan / auction / wallet hooks.
-const onlineClientSource = path.join(ROOT, 'gateway', 'online-client.js');
-if (!fs.existsSync(onlineClientSource)) {
-  throw new Error('Online client bridge missing: gateway/online-client.js');
-}
-fs.copyFileSync(onlineClientSource, path.join(gameDir, 'online-client.js'));
-
-// Publish Cloudflare Durable Object WebSocket realtime client.
-const realtimeClientSource = path.join(ROOT, 'gateway', 'realtime-client.js');
-if (!fs.existsSync(realtimeClientSource)) {
-  throw new Error('Realtime client bridge missing: gateway/realtime-client.js');
-}
-fs.copyFileSync(realtimeClientSource, path.join(gameDir, 'realtime-client.js'));
-
-// Replace the old colored-circle remote placeholder with the same approved
-// class sprite sheets used by the local player and AI fighters.
-const remoteSpriteSource = path.join(ROOT, 'gateway', 'remote-sprite-renderer.js');
-if (!fs.existsSync(remoteSpriteSource)) {
-  throw new Error('Remote sprite renderer missing: gateway/remote-sprite-renderer.js');
-}
-fs.copyFileSync(remoteSpriteSource, path.join(gameDir, 'remote-sprite-renderer.js'));
-
-// Refresh realtime identity when nickname or clan membership changes.
-const realtimeIdentitySource = path.join(ROOT, 'gateway', 'realtime-identity-sync.js');
-if (!fs.existsSync(realtimeIdentitySource)) {
-  throw new Error('Realtime identity sync missing: gateway/realtime-identity-sync.js');
-}
-fs.copyFileSync(realtimeIdentitySource, path.join(gameDir, 'realtime-identity-sync.js'));
-
-// Reserve the native Telegram arrow/menu strip on touch devices so HUD and
-// close buttons sit underneath it, like Telegram games/tappers normally do.
-const telegramSafeUiSource = path.join(ROOT, 'gateway', 'telegram-safe-ui.js');
-if (!fs.existsSync(telegramSafeUiSource)) {
-  throw new Error('Telegram safe UI helper missing: gateway/telegram-safe-ui.js');
-}
-fs.copyFileSync(telegramSafeUiSource, path.join(gameDir, 'telegram-safe-ui.js'));
-
-if (!output.includes('</body>')) {
-  throw new Error('PPA main </body> not found');
-}
-output = output.replace('</body>', '<script src="/game/telegram-safe-ui.js"></script>\n<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/remote-sprite-renderer.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
+if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
+output = output.replace('</body>', '<script src="/game/telegram-safe-ui.js"></script>\n<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/remote-sprite-renderer.js"></script>\n<script src="/game/social-ui.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -132,6 +89,7 @@ console.log('Telegram safe UI: /game/telegram-safe-ui.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
+console.log('Social UI: /game/social-ui.js');
 console.log('Realtime identity sync: /game/realtime-identity-sync.js');
 console.log('Telegram migration lockout guard: enabled');
 console.log('Portable save buttons: removed');
