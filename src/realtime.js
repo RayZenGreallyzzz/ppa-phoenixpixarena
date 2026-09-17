@@ -136,29 +136,58 @@ export class RealtimeHub {
     return null;
   }
 
+  roomCount(room) {
+    room = cleanRoom(room);
+    const ids = new Set();
+    for (const ws of this.sockets()) {
+      const a = attOf(ws);
+      if (a.pid && cleanRoom(a.room) === room) ids.add(a.pid);
+    }
+    return ids.size;
+  }
+
+  syncRoom(ws, a, requested, now = Date.now()) {
+    const oldRaw = String(a.room || 'safe');
+    const oldRoom = cleanRoom(oldRaw);
+    const room = cleanRoom(requested || oldRaw);
+    const moved = oldRoom !== room;
+    if (moved) this.roomBroadcast(oldRoom, { type: 'leave', id: a.pid, room: oldRoom, ts: now }, ws);
+    if (moved || oldRaw !== room) {
+      a.room = room;
+      ws.serializeAttachment(a);
+    }
+    if (moved) this.roomBroadcast(room, { type: 'join', player: packetFromAtt(a), room, ts: now }, ws);
+    return { room, moved };
+  }
+
   sendOnlineCount() {
     const ids = new Set();
     for (const ws of this.sockets()) { const a = attOf(ws); if (a.pid) ids.add(a.pid); }
-    const msg = JSON.stringify({ type: 'online', count: ids.size, ts: Date.now() });
-    for (const ws of this.sockets()) { try { ws.send(msg); } catch (_) {} }
+    const count = ids.size, ts = Date.now();
+    for (const ws of this.sockets()) {
+      const a = attOf(ws), room = cleanRoom(a.room);
+      wsJson(ws, { type: 'online', count, room, roomCount: this.roomCount(room), ts });
+    }
   }
 
   sendRoomSnapshot(ws, room) {
+    room = cleanRoom(room);
     const players = [];
     for (const other of this.sockets()) {
       if (other === ws) continue;
       const a = attOf(other);
-      if (a.room === room && a.pid && Number.isFinite(Number(a.x)) && Number.isFinite(Number(a.y))) players.push(packetFromAtt(a));
+      if (cleanRoom(a.room) === room && a.pid && Number.isFinite(Number(a.x)) && Number.isFinite(Number(a.y))) players.push(packetFromAtt(a));
     }
-    wsJson(ws, { type: 'snapshot', room, players, ts: Date.now() });
+    wsJson(ws, { type: 'snapshot', room, players, roomCount: players.length + 1, ts: Date.now() });
   }
 
   roomBroadcast(room, data, except) {
+    room = cleanRoom(room);
     const raw = JSON.stringify(data);
     for (const ws of this.sockets()) {
       if (ws === except) continue;
       const a = attOf(ws);
-      if (a.room !== room) continue;
+      if (cleanRoom(a.room) !== room) continue;
       try { ws.send(raw); } catch (_) {}
     }
   }
@@ -193,7 +222,7 @@ export class RealtimeHub {
     const client = pair[0], server = pair[1];
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ pid, telegramId, name, clanId, classKey, room: 'safe', partyId: '', lastChat: 0, lastMove: 0, q: 0, l: 1, b: 0 });
-    wsJson(server, { type: 'hello', pid, name, clanId, ts: Date.now() });
+    wsJson(server, { type: 'hello', pid, name, clanId, room: 'safe', ts: Date.now() });
     this.sendOnlineCount();
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -205,22 +234,31 @@ export class RealtimeHub {
     if (!m || typeof m !== 'object') return;
     const a = attOf(ws), now = Date.now();
 
-    if (m.type === 'ping') { wsJson(ws, { type: 'pong', ts: now }); return; }
+    if (m.type === 'ping') {
+      const sr = this.syncRoom(ws, a, m.room || a.room, now);
+      if (sr.moved) this.sendOnlineCount();
+      this.sendRoomSnapshot(ws, sr.room);
+      wsJson(ws, { type: 'pong', room: sr.room, roomCount: this.roomCount(sr.room), ts: now });
+      return;
+    }
 
     if (m.type === 'room') {
-      const oldRoom = cleanRoom(a.room), room = cleanRoom(m.room);
-      if (oldRoom !== room) {
-        this.roomBroadcast(oldRoom, { type: 'leave', id: a.pid, room: oldRoom, ts: now }, ws);
-        a.room = room;
-        ws.serializeAttachment(a);
-        this.roomBroadcast(room, { type: 'join', player: packetFromAtt(a), room, ts: now }, ws);
-      }
-      this.sendRoomSnapshot(ws, room);
+      const sr = this.syncRoom(ws, a, m.room, now);
+      // Always serialize the canonical room, even when it only differed in formatting.
+      a.room = sr.room;
+      ws.serializeAttachment(a);
+      this.sendRoomSnapshot(ws, sr.room);
+      if (sr.moved) this.sendOnlineCount();
       if (a.partyId) this.sendPartyState(a.partyId);
       return;
     }
 
     if (m.type === 'move') {
+      const sr = this.syncRoom(ws, a, m.room || a.room, now);
+      if (sr.moved) {
+        this.sendOnlineCount();
+        this.sendRoomSnapshot(ws, sr.room);
+      }
       if (now - (Number(a.lastMove) || 0) < 90) return;
       a.lastMove = now;
       a.x = Number.isFinite(Number(m.x)) ? Math.round(Number(m.x) * 10) / 10 : Number(a.x) || 0;
@@ -232,8 +270,9 @@ export class RealtimeHub {
       a.l = Math.max(1, Math.min(999, Math.round(Number(m.l) || Number(a.l) || 1)));
       a.b = Math.max(0, Math.round(Number(m.b) || Number(a.b) || 0));
       a.q = (Number(a.q) || 0) + 1;
+      a.room = sr.room;
       ws.serializeAttachment(a);
-      this.roomBroadcast(cleanRoom(a.room), { type: 'move', player: packetFromAtt(a) }, ws);
+      this.roomBroadcast(sr.room, { type: 'move', player: packetFromAtt(a), room: sr.room }, ws);
       return;
     }
 
