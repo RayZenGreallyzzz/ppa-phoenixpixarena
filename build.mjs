@@ -72,6 +72,7 @@ const filesToPublish = [
   ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],
   ['gateway/realtime-identity-sync.js','realtime-identity-sync.js','Realtime identity sync missing'],
   ['gateway/telegram-safe-ui.js','telegram-safe-ui.js','Telegram safe UI helper missing'],
+  ['gateway/mobile-hud-tweaks.js','mobile-hud-tweaks.js','Mobile HUD tweaks missing'],
   ['gateway/social-ui.js','social-ui.js','Social UI missing']
 ];
 for (const [srcName,dstName,err] of filesToPublish) {
@@ -80,12 +81,13 @@ for (const [srcName,dstName,err] of filesToPublish) {
 }
 
 if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
-output = output.replace('</body>', '<script src="/game/telegram-safe-ui.js"></script>\n<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/remote-sprite-renderer.js"></script>\n<script src="/game/social-ui.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
+output = output.replace('</body>', '<script src="/game/telegram-safe-ui.js"></script>\n<script src="/game/mobile-hud-tweaks.js"></script>\n<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/remote-sprite-renderer.js"></script>\n<script src="/game/social-ui.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
 console.log('Telegram bridge: /game/ppa-bridge.js');
 console.log('Telegram safe UI: /game/telegram-safe-ui.js');
+console.log('Mobile HUD tweaks: /game/mobile-hud-tweaks.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
