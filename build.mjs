@@ -97,16 +97,24 @@ if (!fs.existsSync(realtimeClientSource)) {
 }
 fs.copyFileSync(realtimeClientSource, path.join(gameDir, 'realtime-client.js'));
 
+// Refresh realtime identity when nickname or clan membership changes.
+const realtimeIdentitySource = path.join(ROOT, 'gateway', 'realtime-identity-sync.js');
+if (!fs.existsSync(realtimeIdentitySource)) {
+  throw new Error('Realtime identity sync missing: gateway/realtime-identity-sync.js');
+}
+fs.copyFileSync(realtimeIdentitySource, path.join(gameDir, 'realtime-identity-sync.js'));
+
 if (!output.includes('</body>')) {
   throw new Error('PPA main </body> not found');
 }
-output = output.replace('</body>', '<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n</body>');
+output = output.replace('</body>', '<script src="/game/online-client.js"></script>\n<script src="/game/realtime-client.js"></script>\n<script src="/game/realtime-identity-sync.js"></script>\n</body>');
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
 console.log('Telegram bridge: /game/ppa-bridge.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
+console.log('Realtime identity sync: /game/realtime-identity-sync.js');
 console.log('Telegram migration lockout guard: enabled');
 console.log('Portable save buttons: removed');
 console.log(`index.html: ${(Buffer.byteLength(output)/1024/1024).toFixed(2)} MiB`);
