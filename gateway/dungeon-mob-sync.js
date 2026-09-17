@@ -16,6 +16,7 @@
   function room(){var d=rtDiag();return canonicalRoom(d&&d.room||'safe')}
   function onlineState(){try{return (typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE)?PPA_ONLINE:null}catch(_){return null}}
   function selfId(){var o=onlineState();return String((o&&o.selfId)||'')}
+  function localParty(){try{return String((window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'')}catch(_){return ''}}
   function entities(){try{return (typeof EN!=='undefined'&&Array.isArray(EN))?EN:[]}catch(_){return []}}
   function player(){try{return (typeof P!=='undefined'&&P)?P:null}catch(_){return null}}
   function active(){
@@ -43,6 +44,36 @@
     }catch(_){return false}
   }
 
+  function rewardEligible(killer,party){
+    killer=String(killer||'');party=String(party||'');
+    if(!killer)return false;
+    if(killer===selfId())return true;
+    var lp=localParty();
+    return !!(party&&lp&&party===lp);
+  }
+
+  function applyRewardFlag(e,killer,party){
+    if(!e)return;
+    e.__ppaLootEligible=rewardEligible(killer,party);
+    e.__ppaRewardKiller=String(killer||'');
+    e.__ppaRewardParty=String(party||'');
+  }
+
+  function installDropGuard(){
+    try{
+      if(window.__PPA_DUNGEON_DROP_GUARD_V297)return true;
+      if(typeof dropLoot!=='function')return false;
+      var base=dropLoot;
+      dropLoot=function(e){
+        if(active()&&mobKey(e)&&e&&e.__ppaLootEligible!==true)return;
+        return base(e);
+      };
+      try{window.dropLoot=dropLoot}catch(_){}
+      window.__PPA_DUNGEON_DROP_GUARD_V297=true;
+      return true;
+    }catch(_){return false}
+  }
+
   function markTomb(key,at){
     key=String(key||'');at=Math.max(Date.now()+250,Number(at)||0);
     if(!key)return;
@@ -67,10 +98,17 @@
         get:function(){return hp},
         set:function(v){
           var nv=Number(v);if(!Number.isFinite(nv))return;
-          var old=hp;hp=nv;
-          if(APPLYING||!active()||!(nv<old)||old<=0)return;
+          var old=hp;
+          if(APPLYING||!active()||!(nv<old)||old<=0){hp=nv;return}
+          if(e.__ppaLethalPending&&nv<old)return;
           S.hp.set(key,{hp:Math.max(0,nv),at:Date.now()});
           sendDamage(e,key,old,nv);
+          if(nv<=0){
+            e.__ppaLethalPending=true;
+            hp=Math.min(old,0.01);
+            return;
+          }
+          hp=nv;
         }
       });
       e.__ppaMobSyncHook=1;
@@ -158,7 +196,12 @@
     var dead=Array.isArray(m.dead)?m.dead:[];
     for(var j=0;j<dead.length;j++){
       var d=dead[j];if(!Array.isArray(d)||d.length<2)continue;
-      var dk=String(d[0]||''),at=Number(d[1]);if(/^s\d{1,4}$/.test(dk)&&Number.isFinite(at))markTomb(dk,at);
+      var dk=String(d[0]||''),at=Number(d[1]);
+      if(/^s\d{1,4}$/.test(dk)&&Number.isFinite(at)){
+        markTomb(dk,at);
+        var de=findMob(dk);
+        if(de){hookHp(de);applyRewardFlag(de,d[2],d[3]);de.__ppaLethalPending=false;setHp(de,0)}
+      }
     }
     S.lastNetAt=now;
   }
@@ -167,7 +210,13 @@
     var key=String(m.key||''),hp=Number(m.hp),now=Date.now();
     if(!/^s\d{1,4}$/.test(key)||!Number.isFinite(hp))return;
     S.hp.set(key,{hp:Math.max(0,hp),at:now});
-    var e=findMob(key);if(e){hookHp(e);setHp(e,hp)}
+    var e=findMob(key);
+    if(e){
+      hookHp(e);
+      e.__ppaLethalPending=false;
+      if(hp<=0)applyRewardFlag(e,m.killer,m.party);
+      setHp(e,hp);
+    }
     if(hp<=0&&Number.isFinite(Number(m.respawnAt)))markTomb(key,Number(m.respawnAt));
     S.lastNetAt=now;
   }
@@ -176,7 +225,8 @@
     var key=String(m.key||''),at=Number(m.respawnAt);
     if(!/^s\d{1,4}$/.test(key)||!Number.isFinite(at))return;
     markTomb(key,at);
-    var e=findMob(key);if(e){hookHp(e);setHp(e,0)}
+    var e=findMob(key);
+    if(e){hookHp(e);applyRewardFlag(e,m.killer,m.party);e.__ppaLethalPending=false;setHp(e,0)}
     S.lastNetAt=Date.now();
   }
 
@@ -219,7 +269,7 @@
       if(tomb>now){setHp(e,0);continue}
 
       var h=S.hp.get(key);
-      if(h&&now-h.at<3500&&Number.isFinite(Number(h.hp)))setHp(e,h.hp);
+      if(h&&now-h.at<3500&&Number.isFinite(Number(h.hp))&&!e.__ppaLethalPending)setHp(e,h.hp);
 
       var owner=ownerFor(e,ps);
       if(owner&&owner!==sid){
@@ -242,6 +292,8 @@
 
   function boot(){
     if(S.started)return;S.started=true;
+    installDropGuard();
+    setTimeout(installDropGuard,250);
     setInterval(tick,50);
     document.addEventListener('visibilitychange',function(){if(!document.hidden){S.lastSend=0;S.lastHeartbeat=0}},{passive:true});
   }
