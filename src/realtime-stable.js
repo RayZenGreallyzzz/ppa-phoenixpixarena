@@ -618,6 +618,47 @@ export class RealtimeHub extends BaseRealtimeHub {
     return this._mobAiTickTimes;
   }
 
+  mobAiLoops() {
+    if (!this._mobAiLoops) this._mobAiLoops = new Set();
+    return this._mobAiLoops;
+  }
+
+  roomHasAggroMob(room) {
+    room = cleanRoom(room);
+    const { health, dead } = this.mobStores();
+    const prefix = room + '|';
+    const now = Date.now();
+    for (const [ck, rec] of health.entries()) {
+      if (!String(ck).startsWith(prefix) || !rec || !(Number(rec.hp) > 0) || !rec.aggro) continue;
+      const d = dead.get(ck);
+      if (!d || Number(d.at) <= now) return true;
+    }
+    return false;
+  }
+
+  ensureMobAiLoop(room) {
+    room = cleanRoom(room);
+    if (!room.startsWith('dungeon-')) return;
+    const loops = this.mobAiLoops();
+    if (loops.has(room)) return;
+    loops.add(room);
+    const step = async () => {
+      try {
+        if (this.countRoom(room) <= 0) { loops.delete(room); return; }
+        await this.ensureMobRoomLoaded(room);
+        const now = Date.now();
+        if (this.processMobRespawns(room, now)) await this.persistMobRoom(room);
+        this.tickMobAI(room, now);
+        await this.maybePersistMobMovement(room, now);
+        if (!this.roomHasAggroMob(room)) { loops.delete(room); return; }
+        setTimeout(step, 100);
+      } catch (_) {
+        loops.delete(room);
+      }
+    };
+    setTimeout(step, 0);
+  }
+
   mobPersistTimes() {
     if (!this._mobPersistTimes) this._mobPersistTimes = new Map();
     return this._mobPersistTimes;
@@ -884,6 +925,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       rec.aggro = rec.hp > 0;
       rec.target = rec.hp > 0 ? String(a.pid || '') : '';
       health.set(ck, rec);
+      if (rec.aggro) this.ensureMobAiLoop(room);
 
       let respawnAt = 0, killer = rec.killer, party = rec.party;
       if (rec.hp <= 0) {
