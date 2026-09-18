@@ -21,7 +21,15 @@
           var lvl=(typeof DG_SPAWN_LVL!=='undefined'&&DG_SPAWN_LVL)?Number(DG_SPAWN_LVL[si])||1:1;
           var t=(typeof mobByLvl==='function')?mobByLvl(lvl):null;
           var mhp=Math.max(1,Number(t&&t.hp)||1);
-          rows.push(['s'+si,Math.round(mhp*100)/100]);
+          var p=DG_ACTIVE_SPAWNS[si]||[0,0];
+          var scale=(typeof DG_SCALE!=='undefined'&&Number(DG_SCALE))||1;
+          var x=Number(p[0]||0)*scale,y=Number(p[1]||0)*scale;
+          rows.push([
+            's'+si,Math.round(mhp*100)/100,
+            Math.round(x*10)/10,Math.round(y*10)/10,
+            Math.max(.1,Number(t&&t.sp)||1),
+            Math.max(8,Number(t&&t.sz)||30)
+          ]);
         }
         if(rows.length)return rows;
       }
@@ -116,9 +124,14 @@
     if(!Array.isArray(row)||row.length<4)return;
     var key=String(row[0]||''),hp=Number(row[1]),mhp=Number(row[2]),respawnAt=Number(row[3])||0;
     var killer=String(row[4]||''),party=String(row[5]||'');
+    var x=Number(row[6]),y=Number(row[7]),aggro=!!row[8],dir=Number(row[9]),moving=!!row[10],target=String(row[11]||'');
     if(!/^s\d{1,4}$/.test(key)||!Number.isFinite(hp)||!Number.isFinite(mhp))return;
 
-    authority.set(key,{hp:hp,mhp:mhp,respawnAt:respawnAt,killer:killer,party:party});
+    authority.set(key,{
+      hp:hp,mhp:mhp,respawnAt:respawnAt,killer:killer,party:party,
+      x:Number.isFinite(x)?x:null,y:Number.isFinite(y)?y:null,
+      aggro:aggro,dir:Number.isFinite(dir)?dir:1,moving:moving,target:target
+    });
 
     var e=find(key);
     if(hp>0){
@@ -139,6 +152,13 @@
       try{
         e.mhp=Math.max(1,mhp);
         e.hp=Math.min(e.mhp,Math.max(1,hp));
+        if(Number.isFinite(x)){e.x=x;e.__ppaServerX=x}
+        if(Number.isFinite(y)){e.y=y;e.__ppaServerY=y}
+        e.aggro=aggro;
+        if(Number.isFinite(dir)){
+          e.spiderDir=dir;e.animDir=dir;e.__ppaServerDir=dir;
+        }
+        e.spiderMoving=moving;e.animMoving=moving;e.__ppaServerMoving=moving;
       }finally{applying--}
       return;
     }
@@ -181,6 +201,15 @@
         applying++;
         try{e.hp=0}finally{applying--}
       }
+      e=find(key);
+      if(e&&Number(st.hp)>0){
+        if(Number.isFinite(Number(st.x)))e.x=Number(st.x);
+        if(Number.isFinite(Number(st.y)))e.y=Number(st.y);
+        e.aggro=!!st.aggro;
+        var d=Number(st.dir);
+        if(Number.isFinite(d)){e.spiderDir=d;e.animDir=d}
+        e.spiderMoving=!!st.moving;e.animMoving=!!st.moving;
+      }
     });
   }
 
@@ -197,7 +226,21 @@
         return;
       }
       if(m.type==='mob-authority'){
-        applyRow([m.key,m.hp,m.mhp,m.respawnAt,m.killer,m.party]);
+        applyRow([m.key,m.hp,m.mhp,m.respawnAt,m.killer,m.party,m.x,m.y,m.aggro,m.dir,m.moving,m.target]);
+        authReady=true;
+        reconcileAuthority();
+        return;
+      }
+      if(m.type==='mob-position'){
+        var rows=Array.isArray(m.rows)?m.rows:[];
+        for(var j=0;j<rows.length;j++){
+          var r=rows[j];if(!Array.isArray(r)||r.length<7)continue;
+          var st=authority.get(String(r[0]||''))||{hp:1,mhp:1,respawnAt:0,killer:'',party:''};
+          applyRow([
+            r[0],st.hp,st.mhp,st.respawnAt,st.killer,st.party,
+            r[1],r[2],r[3],r[4],r[5],r[6]
+          ]);
+        }
         authReady=true;
         reconcileAuthority();
         return;
@@ -219,6 +262,7 @@
     installDropGuard();
     setTimeout(function(){register(true)},600);
     setInterval(tick,1000);
+    setInterval(reconcileAuthority,33);
     document.addEventListener('visibilitychange',function(){if(!document.hidden)setTimeout(function(){register(true)},400)},{passive:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
