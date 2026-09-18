@@ -97,6 +97,121 @@ function ppaPatchRegex(label, re, replacement, all=false) {
   return output !== before;
 }
 
+/* === CLAN DIRECTORY / RANKING ============================================ */
+ppaPatchRegex(
+  'clan ranking state fields',
+  /applications:\[\],\s*authority:\{\},/g,
+  "applications:[],clanDirectory:[],clanRanking:[],authority:{},",
+  true
+);
+
+ppaPatchRegex(
+  'clan ranking state sync',
+  /CLAN_LOCAL_STATE\.applications\s*=\s*Array\.isArray\(state\.applications\)\?state\.applications:\(CLAN_LOCAL_STATE\.applications\|\|\[\]\);/,
+  "CLAN_LOCAL_STATE.applications=Array.isArray(state.applications)?state.applications:(CLAN_LOCAL_STATE.applications||[]);"
+  + "CLAN_LOCAL_STATE.clanDirectory=Array.isArray(state.clanDirectory)?state.clanDirectory:(CLAN_LOCAL_STATE.clanDirectory||[]);"
+  + "CLAN_LOCAL_STATE.clanRanking=Array.isArray(state.clanRanking)?state.clanRanking:(CLAN_LOCAL_STATE.clanRanking||[]);"
+);
+
+ppaPatchRegex(
+  'clan join tab label',
+  /СОЗДАТЬ\s*\/\s*ВСТУПИТЬ/g,
+  "КЛАНЫ / РЕЙТИНГ",
+  true
+);
+
+ppaPatchRegex(
+  'clan directory ranking UI',
+  /function\s+renderJoin\(\)\s*\{[\s\S]*?\n\}\s*\n\s*function\s+esc\(s\)\s*\{/,
+  `function clanDirectoryList(){
+  var a=Array.isArray(STATE.clanRanking)&&STATE.clanRanking.length?STATE.clanRanking:STATE.clanDirectory;
+  return Array.isArray(a)?a:[];
+}
+function clanRankingHtml(canApply,blocked){
+  var list=clanDirectoryList();
+  if(!list.length){
+    return '<div class="card" style="margin-top:9px"><h3>🏆 РЕЙТИНГ КЛАНОВ</h3><p>Пока нет созданных кланов. Первый клан займёт первое место.</p></div>';
+  }
+  var rows=list.map(function(x){
+    var own=!!(STATE.clan&&String(STATE.clan.id||'')===String(x.id||''));
+    var applied=!!x.applied;
+    var btn='';
+    if(canApply){
+      btn=applied
+        ?'<button class="memberBtn" disabled style="opacity:.65">ЗАЯВКА ОТПРАВЛЕНА</button>'
+        :'<button class="memberBtn acceptBtn" data-clan-apply="'+esc(x.name||'')+'">ПОДАТЬ ЗАЯВКУ</button>';
+    }else if(own){
+      btn='<span class="lock">ВАШ КЛАН</span>';
+    }
+    var medal=Number(x.rank)===1?'🥇':(Number(x.rank)===2?'🥈':(Number(x.rank)===3?'🥉':'#'+Math.max(1,Number(x.rank)||1)));
+    var search=String((x.name||'')+' '+(x.leaderName||'')).toLowerCase();
+    return '<div class="clanRankRow" data-search="'+esc(search)+'" style="display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:7px;align-items:center;padding:7px;margin:5px 0;border:1px solid rgba(139,101,54,.45);border-radius:7px;background:rgba(255,225,180,.025)">'+
+      '<div style="font:bold 11px monospace;color:#ffd278;text-align:center">'+medal+'</div>'+
+      '<div style="min-width:0"><div style="font-weight:800;color:#efd2a1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(x.name||'Клан')+'</div>'+
+      '<div style="margin-top:2px;color:#a99a87;font:8px monospace">Глава: '+esc(x.leaderName||'—')+' · Ур. '+Math.max(1,Number(x.level)||1)+' · 👥 '+Math.max(0,Number(x.members)||0)+'</div>'+
+      '<div style="margin-top:2px;color:#d6b06f;font:8px monospace">Вклад: '+Math.max(0,Number(x.coins)||0).toLocaleString('ru-RU')+' монет клана</div></div>'+
+      '<div style="text-align:right">'+btn+'</div></div>';
+  }).join('');
+  return '<div class="card" style="margin-top:9px"><h3>🏆 РЕЙТИНГ И СПИСОК КЛАНОВ</h3>'+
+    '<p>Место определяется по общему вкладу клана. Можно найти клан и отправить заявку прямо отсюда.</p>'+
+    '<input id="clanSearch" maxlength="24" placeholder="Поиск клана или главы" style="margin:5px 0 7px;width:100%;box-sizing:border-box">'+
+    '<div id="clanRankList">'+rows+'</div></div>';
+}
+function bindClanRanking(){
+  var q=document.getElementById('clanSearch');
+  if(q)q.oninput=function(){
+    var v=String(q.value||'').trim().toLowerCase();
+    document.querySelectorAll('.clanRankRow').forEach(function(row){
+      row.style.display=!v||String(row.dataset.search||'').indexOf(v)>=0?'grid':'none';
+    });
+  };
+  document.querySelectorAll('[data-clan-apply]').forEach(function(btn){
+    btn.onclick=function(){
+      if(btn.disabled)return;
+      btn.disabled=true;btn.textContent='ОТПРАВКА…';
+      parent.postMessage({type:'clanAction',action:'apply',name:btn.getAttribute('data-clan-apply')||''},'*');
+    };
+  });
+}
+function renderJoin(){
+  if(!STATE.connected){
+    main.innerHTML='<div class="storageUnlock"><div><div class="lockIco">🌐</div>'+
+      '<div class="heroTitle">КЛАНОВЫЙ СЕРВЕР НЕ ПОДКЛЮЧЁН</div>'+
+      '<div class="heroText" style="max-width:560px;margin:8px auto">Список, рейтинг и заявки работают только с серверными кланами.</div></div></div>';
+    return;
+  }
+  var blocked=!STATE.clan&&Number(STATE.joinBlockedUntil||0)>Date.now();
+  var canApply=!STATE.clan&&!blocked;
+  var top='';
+  if(STATE.clan){
+    top='<div class="hero"><div class="heroTitle">КЛАНЫ И РЕЙТИНГ</div>'+
+      '<div class="heroText">Твой клан отмечен в рейтинге. Входящие заявки доступны во вкладке «Участники».</div>'+
+      '<div class="status"><span>Ожидают решения</span><b>'+((STATE.applications||[]).length)+'</b></div></div>';
+  }else{
+    top='<div class="hero"><div class="heroTitle">СОЗДАТЬ ИЛИ НАЙТИ КЛАН</div>'+
+      '<div class="heroText">Создай свой клан или выбери существующий из общего серверного списка.</div></div>';
+    if(blocked){
+      top+='<div class="cooldownBox">После добровольного выхода действует задержка 24 часа.<br><br><b style="font-size:16px">'+esc(STATE.joinCooldownText||'до 24 часов')+'</b></div>';
+    }else{
+      top+='<div class="card"><h3>НОВЫЙ КЛАН</h3><div class="fieldLabel">Название</div>'+
+        '<input id="clanCreateName" maxlength="24" placeholder="Название клана">'+
+        '<button class="action" id="createBtn">СОЗДАТЬ КЛАН</button></div>';
+    }
+  }
+  main.innerHTML=top+clanRankingHtml(canApply,blocked);
+  var create=document.getElementById('createBtn');
+  if(create)create.onclick=function(){
+    var name=(document.getElementById('clanCreateName').value||'').trim();
+    if(name.length<3){flash('Название минимум 3 символа');return}
+    create.disabled=true;create.textContent='СОЗДАНИЕ…';
+    parent.postMessage({type:'clanAction',action:'create',name:name},'*');
+  };
+  bindClanRanking();
+}
+
+function esc(s){`
+);
+
 ppaPatchRegex(
   'shared mob reward',
   /P\.kil\s*\+\+\s*;\s*P\.xp\s*\+=\s*e\.xp\s*;/g,
