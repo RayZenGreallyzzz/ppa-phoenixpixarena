@@ -142,12 +142,44 @@
   }
 
   window.PPA_MOB_SERVER_REGISTER=function(){return register(true)};
+  function hash32(str){
+    var h=2166136261>>>0;
+    str=String(str||'');
+    for(var i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)>>>0}
+    return ('00000000'+h.toString(16)).slice(-8);
+  }
+
   window.PPA_MOB_SERVER_DIAG=function(){
+    var arr=entities().filter(function(e){return !!keyOf(e)}),local=new Map(),maxDelta=0;
+    arr.forEach(function(e){local.set(keyOf(e),e)});
+    var keys=Array.from(authority.keys()).sort(function(a,b){return siOf(a)-siOf(b)});
+    var authParts=[],localParts=[],samples=[];
+    var px=0,py=0;try{px=Number(P.x)||0;py=Number(P.y)||0}catch(_){}
+    keys.forEach(function(k){
+      var st=authority.get(k)||{},e=local.get(k);
+      var ax=Number(st.x),ay=Number(st.y),lx=e?Number(e.x):NaN,ly=e?Number(e.y):NaN;
+      authParts.push(k+':'+(Number.isFinite(ax)?Math.round(ax/20):'x')+','+(Number.isFinite(ay)?Math.round(ay/20):'x')+':'+(Number(st.hp)>0?1:0));
+      localParts.push(k+':'+(Number.isFinite(lx)?Math.round(lx/20):'x')+','+(Number.isFinite(ly)?Math.round(ly/20):'x')+':'+(e&&Number(e.hp)>0?1:0));
+      if(e&&Number.isFinite(ax)&&Number.isFinite(ay)&&Number.isFinite(lx)&&Number.isFinite(ly)){
+        maxDelta=Math.max(maxDelta,Math.hypot(ax-lx,ay-ly));
+      }
+    });
+    var nearest=keys.map(function(k){
+      var st=authority.get(k)||{};
+      var ax=Number(st.x),ay=Number(st.y);
+      return {k:k,d:Number.isFinite(ax)&&Number.isFinite(ay)?Math.hypot(ax-px,ay-py):1e12,st:st,e:local.get(k)};
+    }).sort(function(a,b){return a.d-b.d}).slice(0,3);
+    nearest.forEach(function(z){
+      var st=z.st||{},e=z.e;
+      samples.push(z.k+' A'+Math.round(Number(st.x)||0)+','+Math.round(Number(st.y)||0)+' L'+Math.round(Number(e&&e.x)||0)+','+Math.round(Number(e&&e.y)||0));
+    });
+    var rd=rt()||{};
     return {
-      room:room(),ready:authReady,count:authority.size,
-      catalog:currentCatalog().length,
-      mobs:entities().filter(function(e){return !!keyOf(e)}).length,
-      locked:entities().filter(function(e){return !!(e&&e.__ppaServerLocks&&e.__ppaServerLocks.x)}).length
+      room:room(),serverRoom:String(rd.serverRoom||''),instance:Number(rd.dungeonInstance)||0,
+      ready:authReady,count:authority.size,catalog:currentCatalog().length,
+      mobs:arr.length,locked:arr.filter(function(e){return !!(e&&e.__ppaServerLocks&&e.__ppaServerLocks.x)}).length,
+      keyHash:hash32(keys.join('|')),authHash:hash32(authParts.join('|')),localHash:hash32(localParts.join('|')),
+      maxDelta:Math.round(maxDelta),samples:samples
     };
   };
 
@@ -367,11 +399,31 @@
     reconcileAuthority();
   }
 
+  function ensureDiagOverlay(){
+    var id='ppaMobDiagOverlay',el=document.getElementById(id);
+    if(!el){
+      el=document.createElement('div');el.id=id;
+      el.style.cssText='position:fixed;left:50%;top:30px;transform:translateX(-50%);z-index:2147483646;pointer-events:none;background:rgba(0,0,0,.78);border:1px solid rgba(90,255,210,.65);border-radius:5px;padding:3px 5px;color:#9fffdc;font:700 8px/1.25 monospace;white-space:pre;text-align:left;max-width:94vw';
+      document.body.appendChild(el);
+    }
+    try{
+      if(!active()){el.style.display='none';return}
+      el.style.display='block';
+      var d=window.PPA_MOB_SERVER_DIAG?window.PPA_MOB_SERVER_DIAG():{};
+      el.textContent=
+        'MOB '+(d.ready?'READY':'WAIT')+' · '+String(d.room||'?')+' / '+String(d.serverRoom||'?')+'\n'+
+        'A '+d.count+'/'+d.catalog+' · L '+d.mobs+' · LOCK '+d.locked+' · Δ'+d.maxDelta+'\n'+
+        'K '+d.keyHash+' · A '+d.authHash+' · L '+d.localHash+'\n'+
+        (Array.isArray(d.samples)?d.samples.join(' | '):'');
+    }catch(_){}
+  }
+
   function boot(){
     installDropGuard();
     setTimeout(function(){register(true)},600);
     setInterval(tick,1000);
     setInterval(reconcileAuthority,33);
+    setInterval(ensureDiagOverlay,500);
     document.addEventListener('visibilitychange',function(){if(!document.hidden)setTimeout(function(){register(true)},400)},{passive:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
