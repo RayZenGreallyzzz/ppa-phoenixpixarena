@@ -28,7 +28,8 @@
             's'+si,Math.round(mhp*100)/100,
             Math.round(x*10)/10,Math.round(y*10)/10,
             Math.max(.1,Number(t&&t.sp)||1),
-            Math.max(8,Number(t&&t.sz)||30)
+            Math.max(8,Number(t&&t.sz)||30),
+            Math.max(1,Number(t&&t.atk)||Number(t&&t.dmg)||1)
           ]);
         }
         if(rows.length)return rows;
@@ -286,6 +287,39 @@
         }
         authReady=true;
         reconcileAuthority();
+        return;
+      }
+      if(m.type==='mob-attack'){
+        var key=String(m.key||''),e=find(key),target=String(m.target||'');
+        if(e){
+          lockServerMob(e);
+          e.__ppaServerTarget=target;
+          e.atkAnim=12;
+          e.atkCD=50;
+          var dir=Number(m.dir);
+          applying++;
+          try{
+            if(Number.isFinite(Number(m.x)))e.x=Number(m.x);
+            if(Number.isFinite(Number(m.y)))e.y=Number(m.y);
+            if(Number.isFinite(dir)){e.spiderDir=dir;e.animDir=dir}
+            e.spiderMoving=false;e.animMoving=false;
+          }finally{applying--}
+        }
+        if(target&&target===selfId()){
+          try{
+            var dodged=Math.random()*100<(Number(P&&P.dodge)||0);
+            if(dodged){
+              if(typeof showPickup==='function')showPickup('Уворот!','#88ffcc');
+            }else{
+              var raw=Math.max(1,Number(m.dmg)||1);
+              var dealt=(typeof playerDmg==='function')?playerDmg(raw):raw;
+              P.hp=Math.max(0,Number(P.hp||0)-Math.max(1,Number(dealt)||1));
+            }
+            if(typeof PT!=='undefined'&&Array.isArray(PT)&&P){
+              for(var q=0;q<6;q++)PT.push({x:P.x,y:P.y-15,vx:(Math.random()-.5)*5,vy:(Math.random()-.5)*5,life:12,ml:12,sz:2+Math.random()*2,col:'#ff0000'});
+            }
+          }catch(_){}
+        }
         return;
       }
     }catch(err){console.warn('PPA authoritative mob receive',err)}
