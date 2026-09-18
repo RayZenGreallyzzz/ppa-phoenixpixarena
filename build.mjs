@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v303-no-ghost-mob-deaths-20260918-1218';
+const CLIENT_BUILD = 'v304-explicit-mob-death-single-input-20260918-1232';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -84,6 +84,29 @@ output = output.replace(saveToolsRe, '&lt;/section&gt;');
 const combatCreditNeedle = 'P.kil++;P.xp+=e.xp;';
 if (!output.includes(combatCreditNeedle)) throw new Error('PPA combat credit patch target not found');
 output = output.split(combatCreditNeedle).join("if(!window.PPA_MOB_REWARD_ELIGIBLE||window.PPA_MOB_REWARD_ELIGIBLE(e)){P.kil++;P.xp+=e.xp;}"); 
+
+// Android Telegram WebView can emit pointerdown + touchstart + touchend + click
+// for a single physical tap. The source bound combat to all four, so a long
+// press could issue a second Smart Attack on release and silently select/kill
+// the next mob. Use one input family only.
+const attackInputNeedle = `bA.addEventListener('pointerdown',attackPointerDown,{passive:false});
+bA.addEventListener('touchstart',triggerAttackInput,{passive:false});
+bA.addEventListener('touchend',triggerAttackInput,{passive:false});
+bA.addEventListener('click',triggerAttackInput,{passive:false});
+bA.addEventListener('pointerup',attackPointerEnd,{passive:false});
+bA.addEventListener('pointercancel',attackPointerEnd,{passive:false});
+bA.addEventListener('contextmenu',e=>e.preventDefault());`;
+const attackInputPatch = `if(window.PointerEvent){
+  bA.addEventListener('pointerdown',attackPointerDown,{passive:false});
+  bA.addEventListener('pointerup',attackPointerEnd,{passive:false});
+  bA.addEventListener('pointercancel',attackPointerEnd,{passive:false});
+}else{
+  bA.addEventListener('touchstart',triggerAttackInput,{passive:false});
+  bA.addEventListener('touchend',attackPointerEnd,{passive:false});
+}
+bA.addEventListener('contextmenu',e=>e.preventDefault());`;
+if (!output.includes(attackInputNeedle)) throw new Error('PPA single attack input patch target not found');
+output = output.replace(attackInputNeedle, attackInputPatch);
 
 const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
