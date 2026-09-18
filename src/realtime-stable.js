@@ -751,7 +751,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (phoenix) {
         if (!(Number(rec.nextProjectileAt) > 0)) rec.nextProjectileAt = now + 2500;
         if (now >= Number(rec.nextProjectileAt || 0)) {
-          while (now >= rec.nextProjectileAt) rec.nextProjectileAt += 2500;
+          rec.nextProjectileAt = (now - rec.nextProjectileAt > 7500) ? now + 2500 : rec.nextProjectileAt + 2500;
           this.roomBroadcast(room, {
             type: 'boss-special', room, key: mobKey, kind: 'phoenix-fire', phase: 'launch',
             target: n.p.pid, tx: Math.round(n.p.x * 10) / 10, ty: Math.round(n.p.y * 10) / 10,
@@ -789,7 +789,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (!n.p || n.d > 2200) return false;
       if (!(Number(rec.nextSpecialAt) > 0)) rec.nextSpecialAt = now + 5000;
       if (now >= Number(rec.nextSpecialAt || 0)) {
-        while (now >= rec.nextSpecialAt) rec.nextSpecialAt += 5000;
+        rec.nextSpecialAt = (now - rec.nextSpecialAt > 15000) ? now + 5000 : rec.nextSpecialAt + 5000;
         this.roomBroadcast(room, {
           type: 'boss-special', room, key: mobKey, kind: 'titan-crystal', phase: 'launch',
           target: n.p.pid, tx: Math.round(n.p.x * 10) / 10, ty: Math.round(n.p.y * 10) / 10,
