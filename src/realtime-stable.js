@@ -717,6 +717,11 @@ export class RealtimeHub extends BaseRealtimeHub {
     setTimeout(step, 0);
   }
 
+  mobPositionBroadcastTimes() {
+    if (!this._mobPositionBroadcastTimes) this._mobPositionBroadcastTimes = new Map();
+    return this._mobPositionBroadcastTimes;
+  }
+
   mobPersistTimes() {
     if (!this._mobPersistTimes) this._mobPersistTimes = new Map();
     return this._mobPersistTimes;
@@ -994,7 +999,14 @@ export class RealtimeHub extends BaseRealtimeHub {
     }
 
     if (rows.length) {
-      this.roomBroadcast(room, { type: 'mob-position', room, rows, ts: now }, null);
+      // AI remains 10 Hz server-authoritative, but clients do not need 10 position
+      // packets/sec. Render interpolation fills the gaps smoothly and cuts mobile load.
+      const sends = this.mobPositionBroadcastTimes();
+      const lastSend = Number(sends.get(room) || 0);
+      if (!lastSend || now - lastSend >= 160) {
+        sends.set(room, now);
+        this.roomBroadcast(room, { type: 'mob-position', room, rows, ts: now }, null);
+      }
     }
     return rows.length > 0;
   }
