@@ -522,6 +522,26 @@ export class RealtimeHub extends BaseRealtimeHub {
     const a = attOf(ws);
     const now = Date.now();
 
+    if (m.type === 'mob-hit-event') {
+      const room = cleanRoom(a.room);
+      const key = cleanMobKey(m.key);
+      const amount = finite(m.amount, 0, 10000000, 0);
+      const event = String(m.event || '').slice(0, 96);
+      if (!room.startsWith('dungeon-') || cleanRoom(m.room || room) !== room) return;
+      if (!key || !(amount > 0)) return;
+      this.roomBroadcast(room, {
+        type: 'mob-hit-event',
+        room,
+        key,
+        amount: Math.round(amount * 100) / 100,
+        attacker: String(a.pid || ''),
+        party: String(a.partyId || ''),
+        event,
+        ts: now,
+      }, ws);
+      return;
+    }
+
     if (m.type === 'room-request') {
       const info = dungeonInfo(m.base || m.room || '');
       if (!info) return;
