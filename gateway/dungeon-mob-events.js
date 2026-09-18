@@ -9,7 +9,7 @@
   function active(){try{return typeof P!=='undefined'&&P&&P.scene==='dungeon'&&/^dungeon-/.test(room())&&typeof window.PPA_RT_SEND==='function'}catch(_){return false}}
   function selfId(){try{return String((typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE&&PPA_ONLINE.selfId)||'')}catch(_){return''}}
   function partyId(){try{return String((window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'')}catch(_){return''}}
-  function keyOf(e){if(!e||e.isBoss||e.si==null)return'';var si=Math.floor(Number(e.si));return Number.isFinite(si)&&si>=0&&si<10000?'s'+si:''}
+  function keyOf(e){if(!e)return'';if(e.isDungeon60Boss)return'b60';if(e.isBoss||e.si==null)return'';var si=Math.floor(Number(e.si));return Number.isFinite(si)&&si>=0&&si<10000?'s'+si:''}
   function siOf(key){var m=String(key||'').match(/^s(\d{1,4})$/);return m?Number(m[1]):-1}
   function entities(){try{return (typeof EN!=='undefined'&&Array.isArray(EN))?EN:[]}catch(_){return[]}}
   function rebuildEntityCache(force){
@@ -24,6 +24,26 @@
     return entityCache.get(String(key||''))||null;
   }
   function cacheEntity(e){var k=keyOf(e);if(k){entityCache.set(k,e);entityCacheLen=entities().length;entityCacheAt=Date.now()}}
+  function materializeKey(key,fx){
+    key=String(key||'');
+    try{
+      if(key==='b60'){
+        if(typeof window.PPA_DRAGON60_SPAWN_FROM_SERVER==='function'){
+          var b=window.PPA_DRAGON60_SPAWN_FROM_SERVER();
+          if(b)cacheEntity(b);
+          return b||null;
+        }
+        return null;
+      }
+      var si=siOf(key);
+      if(si>=0&&typeof spawnMobAtPoint==='function'){
+        window.__PPA_SERVER_SPAWN_CALL=true;
+        try{spawnMobAtPoint(si,!!fx)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
+        var e=find(key);if(e)cacheEntity(e);return e||null;
+      }
+    }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
+    return null;
+  }
 
   var MATERIALIZE_R=1450;
   function shouldMaterialize(st){
@@ -61,6 +81,15 @@
             Math.max(8,Number(t&&t.sz)||30),
             Math.max(1,Number(t&&t.atk)||Number(t&&t.dmg)||1)
           ]);
+        }
+        if(typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='41-60'&&typeof DG_BOSS_IMG!=='undefined'&&Array.isArray(DG_BOSS_IMG)){
+          var bp=null;
+          try{
+            if(typeof dgNearestWalk==='function')bp=dgNearestWalk(Number(DG_BOSS_IMG[0]||0)*scale,Number(DG_BOSS_IMG[1]||0)*scale);
+          }catch(_){}
+          var bx=bp&&Number.isFinite(Number(bp.x))?Number(bp.x):Number(DG_BOSS_IMG[0]||0)*scale;
+          var by=bp&&Number.isFinite(Number(bp.y))?Number(bp.y):Number(DG_BOSS_IMG[1]||0)*scale;
+          rows.push(['b60',25000,Math.round(bx*10)/10,Math.round(by*10)/10,1.05,180,130]);
         }
         if(rows.length){catalogCount=rows.length;return rows;}
       }
@@ -265,15 +294,7 @@
       var _st=authority.get(key);
       if(!e&&!shouldMaterialize(_st))return;
       if(!e){
-        var si=siOf(key);
-        try{
-          if(si>=0&&typeof spawnMobAtPoint==='function'){
-            window.__PPA_SERVER_SPAWN_CALL=true;
-            try{spawnMobAtPoint(si,true)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
-          }
-        }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
-        e=find(key);
-        if(e)cacheEntity(e);
+        e=materializeKey(key,true);
       }
       if(!e)return;
       cacheEntity(e);
@@ -320,15 +341,7 @@
           return;
         }
         if(!e){
-          var si=siOf(key);
-          try{
-            if(si>=0&&typeof spawnMobAtPoint==='function'){
-              window.__PPA_SERVER_SPAWN_CALL=true;
-              try{spawnMobAtPoint(si,false)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
-            }
-          }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
-          e=find(key);
-          if(e){cacheEntity(e);changed=true}
+          e=materializeKey(key,false);if(e)changed=true;
         }
         if(e&&(Number(e.hp)<=0||e.__ppaAwaitAuthority)){
           e.__ppaAwaitAuthority=false;
@@ -419,14 +432,7 @@
         if(!e&&target&&target===selfId()){
           var st=authority.get(key);
           if(st){
-            var si=siOf(key);
-            try{
-              if(si>=0&&typeof spawnMobAtPoint==='function'){
-                window.__PPA_SERVER_SPAWN_CALL=true;
-                try{spawnMobAtPoint(si,false)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
-              }
-            }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
-            e=find(key);if(e)cacheEntity(e);
+            e=materializeKey(key,false);
           }
         }
         if(e){
@@ -434,6 +440,7 @@
           e.__ppaServerTarget=target;
           e.atkAnim=12;
           e.atkCD=50;
+          if(e.isDungeon60Boss&&typeof window.PPA_DRAGON60_ON_ATTACK==='function')window.PPA_DRAGON60_ON_ATTACK(e,m);
           var dir=Number(m.dir);
           applying++;
           try{
