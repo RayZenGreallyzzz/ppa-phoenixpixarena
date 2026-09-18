@@ -310,10 +310,29 @@ async function handleApi(request, env) {
   }
 }
 
+async function assetResponse(request, env) {
+  const url = new URL(request.url);
+  const res = await env.ASSETS.fetch(request);
+
+  // Telegram WebView can keep an old index.html and therefore keep loading
+  // old ?v= gateway scripts after a new deploy. Never cache the shell or the
+  // realtime/game bridge JS while multiplayer is under active development.
+  const noStoreHtml = url.pathname === '/' || url.pathname === '/index.html' || url.pathname.endsWith('.html');
+  const noStoreBridge = url.pathname.startsWith('/game/') && url.pathname.endsWith('.js');
+  if (!noStoreHtml && !noStoreBridge) return res;
+
+  const headers = new Headers(res.headers);
+  headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
+  headers.set('pragma', 'no-cache');
+  headers.set('expires', '0');
+  headers.set('x-ppa-fresh-assets', '1');
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) return handleApi(request, env);
-    return env.ASSETS.fetch(request);
+    return assetResponse(request, env);
   },
 };
