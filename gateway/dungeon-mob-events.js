@@ -46,6 +46,8 @@
       if(applying||!active())return false;
       var key=keyOf(e),dmg=Number(amount);
       if(!key||!Number.isFinite(dmg)||dmg<=0)return false;
+      e.__ppaEventKiller=selfId();
+      e.__ppaEventParty=partyId();
       var id=(selfId()||'self')+':'+Date.now().toString(36)+':'+(++seq);
       return !!window.PPA_RT_SEND({type:'mob-hit-event',room:room(),key:key,amount:Math.round(dmg*100)/100,event:id});
     }catch(_){return false}
