@@ -87,6 +87,10 @@ function cleanName(v) { return String(v || 'Игрок').trim().replace(/[\u0000
 function cleanText(v) { return String(v || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, 180); }
 function lowerName(v) { return cleanName(v).toLocaleLowerCase('ru-RU'); }
 function cleanPid(v) { v = String(v || '').trim(); return /^tg:\d{1,24}$/.test(v) ? v : ''; }
+function cleanClass(v) {
+  v = String(v || '').trim().toLowerCase();
+  return ['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'].includes(v) ? v : '';
+}
 
 async function playerIdentity(env, user) {
   const id = String(user.id);
@@ -312,6 +316,10 @@ export class RealtimeHub {
       a.a = String(m.a || 'idle').slice(0, 12);
       a.l = Math.max(1, Math.min(999, Math.round(Number(m.l) || Number(a.l) || 1)));
       a.b = Math.max(0, Math.round(Number(m.b) || Number(a.b) || 0));
+      {
+        const liveClass = cleanClass(m.c);
+        if (liveClass) a.classKey = liveClass;
+      }
       a.q = (Number(a.q) || 0) + 1;
       a.room = sr.room;
       ws.serializeAttachment(a);
