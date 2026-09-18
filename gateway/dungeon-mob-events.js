@@ -115,7 +115,9 @@
             Math.round(x*10)/10,Math.round(y*10)/10,
             Math.max(.1,Number(spec&&spec.sp)||Number(t&&t.sp)||1),
             Math.max(8,Number(spec&&spec.sz)||Number(t&&t.sz)||30),
-            Math.max(1,Number(spec&&spec.dmg)||Number(t&&t.atk)||Number(t&&t.dmg)||1)
+            Math.max(1,Number(spec&&spec.dmg)||Number(t&&t.atk)||Number(t&&t.dmg)||1),
+            0,
+            Math.max(1,Math.round(Number(spec&&spec.lvl)||Number(lvl)||1))
           ]);
         }
         if(typeof DG_BOSS_IMG!=='undefined'&&Array.isArray(DG_BOSS_IMG)){
