@@ -211,10 +211,13 @@
   }
 
   function visualDir(serverDir){
-    var d=Math.round(Number(serverDir));
-    // Animated dungeon atlases use the SAME rows as the server:
-    // 0=up/back, 1=down/front, 2=left, 3=right.
-    return d>=0&&d<=3?d:1;
+    var d=Number(serverDir);
+    if(!Number.isFinite(d))return 3;
+    d=Math.round(d);
+    // Approved dungeon atlases use visual rows:
+    // 0=right, 1=left, 2=up/back, 3=down/front.
+    // Server direction remains 0=up, 1=down, 2=left, 3=right.
+    return d===3?0:d===2?1:d===0?2:3;
   }
 
   function bossDirName(serverDir){
@@ -696,7 +699,6 @@
 
   function smoothServerMovement(ts){
     smoothRaf=requestAnimationFrame(smoothServerMovement);
-    // Clean up immediately on scene exit, not one second later in the sanity tick.
     try{
       if(serverMode&&typeof P!=='undefined'&&P&&P.scene!=='dungeon'&&P.scene!=='worldboss'){
         serverMode=false;cleanupServerEntities();
@@ -704,36 +706,24 @@
     }catch(_){}
     if(!serverMode||!smoothEntities.size){smoothLast=ts;return}
     var dt=smoothLast?Math.max(8,Math.min(50,ts-smoothLast)):16;smoothLast=ts;
-    var alpha=1-Math.exp(-dt/58),now=Date.now();
+    // Pure interpolation only. No velocity prediction/extrapolation:
+    // it removes overshoot, side-jumps and "robot" corrections on mobile.
+    var alpha=1-Math.exp(-dt/52);
     smoothEntities.forEach(function(e){
       try{
         if(!e||!keyOf(e)||!(Number(e.hp)>0)){smoothEntities.delete(e);return}
-        var sx=Number(e.__ppaServerX),sy=Number(e.__ppaServerY);
-        if(!Number.isFinite(sx)||!Number.isFinite(sy)){smoothEntities.delete(e);return}
-        var moving=!!e.__ppaServerMoving;
-        var age=Math.max(0,Math.min(650,now-(Number(e.__ppaServerAt)||now)))/1000;
-        var vx=moving?(Number(e.__ppaServerVX)||0):0,vy=moving?(Number(e.__ppaServerVY)||0):0;
-        var tx=sx+vx*age,ty=sy+vy*age;
-        var maxLead=Math.max(18,Math.min(90,(Number(e.sp)||1)*48));
-        var lx=tx-sx,ly=ty-sy,lead=Math.hypot(lx,ly);
-        if(lead>maxLead){tx=sx+lx/lead*maxLead;ty=sy+ly/lead*maxLead}
+        var tx=Number(e.__ppaServerX),ty=Number(e.__ppaServerY);
+        if(!Number.isFinite(tx)||!Number.isFinite(ty)){smoothEntities.delete(e);return}
         var x=Number(e.x),y=Number(e.y),dx=tx-x,dy=ty-y,d=Math.hypot(dx,dy);
         applying++;
         try{
-          if(d>180){e.x=sx;e.y=sy}
+          if(!Number.isFinite(x)||!Number.isFinite(y)||d>140){e.x=tx;e.y=ty}
           else{e.x=x+dx*alpha;e.y=y+dy*alpha}
         }finally{applying--}
-        // Do not recalculate facing from interpolation noise. Server dir is
-        // authoritative and already matches atlas rows 0 up / 1 down / 2 left / 3 right.
-        var sd=Math.round(Number(e.__ppaServerDir));
-        if(sd>=0&&sd<=3){
-          e.spiderDir=sd;e.animDir=sd;
-          applyBossVisualDir(e,sd,moving);
-        }
-        e.spiderMoving=moving;e.animMoving=moving;
-        if(!moving&&Math.hypot(sx-Number(e.x),sy-Number(e.y))<0.35){
-          applying++;try{e.x=sx;e.y=sy}finally{applying--}
-          smoothEntities.delete(e);
+        if(d<0.22){
+          applying++;
+          try{e.x=tx;e.y=ty}finally{applying--}
+          if(!e.__ppaServerMoving)smoothEntities.delete(e);
         }
       }catch(_){smoothEntities.delete(e)}
     });
