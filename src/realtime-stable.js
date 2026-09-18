@@ -35,6 +35,7 @@ function finite(v, min, max, fallback = 0) {
 
 const DUNGEON_CAPACITY = 40;
 const DUNGEON_RESERVE_MS = 90_000;
+const DUNGEON_MOB_RESPAWN_MS = 10_000;
 
 function dungeonInfo(v) {
   const room = cleanRoom(v);
@@ -719,6 +720,22 @@ export class RealtimeHub extends BaseRealtimeHub {
       const leash = 180;
       let target = rec.target ? byPid.get(String(rec.target)) : null;
 
+      // Normal dungeon mobs must be able to attack without relying on the old
+      // client AI. Acquire the nearest player only in a small local radius so
+      // we do not wake the whole room at once.
+      if (!rec.aggro && players.length) {
+        let best = null, bd = Infinity;
+        for (const p of players) {
+          const pd = Math.hypot(p.x - x, p.y - y);
+          if (pd < bd) { bd = pd; best = p; }
+        }
+        if (best && bd <= 150) {
+          rec.aggro = true;
+          rec.target = best.pid;
+          target = best;
+        }
+      }
+
       if (rec.aggro && !target && players.length) {
         let best = null, bd = Infinity;
         for (const p of players) {
@@ -972,14 +989,14 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       let respawnAt = 0, killer = rec.killer, party = rec.party;
       if (rec.hp <= 0) {
-        respawnAt = now + 10000;
+        respawnAt = now + DUNGEON_MOB_RESPAWN_MS;
         dead.set(ck, { room, key, at: respawnAt, killer, party });
         setTimeout(async () => {
           try {
             await this.ensureMobRoomLoaded(room);
             if (this.processMobRespawns(room, Date.now())) await this.persistMobRoom(room);
           } catch (_) {}
-        }, 10050);
+        }, DUNGEON_MOB_RESPAWN_MS + 50);
       }
 
       await this.persistMobRoom(room);
@@ -1235,6 +1252,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (currentRoom.startsWith('dungeon-')) {
         await this.ensureMobRoomLoaded(currentRoom);
         this.tickMobAI(currentRoom, now);
+        if (this.roomHasAggroMob(currentRoom)) this.ensureMobAiLoop(currentRoom);
         await this.maybePersistMobMovement(currentRoom, now);
       }
 
