@@ -220,6 +220,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     const { health, dead } = this.mobStores();
     for (const key of [...health.keys()]) if (String(key).startsWith(prefix)) health.delete(key);
     for (const key of [...dead.keys()]) if (String(key).startsWith(prefix)) dead.delete(key);
+    this.forgetMobRoom(room);
   }
 
   roomHasReservation(room, now = Date.now()) {
@@ -448,6 +449,80 @@ export class RealtimeHub extends BaseRealtimeHub {
     return cleanRoom(room) + '|' + cleanMobKey(key);
   }
 
+  mobStorageKey(room) {
+    return 'mob-authority:' + cleanRoom(room);
+  }
+
+  mobLoadedRooms() {
+    if (!this._mobLoadedRooms) this._mobLoadedRooms = new Set();
+    return this._mobLoadedRooms;
+  }
+
+  async ensureMobRoomLoaded(room) {
+    room = cleanRoom(room);
+    if (!room.startsWith('dungeon-')) return;
+    const loaded = this.mobLoadedRooms();
+    if (loaded.has(room)) return;
+    loaded.add(room);
+
+    let saved = null;
+    try { saved = await this.ctx.storage.get(this.mobStorageKey(room)); } catch (_) { saved = null; }
+    if (!saved || typeof saved !== 'object' || !saved.mobs) return;
+
+    const { health, dead } = this.mobStores();
+    const now = Date.now();
+    for (const [key, row] of Object.entries(saved.mobs || {})) {
+      const cleanKey = cleanMobKey(key);
+      if (!cleanKey || !row || typeof row !== 'object') continue;
+      const mhp = Math.max(1, Number(row.mhp) || 1);
+      const deadUntil = Math.max(0, Number(row.deadUntil) || 0);
+      const hp = deadUntil > now ? 0 : Math.max(1, Math.min(mhp, Number(row.hp) || mhp));
+      const ck = this.mobCompound(room, cleanKey);
+      health.set(ck, {
+        hp, mhp,
+        updatedAt: Math.max(0, Number(row.updatedAt) || now),
+        killer: String(row.killer || ''),
+        party: String(row.party || ''),
+      });
+      if (deadUntil > now) {
+        dead.set(ck, {
+          room, key: cleanKey, at: deadUntil,
+          killer: String(row.killer || ''),
+          party: String(row.party || ''),
+        });
+      }
+    }
+  }
+
+  async persistMobRoom(room) {
+    room = cleanRoom(room);
+    if (!room.startsWith('dungeon-')) return;
+    const { health, dead } = this.mobStores();
+    const prefix = room + '|';
+    const mobs = {};
+    for (const [ck, rec] of health.entries()) {
+      if (!String(ck).startsWith(prefix) || !rec) continue;
+      const key = String(ck).slice(prefix.length);
+      const d = dead.get(ck);
+      mobs[key] = {
+        hp: Math.max(0, Number(rec.hp) || 0),
+        mhp: Math.max(1, Number(rec.mhp) || 1),
+        updatedAt: Math.max(0, Number(rec.updatedAt) || Date.now()),
+        deadUntil: d ? Math.max(0, Number(d.at) || 0) : 0,
+        killer: d ? String(d.killer || '') : String(rec.killer || ''),
+        party: d ? String(d.party || '') : String(rec.party || ''),
+      };
+    }
+    try { await this.ctx.storage.put(this.mobStorageKey(room), { version: 1, mobs }); } catch (_) {}
+  }
+
+  forgetMobRoom(room) {
+    room = cleanRoom(room);
+    this.mobLoadedRooms().delete(room);
+    const p = this.ctx.storage.delete(this.mobStorageKey(room));
+    try { if (this.ctx && typeof this.ctx.waitUntil === 'function') this.ctx.waitUntil(p); } catch (_) {}
+  }
+
   pruneMobStores(now = Date.now()) {
     const { events } = this.mobStores();
     for (const [id, at] of events) if (now - Number(at || 0) > 15000) events.delete(id);
@@ -455,25 +530,28 @@ export class RealtimeHub extends BaseRealtimeHub {
 
   processMobRespawns(room, now = Date.now()) {
     room = cleanRoom(room);
-    if (!room.startsWith('dungeon-')) return;
+    if (!room.startsWith('dungeon-')) return false;
     this.pruneMobStores(now);
     const { health, dead } = this.mobStores();
+    let changed = false;
     for (const [ck, d] of [...dead.entries()]) {
       if (!d || d.room !== room || Number(d.at) > now) continue;
       const rec = health.get(ck);
-      if (!rec) { dead.delete(ck); continue; }
+      if (!rec) { dead.delete(ck); changed = true; continue; }
       rec.hp = Math.max(1, Number(rec.mhp) || 1);
       rec.updatedAt = now;
       rec.killer = '';
       rec.party = '';
       health.set(ck, rec);
       dead.delete(ck);
+      changed = true;
       this.roomBroadcast(room, {
         type: 'mob-authority', room, key: d.key,
         hp: rec.hp, mhp: rec.mhp, respawnAt: 0,
         killer: '', party: '', ts: now,
       }, null);
     }
+    return changed;
   }
 
   sendMobAuthoritySnapshot(ws, room, now = Date.now()) {
@@ -566,7 +644,8 @@ export class RealtimeHub extends BaseRealtimeHub {
     if (m.type === 'mob-catalog') {
       const room = cleanRoom(a.room);
       if (!room.startsWith('dungeon-') || cleanRoom(m.room || room) !== room) return;
-      this.processMobRespawns(room, now);
+      await this.ensureMobRoomLoaded(room);
+      const respawnChanged = this.processMobRespawns(room, now);
       const { health } = this.mobStores();
       const rows = Array.isArray(m.rows) ? m.rows.slice(0, 256) : [];
       for (const row of rows) {
@@ -587,6 +666,7 @@ export class RealtimeHub extends BaseRealtimeHub {
           health.set(ck, rec);
         }
       }
+      await this.persistMobRoom(room);
       this.sendMobAuthoritySnapshot(ws, room, now);
       return;
     }
@@ -600,7 +680,8 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (!room.startsWith('dungeon-') || cleanRoom(m.room || room) !== room) return;
       if (!key || !(amount > 0)) return;
 
-      this.processMobRespawns(room, now);
+      await this.ensureMobRoomLoaded(room);
+      if (this.processMobRespawns(room, now)) await this.persistMobRoom(room);
       const { health, dead, events } = this.mobStores();
       if (event && events.has(event)) return;
       if (event) events.set(event, now);
@@ -625,11 +706,15 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (rec.hp <= 0) {
         respawnAt = now + 10000;
         dead.set(ck, { room, key, at: respawnAt, killer, party });
-        setTimeout(() => {
-          try { this.processMobRespawns(room, Date.now()); } catch (_) {}
+        setTimeout(async () => {
+          try {
+            await this.ensureMobRoomLoaded(room);
+            if (this.processMobRespawns(room, Date.now())) await this.persistMobRoom(room);
+          } catch (_) {}
         }, 10050);
       }
 
+      await this.persistMobRoom(room);
       this.roomBroadcast(room, {
         type: 'mob-authority', room, key,
         hp: Math.round(rec.hp * 100) / 100,
@@ -642,7 +727,10 @@ export class RealtimeHub extends BaseRealtimeHub {
     if (m.type === 'room-request') {
       const info = dungeonInfo(m.base || m.room || '');
       if (!info) return;
-      this.assignDungeon(ws, a, info.base, now);
+      const assignedRoom = this.assignDungeon(ws, a, info.base, now);
+      await this.ensureMobRoomLoaded(assignedRoom);
+      if (this.processMobRespawns(assignedRoom, now)) await this.persistMobRoom(assignedRoom);
+      this.sendMobAuthoritySnapshot(ws, assignedRoom, now);
       return;
     }
 
@@ -779,7 +867,11 @@ export class RealtimeHub extends BaseRealtimeHub {
     if (m.type === 'ping') {
       a.lastSeenAt = now;
       ws.serializeAttachment(a);
-      this.processMobRespawns(cleanRoom(a.room), now);
+      {
+        const pingRoom = cleanRoom(a.room);
+        await this.ensureMobRoomLoaded(pingRoom);
+        if (this.processMobRespawns(pingRoom, now)) await this.persistMobRoom(pingRoom);
+      }
       wsJson(ws, {
         type: 'pong',
         ts: now,
@@ -810,6 +902,12 @@ export class RealtimeHub extends BaseRealtimeHub {
           this.sendRoomSnapshot(ws, requested);
         } else {
           this.assignDungeon(ws, a, d.base, now);
+        }
+        {
+          const mobRoom = cleanRoom(a.room);
+          await this.ensureMobRoomLoaded(mobRoom);
+          if (this.processMobRespawns(mobRoom, now)) await this.persistMobRoom(mobRoom);
+          this.sendMobAuthoritySnapshot(ws, mobRoom, now);
         }
         return;
       }
