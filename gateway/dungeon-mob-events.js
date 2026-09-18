@@ -107,6 +107,7 @@
 
   function lockServerMob(e){
     if(!e||!keyOf(e))return;
+    lockProp(e,'hp');
     lockProp(e,'x');lockProp(e,'y');
     lockProp(e,'aggro');
     lockProp(e,'spiderDir');lockProp(e,'spiderMoving');
