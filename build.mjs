@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v329-phone-party-hud-20260918-1852';
+const CLIENT_BUILD = 'v330-dragon60-authority-20260918-1925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -178,10 +178,53 @@ if (renderFacingRe.test(output)) {
   console.warn('[PPA BUILD WARN] mob render facing target not found; continuing');
 }
 
+
+/* === V330 LEVEL-60 DRAGON ================================================ */
+ppaPatchRegex(
+  'dragon60 boss update hook',
+  /\}else if\s*\(e\.isDungeon21Boss\)\s*\{\s*dungeon21BossUpdate\(e,dx,dy,d\)\s*;/,
+  "}else if(e.isDungeon60Boss){if(window.PPA_DRAGON60_UPDATE)window.PPA_DRAGON60_UPDATE(e,dx,dy,d);"
+  + "}else if(e.isDungeon21Boss){dungeon21BossUpdate(e,dx,dy,d);"
+);
+
+ppaPatchRegex(
+  'dragon60 local boss attack gate',
+  /\}else if\s*\(d<=reach&&e\.atkCD<=0\)\s*\{/g,
+  "}else if(!e.isDungeon60Boss&&d<=reach&&e.atkCD<=0){",
+  true
+);
+
+ppaPatchRegex(
+  'dragon60 render hook',
+  /if\s*\(e\.isDungeon21Boss\)\s*\{\s*drawDungeon21Boss\(e\)\s*;\s*continue\s*;\s*\}/,
+  "if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW)window.PPA_DRAGON60_DRAW(e);continue;}"
+  + "if(e.isDungeon21Boss){drawDungeon21Boss(e);continue;}"
+);
+
+ppaPatchRegex(
+  'dragon60 phoenix-ai exclusion',
+  /if\s*\(e\.isBoss&&\s*!e\.isClanBoss&&\s*!e\.isDungeon21Boss&&\s*!e\.isWorldCrystalBoss&&\s*!e\.isClanSiegeCrystal\)\s*\{/,
+  "if(e.isBoss&&!e.isClanBoss&&!e.isDungeon21Boss&&!e.isDungeon60Boss&&!e.isWorldCrystalBoss&&!e.isClanSiegeCrystal){"
+);
+
+ppaPatchRegex(
+  'dragon60 death-remnant exclusion',
+  /if\s*\(!e\.isWorldCrystalBoss\)\s*ppaAddDeathRemnant\(e\)\s*;/,
+  "if(!e.isWorldCrystalBoss&&!e.isDungeon60Boss)ppaAddDeathRemnant(e);"
+);
+
+ppaPatchRegex(
+  'dragon60 death notice',
+  /\}else if\s*\(e\.isDungeon21Boss&&P\.scene===['"]dungeon['"]\)\s*\{/,
+  "}else if(e.isDungeon60Boss&&P.scene==='dungeon'){\n        const ln=document.getElementById('locName');\n        ln.innerHTML='ДРАКОН ПЕПЛА ПОВЕРЖЕН<div class=\"sub\">Откат 6 часов</div>';\n        ln.classList.add('show');\n        setTimeout(()=>ln.classList.remove('show'),2500);\n      }else if(e.isDungeon21Boss&&P.scene==='dungeon'){"
+);
+/* ======================================================================== */
+
 const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
   ['gateway/online-client.js','online-client.js','Online client bridge missing'],
   ['gateway/realtime-client.js','realtime-client.js','Realtime client bridge missing'],
+  ['gateway/dungeon60-dragon.js','dungeon60-dragon.js','Dungeon 60 dragon runtime missing'],
   ['gateway/dungeon-mob-events.js','dungeon-mob-events.js','Dungeon mob event bridge missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
   ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],
@@ -199,7 +242,7 @@ for (const [srcName,dstName,err] of filesToPublish) {
 
 if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
 const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
-output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
+output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -208,6 +251,7 @@ console.log('Telegram safe UI: /game/telegram-safe-ui.js');
 console.log('Mobile HUD tweaks: /game/mobile-hud-tweaks.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
+console.log('Dungeon 60 dragon: /game/dungeon60-dragon.js');
 console.log('Dungeon mob events: /game/dungeon-mob-events.js');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
