@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v342-mob-up-facing-zero-fix-20260919-0022';
+const CLIENT_BUILD = 'v343-clan-ui-srcdoc-fix-20260919-0120';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -97,6 +97,15 @@ function ppaPatchRegex(label, re, replacement, all=false) {
   return output !== before;
 }
 
+function ppaEscapeSrcdocCode(code) {
+  return String(code)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 /* === CLAN DIRECTORY / RANKING ============================================ */
 ppaPatchRegex(
   'clan ranking state fields',
@@ -123,7 +132,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'clan directory ranking UI',
   /function\s+renderJoin\(\)\s*\{[\s\S]*?\n\}\s*\n\s*function\s+esc\(s\)\s*\{/,
-  `function clanDirectoryList(){
+  ppaEscapeSrcdocCode(`function clanDirectoryList(){
   var a=Array.isArray(STATE.clanRanking)&&STATE.clanRanking.length?STATE.clanRanking:STATE.clanDirectory;
   return Array.isArray(a)?a:[];
 }
@@ -209,8 +218,12 @@ function renderJoin(){
   bindClanRanking();
 }
 
-function esc(s){`
+function esc(s){`)
 );
+
+if (!output.includes('id=&quot;clanRankList&quot;')) {
+  throw new Error('Clan ranking srcdoc escaping failed');
+}
 
 /* === CLASS RANGE CONSISTENCY ============================================ */
 /* Use the older, tighter ranged values for BOTH player and AI. */
