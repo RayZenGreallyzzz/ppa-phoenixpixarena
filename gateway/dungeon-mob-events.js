@@ -24,26 +24,53 @@
     return entityCache.get(String(key||''))||null;
   }
   function cacheEntity(e){var k=keyOf(e);if(k){entityCache.set(k,e);entityCacheLen=entities().length;entityCacheAt=Date.now()}}
+  function tagServerEntity(e){
+    try{
+      if(!e)return e;
+      e.__ppaServerEntity=true;
+      e.__ppaServerRoom=room();
+      return e;
+    }catch(_){return e}
+  }
+  function isTaggedServerEntity(e){
+    try{
+      return !!(e&&(e.__ppaServerEntity||e.__ppaServerRoom||e.__ppaServerLocks||
+        Number.isFinite(Number(e.__ppaServerAt))||Number.isFinite(Number(e.__ppaServerX))));
+    }catch(_){return false}
+  }
+  function cleanupServerEntities(){
+    try{
+      var a=entities(),changed=false;
+      for(var i=a.length-1;i>=0;i--){
+        if(isTaggedServerEntity(a[i])){
+          try{smoothEntities.delete(a[i])}catch(_){}
+          a.splice(i,1);changed=true;
+        }
+      }
+      smoothEntities.clear();
+      if(changed)rebuildEntityCache(true);
+    }catch(_){}
+  }
   function materializeKey(key,fx){
     key=String(key||'');
     try{
       if(key==='wtitan'&&typeof spawnWorldCrystalBoss==='function'){
         window.__PPA_SERVER_SPAWN_CALL=true;
-        try{var wt=spawnWorldCrystalBoss();if(wt)cacheEntity(wt);return wt||find(key)||null}finally{window.__PPA_SERVER_SPAWN_CALL=false}
+        try{var wt=spawnWorldCrystalBoss();if(wt){tagServerEntity(wt);cacheEntity(wt)}return tagServerEntity(wt||find(key)||null)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
       }
       if(key==='p20'&&typeof spawnBoss==='function'){
         window.__PPA_SERVER_SPAWN_CALL=true;
-        try{spawnBoss();var ph=find(key);if(ph)cacheEntity(ph);return ph||null}finally{window.__PPA_SERVER_SPAWN_CALL=false}
+        try{spawnBoss();var ph=find(key);if(ph){tagServerEntity(ph);cacheEntity(ph)}return tagServerEntity(ph||null)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
       }
       if(key==='b40'&&typeof spawnDungeon21Boss==='function'){
         window.__PPA_SERVER_SPAWN_CALL=true;
-        try{var l=spawnDungeon21Boss();var b40=l||find(key);if(b40)cacheEntity(b40);return b40||null}finally{window.__PPA_SERVER_SPAWN_CALL=false}
+        try{var l=spawnDungeon21Boss();var b40=l||find(key);if(b40){tagServerEntity(b40);cacheEntity(b40)}return tagServerEntity(b40||null)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
       }
       if(key==='b60'){
         if(typeof window.PPA_DRAGON60_SPAWN_FROM_SERVER==='function'){
           var b=window.PPA_DRAGON60_SPAWN_FROM_SERVER();
-          if(b)cacheEntity(b);
-          return b||null;
+          if(b){tagServerEntity(b);cacheEntity(b)}
+          return tagServerEntity(b||null);
         }
         return null;
       }
@@ -51,7 +78,7 @@
       if(si>=0&&typeof spawnMobAtPoint==='function'){
         window.__PPA_SERVER_SPAWN_CALL=true;
         try{spawnMobAtPoint(si,!!fx)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
-        var e=find(key);if(e)cacheEntity(e);return e||null;
+        var e=find(key);if(e){tagServerEntity(e);cacheEntity(e)}return tagServerEntity(e||null);
       }
     }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
     return null;
@@ -387,6 +414,7 @@
         e=materializeKey(key,true);
       }
       if(!e)return;
+      tagServerEntity(e);
       cacheEntity(e);
       lockServerMob(e);
       e.__ppaAwaitAuthority=false;
@@ -508,7 +536,11 @@
 
   window.PPA_DUNGEON_MOB_EVENT_RECEIVE=function(m){
     try{
-      if(!m||String(m.room||'')!==room())return;
+      if(!m)return;
+      // A scene transition can beat realtime room switching by a few frames.
+      // Drop late dungeon packets so they can never respawn enemies in town.
+      if(!active()){cleanupServerEntities();return}
+      if(String(m.room||'')!==room())return;
       if(m.type==='mob-authority-snapshot'){
         var rows=Array.isArray(m.rows)?m.rows:[];
         if(catalogRoom!==room()&&rows.length===0)return;
@@ -664,6 +696,12 @@
 
   function smoothServerMovement(ts){
     smoothRaf=requestAnimationFrame(smoothServerMovement);
+    // Clean up immediately on scene exit, not one second later in the sanity tick.
+    try{
+      if(serverMode&&typeof P!=='undefined'&&P&&P.scene!=='dungeon'&&P.scene!=='worldboss'){
+        serverMode=false;cleanupServerEntities();
+      }
+    }catch(_){}
     if(!serverMode||!smoothEntities.size){smoothLast=ts;return}
     var dt=smoothLast?Math.max(8,Math.min(50,ts-smoothLast)):16;smoothLast=ts;
     var alpha=1-Math.exp(-dt/58),now=Date.now();
@@ -706,6 +744,7 @@
     installBossRuntimeGuards();
     serverMode=active();
     if(!serverMode){
+      cleanupServerEntities();
       lastRoom='';catalogRoom='';authReady=false;authority.clear();deadUntil.clear();
       entityCache.clear();entityCacheLen=-1;diagCache=null;
       return;
