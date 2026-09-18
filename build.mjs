@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v334-test-all-dungeons-open-20260918-2112';
+const CLIENT_BUILD = 'v335-dungeon-test-auction-art-20260918-2128';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -232,6 +232,78 @@ ppaPatchRegex(
   'temporary dungeon test status',
   /st\.textContent='Твой уровень: '\+lv\+' · доступные диапазоны отмечены выше\.';/,
   "st.textContent=window.PPA_TEST_ALL_DUNGEONS===true?'ТЕСТ · ограничения по уровню временно отключены.':'Твой уровень: '+lv+' · доступные диапазоны отмечены выше.';"
+);
+
+ppaPatchRegex(
+  'temporary unlock dungeon buttons hard gate',
+  /const\s+ok21=dungeon21Unlocked\(\),ok41=dungeon41Unlocked\(\);/,
+  "const ok21=window.PPA_TEST_ALL_DUNGEONS===true||dungeon21Unlocked(),ok41=window.PPA_TEST_ALL_DUNGEONS===true||dungeon41Unlocked();"
+);
+
+ppaPatchRegex(
+  'temporary unlock dungeon 21 click hard gate',
+  /if\(!dungeon21Unlocked\(\)\)\{updateDungeonGateMenu\(\);return\}/,
+  "if(window.PPA_TEST_ALL_DUNGEONS!==true&&!dungeon21Unlocked()){updateDungeonGateMenu();return}"
+);
+
+ppaPatchRegex(
+  'temporary unlock dungeon 41 click hard gate',
+  /if\(!dungeon41Unlocked\(\)\)\{updateDungeonGateMenu\(\);return\}/,
+  "if(window.PPA_TEST_ALL_DUNGEONS!==true&&!dungeon41Unlocked()){updateDungeonGateMenu();return}"
+);
+
+
+/* ======================================================================== */
+
+/* === V335 AUCTION PREMIUM ART ============================================ */
+ppaPatchRegex(
+  'auction keep inventory art',
+  /items:auctionItemsForUi\(\)\.map\(auctionAttachMinPrices\)\.map\(function\(x\)\{var y=Object\.assign\(\{\},x\);delete y\.img;delete y\.cardArt;delete y\.iconArt;return y\}\),/,
+  "items:auctionItemsForUi().map(auctionAttachMinPrices),"
+);
+
+ppaPatchRegex(
+  'auction keep own lot art',
+  /lots:\(INV\.auctionLots\|\|\[\]\)\.map\(auctionLotForUi\)\.map\(function\(l\)\{if\(l&&l\.item\)\{l=Object\.assign\(\{\},l,\{item:Object\.assign\(\{\},l\.item\)\}\);delete l\.item\.img;\}return l\}\),/,
+  "lots:(INV.auctionLots||[]).map(auctionLotForUi),"
+);
+
+ppaPatchRegex(
+  'auction art hydration helper',
+  /function\s+sendAuctionState\(\)\s*\{/,
+  `function auctionRestoreUiArt(it){
+  if(!it||typeof it!=='object')return it;
+  if(it.img)return it;
+  try{
+    if(it.kind==='consumable'){
+      var cm=auctionConsumableMeta().find(function(v){return v&&String(v[0])===String(it.refId||'')});
+      if(cm)it.img=cm[3]||'';
+    }else if(it.kind==='stone'){
+      var sm={normal:PPA_V172_ART.normalStone,premium:PPA_V172_ART.premiumStone,rune:PPA_V172_ART.premiumRune};
+      it.img=sm[it.refId]||'';
+    }else if(it.kind==='feather'&&it.refId==='phoenix'){
+      it.img=PPA_V172_ART.feather||'';
+    }else if(it.kind==='grimoire'&&it.refId){
+      var ga=GRIMOIRE_ART[it.refId]||{};it.img=ga.card||ga.icon||'';
+    }
+  }catch(_){}
+  return it;
+}
+function auctionRestoreLotArt(l){
+  if(!l||typeof l!=='object')return l;
+  try{
+    var c=Object.assign({},l);
+    if(c.item)c.item=auctionRestoreUiArt(Object.assign({},c.item));
+    return c;
+  }catch(_){return l}
+}
+function sendAuctionState(){`
+);
+
+ppaPatchRegex(
+  'auction hydrate server market art',
+  /marketLots:\(PPA_AUCTION_MARKET_CACHE\|\|\[\]\)\.slice\(0,100\),/,
+  "marketLots:(PPA_AUCTION_MARKET_CACHE||[]).slice(0,100).map(auctionRestoreLotArt),"
 );
 
 /* ======================================================================== */
