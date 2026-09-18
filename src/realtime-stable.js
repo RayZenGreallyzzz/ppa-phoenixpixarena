@@ -483,16 +483,17 @@ export class RealtimeHub extends BaseRealtimeHub {
         updatedAt: Math.max(0, Number(row.updatedAt) || now),
         killer: String(row.killer || ''),
         party: String(row.party || ''),
-        x: Number.isFinite(Number(row.x)) ? Number(row.x) : undefined,
-        y: Number.isFinite(Number(row.y)) ? Number(row.y) : undefined,
-        hx: Number.isFinite(Number(row.hx)) ? Number(row.hx) : undefined,
-        hy: Number.isFinite(Number(row.hy)) ? Number(row.hy) : undefined,
+        x: row.x != null && Number.isFinite(Number(row.x)) ? Number(row.x) : undefined,
+        y: row.y != null && Number.isFinite(Number(row.y)) ? Number(row.y) : undefined,
+        hx: row.hx != null && Number.isFinite(Number(row.hx)) ? Number(row.hx) : undefined,
+        hy: row.hy != null && Number.isFinite(Number(row.hy)) ? Number(row.hy) : undefined,
         sp: Math.max(0.1, Number(row.sp) || 1),
         sz: Math.max(8, Number(row.sz) || 30),
         aggro: !!row.aggro,
         target: String(row.target || ''),
         dir: Number.isFinite(Number(row.dir)) ? Number(row.dir) : 1,
         moving: !!row.moving,
+        positioned: !!row.positioned && row.x != null && row.y != null && row.hx != null && row.hy != null,
       });
       if (deadUntil > now) {
         dead.set(ck, {
@@ -531,6 +532,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         target: String(rec.target || ''),
         dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1,
         moving: !!rec.moving,
+        positioned: !!rec.positioned,
       };
     }
     try { await this.ctx.storage.put(this.mobStorageKey(room), { version: 1, mobs }); } catch (_) {}
@@ -826,17 +828,20 @@ export class RealtimeHub extends BaseRealtimeHub {
             hp: mhp, mhp, updatedAt: now, killer: '', party: '',
             x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0,
             hx: Number.isFinite(x) ? x : 0, hy: Number.isFinite(y) ? y : 0,
-            sp, sz, aggro: false, target: '', dir: 1, moving: false,
+            sp, sz, aggro: false, target: '', dir: 1, moving: false, positioned: true,
           };
           health.set(ck, rec);
         } else {
           rec.mhp = mhp;
           if (!Number.isFinite(Number(rec.hp))) rec.hp = mhp;
           rec.hp = Math.max(0, Math.min(Number(rec.hp) || 0, mhp));
-          if (!Number.isFinite(Number(rec.hx)) && Number.isFinite(x)) rec.hx = x;
-          if (!Number.isFinite(Number(rec.hy)) && Number.isFinite(y)) rec.hy = y;
-          if (!Number.isFinite(Number(rec.x)) && Number.isFinite(x)) rec.x = x;
-          if (!Number.isFinite(Number(rec.y)) && Number.isFinite(y)) rec.y = y;
+          if (Number.isFinite(x) && Number.isFinite(y)) {
+            rec.hx = x; rec.hy = y;
+            if (!rec.positioned || !Number.isFinite(Number(rec.x)) || !Number.isFinite(Number(rec.y))) {
+              rec.x = x; rec.y = y;
+            }
+            rec.positioned = true;
+          }
           rec.sp = sp; rec.sz = sz;
           rec.updatedAt = now;
           health.set(ck, rec);
