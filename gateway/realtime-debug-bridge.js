@@ -57,7 +57,8 @@
 
       box.innerHTML='<div><span class="'+fcls+'">FPS '+fps+'</span> &nbsp; <span class="'+clsPing(ping)+'">PING '+(ping==null?'—':ping+' ms')+'</span></div>'+
         '<div class="d">PLAYERS '+players+' · ROOM '+roomPeers+' · VISIBLE '+visible+' / '+drawn+'</div>'+instLine+authLine+
-        '<div class="d">WS '+(d.connected?'✓':'×')+' · SERVER '+(age==null?'—':age+' ms')+'</div>'+
+        '<div class="d">WS '+(d.connected?'✓':'×')+' · RX AGE '+(age==null?'—':age+' ms')+'</div>'+
+        '<div class="d">BUILD '+esc(window.PPA_CLIENT_BUILD||'—')+'</div>'+
         '<div class="d">CLIENT '+esc(room)+'</div>'+
         '<div class="d">SERVER '+esc(serverRoom)+'</div>'+mobLine;
     }catch(_){}
