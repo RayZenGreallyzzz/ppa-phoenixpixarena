@@ -650,7 +650,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     const prefix = room + '|';
     const now = Date.now();
     for (const [ck, rec] of health.entries()) {
-      if (!String(ck).startsWith(prefix) || !rec || !(Number(rec.hp) > 0) || !rec.aggro) continue;
+      if (!String(ck).startsWith(prefix) || !rec || !(Number(rec.hp) > 0) || (!rec.aggro && !rec.moving)) continue;
       const d = dead.get(ck);
       if (!d || Number(d.at) <= now) return true;
     }
@@ -763,6 +763,9 @@ export class RealtimeHub extends BaseRealtimeHub {
           vy = dy / dist * step;
           moving = step > 0.01;
         } else if (dist <= reach) {
+          if (Math.abs(dx) + Math.abs(dy) > 0.01) {
+            rec.dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 0 : 1);
+          }
           const nextAttackAt = Math.max(0, Number(rec.nextAttackAt) || 0);
           if (now >= nextAttackAt) {
             rec.nextAttackAt = now + 850;
