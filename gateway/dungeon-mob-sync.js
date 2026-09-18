@@ -84,11 +84,15 @@
     }catch(_){return false}
   }
 
-  function markTomb(key,at){
-    key=String(key||'');at=Math.max(Date.now()+250,Number(at)||0);
-    if(!key)return;
+  function markTomb(key,at,serverTs){
+    key=String(key||'');if(!key)return;
+    var now=Date.now(),raw=Number(at),srv=Number(serverTs),until=0;
+    if(Number.isFinite(raw)&&Number.isFinite(srv)){
+      var ttl=Math.max(250,Math.min(60000,raw-srv));
+      until=now+ttl;
+    }else until=Math.max(now+250,Number.isFinite(raw)?raw:0);
     var old=S.tombs.get(key)||0;
-    if(at>old)S.tombs.set(key,at);
+    if(until>old)S.tombs.set(key,until);
   }
 
   function sendDamage(e,key,before,after){
@@ -96,6 +100,18 @@
     if(!(amount>0)||!key)return;
     var id=(selfId()||'self')+':'+(++S.seq)+':'+Date.now().toString(36);
     send({type:'mob-damage',key:key,amount:r2(amount),before:r2(before),event:id});
+  }
+
+  function localCombatEvidence(e){
+    try{
+      var p=player();
+      if(e&&Number(e.flash)>0)return true;
+      if(p&&(p.attacking||Number(p.shootT)>0||Number(p.shootCD)>0)){
+        if(!e||p.tid==null||String(p.tid)===String(e.id))return true;
+        if(e&&e.aggro)return true;
+      }
+      return false;
+    }catch(_){return false}
   }
 
   function hookHp(e){
@@ -111,14 +127,27 @@
           var old=hp;
           if(APPLYING||!active()||!(nv<old)||old<=0){hp=nv;return}
           if(e.__ppaLethalPending&&nv<old)return;
-          S.hp.set(key,{hp:Math.max(0,nv),at:Date.now()});
-          sendDamage(e,key,old,nv);
-          if(nv<=0){
-            e.__ppaLethalPending=true;
-            hp=Math.min(old,0.01);
-            return;
-          }
-          hp=nv;
+
+          // Hold lethal damage at 0.01 until the current JS turn finishes.
+          // The base game also writes hp=0 for non-combat cleanup/despawn paths;
+          // treating every decrease as an attack was creating "mobs die by themselves".
+          var lethal=nv<=0,token=(Number(e.__ppaDamageToken)||0)+1;
+          e.__ppaDamageToken=token;
+          if(lethal){e.__ppaLethalPending=true;hp=Math.min(old,0.01)}
+          else hp=nv;
+
+          Promise.resolve().then(function(){
+            if(Number(e.__ppaDamageToken)!==token)return;
+            if(!active())return;
+            if(!localCombatEvidence(e)){
+              hp=old;
+              e.__ppaLethalPending=false;
+              return;
+            }
+            S.hp.set(key,{hp:Math.max(0,nv),at:Date.now()});
+            sendDamage(e,key,old,nv);
+            if(!lethal)hp=nv;
+          });
         }
       });
       e.__ppaMobSyncHook=1;
@@ -208,7 +237,7 @@
       var d=dead[j];if(!Array.isArray(d)||d.length<2)continue;
       var dk=String(d[0]||''),at=Number(d[1]);
       if(/^s\d{1,4}$/.test(dk)&&Number.isFinite(at)){
-        markTomb(dk,at);
+        markTomb(dk,at,m.ts);
         var de=findMob(dk);
         if(de){hookHp(de);applyRewardFlag(de,d[2],d[3]);de.__ppaLethalPending=false;setHp(de,0)}
       }
@@ -227,14 +256,14 @@
       if(hp<=0)applyRewardFlag(e,m.killer,m.party);
       setHp(e,hp);
     }
-    if(hp<=0&&Number.isFinite(Number(m.respawnAt)))markTomb(key,Number(m.respawnAt));
+    if(hp<=0&&Number.isFinite(Number(m.respawnAt)))markTomb(key,Number(m.respawnAt),m.ts);
     S.lastNetAt=now;
   }
 
   function receiveDead(m){
     var key=String(m.key||''),at=Number(m.respawnAt);
     if(!/^s\d{1,4}$/.test(key)||!Number.isFinite(at))return;
-    markTomb(key,at);
+    markTomb(key,at,m.ts);
     var e=findMob(key);
     if(e){hookHp(e);applyRewardFlag(e,m.killer,m.party);e.__ppaLethalPending=false;setHp(e,0)}
     S.lastNetAt=Date.now();
