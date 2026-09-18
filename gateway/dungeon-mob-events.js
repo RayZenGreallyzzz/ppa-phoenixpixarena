@@ -51,6 +51,33 @@
       applying--;
     });
   }
+
+  function lockProp(e,name){
+    try{
+      if(!e||e.__ppaServerLocks&&e.__ppaServerLocks[name])return;
+      var value=e[name];
+      if(!e.__ppaServerLocks)Object.defineProperty(e,'__ppaServerLocks',{value:{},configurable:true});
+      Object.defineProperty(e,name,{
+        configurable:true,enumerable:true,
+        get:function(){return value},
+        set:function(v){
+          // In an online dungeon only the authoritative bridge may move/facing-control mobs.
+          // Old single-player AI is still allowed offline.
+          if(applying>0||!active())value=v;
+        }
+      });
+      e.__ppaServerLocks[name]=1;
+    }catch(_){}
+  }
+
+  function lockServerMob(e){
+    if(!e||!keyOf(e))return;
+    lockProp(e,'x');lockProp(e,'y');
+    lockProp(e,'aggro');
+    lockProp(e,'spiderDir');lockProp(e,'spiderMoving');
+    lockProp(e,'animDir');lockProp(e,'animMoving');
+  }
+
   function isServerMode(){return active()}
   window.PPA_SERVER_MOBS_ACTIVE=isServerMode;
 
@@ -105,6 +132,13 @@
   }
 
   window.PPA_MOB_SERVER_REGISTER=function(){return register(true)};
+  window.PPA_MOB_SERVER_DIAG=function(){
+    return {
+      room:room(),ready:authReady,count:authority.size,
+      mobs:entities().filter(function(e){return !!keyOf(e)}).length,
+      locked:entities().filter(function(e){return !!(e&&e.__ppaServerLocks&&e.__ppaServerLocks.x)}).length
+    };
+  };
 
   window.PPA_MOB_EVENT_DAMAGE=function(e,amount){
     try{
@@ -146,8 +180,10 @@
         e=find(key);
       }
       if(!e)return;
+      lockServerMob(e);
       e.__ppaAwaitAuthority=false;
       e.__ppaEventKiller='';e.__ppaEventParty='';
+      e.__ppaServerTarget=target;
       applying++;
       try{
         e.mhp=Math.max(1,mhp);
@@ -166,8 +202,10 @@
     // Dead is also authoritative. If local spawn has not been created yet,
     // keeping it in authority Map is enough; reconcile() will remove it later.
     if(!e)return;
+    lockServerMob(e);
     e.__ppaAwaitAuthority=false;
     e.__ppaEventKiller=killer;e.__ppaEventParty=party;e.__ppaServerRespawnAt=respawnAt;
+    e.__ppaServerTarget=target;
     applying++;
     try{e.hp=0}finally{applying--}
   }
@@ -203,12 +241,17 @@
       }
       e=find(key);
       if(e&&Number(st.hp)>0){
-        if(Number.isFinite(Number(st.x)))e.x=Number(st.x);
-        if(Number.isFinite(Number(st.y)))e.y=Number(st.y);
-        e.aggro=!!st.aggro;
-        var d=Number(st.dir);
-        if(Number.isFinite(d)){e.spiderDir=d;e.animDir=d}
-        e.spiderMoving=!!st.moving;e.animMoving=!!st.moving;
+        lockServerMob(e);
+        e.__ppaServerTarget=String(st.target||'');
+        applying++;
+        try{
+          if(Number.isFinite(Number(st.x)))e.x=Number(st.x);
+          if(Number.isFinite(Number(st.y)))e.y=Number(st.y);
+          e.aggro=!!st.aggro;
+          var d=Number(st.dir);
+          if(Number.isFinite(d)){e.spiderDir=d;e.animDir=d}
+          e.spiderMoving=!!st.moving;e.animMoving=!!st.moving;
+        }finally{applying--}
       }
     });
   }
