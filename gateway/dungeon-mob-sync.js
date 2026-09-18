@@ -4,7 +4,7 @@
   var S={
     started:false,room:'',seq:0,lastSend:0,lastHeartbeat:0,
     states:new Map(),hp:new Map(),tombs:new Map(),seen:0,
-    owned:0,remoteOwned:0,synced:0,lastNetAt:0,intentUntil:0,lastIntentAt:0
+    owned:0,remoteOwned:0,synced:0,lastNetAt:0,intentUntil:0,lastIntentAt:0,intentKind:''
   };
   var APPLYING=0;
 
@@ -95,29 +95,40 @@
     if(until>old)S.tombs.set(key,until);
   }
 
-  function markCombatIntent(ms){
+  function markCombatIntent(kind,ms){
     var now=Date.now();
     S.lastIntentAt=now;
-    S.intentUntil=Math.max(S.intentUntil,now+Math.max(250,Number(ms)||900));
+    S.intentKind=String(kind||'');
+    S.intentUntil=now+Math.max(250,Number(ms)||900);
   }
-  function isCombatControl(t){
-    if(!t||!t.closest)return false;
-    return !!t.closest('#bAtk,#s1,#s2,#s3,#s4');
+  function combatControl(t){
+    if(!t||!t.closest)return null;
+    return t.closest('#bAtk,#s1,#s2,#s3,#s4');
   }
   function armCombatIntent(){
     document.addEventListener('pointerdown',function(e){
-      if(isCombatControl(e.target))markCombatIntent(e.target&&e.target.id==='bAtk'?1200:2200);
+      var b=combatControl(e.target);if(!b)return;
+      markCombatIntent(b.id==='bAtk'?'basic':'skill',b.id==='bAtk'?12000:2600);
     },true);
     document.addEventListener('touchstart',function(e){
-      if(isCombatControl(e.target))markCombatIntent(e.target&&e.target.id==='bAtk'?1200:2200);
+      var b=combatControl(e.target);if(!b)return;
+      markCombatIntent(b.id==='bAtk'?'basic':'skill',b.id==='bAtk'?12000:2600);
     },{capture:true,passive:true});
   }
   function damageAllowed(e){
     var now=Date.now();
+    // Basic Smart Attack can spend several seconds walking to its chosen target,
+    // so keep that intent longer but accept damage only for the selected target.
     if(now<=S.intentUntil){
+      if(S.intentKind==='basic'){
+        var p=player();
+        if(!p||p.tid==null||!e||String(p.tid)!==String(e.id))return false;
+      }
       if(e)e.__ppaCombatTrackedUntil=Math.max(Number(e.__ppaCombatTrackedUntil)||0,now+15000);
       return true;
     }
+    // Legitimate DoT may continue after the button press, but only on a mob that
+    // was already hit during that explicit combat intent.
     return !!(e&&now<Number(e.__ppaCombatTrackedUntil||0));
   }
 
