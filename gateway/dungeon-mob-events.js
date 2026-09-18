@@ -264,7 +264,7 @@
     var key=String(row[0]||''),hp=Number(row[1]),mhp=Number(row[2]),respawnAt=Number(row[3])||0;
     var killer=String(row[4]||''),party=String(row[5]||'');
     var x=Number(row[6]),y=Number(row[7]),aggro=!!row[8],dir=Number(row[9]),moving=!!row[10],target=String(row[11]||''),sz=Number(row[12]);
-    if(!/^s\d{1,4}$/.test(key)||!Number.isFinite(hp)||!Number.isFinite(mhp))return;
+    if(!(/^s\d{1,4}$/.test(key)||key==='b60')||!Number.isFinite(hp)||!Number.isFinite(mhp))return;
 
     var now=Date.now(),tomb=Number(deadUntil.get(key)||0);
     if(hp<=0&&respawnAt>now){
