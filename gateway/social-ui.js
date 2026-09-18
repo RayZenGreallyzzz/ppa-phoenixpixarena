@@ -4,18 +4,17 @@
   var friends=new Map();
   var current=null;
   var party={partyId:'',members:[]};
-  var hitEls=new Map();
   var booted=false;
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var t=tg();return t&&t.initData?String(t.initData):''}
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-  function nearby(id){try{return window.PPA_ONLINE&&PPA_ONLINE.remotes&&PPA_ONLINE.remotes.get(String(id||''))||null}catch(_){return null}}
-  function note(text,ok){try{if(typeof showPickup==='function')showPickup(String(text||''),ok===false?'#ff8d8d':'#8dffad')}catch(_){} }
+  function online(){try{return (typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE)?PPA_ONLINE:null}catch(_){return null}}
+  function nearby(id){var o=online();try{return o&&o.remotes?o.remotes.get(String(id||''))||null:null}catch(_){return null}}
+  function note(text,ok){try{if(typeof showPickup==='function')showPickup(String(text||''),ok===false?'#ff8d8d':'#8dffad')}catch(_){}}
 
   async function api(path,payload){
-    var d=initData();
-    if(!d)throw new Error('Открой игру через Telegram Mini App');
+    var d=initData();if(!d)throw new Error('Открой игру через Telegram Mini App');
     var r=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign({initData:d},payload||{})),credentials:'same-origin',cache:'no-store'});
     var j=null;try{j=await r.json()}catch(_){}
     if(!r.ok||!j||j.ok===false)throw new Error((j&&j.message)||('HTTP '+r.status));
@@ -23,10 +22,8 @@
   }
 
   function installStyle(){
-    if(document.getElementById('ppaSocialStyleV2'))return;
-    var st=document.createElement('style');
-    st.id='ppaSocialStyleV2';
-    st.textContent=`
+    if(document.getElementById('ppaSocialStyleV3'))return;
+    var st=document.createElement('style');st.id='ppaSocialStyleV3';st.textContent=`
       #ppaSocialShade{position:fixed;inset:0;z-index:10020;background:rgba(0,0,0,.26);display:none}
       #ppaSocialShade.on{display:block}
       #ppaPlayerCard{position:fixed;z-index:10030;left:50%;top:48%;transform:translate(-50%,-50%);width:min(88vw,330px);padding:13px;border:1px solid rgba(126,198,255,.72);border-radius:12px;background:linear-gradient(180deg,rgba(9,21,31,.98),rgba(7,10,16,.99));box-shadow:0 18px 42px #000;color:#ddd;font-family:Georgia,'Times New Roman',serif;display:none}
@@ -48,127 +45,83 @@
       #ppaPartyLeave{width:100%;margin-top:6px;height:34px;border:1px solid #75454c;border-radius:8px;background:#29181b;color:#ffb9bd;font:bold 10px Georgia,serif}
       .ppaFriendsTab{height:27px;border:1px solid #365568;border-radius:4px;background:#0d1720;color:#9fd7ff;font:700 7.5px monospace;white-space:nowrap;padding:0 2px}
       .ppaFriendsTab:active{background:#173040;border-color:#5f9abb;color:#d7efff}
-      #ppaRemoteHitLayer{position:fixed;inset:0;z-index:4800;pointer-events:none}
-      .ppaRemoteHit{position:fixed;pointer-events:auto;background:transparent;border:0;border-radius:50%;padding:0;margin:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
       @media(max-width:600px){#ppaPlayerCard{top:45%}#ppaFriendsPanel{top:45%;max-height:68vh}.ppaFriendsTab{font-size:7px}}
-    `;
-    document.head.appendChild(st);
+    `;document.head.appendChild(st);
   }
 
   function closeAll(){
-    var sh=document.getElementById('ppaSocialShade');
-    var c=document.getElementById('ppaPlayerCard');
-    var p=document.getElementById('ppaFriendsPanel');
-    if(sh)sh.classList.remove('on');
-    if(c)c.classList.remove('on');
-    if(p)p.classList.remove('on');
-    current=null;
+    var sh=document.getElementById('ppaSocialShade'),c=document.getElementById('ppaPlayerCard'),p=document.getElementById('ppaFriendsPanel');
+    if(sh)sh.classList.remove('on');if(c)c.classList.remove('on');if(p)p.classList.remove('on');current=null;
   }
   function showShade(){var sh=document.getElementById('ppaSocialShade');if(sh)sh.classList.add('on')}
 
-  function ensureBaseUi(){
-    installStyle();
-    if(!document.getElementById('ppaSocialShade')){
-      var s=document.createElement('div');s.id='ppaSocialShade';document.body.appendChild(s);
-      s.addEventListener('pointerdown',closeAll);
-    }
-    if(!document.getElementById('ppaPlayerCard')){
-      var c=document.createElement('div');c.id='ppaPlayerCard';
-      c.innerHTML='<div class="ppaSocialName" id="ppaSocialName">Игрок</div><div class="ppaSocialClass" id="ppaSocialClass">ГЕРОЙ</div><div class="ppaSocialStats"><span id="ppaSocialLevel">УР. 1</span><span id="ppaSocialBm">⚔ БМ 0</span></div><div class="ppaSocialBtns"><button class="ppaSocialBtn" id="ppaInviteParty">ПРИГЛАСИТЬ В ГРУППУ</button><button class="ppaSocialBtn friend" id="ppaAddFriend">ДОБАВИТЬ В ДРУЗЬЯ</button></div>';
-      document.body.appendChild(c);
-      c.addEventListener('pointerdown',function(e){e.stopPropagation()});
-      document.getElementById('ppaInviteParty').addEventListener('click',inviteCurrent);
-      document.getElementById('ppaAddFriend').addEventListener('click',addCurrentFriend);
-    }
-    if(!document.getElementById('ppaFriendsPanel')){
-      var p=document.createElement('div');p.id='ppaFriendsPanel';
-      p.innerHTML='<div class="ppaFriendsHead"><b>👥 ДРУЗЬЯ И ГРУППА</b><button id="ppaFriendsClose" type="button">✕</button></div><div id="ppaFriendsBody">Загрузка…</div>';
-      document.body.appendChild(p);
-      p.addEventListener('pointerdown',function(e){e.stopPropagation()});
-      document.getElementById('ppaFriendsClose').addEventListener('click',closeAll);
-    }
-    if(!document.getElementById('ppaRemoteHitLayer')){
-      var h=document.createElement('div');h.id='ppaRemoteHitLayer';document.body.appendChild(h);
-    }
-    ensureFriendsTab();
-  }
-
   function ensureFriendsTab(){
-    var tabs=document.querySelector('#ppaChatBox .ppaChatTabs')||document.querySelector('.ppaChatTabs');
-    if(!tabs)return false;
+    var tabs=document.querySelector('#ppaChatBox .ppaChatTabs')||document.querySelector('.ppaChatTabs');if(!tabs)return false;
     tabs.style.gridTemplateColumns='repeat(5,1fr)';
     var b=document.getElementById('ppaFriendsTab');
     if(!b){
-      b=document.createElement('button');
-      b.id='ppaFriendsTab';b.type='button';b.className='ppaFriendsTab';b.textContent='ДРУЗЬЯ';
+      b=document.createElement('button');b.id='ppaFriendsTab';b.type='button';b.className='ppaFriendsTab';b.textContent='ДРУЗЬЯ';
       b.setAttribute('aria-label','Друзья и группа');
-      b.addEventListener('pointerdown',function(e){e.stopPropagation()});
       b.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openFriends()});
       tabs.appendChild(b);
     }
     return true;
   }
 
+  function ensureUi(){
+    installStyle();
+    if(!document.getElementById('ppaSocialShade')){var s=document.createElement('div');s.id='ppaSocialShade';document.body.appendChild(s);s.addEventListener('pointerdown',closeAll)}
+    if(!document.getElementById('ppaPlayerCard')){
+      var c=document.createElement('div');c.id='ppaPlayerCard';
+      c.innerHTML='<div class="ppaSocialName" id="ppaSocialName">Игрок</div><div class="ppaSocialClass" id="ppaSocialClass">ГЕРОЙ</div><div class="ppaSocialStats"><span id="ppaSocialLevel">УР. 1</span><span id="ppaSocialBm">⚔ БМ 0</span></div><div class="ppaSocialBtns"><button class="ppaSocialBtn" id="ppaInviteParty">ПРИГЛАСИТЬ В ГРУППУ</button><button class="ppaSocialBtn friend" id="ppaAddFriend">ДОБАВИТЬ В ДРУЗЬЯ</button></div>';
+      document.body.appendChild(c);c.addEventListener('pointerdown',function(e){e.stopPropagation()});
+      document.getElementById('ppaInviteParty').addEventListener('click',inviteCurrent);
+      document.getElementById('ppaAddFriend').addEventListener('click',addCurrentFriend);
+    }
+    if(!document.getElementById('ppaFriendsPanel')){
+      var p=document.createElement('div');p.id='ppaFriendsPanel';
+      p.innerHTML='<div class="ppaFriendsHead"><b>👥 ДРУЗЬЯ И ГРУППА</b><button id="ppaFriendsClose" type="button">✕</button></div><div id="ppaFriendsBody">Загрузка…</div>';
+      document.body.appendChild(p);p.addEventListener('pointerdown',function(e){e.stopPropagation()});
+      document.getElementById('ppaFriendsClose').addEventListener('click',closeAll);
+    }
+    ensureFriendsTab();
+  }
+
+  function remoteId(r,key){return String((r&&(r.id||r.i||r.__ppaPid))||key||'')}
   function openPlayer(r){
-    if(!r)return;
-    ensureBaseUi();current=r;showShade();
-    var card=document.getElementById('ppaPlayerCard');if(!card)return;
-    card.classList.add('on');
+    if(!r)return;ensureUi();current=r;showShade();
+    var card=document.getElementById('ppaPlayerCard');if(!card)return;card.classList.add('on');
     document.getElementById('ppaSocialName').textContent=String(r.name||r.n||'Игрок');
     document.getElementById('ppaSocialClass').textContent=String(r.cls||r.classKey||r.c||'ГЕРОЙ');
     document.getElementById('ppaSocialLevel').textContent='УР. '+Math.max(1,Math.floor(Number(r.level||r.l)||1));
     document.getElementById('ppaSocialBm').textContent='⚔ БМ '+Math.max(0,Math.round(Number(r.bm||r.b)||0));
-    var fb=document.getElementById('ppaAddFriend');
-    var id=String(r.id||r.i||'');
-    if(friends.has(id)){fb.textContent='✓ УЖЕ В ДРУЗЬЯХ';fb.disabled=true}else{fb.textContent='ДОБАВИТЬ В ДРУЗЬЯ';fb.disabled=false}
-    var pb=document.getElementById('ppaInviteParty');
-    pb.disabled=!window.PPA_RT_SEND;pb.textContent='ПРИГЛАСИТЬ В ГРУППУ';
+    var id=remoteId(r,''),fb=document.getElementById('ppaAddFriend');
+    if(friends.has(id)){fb.textContent='✓ УЖЕ В ДРУЗЬЯХ';fb.disabled=true}else{fb.textContent='ДОБАВИТЬ В ДРУЗЬЯ';fb.disabled=!id}
+    var pb=document.getElementById('ppaInviteParty');pb.disabled=!window.PPA_RT_SEND||!id;pb.textContent='ПРИГЛАСИТЬ В ГРУППУ';
   }
 
   async function loadFriends(){
-    try{
-      var r=await api('/api/social/list');
-      friends.clear();(r.friends||[]).forEach(function(x){friends.set(String(x.id),x)});
-      renderFriends();return r;
-    }catch(e){
-      var body=document.getElementById('ppaFriendsBody');if(body)body.textContent='Не удалось загрузить друзей: '+e.message;
-      return null;
-    }
+    try{var r=await api('/api/social/list');friends.clear();(r.friends||[]).forEach(function(x){friends.set(String(x.id),x)});renderFriends();return r}
+    catch(e){var b=document.getElementById('ppaFriendsBody');if(b)b.textContent='Не удалось загрузить друзей: '+e.message;return null}
   }
-
   async function addCurrentFriend(){
-    if(!current)return;
-    var id=String(current.id||current.i||'');
-    if(!id)return;
+    if(!current)return;var id=remoteId(current,'');if(!id)return;
     var btn=document.getElementById('ppaAddFriend');if(btn)btn.disabled=true;
-    try{
-      var r=await api('/api/social/add',{friendId:id});
-      friends.clear();(r.friends||[]).forEach(function(x){friends.set(String(x.id),x)});
-      note(r.message||'Игрок добавлен в друзья');
-      if(btn){btn.textContent='✓ УЖЕ В ДРУЗЬЯХ';btn.disabled=true}
-    }catch(e){note(e.message,false);if(btn)btn.disabled=false}
+    try{var r=await api('/api/social/add',{friendId:id});friends.clear();(r.friends||[]).forEach(function(x){friends.set(String(x.id),x)});note(r.message||'Игрок добавлен в друзья');if(btn){btn.textContent='✓ УЖЕ В ДРУЗЬЯХ';btn.disabled=true}}
+    catch(e){note(e.message,false);if(btn)btn.disabled=false}
   }
-
   async function removeFriend(id){
-    try{
-      var r=await api('/api/social/remove',{friendId:id});
-      friends.clear();(r.friends||[]).forEach(function(x){friends.set(String(x.id),x)});
-      renderFriends();
-    }catch(e){note(e.message,false)}
+    try{var r=await api('/api/social/remove',{friendId:id});friends.clear();(r.friends||[]).forEach(function(x){friends.set(String(x.id),x)});renderFriends()}
+    catch(e){note(e.message,false)}
   }
-
   function inviteCurrent(){
-    if(!current||!window.PPA_RT_SEND)return;
-    var id=String(current.id||current.i||'');
-    if(!id)return;
-    var ok=window.PPA_RT_SEND({type:'party-invite',target:id});
-    if(ok){note('Приглашение в группу отправлено');closeAll()}else note('ONLINE переподключается',false)
+    if(!current||!window.PPA_RT_SEND)return;var id=remoteId(current,'');if(!id)return;
+    if(window.PPA_RT_SEND({type:'party-invite',target:id})){note('Приглашение в группу отправлено');closeAll()}else note('ONLINE переподключается',false)
   }
 
   function renderFriends(){
     var body=document.getElementById('ppaFriendsBody');if(!body)return;
-    var pm=Array.isArray(party&&party.members)?party.members:[];
-    var h='<div class="ppaSocialSec">ГРУППА</div>';
+    var pm=Array.isArray(party&&party.members)?party.members:[],h='<div class="ppaSocialSec">ГРУППА</div>';
     if(pm.length){
       pm.forEach(function(x){h+='<div class="ppaPartyRow"><div class="ppaFriendMain"><div class="ppaFriendName">'+esc(x.name||'Игрок')+'</div><div class="ppaFriendSub">УР. '+Math.max(1,Number(x.level)||1)+' · БМ '+Math.max(0,Number(x.bm)||0)+'</div></div></div>'});
       h+='<button id="ppaPartyLeave">ПОКИНУТЬ ГРУППУ</button>';
@@ -176,8 +129,7 @@
     h+='<div class="ppaSocialSec">ДРУЗЬЯ</div>';
     if(!friends.size)h+='<div class="ppaFriendSub" style="padding:7px">Список пуст. Добавляй игроков тапом по персонажу.</div>';
     friends.forEach(function(f,id){
-      var r=nearby(id);
-      var sub=r?('<span class="ppaFriendNear">● РЯДОМ</span> · УР. '+Math.max(1,Number(r.level)||1)+' · БМ '+Math.max(0,Number(r.bm)||0)):'<span class="ppaFriendAway">○ НЕ В ЭТОЙ ЛОКАЦИИ</span>';
+      var r=nearby(id),sub=r?('<span class="ppaFriendNear">● РЯДОМ</span> · УР. '+Math.max(1,Number(r.level)||1)+' · БМ '+Math.max(0,Number(r.bm)||0)):'<span class="ppaFriendAway">○ НЕ В ЭТОЙ ЛОКАЦИИ</span>';
       h+='<div class="ppaFriendRow"><div class="ppaFriendMain"><div class="ppaFriendName">'+esc(f.name||'Игрок')+'</div><div class="ppaFriendSub">'+sub+'</div></div>'+(r?'<button class="ppaFriendOpen" data-open="'+esc(id)+'" type="button">👤</button>':'')+'<button class="ppaFriendRemove" data-remove="'+esc(id)+'" type="button">×</button></div>';
     });
     body.innerHTML=h;
@@ -186,70 +138,49 @@
     body.querySelectorAll('[data-remove]').forEach(function(b){b.onclick=function(){removeFriend(b.dataset.remove)}});
   }
 
-  function openFriends(){
-    ensureBaseUi();showShade();
-    var p=document.getElementById('ppaFriendsPanel');if(!p)return;
-    p.classList.add('on');renderFriends();loadFriends();
-  }
+  function openFriends(){ensureUi();showShade();var p=document.getElementById('ppaFriendsPanel');if(!p)return;p.classList.add('on');renderFriends();loadFriends()}
 
-  function canvasRectData(){
+  function canvasInfo(){
     var c=document.getElementById('c');if(!c)return null;
-    var cr=c.getBoundingClientRect();
-    var z=1;try{z=Math.max(.1,Number(cameraZoom())||1)}catch(_){}
-    return {c:c,cr:cr,z:z};
+    var r=c.getBoundingClientRect();if(!r.width||!r.height)return null;
+    var z=1;try{z=Math.max(.1,Number(typeof cameraZoom==='function'?cameraZoom():1)||1)}catch(_){}
+    return{c:c,r:r,z:z,kx:r.width/Math.max(1,c.width),ky:r.height/Math.max(1,c.height)};
   }
 
-  function positionHitTargets(){
-    ensureFriendsTab();
-    var info=canvasRectData();
-    if(!info||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return;
-    var live=new Set();
-    var layer=document.getElementById('ppaRemoteHitLayer');if(!layer)return;
-    PPA_ONLINE.remotes.forEach(function(r,id){
-      id=String(id||r.id||'');if(!id)return;
-      if(!Number.isFinite(Number(r.__ppaHitX))||!Number.isFinite(Number(r.__ppaHitY)))return;
-      live.add(id);
-      var el=hitEls.get(id);
-      if(!el){
-        el=document.createElement('button');el.type='button';el.className='ppaRemoteHit';el.setAttribute('aria-label','Игрок '+String(r.name||'Игрок'));
-        el.addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();openPlayer(nearby(id)||r)},true);
-        layer.appendChild(el);hitEls.set(id,el);
+  function findRemoteAt(clientX,clientY){
+    var o=online(),info=canvasInfo();if(!o||!o.remotes||!info)return null;
+    var best=null,bd=1e9,now=Date.now();
+    o.remotes.forEach(function(r,key){
+      if(!r||!remoteId(r,key))return;
+      var cx=Number(r.__ppaClientX),cy=Number(r.__ppaClientY),ca=Number(r.__ppaClientAt),rad=Number(r.__ppaClientRadius);
+      if(Number.isFinite(cx)&&Number.isFinite(cy)&&(!Number.isFinite(ca)||now-ca<1600)){
+        var d=Math.hypot(clientX-cx,clientY-cy),rr=Math.max(42,Math.min(90,Number.isFinite(rad)?rad:58));
+        if(d<=rr&&d<bd){bd=d;best=r}return;
       }
-      var sx=Number(r.__ppaHitX),sy=Number(r.__ppaHitY),rad=Math.max(30,Number(r.__ppaHitBody)||32);
-      var x=info.cr.left+(sx*info.z)*(info.cr.width/Math.max(1,info.c.width));
-      var y=info.cr.top+(sy*info.z)*(info.cr.height/Math.max(1,info.c.height));
-      var rr=Math.max(26,rad*info.z*(info.cr.width/Math.max(1,info.c.width))*1.5);
-      el.style.left=(x-rr)+'px';el.style.top=(y-rr)+'px';el.style.width=(rr*2)+'px';el.style.height=(rr*2)+'px';
-      el.style.display=(x<-rr||y<-rr||x>innerWidth+rr||y>innerHeight+rr)?'none':'block';
+      var hx=Number(r.__ppaHitX),hy=Number(r.__ppaHitY),hb=Number(r.__ppaHitBody);
+      if(Number.isFinite(hx)&&Number.isFinite(hy)){
+        var x=info.r.left+hx*info.z*info.kx,y=info.r.top+hy*info.z*info.ky;
+        var rr2=Math.max(42,Math.min(90,Math.max(30,Number.isFinite(hb)?hb:32)*info.z*Math.max(info.kx,info.ky)*1.7));
+        var d2=Math.hypot(clientX-x,clientY-y);if(d2<=rr2&&d2<bd){bd=d2;best=r}
+      }
     });
-    hitEls.forEach(function(el,id){if(!live.has(id)){try{el.remove()}catch(_){}hitEls.delete(id)}});
+    return best;
   }
 
-  function armCanvasFallback(){
-    var c=document.getElementById('c');if(!c||c.dataset.ppaSocialTapV2==='1')return;
-    c.dataset.ppaSocialTapV2='1';
+  function armCanvasTap(){
+    var c=document.getElementById('c');if(!c||c.dataset.ppaSocialTapV3==='1')return false;
+    c.dataset.ppaSocialTapV3='1';
     c.addEventListener('pointerdown',function(e){
-      try{
-        if(!window.PPA_ONLINE||!PPA_ONLINE.remotes)return;
-        var info=canvasRectData();if(!info)return;
-        var px=(e.clientX-info.cr.left)*(info.c.width/Math.max(1,info.cr.width));
-        var py=(e.clientY-info.cr.top)*(info.c.height/Math.max(1,info.cr.height));
-        var wx=px/info.z,wy=py/info.z,best=null,bd=1e9;
-        PPA_ONLINE.remotes.forEach(function(r){
-          if(!Number.isFinite(Number(r.__ppaHitX))||!Number.isFinite(Number(r.__ppaHitY)))return;
-          var rad=Math.max(30,Number(r.__ppaHitBody)||32);
-          var d=Math.hypot(wx-Number(r.__ppaHitX),wy-Number(r.__ppaHitY));
-          if(d<rad*1.8&&d<bd){bd=d;best=r}
-        });
-        if(best){e.preventDefault();e.stopPropagation();openPlayer(best)}
-      }catch(_){}
+      if(e.button!=null&&e.button!==0)return;
+      var r=findRemoteAt(e.clientX,e.clientY);if(!r)return;
+      e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+      openPlayer(r);
     },true);
+    return true;
   }
 
   window.PPA_SOCIAL_ON_PARTY_INVITE=function(from){
-    var name=String((from&&from.name)||'Игрок');
-    var lv=Math.max(1,Number(from&&from.level)||1),bm=Math.max(0,Number(from&&from.bm)||0);
-    var ok=false;
+    var name=String((from&&from.name)||'Игрок'),lv=Math.max(1,Number(from&&from.level)||1),bm=Math.max(0,Number(from&&from.bm)||0),ok=false;
     try{ok=window.confirm(name+' · ур. '+lv+' · БМ '+bm+' приглашает тебя в группу.\n\nПринять?')}catch(_){}
     if(window.PPA_RT_SEND)window.PPA_RT_SEND({type:ok?'party-accept':'party-decline',from:String((from&&from.id)||'')});
   };
@@ -259,9 +190,8 @@
   window.PPA_SOCIAL_OPEN_PLAYER=openPlayer;
 
   function boot(){
-    if(booted)return;booted=true;
-    ensureBaseUi();armCanvasFallback();loadFriends();
-    setInterval(function(){ensureBaseUi();armCanvasFallback();positionHitTargets()},180);
+    if(booted)return;booted=true;ensureUi();armCanvasTap();loadFriends();
+    setInterval(function(){ensureFriendsTab();armCanvasTap()},1500);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
