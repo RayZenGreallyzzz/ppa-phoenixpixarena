@@ -113,11 +113,11 @@
       if(!active())return false;
       var now=Date.now(),r=room(),rows=currentCatalog();
       if(!rows.length)return false;
-      if(!force&&r===lastRoom&&now-lastRegister<2500)return true;
 
-      // First authoritative handshake for this instance:
-      // send the original local roster, then hide/quarantine it. From this
-      // point onward ONLY the server snapshot decides which spawn ids exist.
+      // The realtime server rejects inbound WS messages >4096 bytes.
+      // Full dungeon catalog is ~400 mobs, so always send small ordered chunks.
+      if(!force&&catalogRoom===r&&authReady)return true;
+
       var firstForRoom=(catalogRoom!==r);
       if(firstForRoom){
         catalogRoom=r;
@@ -125,9 +125,18 @@
         authority.clear();
       }
 
-      lastRoom=r;lastRegister=now;
-      var ok=!!window.PPA_RT_SEND({type:'mob-catalog',room:r,rows:rows});
-      if(ok&&firstForRoom)quarantineLocalMobs();
+      var chunkSize=36,total=Math.ceil(rows.length/chunkSize),ok=true;
+      for(var n=0;n<total;n++){
+        var part=rows.slice(n*chunkSize,(n+1)*chunkSize);
+        ok=!!window.PPA_RT_SEND({
+          type:'mob-catalog',room:r,rows:part,
+          batch:n,batches:total,done:n===total-1
+        })&&ok;
+      }
+      if(ok){
+        lastRoom=r;lastRegister=now;
+        if(firstForRoom)quarantineLocalMobs();
+      }
       return ok;
     }catch(_){return false}
   }
@@ -136,6 +145,7 @@
   window.PPA_MOB_SERVER_DIAG=function(){
     return {
       room:room(),ready:authReady,count:authority.size,
+      catalog:currentCatalog().length,
       mobs:entities().filter(function(e){return !!keyOf(e)}).length,
       locked:entities().filter(function(e){return !!(e&&e.__ppaServerLocks&&e.__ppaServerLocks.x)}).length
     };
@@ -159,13 +169,14 @@
     if(!Array.isArray(row)||row.length<4)return;
     var key=String(row[0]||''),hp=Number(row[1]),mhp=Number(row[2]),respawnAt=Number(row[3])||0;
     var killer=String(row[4]||''),party=String(row[5]||'');
-    var x=Number(row[6]),y=Number(row[7]),aggro=!!row[8],dir=Number(row[9]),moving=!!row[10],target=String(row[11]||'');
+    var x=Number(row[6]),y=Number(row[7]),aggro=!!row[8],dir=Number(row[9]),moving=!!row[10],target=String(row[11]||''),sz=Number(row[12]);
     if(!/^s\d{1,4}$/.test(key)||!Number.isFinite(hp)||!Number.isFinite(mhp))return;
 
     authority.set(key,{
       hp:hp,mhp:mhp,respawnAt:respawnAt,killer:killer,party:party,
       x:Number.isFinite(x)?x:null,y:Number.isFinite(y)?y:null,
-      aggro:aggro,dir:Number.isFinite(dir)?dir:1,moving:moving,target:target
+      aggro:aggro,dir:Number.isFinite(dir)?dir:1,moving:moving,target:target,
+      sz:Number.isFinite(sz)?sz:null
     });
 
     var e=find(key);
@@ -189,6 +200,7 @@
       try{
         e.mhp=Math.max(1,mhp);
         e.hp=Math.min(e.mhp,Math.max(1,hp));
+        if(Number.isFinite(sz)&&sz>0)e.sz=sz;
         if(Number.isFinite(x)){e.x=x;e.__ppaServerX=x}
         if(Number.isFinite(y)){e.y=y;e.__ppaServerY=y}
         e.aggro=aggro;
@@ -248,6 +260,7 @@
         try{
           if(Number.isFinite(Number(st.x)))e.x=Number(st.x);
           if(Number.isFinite(Number(st.y)))e.y=Number(st.y);
+          if(Number.isFinite(Number(st.sz))&&Number(st.sz)>0)e.sz=Number(st.sz);
           e.aggro=!!st.aggro;
           var d=Number(st.dir);
           if(Number.isFinite(d)){e.spiderDir=d;e.animDir=d}
@@ -257,20 +270,39 @@
     });
   }
 
+  function pruneToAuthority(){
+    if(!authReady)return;
+    try{
+      var a=entities(),seen=new Set();
+      for(var i=a.length-1;i>=0;i--){
+        var e=a[i],key=keyOf(e);
+        if(!key)continue;
+        if(!authority.has(key)||seen.has(key)){
+          a.splice(i,1);
+          continue;
+        }
+        seen.add(key);
+      }
+    }catch(_){}
+  }
+
   window.PPA_DUNGEON_MOB_EVENT_RECEIVE=function(m){
     try{
       if(!m||String(m.room||'')!==room())return;
       if(m.type==='mob-authority-snapshot'){
         var rows=Array.isArray(m.rows)?m.rows:[];
         if(catalogRoom!==room()&&rows.length===0)return;
-        authority.clear();
+        if(m.reset!==false)authority.clear();
         for(var i=0;i<rows.length;i++)applyRow(rows[i]);
-        authReady=true;
-        reconcileAuthority();
+        if(m.done!==false){
+          authReady=true;
+          pruneToAuthority();
+          reconcileAuthority();
+        }
         return;
       }
       if(m.type==='mob-authority'){
-        applyRow([m.key,m.hp,m.mhp,m.respawnAt,m.killer,m.party,m.x,m.y,m.aggro,m.dir,m.moving,m.target]);
+        applyRow([m.key,m.hp,m.mhp,m.respawnAt,m.killer,m.party,m.x,m.y,m.aggro,m.dir,m.moving,m.target,m.sz]);
         authReady=true;
         reconcileAuthority();
         return;
@@ -282,7 +314,7 @@
           var st=authority.get(String(r[0]||''))||{hp:1,mhp:1,respawnAt:0,killer:'',party:''};
           applyRow([
             r[0],st.hp,st.mhp,st.respawnAt,st.killer,st.party,
-            r[1],r[2],r[3],r[4],r[5],r[6]
+            r[1],r[2],r[3],r[4],r[5],r[6],st.sz
           ]);
         }
         authReady=true;
