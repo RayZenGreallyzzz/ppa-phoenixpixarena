@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v315-hardlock-server-mobs-20260918-1552';
+const CLIENT_BUILD = 'v316-server-mob-attacks-20260918-1600';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -81,9 +81,8 @@ const saveToolsRe = /&lt;div id=&quot;saveTools&quot;&gt;[\s\S]*?&lt;\/div&gt;\s
 if (!saveToolsRe.test(output)) throw new Error('PPA save tools block not found');
 output = output.replace(saveToolsRe, '&lt;/section&gt;');
 
-// Mobs remain fully client-side. We only relay real combat events by spawn id,
-// so every player in the same dungeon instance loses the same HP on the same mob.
-// No mob position/AI snapshots are sent to the server.
+// Online dungeon mobs use server-authoritative spawn/HP/position/AI events.
+// Clients keep only rendering, local controls, and offline fallback behavior.
 const combatCreditNeedle = 'P.kil++;P.xp+=e.xp;';
 if (!output.includes(combatCreditNeedle)) throw new Error('PPA shared mob reward patch target not found');
 output = output.split(combatCreditNeedle).join("if(!window.PPA_MOB_REWARD_ELIGIBLE||window.PPA_MOB_REWARD_ELIGIBLE(e)){P.kil++;P.xp+=e.xp;}");
@@ -137,6 +136,35 @@ if (!output.includes(spawnMobFnNeedle)) throw new Error('PPA spawnMobAtPoint gat
 output = output.replace(spawnMobFnNeedle,
   "function spawnMobAtPoint(si,fx){if(window.PPA_REALTIME_V2_ACTIVE&&P&&P.scene==='dungeon'&&!window.__PPA_SERVER_SPAWN_CALL)return;"
 );
+
+// In online dungeons normal mob attack timing/damage is server-driven.
+// Local single-player AI must not secretly hit the local player between packets.
+const localMobAttackNeedle = "if(e.aggro&&d<=reach&&e.atkCD<=0){";
+if (!output.includes(localMobAttackNeedle)) throw new Error('PPA local mob attack gate target not found');
+output = output.split(localMobAttackNeedle).join(
+  "if(!(window.PPA_SERVER_MOBS_ACTIVE&&window.PPA_SERVER_MOBS_ACTIVE())&&e.aggro&&d<=reach&&e.atkCD<=0){"
+);
+
+// Generic dungeon monster rendering used to face the LOCAL player, so an observer
+// could see a mob attack in the wrong direction. Prefer authoritative server dir.
+const renderFacingNeedle = `      const dxp=P.x-e.x,dyp=P.y-e.y;
+      // 4 visible states:
+      // 0 right, 1 left, 2 upper-turn, 3 lower-turn
+      let state=0;
+      if(Math.abs(dxp)>Math.abs(dyp))state=dxp>=0?0:1;
+      else state=dyp<0?2:3;
+      e.visDir=state;`;
+const renderFacingPatch = `      const dxp=P.x-e.x,dyp=P.y-e.y;
+      // 4 visible states:
+      // 0 right, 1 left, 2 upper-turn, 3 lower-turn
+      let state=0;
+      if(window.PPA_SERVER_MOBS_ACTIVE&&window.PPA_SERVER_MOBS_ACTIVE()&&Number.isFinite(Number(e.__ppaServerDir))){
+        const _sd=Number(e.__ppaServerDir);
+        state=_sd===3?0:_sd===2?1:_sd===0?2:3;
+      }else if(Math.abs(dxp)>Math.abs(dyp))state=dxp>=0?0:1;
+      else state=dyp<0?2:3;
+      e.visDir=state;`;
+if (output.includes(renderFacingNeedle)) output = output.replace(renderFacingNeedle,renderFacingPatch);
 
 const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
