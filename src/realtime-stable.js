@@ -877,11 +877,11 @@ export class RealtimeHub extends BaseRealtimeHub {
       const isAuthorityBoss = phoenix || lord40 || boss60 || titan;
       const stationaryBoss = phoenix || lord40 || titan;
       const reach = lord40 ? 112 : (phoenix ? 100 : (boss60 ? 112 : (titan ? 0 : (42 + (sz - 30) * 0.35))));
-      const leash = boss60 ? 420 : (stationaryBoss ? 0 : 180);
+      const leash = boss60 ? 420 : (stationaryBoss ? 0 : 260);
       const normalLevel = Math.max(1, Math.round(Number(rec.lvl) || 1));
-      const normalAggroRadius = normalLevel <= 2 ? 90 : (normalLevel <= 4 ? 115 : (normalLevel <= 6 ? 140 : (normalLevel <= 10 ? 170 : 200)));
+      const normalAggroRadius = normalLevel <= 2 ? 140 : (normalLevel <= 4 ? 165 : (normalLevel <= 6 ? 190 : (normalLevel <= 10 ? 220 : 250)));
       const aggroRadius = titan ? 1800 : ((phoenix || lord40) ? 620 : (boss60 ? 420 : normalAggroRadius));
-      const reacquireRadius = titan ? 2200 : ((phoenix || lord40) ? 700 : (boss60 ? 520 : 260));
+      const reacquireRadius = titan ? 2200 : ((phoenix || lord40) ? 700 : (boss60 ? 520 : 360));
       const attackEvery = lord40 ? 1200 : (phoenix ? 1100 : (boss60 ? 1200 : 850));
       let target = rec.target ? byPid.get(String(rec.target)) : null;
 
