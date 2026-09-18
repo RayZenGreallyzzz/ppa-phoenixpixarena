@@ -150,13 +150,16 @@
     return rows;
   }
   function quarantineLocalMobs(){
-    entities().forEach(function(e){
-      if(!keyOf(e))return;
-      e.__ppaAwaitAuthority=true;
-      applying++;
-      try{e.hp=0}catch(_){}
-      applying--;
-    });
+    // Never fake-kill a legacy/local entity while waiting for the first server
+    // snapshot: boss death handlers would otherwise award loot/start cooldowns.
+    // Remove local copies silently; authoritative rows materialize the real ones.
+    try{
+      var a=entities();
+      for(var i=a.length-1;i>=0;i--){
+        if(keyOf(a[i]))a.splice(i,1);
+      }
+      rebuildEntityCache(true);
+    }catch(_){}
   }
 
   function lockProp(e,name){
