@@ -137,6 +137,8 @@
           var p=DG_ACTIVE_SPAWNS[si]||[0,0];
           var scale=(typeof DG_SCALE!=='undefined'&&Number(DG_SCALE))||1;
           var x=Number(p[0]||0)*scale,y=Number(p[1]||0)*scale;
+          var roomIndex=Number(p[2]),rb=null;
+          try{if(Number.isFinite(roomIndex)&&typeof dgRoomBounds==='function')rb=dgRoomBounds(roomIndex)}catch(_){}
           rows.push([
             's'+si,Math.round(mhp*100)/100,
             Math.round(x*10)/10,Math.round(y*10)/10,
@@ -144,7 +146,12 @@
             Math.max(8,Number(spec&&spec.sz)||Number(t&&t.sz)||30),
             Math.max(1,Number(spec&&spec.dmg)||Number(t&&t.atk)||Number(t&&t.dmg)||1),
             0,
-            Math.max(1,Math.round(Number(spec&&spec.lvl)||Number(lvl)||1))
+            Math.max(1,Math.round(Number(spec&&spec.lvl)||Number(lvl)||1)),
+            Number.isFinite(roomIndex)?Math.round(roomIndex):-1,
+            rb?Math.round(Number(rb.minX)*10)/10:null,
+            rb?Math.round(Number(rb.minY)*10)/10:null,
+            rb?Math.round(Number(rb.maxX)*10)/10:null,
+            rb?Math.round(Number(rb.maxY)*10)/10:null
           ]);
         }
         if(typeof DG_BOSS_IMG!=='undefined'&&Array.isArray(DG_BOSS_IMG)){
@@ -211,13 +218,10 @@
   }
 
   function visualDir(serverDir){
-    var d=Number(serverDir);
-    if(!Number.isFinite(d))return 3;
-    d=Math.round(d);
-    // Approved dungeon atlases use visual rows:
-    // 0=right, 1=left, 2=up/back, 3=down/front.
-    // Server direction remains 0=up, 1=down, 2=left, 3=right.
-    return d===3?0:d===2?1:d===0?2:3;
+    var d=Math.round(Number(serverDir));
+    // All animated dungeon mob atlases use the original local-AI rows:
+    // 0=up/back, 1=down/front, 2=left, 3=right.
+    return d>=0&&d<=3?d:1;
   }
 
   function bossDirName(serverDir){
@@ -314,7 +318,7 @@
         authority.clear();
       }
 
-      var chunkSize=36,total=Math.ceil(rows.length/chunkSize),ok=true;
+      var chunkSize=22,total=Math.ceil(rows.length/chunkSize),ok=true;
       for(var n=0;n<total;n++){
         var part=rows.slice(n*chunkSize,(n+1)*chunkSize);
         ok=!!window.PPA_RT_SEND({
