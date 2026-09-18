@@ -2,7 +2,7 @@
   'use strict';
 
   var seq=0, applying=0, lastRoom='', lastRegister=0, catalogRoom='', authReady=false, serverMode=false;
-  var authority=new Map(), entityCache=new Map(), entityCacheLen=-1, entityCacheAt=0, diagCache=null, diagCacheAt=0, catalogCount=0;
+  var authority=new Map(), deadUntil=new Map(), entityCache=new Map(), entityCacheLen=-1, entityCacheAt=0, diagCache=null, diagCacheAt=0, catalogCount=0;
 
   function rt(){try{return window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null}catch(_){return null}}
   function room(){var d=rt();return String((d&&d.room)||'')}
@@ -21,9 +21,6 @@
   }
   function find(key){
     rebuildEntityCache(false);
-    var e=entityCache.get(String(key||''));
-    if(e)return e;
-    rebuildEntityCache(true);
     return entityCache.get(String(key||''))||null;
   }
   function cacheEntity(e){var k=keyOf(e);if(k){entityCache.set(k,e);entityCacheLen=entities().length;entityCacheAt=Date.now()}}
@@ -205,7 +202,7 @@
     diagCache={
       room:room(),serverRoom:String(rd.serverRoom||''),instance:Number(rd.dungeonInstance)||0,
       ready:authReady,count:authority.size,catalog:catalogCount||authority.size,
-      mobs:mobs,locked:locked,keyHash:'ok',authHash:'ok',localHash:'near',
+      mobs:mobs,locked:locked,dead:deadUntil.size,keyHash:'ok',authHash:'ok',localHash:'near',
       maxDelta:Math.round(maxDelta),samples:[]
     };
     diagCacheAt=now;
@@ -232,6 +229,22 @@
     var killer=String(row[4]||''),party=String(row[5]||'');
     var x=Number(row[6]),y=Number(row[7]),aggro=!!row[8],dir=Number(row[9]),moving=!!row[10],target=String(row[11]||''),sz=Number(row[12]);
     if(!/^s\d{1,4}$/.test(key)||!Number.isFinite(hp)||!Number.isFinite(mhp))return;
+
+    var now=Date.now(),tomb=Number(deadUntil.get(key)||0);
+    if(hp<=0&&respawnAt>now){
+      deadUntil.set(key,respawnAt);
+      tomb=respawnAt;
+    }else if(hp>0&&respawnAt===0&&tomb&&now>=tomb){
+      deadUntil.delete(key);
+      tomb=0;
+    }
+    // WebSocket order should already protect this, but this guard also covers
+    // reconnect/snapshot races: positive state cannot revive a still-dead mob.
+    if(hp>0&&tomb>now){
+      hp=0;
+      respawnAt=tomb;
+      aggro=false;moving=false;target='';
+    }
 
     authority.set(key,{
       hp:hp,mhp:mhp,respawnAt:respawnAt,killer:killer,party:party,
@@ -366,7 +379,7 @@
       if(m.type==='mob-authority-snapshot'){
         var rows=Array.isArray(m.rows)?m.rows:[];
         if(catalogRoom!==room()&&rows.length===0)return;
-        if(m.reset!==false)authority.clear();
+        if(m.reset!==false){authority.clear();deadUntil.clear();}
         for(var i=0;i<rows.length;i++)applyRow(rows[i]);
         if(m.done!==false){
           authReady=true;
@@ -446,7 +459,7 @@
     installDropGuard();
     serverMode=active();
     if(!serverMode){
-      lastRoom='';catalogRoom='';authReady=false;authority.clear();
+      lastRoom='';catalogRoom='';authReady=false;authority.clear();deadUntil.clear();
       entityCache.clear();entityCacheLen=-1;diagCache=null;
       return;
     }
