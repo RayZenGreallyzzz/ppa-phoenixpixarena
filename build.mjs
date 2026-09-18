@@ -258,6 +258,14 @@ ppaPatchRegex(
 
 /* ======================================================================== */
 
+// QA mode must never silently miss the release gates: fail the build instead.
+if (!output.includes("const ok1=true,ok21=true,ok41=true;")) {
+  throw new Error('QA dungeon menu unlock patch did not apply');
+}
+if (!output.includes("window.PPA_TEST_ALL_DUNGEONS!==true&&!allowed")) {
+  throw new Error('QA hard dungeon scene gate patch did not apply');
+}
+
 /* === V335 AUCTION PREMIUM ART ============================================ */
 ppaPatchRegex(
   'auction keep inventory art',
