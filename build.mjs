@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v307-clean-local-mobs-baseline-20260918-1328';
+const CLIENT_BUILD = 'v308-local-mobs-shared-hits-20260918-1505';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -81,10 +81,48 @@ const saveToolsRe = /&lt;div id=&quot;saveTools&quot;&gt;[\s\S]*?&lt;\/div&gt;\s
 if (!saveToolsRe.test(output)) throw new Error('PPA save tools block not found');
 output = output.replace(saveToolsRe, '&lt;/section&gt;');
 
+// Mobs remain fully client-side. We only relay real combat events by spawn id,
+// so every player in the same dungeon instance loses the same HP on the same mob.
+// No mob position/AI snapshots are sent to the server.
+const combatCreditNeedle = 'P.kil++;P.xp+=e.xp;';
+if (!output.includes(combatCreditNeedle)) throw new Error('PPA shared mob reward patch target not found');
+output = output.split(combatCreditNeedle).join("if(!window.PPA_MOB_REWARD_ELIGIBLE||window.PPA_MOB_REWARD_ELIGIBLE(e)){P.kil++;P.xp+=e.xp;}");
+
+const basicMobEventNeedle = `  const r=basicAttackRoll(target);
+  target.hp-=r.damage;
+  target.flash=7;target.aggro=true;`;
+const basicMobEventPatch = `  const r=basicAttackRoll(target);
+  if(window.PPA_MOB_EVENT_DAMAGE)window.PPA_MOB_EVENT_DAMAGE(target,r.damage);
+  target.hp-=r.damage;
+  target.flash=7;target.aggro=true;`;
+if (!output.includes(basicMobEventNeedle)) throw new Error('PPA basic shared mob hit patch target not found');
+output = output.replace(basicMobEventNeedle,basicMobEventPatch);
+
+const skillMobEventNeedle = `  if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
+  e.hp-=dmg;
+  applyPlayerVampirism(dmg,.6);`;
+const skillMobEventPatch = `  if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
+  if(window.PPA_MOB_EVENT_DAMAGE)window.PPA_MOB_EVENT_DAMAGE(e,dmg);
+  e.hp-=dmg;
+  applyPlayerVampirism(dmg,.6);`;
+if (!output.includes(skillMobEventNeedle)) throw new Error('PPA skill shared mob hit patch target not found');
+output = output.replace(skillMobEventNeedle,skillMobEventPatch);
+
+const rangedMobEventNeedle = `          const raw=Math.max(1,Math.floor(P.atk||12)-(t.def||0));
+          t.hp=Math.max(0,t.hp-raw);
+          t.flash=6;t.aggro=true;`;
+const rangedMobEventPatch = `          const raw=Math.max(1,Math.floor(P.atk||12)-(t.def||0));
+          if(window.PPA_MOB_EVENT_DAMAGE)window.PPA_MOB_EVENT_DAMAGE(t,raw);
+          t.hp=Math.max(0,t.hp-raw);
+          t.flash=6;t.aggro=true;`;
+if (!output.includes(rangedMobEventNeedle)) throw new Error('PPA ranged shared mob hit patch target not found');
+output = output.split(rangedMobEventNeedle).join(rangedMobEventPatch);
+
 const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
   ['gateway/online-client.js','online-client.js','Online client bridge missing'],
   ['gateway/realtime-client.js','realtime-client.js','Realtime client bridge missing'],
+  ['gateway/dungeon-mob-events.js','dungeon-mob-events.js','Dungeon mob event bridge missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
   ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],
   ['gateway/remote-pet-renderer.js','remote-pet-renderer.js','Remote pet renderer missing'],
@@ -101,7 +139,7 @@ for (const [srcName,dstName,err] of filesToPublish) {
 
 if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
 const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
-output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
+output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -110,6 +148,7 @@ console.log('Telegram safe UI: /game/telegram-safe-ui.js');
 console.log('Mobile HUD tweaks: /game/mobile-hud-tweaks.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
+console.log('Dungeon mob events: /game/dungeon-mob-events.js');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
 console.log('Remote pet renderer: /game/remote-pet-renderer.js');
