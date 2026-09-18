@@ -84,9 +84,10 @@
       if(id&&typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes){
         var r=PPA_ONLINE.remotes.get(id);
         if(r){
-          var lv=Number(p.l!=null?p.l:p.level),bm=Number(p.b!=null?p.b:p.bm),seq=Number(p.q!=null?p.q:p.seq);
+          var lv=Number(p.l!=null?p.l:p.level),bm=Number(p.b!=null?p.b:p.bm),seq=Number(p.q!=null?p.q:p.seq),face=Number(p.f);
           if(Number.isFinite(lv))r.level=Math.max(1,Math.floor(lv));
           if(Number.isFinite(bm))r.bm=Math.max(0,Math.round(bm));
+          if(Number.isFinite(face))r.face=face;
           if(p.p!==undefined)r.partyId=String(p.p||'');
           if(presence&&Number.isFinite(seq))r.lastSeq=Math.max(0,seq);
           r.lastNetAt=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
