@@ -302,7 +302,7 @@
     if(m.type==='move'){if(m.player)applyPlayer(m.player,false);return}
     if(m.type==='join'){if(m.player)applyPlayer(m.player,true);return}
     if(m.type==='leave'){deleteRemote(m.id);return}
-    if(m.type==='mob-hit-event'||m.type==='mob-authority'||m.type==='mob-authority-snapshot'||m.type==='mob-position'||m.type==='mob-attack'){
+    if(m.type==='mob-hit-event'||m.type==='mob-authority'||m.type==='mob-authority-snapshot'||m.type==='mob-position'||m.type==='mob-attack'||m.type==='boss-special'){
       try{if(window.PPA_DUNGEON_MOB_EVENT_RECEIVE)window.PPA_DUNGEON_MOB_EVENT_RECEIVE(m)}catch(_){}
       return;
     }
