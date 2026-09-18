@@ -17,12 +17,23 @@
   }
 
   function remoteDir(r,dx,dy){
-    var d=Math.hypot(dx,dy);
+    var d=Math.hypot(dx,dy),face=Number(r&&r.face);
     if(d>.35){
       var oct=Math.round(Math.atan2(dy,dx)/(Math.PI/4));
       r.__ppaRemoteDir=((oct+2)+8)%8;
+      r.__ppaRemoteFace=Number.isFinite(face)?face:null;
+    }else if(Number.isFinite(face)){
+      var next=null;
+      if(face===-1)next=6;
+      else if(face===1)next=2;
+      else if(face>=0&&face<=7)next=Math.round(face);
+      else if(face===8)next=0;
+      if(next!==null&&(r.__ppaRemoteFace!==face||!Number.isFinite(Number(r.__ppaRemoteDir)))){
+        r.__ppaRemoteDir=next;
+        r.__ppaRemoteFace=face;
+      }
     }else if(!Number.isFinite(Number(r.__ppaRemoteDir))){
-      r.__ppaRemoteDir=Number(r.face)<0?6:2;
+      r.__ppaRemoteDir=2;
     }
     return Number(r.__ppaRemoteDir)||0;
   }
