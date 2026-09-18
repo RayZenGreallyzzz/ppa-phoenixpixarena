@@ -4,7 +4,7 @@
   "version": "278.0.0",
   "scripts": {
     "build": "node build.mjs",
-    "deploy": "wrangler deploy"
+    "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
