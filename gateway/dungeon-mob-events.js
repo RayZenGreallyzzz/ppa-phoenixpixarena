@@ -15,6 +15,18 @@
   function find(key){var a=entities();for(var i=0;i<a.length;i++)if(keyOf(a[i])===key)return a[i];return null}
   function currentCatalog(){
     var rows=[];
+    try{
+      if(typeof DG_ACTIVE_SPAWNS!=='undefined'&&Array.isArray(DG_ACTIVE_SPAWNS)){
+        for(var si=0;si<DG_ACTIVE_SPAWNS.length;si++){
+          var lvl=(typeof DG_SPAWN_LVL!=='undefined'&&DG_SPAWN_LVL)?Number(DG_SPAWN_LVL[si])||1:1;
+          var t=(typeof mobByLvl==='function')?mobByLvl(lvl):null;
+          var mhp=Math.max(1,Number(t&&t.hp)||1);
+          rows.push(['s'+si,Math.round(mhp*100)/100]);
+        }
+        if(rows.length)return rows;
+      }
+    }catch(_){}
+    // Offline/legacy fallback only.
     entities().forEach(function(e){
       var key=keyOf(e);if(!key)return;
       var mhp=Math.max(1,Number(e.mhp)||Number(e.hp)||1);
@@ -112,7 +124,12 @@
     if(hp>0){
       if(!e){
         var si=siOf(key);
-        try{if(si>=0&&typeof spawnMobAtPoint==='function')spawnMobAtPoint(si,true)}catch(_){}
+        try{
+          if(si>=0&&typeof spawnMobAtPoint==='function'){
+            window.__PPA_SERVER_SPAWN_CALL=true;
+            try{spawnMobAtPoint(si,true)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
+          }
+        }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
         e=find(key);
       }
       if(!e)return;
@@ -142,7 +159,12 @@
       if(Number(st.hp)>0){
         if(!e){
           var si=siOf(key);
-          try{if(si>=0&&typeof spawnMobAtPoint==='function')spawnMobAtPoint(si,false)}catch(_){}
+          try{
+            if(si>=0&&typeof spawnMobAtPoint==='function'){
+              window.__PPA_SERVER_SPAWN_CALL=true;
+              try{spawnMobAtPoint(si,false)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
+            }
+          }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
           e=find(key);
         }
         if(e&&(Number(e.hp)<=0||e.__ppaAwaitAuthority)){
