@@ -3,13 +3,15 @@
 
   var friends=new Map();
   var current=null;
-  var party={partyId:'',members:[]};
+  var party={partyId:'',leaderId:'',members:[]};
   var booted=false;
+  var pendingInvite=null;
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var t=tg();return t&&t.initData?String(t.initData):''}
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function online(){try{return (typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE)?PPA_ONLINE:null}catch(_){return null}}
+  function selfId(){var o=online();return String((o&&o.selfId)||'')}
   function nearby(id){var o=online();try{return o&&o.remotes?o.remotes.get(String(id||''))||null:null}catch(_){return null}}
   function note(text,ok){try{if(typeof showPickup==='function')showPickup(String(text||''),ok===false?'#ff8d8d':'#8dffad')}catch(_){}}
 
@@ -22,30 +24,69 @@
   }
 
   function installStyle(){
-    if(document.getElementById('ppaSocialStyleV3'))return;
-    var st=document.createElement('style');st.id='ppaSocialStyleV3';st.textContent=`
-      #ppaSocialShade{position:fixed;inset:0;z-index:10020;background:rgba(0,0,0,.26);display:none}
-      #ppaSocialShade.on{display:block}
-      #ppaPlayerCard{position:fixed;z-index:10030;left:50%;top:48%;transform:translate(-50%,-50%);width:min(88vw,330px);padding:13px;border:1px solid rgba(126,198,255,.72);border-radius:12px;background:linear-gradient(180deg,rgba(9,21,31,.98),rgba(7,10,16,.99));box-shadow:0 18px 42px #000;color:#ddd;font-family:Georgia,'Times New Roman',serif;display:none}
-      #ppaPlayerCard.on{display:block}
-      .ppaSocialName{font-size:17px;font-weight:800;color:#f2d39a;text-align:center;text-shadow:1px 1px 2px #000}
-      .ppaSocialClass{margin-top:3px;text-align:center;color:#9fd7ff;font-size:11px}
-      .ppaSocialStats{display:flex;justify-content:center;gap:18px;margin:12px 0;padding:9px;border-top:1px solid #29455a;border-bottom:1px solid #29455a;color:#ffd65e;font:bold 12px monospace}
+    if(document.getElementById('ppaSocialStyleV4'))return;
+    var st=document.createElement('style');st.id='ppaSocialStyleV4';st.textContent=`
+      #ppaSocialShade,#ppaPartyInviteShade{position:fixed;inset:0;background:rgba(0,0,0,.58);display:none}
+      #ppaSocialShade{z-index:10020}#ppaPartyInviteShade{z-index:10060}
+      #ppaSocialShade.on,#ppaPartyInviteShade.on{display:block}
+      #ppaPlayerCard,#ppaFriendsPanel,#ppaPartyInviteModal{
+        position:fixed;left:50%;transform:translate(-50%,-50%);
+        border:1px solid rgba(216,157,76,.82);
+        background:
+          linear-gradient(180deg,rgba(40,26,18,.98),rgba(12,12,15,.99)),
+          radial-gradient(circle at 50% 0,rgba(146,83,32,.25),transparent 65%);
+        box-shadow:0 0 0 2px rgba(69,38,18,.78),0 18px 48px rgba(0,0,0,.82),inset 0 0 30px rgba(0,0,0,.48);
+        color:#e9dcc5;font-family:Georgia,'Times New Roman',serif;display:none;
+      }
+      #ppaPlayerCard{z-index:10030;top:48%;width:min(88vw,330px);padding:14px;border-radius:10px}
+      #ppaFriendsPanel{z-index:10035;top:48%;width:min(92vw,400px);max-height:min(74vh,640px);overflow:auto;padding:12px;border-radius:10px}
+      #ppaPartyInviteModal{z-index:10070;top:50%;width:min(88vw,350px);padding:16px;border-radius:12px}
+      #ppaPlayerCard.on,#ppaFriendsPanel.on,#ppaPartyInviteModal.on{display:block}
+      .ppaSocialName{font-size:18px;font-weight:800;color:#f2d39a;text-align:center;text-shadow:1px 2px 2px #000}
+      .ppaSocialClass{margin-top:4px;text-align:center;color:#b9d6e8;font-size:11px}
+      .ppaSocialStats{display:flex;justify-content:center;gap:18px;margin:12px 0;padding:9px;border-top:1px solid rgba(191,130,63,.4);border-bottom:1px solid rgba(191,130,63,.4);color:#ffd66f;font:bold 12px monospace}
       .ppaSocialBtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-      .ppaSocialBtn{min-height:42px;border:1px solid #50789b;border-radius:8px;background:rgba(26,51,70,.9);color:#d8ecff;font:bold 10px Georgia,serif;padding:4px}
-      .ppaSocialBtn.friend{border-color:#9c5c45;background:rgba(78,34,27,.88);color:#ffd3b4}
-      .ppaSocialBtn:disabled{opacity:.55}
-      #ppaFriendsPanel{position:fixed;z-index:10035;left:50%;top:48%;transform:translate(-50%,-50%);width:min(92vw,390px);max-height:min(72vh,620px);overflow:auto;padding:12px;border:1px solid rgba(120,205,255,.72);border-radius:12px;background:rgba(7,14,21,.99);box-shadow:0 20px 50px #000;color:#ddd;font-family:Georgia,'Times New Roman',serif;display:none}
-      #ppaFriendsPanel.on{display:block}
-      .ppaFriendsHead{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}.ppaFriendsHead b{color:#bfe7ff;font-size:15px}.ppaFriendsHead button{width:34px;height:34px;border-radius:8px;border:1px solid #46677e;background:#10212e;color:#d8efff}
-      .ppaSocialSec{margin:9px 0 5px;color:#8ab9d7;font:bold 9px monospace;letter-spacing:.8px}
-      .ppaFriendRow,.ppaPartyRow{display:flex;align-items:center;gap:8px;padding:8px;margin:5px 0;border:1px solid rgba(92,126,149,.36);border-radius:8px;background:rgba(255,255,255,.025)}
-      .ppaFriendMain{flex:1;min-width:0}.ppaFriendName{font-weight:700;color:#efd2a1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ppaFriendSub{font:9px monospace;color:#8ea0ad;margin-top:2px}.ppaFriendNear{color:#87efab}.ppaFriendAway{color:#88939b}
-      .ppaFriendOpen,.ppaFriendRemove{border:1px solid #38586f;border-radius:7px;background:#10202b;color:#bfe4ff;min-width:35px;height:32px}.ppaFriendRemove{color:#ffadad;border-color:#704044}
-      #ppaPartyLeave{width:100%;margin-top:6px;height:34px;border:1px solid #75454c;border-radius:8px;background:#29181b;color:#ffb9bd;font:bold 10px Georgia,serif}
-      .ppaFriendsTab{height:27px;border:1px solid #365568;border-radius:4px;background:#0d1720;color:#9fd7ff;font:700 7.5px monospace;white-space:nowrap;padding:0 2px}
-      .ppaFriendsTab:active{background:#173040;border-color:#5f9abb;color:#d7efff}
-      @media(max-width:600px){#ppaPlayerCard{top:45%}#ppaFriendsPanel{top:45%;max-height:68vh}.ppaFriendsTab{font-size:7px}}
+      .ppaSocialBtn,.ppaInviteBtn{
+        min-height:42px;border:1px solid #8f673a;border-radius:7px;
+        background:linear-gradient(180deg,#3b2b1d,#1d1713);color:#f2dfbd;
+        font:bold 10px Georgia,serif;padding:5px;box-shadow:inset 0 1px rgba(255,255,255,.06)
+      }
+      .ppaSocialBtn.friend{border-color:#6c5e4a;color:#d7e8f0}
+      .ppaSocialBtn:disabled{opacity:.48}
+      .ppaFriendsHead{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;border-bottom:1px solid rgba(191,130,63,.35);padding-bottom:8px}
+      .ppaFriendsHead b{color:#f0cf93;font-size:15px}.ppaFriendsHead button{width:34px;height:34px;border-radius:7px;border:1px solid #7b5a35;background:#251b14;color:#e9d3ad}
+      .ppaSocialSec{margin:10px 0 5px;color:#c99b62;font:bold 9px monospace;letter-spacing:.9px}
+      .ppaFriendRow,.ppaPartyRow{display:flex;align-items:center;gap:8px;padding:8px;margin:5px 0;border:1px solid rgba(124,92,55,.42);border-radius:7px;background:rgba(255,225,180,.025)}
+      .ppaFriendMain{flex:1;min-width:0}.ppaFriendName{font-weight:700;color:#efd2a1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ppaFriendSub{font:9px monospace;color:#a99a87;margin-top:2px}.ppaFriendNear{color:#8fe7aa}.ppaFriendAway{color:#8d8981}
+      .ppaFriendOpen,.ppaFriendRemove,.ppaPartyKick{border:1px solid #6c5337;border-radius:6px;background:#211912;color:#d8c6aa;min-width:34px;height:32px}
+      .ppaFriendRemove,.ppaPartyKick{color:#ffaaa2;border-color:#73423d;background:#2b1715}
+      #ppaPartyLeave{width:100%;margin-top:7px;height:35px;border:1px solid #75454c;border-radius:7px;background:#2b1719;color:#ffc0bd;font:bold 10px Georgia,serif}
+      .ppaFriendsTab{height:27px;border:1px solid #655139;border-radius:4px;background:#211914;color:#e1c79f;font:700 7.5px monospace;white-space:nowrap;padding:0 2px}
+      .ppaFriendsTab:active{background:#3a291a;border-color:#a77842;color:#fff0cf}
+
+      .ppaInviteTitle{text-align:center;color:#f0cf93;font-size:19px;font-weight:800;text-shadow:1px 2px #000;margin:2px 0 10px}
+      .ppaInviteSigil{width:42px;height:42px;margin:0 auto 8px;border:1px solid #9d713f;border-radius:50%;display:grid;place-items:center;color:#ffd47f;background:radial-gradient(circle,#5b3a1d,#1b1410);font-size:20px;box-shadow:0 0 18px rgba(214,139,54,.25)}
+      .ppaInviteText{text-align:center;font-size:14px;line-height:1.45;color:#e5d5bd}
+      .ppaInviteWho{display:block;margin:7px 0;color:#ffd27c;font-weight:800;font-size:16px}
+      .ppaInviteBtns{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}
+      .ppaInviteBtn.accept{border-color:#4f8b63;background:linear-gradient(180deg,#244b33,#15261d);color:#c9f3d6}
+      .ppaInviteBtn.decline{border-color:#7c4640;background:linear-gradient(180deg,#46231f,#271412);color:#ffc1bb}
+
+      #ppaPartyHud{position:fixed;z-index:4700;left:8px;top:118px;width:150px;display:none;pointer-events:none;font-family:Georgia,'Times New Roman',serif}
+      #ppaPartyHud.on{display:block}
+      .ppaPartyHudTitle{margin:0 0 4px 2px;color:#e5bd78;font:bold 9px monospace;text-shadow:1px 1px #000;letter-spacing:.7px}
+      .ppaPartyHudRow{position:relative;margin:4px 0;padding:6px 7px 7px;border:1px solid rgba(131,92,48,.58);border-radius:7px;background:linear-gradient(90deg,rgba(24,17,13,.91),rgba(10,12,15,.74));box-shadow:0 2px 8px rgba(0,0,0,.45);overflow:hidden}
+      .ppaPartyHudTop{display:flex;align-items:center;gap:4px;min-width:0}
+      .ppaPartyHudName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#eed3a5;font-size:10px;font-weight:800;text-shadow:1px 1px #000}
+      .ppaPartyCrown{color:#ffd66c;font-size:10px}.ppaPartyYou{color:#8fdba8;font:700 7px monospace}
+      .ppaPartyKick{pointer-events:auto;width:24px;min-width:24px;height:22px;padding:0;font-size:12px}
+      .ppaPartyHp{height:4px;margin-top:5px;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.07);border-radius:3px;overflow:hidden}
+      .ppaPartyHp>i{display:block;height:100%;background:linear-gradient(90deg,#7a2020,#d34e45)}
+      .ppaPartyMeta{margin-top:3px;color:#a99b86;font:7.5px monospace}
+      @media(max-width:600px){
+        #ppaPlayerCard{top:45%}#ppaFriendsPanel{top:45%;max-height:68vh}.ppaFriendsTab{font-size:7px}
+        #ppaPartyHud{top:300px;left:6px;width:134px}.ppaPartyHudRow{padding:5px 6px}.ppaPartyHudName{font-size:9px}
+      }
     `;document.head.appendChild(st);
   }
 
@@ -54,6 +95,10 @@
     if(sh)sh.classList.remove('on');if(c)c.classList.remove('on');if(p)p.classList.remove('on');current=null;
   }
   function showShade(){var sh=document.getElementById('ppaSocialShade');if(sh)sh.classList.add('on')}
+  function hideInvite(){
+    var sh=document.getElementById('ppaPartyInviteShade'),m=document.getElementById('ppaPartyInviteModal');
+    if(sh)sh.classList.remove('on');if(m)m.classList.remove('on');pendingInvite=null;
+  }
 
   function ensureFriendsTab(){
     var tabs=document.querySelector('#ppaChatBox .ppaChatTabs')||document.querySelector('.ppaChatTabs');if(!tabs)return false;
@@ -80,9 +125,23 @@
     }
     if(!document.getElementById('ppaFriendsPanel')){
       var p=document.createElement('div');p.id='ppaFriendsPanel';
-      p.innerHTML='<div class="ppaFriendsHead"><b>👥 ДРУЗЬЯ И ГРУППА</b><button id="ppaFriendsClose" type="button">✕</button></div><div id="ppaFriendsBody">Загрузка…</div>';
+      p.innerHTML='<div class="ppaFriendsHead"><b>⚔ ДРУЗЬЯ И ГРУППА</b><button id="ppaFriendsClose" type="button">✕</button></div><div id="ppaFriendsBody">Загрузка…</div>';
       document.body.appendChild(p);p.addEventListener('pointerdown',function(e){e.stopPropagation()});
       document.getElementById('ppaFriendsClose').addEventListener('click',closeAll);
+    }
+    if(!document.getElementById('ppaPartyInviteShade')){
+      var is=document.createElement('div');is.id='ppaPartyInviteShade';document.body.appendChild(is);
+      is.addEventListener('pointerdown',function(){answerInvite(false)});
+    }
+    if(!document.getElementById('ppaPartyInviteModal')){
+      var im=document.createElement('div');im.id='ppaPartyInviteModal';
+      im.innerHTML='<div class="ppaInviteSigil">⚔</div><div class="ppaInviteTitle">ПРИГЛАШЕНИЕ В ГРУППУ</div><div class="ppaInviteText"><span class="ppaInviteWho" id="ppaInviteWho">Игрок</span><span id="ppaInviteStats">УР. 1 · БМ 0</span><br>приглашает тебя присоединиться к группе.</div><div class="ppaInviteBtns"><button id="ppaInviteDecline" class="ppaInviteBtn decline" type="button">ОТКЛОНИТЬ</button><button id="ppaInviteAccept" class="ppaInviteBtn accept" type="button">ПРИНЯТЬ</button></div>';
+      document.body.appendChild(im);im.addEventListener('pointerdown',function(e){e.stopPropagation()});
+      document.getElementById('ppaInviteDecline').addEventListener('click',function(){answerInvite(false)});
+      document.getElementById('ppaInviteAccept').addEventListener('click',function(){answerInvite(true)});
+    }
+    if(!document.getElementById('ppaPartyHud')){
+      var ph=document.createElement('div');ph.id='ppaPartyHud';document.body.appendChild(ph);
     }
     ensureFriendsTab();
   }
@@ -118,12 +177,61 @@
     if(!current||!window.PPA_RT_SEND)return;var id=remoteId(current,'');if(!id)return;
     if(window.PPA_RT_SEND({type:'party-invite',target:id})){note('Приглашение в группу отправлено');closeAll()}else note('ONLINE переподключается',false)
   }
+  function kickMember(id){
+    id=String(id||'');if(!id||!window.PPA_RT_SEND)return;
+    window.PPA_RT_SEND({type:'party-kick',target:id});
+  }
+
+  function partyLeaderId(){
+    var id=String((party&&party.leaderId)||'');
+    if(id)return id;
+    var m=party&&Array.isArray(party.members)?party.members:[];
+    var lead=m.find(function(x){return x&&x.leader});
+    return String((lead&&lead.id)||(m[0]&&m[0].id)||'');
+  }
+
+  function memberVitals(m){
+    var id=String((m&&m.id)||''),sid=selfId(),hp=Number(m&&m.hp),mhp=Number(m&&m.mhp);
+    try{
+      if(id&&id===sid&&typeof P!=='undefined'&&P){hp=Number(P.hp);mhp=Number(P.mhp)}
+      else{
+        var r=nearby(id);
+        if(r){if(Number.isFinite(Number(r.hp)))hp=Number(r.hp);if(Number.isFinite(Number(r.mhp)))mhp=Number(r.mhp)}
+      }
+    }catch(_){}
+    if(!Number.isFinite(hp))hp=0;if(!Number.isFinite(mhp)||mhp<=0)mhp=1;
+    return{hp:Math.max(0,hp),mhp:Math.max(1,mhp)};
+  }
+
+  function renderPartyHud(){
+    var hud=document.getElementById('ppaPartyHud');if(!hud)return;
+    var members=party&&Array.isArray(party.members)?party.members:[];
+    if(!party||!party.partyId||members.length<2){hud.classList.remove('on');hud.innerHTML='';return}
+    var sid=selfId(),leader=partyLeaderId(),canKick=sid&&sid===leader;
+    var h='<div class="ppaPartyHudTitle">ГРУППА '+members.length+'</div>';
+    members.forEach(function(m){
+      if(!m)return;
+      var id=String(m.id||''),v=memberVitals(m),pct=Math.max(0,Math.min(100,Math.round(v.hp/v.mhp*100)));
+      var near=!!nearby(id)||id===sid;
+      h+='<div class="ppaPartyHudRow"><div class="ppaPartyHudTop">'+(id===leader?'<span class="ppaPartyCrown">♛</span>':'')+
+        '<span class="ppaPartyHudName">'+esc(m.name||'Игрок')+'</span>'+(id===sid?'<span class="ppaPartyYou">ТЫ</span>':'')+
+        (canKick&&id!==sid?'<button class="ppaPartyKick" data-hud-kick="'+esc(id)+'" type="button">×</button>':'')+
+        '</div><div class="ppaPartyHp"><i style="width:'+pct+'%"></i></div><div class="ppaPartyMeta">УР. '+Math.max(1,Number(m.level)||1)+' · '+Math.round(v.hp)+'/'+Math.round(v.mhp)+(near?'':' · ДАЛЕКО')+'</div></div>';
+    });
+    hud.innerHTML=h;hud.classList.add('on');
+    hud.querySelectorAll('[data-hud-kick]').forEach(function(b){b.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();kickMember(b.dataset.hudKick)})});
+  }
 
   function renderFriends(){
     var body=document.getElementById('ppaFriendsBody');if(!body)return;
-    var pm=Array.isArray(party&&party.members)?party.members:[],h='<div class="ppaSocialSec">ГРУППА</div>';
+    var pm=Array.isArray(party&&party.members)?party.members:[],sid=selfId(),leader=partyLeaderId(),canKick=sid&&sid===leader;
+    var h='<div class="ppaSocialSec">ГРУППА</div>';
     if(pm.length){
-      pm.forEach(function(x){h+='<div class="ppaPartyRow"><div class="ppaFriendMain"><div class="ppaFriendName">'+esc(x.name||'Игрок')+'</div><div class="ppaFriendSub">УР. '+Math.max(1,Number(x.level)||1)+' · БМ '+Math.max(0,Number(x.bm)||0)+'</div></div></div>'});
+      pm.forEach(function(x){
+        var id=String(x.id||'');
+        h+='<div class="ppaPartyRow"><div class="ppaFriendMain"><div class="ppaFriendName">'+(id===leader?'♛ ':'')+esc(x.name||'Игрок')+(id===sid?' · ТЫ':'')+'</div><div class="ppaFriendSub">УР. '+Math.max(1,Number(x.level)||1)+' · БМ '+Math.max(0,Number(x.bm)||0)+'</div></div>'+
+          (canKick&&id!==sid?'<button class="ppaPartyKick" data-kick="'+esc(id)+'" type="button">×</button>':'')+'</div>';
+      });
       h+='<button id="ppaPartyLeave">ПОКИНУТЬ ГРУППУ</button>';
     }else h+='<div class="ppaFriendSub" style="padding:7px">Группы пока нет. Тапни другого игрока → «Пригласить в группу».</div>';
     h+='<div class="ppaSocialSec">ДРУЗЬЯ</div>';
@@ -136,9 +244,24 @@
     var leave=document.getElementById('ppaPartyLeave');if(leave)leave.onclick=function(){if(window.PPA_RT_SEND)window.PPA_RT_SEND({type:'party-leave'})};
     body.querySelectorAll('[data-open]').forEach(function(b){b.onclick=function(){var r=nearby(b.dataset.open);if(r){document.getElementById('ppaFriendsPanel').classList.remove('on');openPlayer(r)}}});
     body.querySelectorAll('[data-remove]').forEach(function(b){b.onclick=function(){removeFriend(b.dataset.remove)}});
+    body.querySelectorAll('[data-kick]').forEach(function(b){b.onclick=function(){kickMember(b.dataset.kick)}});
+    renderPartyHud();
   }
 
   function openFriends(){ensureUi();showShade();var p=document.getElementById('ppaFriendsPanel');if(!p)return;p.classList.add('on');renderFriends();loadFriends()}
+
+  function showInvite(from){
+    ensureUi();pendingInvite=from||{};
+    var name=String((from&&from.name)||'Игрок'),lv=Math.max(1,Number(from&&from.level)||1),bm=Math.max(0,Number(from&&from.bm)||0);
+    document.getElementById('ppaInviteWho').textContent=name;
+    document.getElementById('ppaInviteStats').textContent='УР. '+lv+' · БМ '+bm;
+    document.getElementById('ppaPartyInviteShade').classList.add('on');
+    document.getElementById('ppaPartyInviteModal').classList.add('on');
+  }
+  function answerInvite(ok){
+    var f=pendingInvite;hideInvite();
+    if(f&&window.PPA_RT_SEND)window.PPA_RT_SEND({type:ok?'party-accept':'party-decline',from:String(f.id||'')});
+  }
 
   function canvasInfo(){
     var c=document.getElementById('c');if(!c)return null;
@@ -168,8 +291,8 @@
   }
 
   function armCanvasTap(){
-    var c=document.getElementById('c');if(!c||c.dataset.ppaSocialTapV3==='1')return false;
-    c.dataset.ppaSocialTapV3='1';
+    var c=document.getElementById('c');if(!c||c.dataset.ppaSocialTapV4==='1')return false;
+    c.dataset.ppaSocialTapV4='1';
     c.addEventListener('pointerdown',function(e){
       if(e.button!=null&&e.button!==0)return;
       var r=findRemoteAt(e.clientX,e.clientY);if(!r)return;
@@ -179,19 +302,15 @@
     return true;
   }
 
-  window.PPA_SOCIAL_ON_PARTY_INVITE=function(from){
-    var name=String((from&&from.name)||'Игрок'),lv=Math.max(1,Number(from&&from.level)||1),bm=Math.max(0,Number(from&&from.bm)||0),ok=false;
-    try{ok=window.confirm(name+' · ур. '+lv+' · БМ '+bm+' приглашает тебя в группу.\n\nПринять?')}catch(_){}
-    if(window.PPA_RT_SEND)window.PPA_RT_SEND({type:ok?'party-accept':'party-decline',from:String((from&&from.id)||'')});
-  };
-  window.PPA_SOCIAL_ON_PARTY_STATE=function(s){party=s||{partyId:'',members:[]};renderFriends()};
+  window.PPA_SOCIAL_ON_PARTY_INVITE=showInvite;
+  window.PPA_SOCIAL_ON_PARTY_STATE=function(st){party=st||{partyId:'',leaderId:'',members:[]};renderFriends();renderPartyHud()};
   window.PPA_SOCIAL_NOTICE=function(text,ok){note(text,ok)};
   window.PPA_SOCIAL_OPEN_FRIENDS=openFriends;
   window.PPA_SOCIAL_OPEN_PLAYER=openPlayer;
 
   function boot(){
-    if(booted)return;booted=true;ensureUi();armCanvasTap();loadFriends();
-    setInterval(function(){ensureFriendsTab();armCanvasTap()},1500);
+    if(booted)return;booted=true;ensureUi();armCanvasTap();loadFriends();renderPartyHud();
+    setInterval(function(){ensureFriendsTab();armCanvasTap();renderPartyHud()},500);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
