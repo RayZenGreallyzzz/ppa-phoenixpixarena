@@ -70,16 +70,28 @@
         for(var si=0;si<DG_ACTIVE_SPAWNS.length;si++){
           var lvl=(typeof DG_SPAWN_LVL!=='undefined'&&DG_SPAWN_LVL)?Number(DG_SPAWN_LVL[si])||1:1;
           var t=(typeof mobByLvl==='function')?mobByLvl(lvl):null;
-          var mhp=Math.max(1,Number(t&&t.hp)||1);
+          var spec=t?{
+            lvl:Number(t.lvl)||lvl,type:t,hp:Number(t.hp)||1,mhp:Number(t.hp)||1,
+            sp:Number(t.sp)||1,sz:Number(t.sz)||30,dmg:Number(t.atk)||Number(t.dmg)||1,
+            def:Number(t.def)||0,xp:Number(t.xp)||0,gold:Number(t.gold)||0
+          }:null;
+          // Catalog must use the SAME scaled stats as the local entity factory.
+          // Otherwise server authority would overwrite 21–40 / 41–60 mobs with
+          // their old 1–20 base HP and damage.
+          try{
+            if(spec&&typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='21+'&&typeof applyDungeon21MobStats==='function')spec=applyDungeon21MobStats(spec,si);
+            else if(spec&&typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='41-60'&&typeof applyDungeon41MobStats==='function')spec=applyDungeon41MobStats(spec,si);
+          }catch(_){}
+          var mhp=Math.max(1,Number(spec&&spec.mhp)||Number(spec&&spec.hp)||Number(t&&t.hp)||1);
           var p=DG_ACTIVE_SPAWNS[si]||[0,0];
           var scale=(typeof DG_SCALE!=='undefined'&&Number(DG_SCALE))||1;
           var x=Number(p[0]||0)*scale,y=Number(p[1]||0)*scale;
           rows.push([
             's'+si,Math.round(mhp*100)/100,
             Math.round(x*10)/10,Math.round(y*10)/10,
-            Math.max(.1,Number(t&&t.sp)||1),
-            Math.max(8,Number(t&&t.sz)||30),
-            Math.max(1,Number(t&&t.atk)||Number(t&&t.dmg)||1)
+            Math.max(.1,Number(spec&&spec.sp)||Number(t&&t.sp)||1),
+            Math.max(8,Number(spec&&spec.sz)||Number(t&&t.sz)||30),
+            Math.max(1,Number(spec&&spec.dmg)||Number(t&&t.atk)||Number(t&&t.dmg)||1)
           ]);
         }
         if(typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='41-60'&&typeof DG_BOSS_IMG!=='undefined'&&Array.isArray(DG_BOSS_IMG)){
