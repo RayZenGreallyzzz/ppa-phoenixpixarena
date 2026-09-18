@@ -574,6 +574,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       rec.aggro = false;
       rec.target = '';
       rec.moving = false;
+      rec.nextAttackAt = 0;
       health.set(ck, rec);
       dead.delete(ck);
       changed = true;
@@ -729,7 +730,7 @@ export class RealtimeHub extends BaseRealtimeHub {
           const pd = Math.hypot(p.x - x, p.y - y);
           if (pd < bd) { bd = pd; best = p; }
         }
-        if (best && bd <= 150) {
+        if (best && bd <= 185) {
           rec.aggro = true;
           rec.target = best.pid;
           target = best;
@@ -989,6 +990,11 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       let respawnAt = 0, killer = rec.killer, party = rec.party;
       if (rec.hp <= 0) {
+        rec.aggro = false;
+        rec.target = '';
+        rec.moving = false;
+        rec.nextAttackAt = 0;
+        health.set(ck, rec);
         respawnAt = now + DUNGEON_MOB_RESPAWN_MS;
         dead.set(ck, { room, key, at: respawnAt, killer, party });
         setTimeout(async () => {
@@ -1030,6 +1036,12 @@ export class RealtimeHub extends BaseRealtimeHub {
         ws.serializeAttachment(a);
         this.roomBroadcast(room, { type: 'move', player: packetFromAtt(a), room }, ws);
       }
+      return;
+    }
+
+    if (m.type === 'mob-state' || m.type === 'mob-damage' || m.type === 'mob-dead') {
+      // Legacy protocol retired. Authoritative flow is mob-catalog +
+      // mob-hit-event + server mob-authority/mob-position/mob-attack.
       return;
     }
 
