@@ -37,6 +37,26 @@
   function mobileUi(){try{return innerWidth<=900||matchMedia('(pointer:coarse)').matches}catch(_){return false}}
   function selfLevel(){try{return Math.max(1,Math.floor(Number(P&&P.lvl)||1))}catch(_){return 1}}
   function selfBm(){try{return Math.max(0,Math.round(Number(P&&P.bm)||0))}catch(_){return 0}}
+  function selfClass(){
+    var vals=[];
+    try{if(typeof P!=='undefined'&&P)vals.push(P.classKey,P.cls,P.className,P._saved&&P._saved.cls)}catch(_){}
+    try{if(typeof INV!=='undefined'&&INV)vals.push(INV.classKey,INV.cls,INV.className)}catch(_){}
+    try{var z=JSON.parse(localStorage.getItem('pxSave')||'null');if(z)vals.push(z.classKey,z.cls,z.className)}catch(_){}
+    for(var i=0;i<vals.length;i++){
+      var v=String(vals[i]||'').trim(),l=v.toLowerCase();
+      if(['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'].indexOf(l)>=0)return l;
+      try{if(typeof classKeyFromName==='function'){var k=String(classKeyFromName(v)||'').toLowerCase();if(k)return k}}catch(_){}
+      if(l.indexOf('страж')>=0||l.indexOf('tank')>=0)return'tank';
+      if(l.indexOf('бер')>=0||l.indexOf('barb')>=0)return'barbarian';
+      if(l.indexOf('пал')>=0)return'paladin';
+      if(l.indexOf('гном')>=0||l.indexOf('cannon')>=0)return'gnome';
+      if(l.indexOf('луч')>=0||l.indexOf('archer')>=0)return'archer';
+      if(l.indexOf('маг')>=0||l.indexOf('mage')>=0)return'mage';
+      if(l.indexOf('асс')>=0||l.indexOf('assassin')>=0)return'assassin';
+      if(l.indexOf('жр')>=0||l.indexOf('priest')>=0)return'priest';
+    }
+    return'';
+  }
   function badgeText(){var s='ONLINE · '+Math.max(1,RT.onlineCount||1);if(Number.isFinite(RT.pingMs))s+=' · '+Math.round(RT.pingMs)+' ms';return s}
 
   function disableLegacyOnline(){
@@ -88,6 +108,7 @@
           if(Number.isFinite(lv))r.level=Math.max(1,Math.floor(lv));
           if(Number.isFinite(bm))r.bm=Math.max(0,Math.round(bm));
           if(Number.isFinite(face))r.face=face;
+          if(p.c!==undefined&&String(p.c||''))r.cls=String(p.c||'');
           if(p.p!==undefined)r.partyId=String(p.p||'');
           if(presence&&Number.isFinite(seq))r.lastSeq=Math.max(0,seq);
           r.lastNetAt=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
@@ -216,11 +237,11 @@
     if(wantD&&!(curD&&curD.instance&&curD.base===wantD.base))return;
     var now=Date.now();if(!force&&now-RT.lastMove<220)return;
     try{
-      var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),f=Number(P.face)||1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm();
+      var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),f=Number(P.face)||1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm(),c=selfClass();
       var changed=RT.lastX===null||Math.abs(x-RT.lastX)>.35||Math.abs(y-RT.lastY)>.35||h!==RT.lastHp||m!==RT.lastMhp||f!==RT.lastFace||a!==RT.lastAnim||l!==RT.lastLevel||b!==RT.lastBm;
       if(!force&&!changed&&now-RT.lastMove<900)return;
       RT.lastMove=now;RT.lastX=x;RT.lastY=y;RT.lastHp=h;RT.lastMhp=m;RT.lastFace=f;RT.lastAnim=a;RT.lastLevel=l;RT.lastBm=b;
-      send({type:'move',room:RT.lastRoom||room(),x:x,y:y,h:h,m:m,f:f,a:a,l:l,b:b});
+      send({type:'move',room:RT.lastRoom||room(),x:x,y:y,h:h,m:m,f:f,a:a,l:l,b:b,c:c});
     }catch(_){}
   }
 
