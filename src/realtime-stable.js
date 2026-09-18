@@ -28,6 +28,22 @@ function finite(v, min, max, fallback = 0) {
   return Math.max(min, Math.min(max, v));
 }
 
+const DUNGEON_CAPACITY = 40;
+const DUNGEON_RESERVE_MS = 90_000;
+
+function dungeonInfo(v) {
+  const room = cleanRoom(v);
+  if (!room.startsWith('dungeon-')) return null;
+  const m = room.match(/^(dungeon-[a-z0-9_-]*?)-i([1-9]\d*)$/);
+  if (m) return { base: m[1], room, instance: Math.max(1, Number(m[2]) || 1) };
+  return { base: room, room: '', instance: 0 };
+}
+
+function dungeonRoom(base, instance) {
+  const d = dungeonInfo(base);
+  return d ? (d.base + '-i' + Math.max(1, Math.floor(Number(instance) || 1))) : cleanRoom(base);
+}
+
 function wsJson(ws, data) {
   try { ws.send(JSON.stringify(data)); return true; } catch (_) { return false; }
 }
@@ -56,6 +72,53 @@ function packetFromAtt(a) {
 }
 
 export class RealtimeHub extends BaseRealtimeHub {
+  ensureRoomIndex() {
+    if (this._roomIndex) return this._roomIndex;
+    this._roomIndex = new Map();
+    for (const ws of this.sockets()) {
+      const a = attOf(ws);
+      const room = cleanRoom(a.room);
+      let set = this._roomIndex.get(room);
+      if (!set) this._roomIndex.set(room, set = new Set());
+      set.add(ws);
+    }
+    return this._roomIndex;
+  }
+
+  roomSockets(room) {
+    room = cleanRoom(room);
+    const idx = this.ensureRoomIndex();
+    return idx.get(room) || new Set();
+  }
+
+  indexAdd(ws, room) {
+    room = cleanRoom(room);
+    const idx = this.ensureRoomIndex();
+    let set = idx.get(room);
+    if (!set) idx.set(room, set = new Set());
+    set.add(ws);
+  }
+
+  indexRemove(ws, room) {
+    room = cleanRoom(room);
+    const idx = this.ensureRoomIndex();
+    const set = idx.get(room);
+    if (!set) return;
+    set.delete(ws);
+    if (!set.size) idx.delete(room);
+  }
+
+  indexMove(ws, oldRoom, newRoom) {
+    oldRoom = cleanRoom(oldRoom);
+    newRoom = cleanRoom(newRoom);
+    if (oldRoom === newRoom) {
+      this.indexAdd(ws, newRoom);
+      return;
+    }
+    this.indexRemove(ws, oldRoom);
+    this.indexAdd(ws, newRoom);
+  }
+
   hasReplacement(pid, except) {
     pid = String(pid || '');
     if (!pid) return false;
@@ -68,22 +131,23 @@ export class RealtimeHub extends BaseRealtimeHub {
   }
 
   countRoom(room) {
-    room = cleanRoom(room);
     const ids = new Set();
-    for (const ws of this.sockets()) {
+    for (const ws of this.roomSockets(room)) {
       const a = attOf(ws);
-      if (a.pid && cleanRoom(a.room) === room) ids.add(String(a.pid));
+      if (a.pid) ids.add(String(a.pid));
     }
     return ids.size;
+  }
+
+  roomCount(room) {
+    return this.countRoom(room);
   }
 
   roomBroadcast(room, data, except) {
     room = cleanRoom(room);
     const raw = JSON.stringify(data);
-    for (const ws of this.sockets()) {
+    for (const ws of this.roomSockets(room)) {
       if (ws === except) continue;
-      const a = attOf(ws);
-      if (cleanRoom(a.room) !== room) continue;
       try { ws.send(raw); } catch (_) {}
     }
   }
@@ -91,11 +155,11 @@ export class RealtimeHub extends BaseRealtimeHub {
   sendRoomSnapshot(ws, room) {
     room = cleanRoom(room);
     const byPid = new Map();
-    for (const other of this.sockets()) {
+    for (const other of this.roomSockets(room)) {
       if (other === ws) continue;
       const a = attOf(other);
       const pid = String(a.pid || '');
-      if (!pid || cleanRoom(a.room) !== room) continue;
+      if (!pid) continue;
       if (!Number.isFinite(Number(a.x)) || !Number.isFinite(Number(a.y))) continue;
       const prev = byPid.get(pid);
       if (!prev || Number(a.lastSeenAt || 0) >= Number(prev.lastSeenAt || 0)) byPid.set(pid, a);
@@ -109,6 +173,220 @@ export class RealtimeHub extends BaseRealtimeHub {
       players,
       ts: Date.now(),
     });
+  }
+
+  dungeonReservations() {
+    if (!this._dungeonReservations) this._dungeonReservations = new Map();
+    return this._dungeonReservations;
+  }
+
+  partyPids(partyId) {
+    partyId = String(partyId || '');
+    if (!partyId) return [];
+    const ids = new Set();
+    for (const ws of this.sockets()) {
+      const a = attOf(ws);
+      if (String(a.partyId || '') === partyId && a.pid) ids.add(String(a.pid));
+    }
+    return [...ids];
+  }
+
+  roomPidSet(room) {
+    const ids = new Set();
+    for (const ws of this.roomSockets(room)) {
+      const a = attOf(ws);
+      if (a.pid) ids.add(String(a.pid));
+    }
+    return ids;
+  }
+
+  pidInRoom(pid, room) {
+    pid = String(pid || '');
+    if (!pid) return false;
+    for (const ws of this.roomSockets(room)) if (String(attOf(ws).pid || '') === pid) return true;
+    return false;
+  }
+
+  clearDungeonRoomState(room) {
+    room = cleanRoom(room);
+    const d = dungeonInfo(room);
+    if (!d || !d.instance) return;
+    const prefix = room + '|';
+    const { health, dead } = this.mobStores();
+    for (const key of [...health.keys()]) if (String(key).startsWith(prefix)) health.delete(key);
+    for (const key of [...dead.keys()]) if (String(key).startsWith(prefix)) dead.delete(key);
+  }
+
+  roomHasReservation(room, now = Date.now()) {
+    room = cleanRoom(room);
+    for (const r of this.dungeonReservations().values()) {
+      if (r && r.room === room && Number(r.expiresAt || 0) > now) return true;
+    }
+    return false;
+  }
+
+  maybeCleanupDungeon(room, now = Date.now()) {
+    room = cleanRoom(room);
+    const d = dungeonInfo(room);
+    if (!d || !d.instance) return;
+    if (this.countRoom(room) > 0 || this.roomHasReservation(room, now)) return;
+    this.clearDungeonRoomState(room);
+  }
+
+  pruneDungeonReservations(now = Date.now()) {
+    const map = this.dungeonReservations();
+    for (const [key, r] of [...map.entries()]) {
+      if (!r || !r.partyId || !r.room) {
+        map.delete(key);
+        continue;
+      }
+      const pids = this.partyPids(r.partyId);
+      if (!pids.length) {
+        map.delete(key);
+        this.maybeCleanupDungeon(r.room, now);
+        continue;
+      }
+      r.pids = new Set(pids);
+      const inside = pids.some((pid) => this.pidInRoom(pid, r.room));
+      if (inside) r.expiresAt = now + DUNGEON_RESERVE_MS;
+      if (!inside && Number(r.expiresAt || 0) <= now) {
+        map.delete(key);
+        this.maybeCleanupDungeon(r.room, now);
+      }
+    }
+  }
+
+  reservedSlots(room, exceptKey = '', now = Date.now()) {
+    room = cleanRoom(room);
+    let count = 0;
+    const occupied = this.roomPidSet(room);
+    for (const [key, r] of this.dungeonReservations()) {
+      if (key === exceptKey || !r || r.room !== room || Number(r.expiresAt || 0) <= now) continue;
+      const pids = r.pids instanceof Set ? r.pids : new Set(r.pids || []);
+      for (const pid of pids) if (!occupied.has(String(pid))) count++;
+    }
+    return count;
+  }
+
+  candidateDungeonRooms(base) {
+    const d = dungeonInfo(base);
+    if (!d) return [];
+    const out = new Set();
+    const idx = this.ensureRoomIndex();
+    for (const room of idx.keys()) {
+      const x = dungeonInfo(room);
+      if (x && x.instance && x.base === d.base) out.add(x.room);
+    }
+    for (const r of this.dungeonReservations().values()) {
+      const x = r && dungeonInfo(r.room);
+      if (x && x.instance && x.base === d.base) out.add(x.room);
+    }
+    return [...out];
+  }
+
+  moveSocketRoom(ws, a, targetRoom, now = Date.now()) {
+    targetRoom = cleanRoom(targetRoom);
+    const oldRoom = cleanRoom(a.room);
+    if (oldRoom !== targetRoom) {
+      this.roomBroadcast(oldRoom, { type: 'leave', id: a.pid, room: oldRoom, ts: now }, ws);
+      this.indexMove(ws, oldRoom, targetRoom);
+      a.room = targetRoom;
+      a.lastSeenAt = now;
+      ws.serializeAttachment(a);
+      this.roomBroadcast(targetRoom, { type: 'join', player: packetFromAtt(a), room: targetRoom, ts: now }, ws);
+      this.maybeCleanupDungeon(oldRoom, now);
+    } else {
+      a.room = targetRoom;
+      a.lastSeenAt = now;
+      this.indexAdd(ws, targetRoom);
+      ws.serializeAttachment(a);
+    }
+    return targetRoom;
+  }
+
+  assignDungeon(ws, a, requested, now = Date.now()) {
+    const info = dungeonInfo(requested);
+    if (!info) return cleanRoom(a.room);
+    const base = info.base;
+    this.pruneDungeonReservations(now);
+
+    const partyId = String(a.partyId || '');
+    const ownPid = String(a.pid || '');
+    const pids = partyId ? this.partyPids(partyId) : [ownPid];
+    if (ownPid && !pids.includes(ownPid)) pids.push(ownPid);
+    const unit = [...new Set(pids.filter(Boolean))];
+    const resKey = partyId ? (base + '|' + partyId) : '';
+    const reservations = this.dungeonReservations();
+    let reservation = resKey ? reservations.get(resKey) : null;
+    if (reservation) {
+      reservation.pids = new Set(unit);
+      reservation.expiresAt = now + DUNGEON_RESERVE_MS;
+    }
+
+    const current = dungeonInfo(a.room);
+    let target = '';
+    const canFit = (room) => {
+      const occupied = this.roomPidSet(room);
+      const otherReserved = this.reservedSlots(room, resKey, now);
+      let missing = 0;
+      for (const pid of unit) if (!occupied.has(pid)) missing++;
+      return occupied.size + otherReserved + missing <= DUNGEON_CAPACITY;
+    };
+
+    if (reservation && dungeonInfo(reservation.room)?.base === base && canFit(reservation.room)) {
+      target = reservation.room;
+    } else if (!partyId && current && current.instance && current.base === base && this.countRoom(current.room) <= DUNGEON_CAPACITY) {
+      target = current.room;
+    }
+
+    if (!target) {
+      const rooms = this.candidateDungeonRooms(base);
+      const ranked = [];
+      for (const room of rooms) {
+        if (!canFit(room)) continue;
+        const occupied = this.roomPidSet(room);
+        const otherReserved = this.reservedSlots(room, resKey, now);
+        let partyInside = 0;
+        for (const pid of unit) if (occupied.has(pid)) partyInside++;
+        const x = dungeonInfo(room);
+        ranked.push({ room, partyInside, load: occupied.size + otherReserved, instance: x ? x.instance : 999999 });
+      }
+      ranked.sort((x, y) => (y.partyInside - x.partyInside) || (y.load - x.load) || (x.instance - y.instance));
+      if (ranked.length) target = ranked[0].room;
+    }
+
+    if (!target) {
+      const used = new Set(this.candidateDungeonRooms(base).map((room) => dungeonInfo(room)?.instance).filter(Boolean));
+      let instance = 1;
+      while (used.has(instance)) instance++;
+      target = dungeonRoom(base, instance);
+    }
+
+    if (partyId) {
+      reservations.set(resKey, {
+        base,
+        room: target,
+        partyId,
+        pids: new Set(unit),
+        expiresAt: now + DUNGEON_RESERVE_MS,
+      });
+    }
+
+    this.moveSocketRoom(ws, a, target, now);
+    const t = dungeonInfo(target);
+    wsJson(ws, {
+      type: 'room-assigned',
+      base,
+      room: target,
+      instance: t ? t.instance : 1,
+      capacity: DUNGEON_CAPACITY,
+      roomCount: this.countRoom(target),
+      partyReserved: partyId ? unit.length : 1,
+      ts: now,
+    });
+    this.sendRoomSnapshot(ws, target);
+    if (partyId) this.sendPartyState(partyId);
+    return target;
   }
 
   mobStores() {
@@ -165,6 +443,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (String(a.pid || '') === pid) oldSockets.push(old);
     }
 
+    this.ensureRoomIndex();
     const pair = new WebSocketPair();
     const client = pair[0], server = pair[1];
     this.ctx.acceptWebSocket(server);
@@ -174,6 +453,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       lastSeenAt: Date.now(), lastSnapshotPush: 0,
       q: 0, l: 1, b: 0,
     });
+    this.indexAdd(server, 'safe');
 
     wsJson(server, { type: 'hello', pid, name, clanId, serverRoom: 'safe', ts: Date.now() });
 
@@ -193,6 +473,13 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     const a = attOf(ws);
     const now = Date.now();
+
+    if (m.type === 'room-request') {
+      const info = dungeonInfo(m.base || m.room || '');
+      if (!info) return;
+      this.assignDungeon(ws, a, info.base, now);
+      return;
+    }
 
     if (m.type === 'pet-state') {
       const room = cleanRoom(a.room);
@@ -335,17 +622,30 @@ export class RealtimeHub extends BaseRealtimeHub {
     }
 
     if (m.type === 'room') {
-      const oldRoom = cleanRoom(a.room);
-      const room = cleanRoom(m.room);
-      if (oldRoom !== room) {
-        this.roomBroadcast(oldRoom, { type: 'leave', id: a.pid, room: oldRoom, ts: now }, ws);
-        a.room = room;
-        this.roomBroadcast(room, { type: 'join', player: packetFromAtt(a), room, ts: now }, ws);
-      } else {
-        a.room = room;
+      const requested = cleanRoom(m.room);
+      const d = dungeonInfo(requested);
+      if (d) {
+        const current = dungeonInfo(a.room);
+        if (d.instance && current && current.instance && cleanRoom(a.room) === requested) {
+          a.lastSeenAt = now;
+          ws.serializeAttachment(a);
+          wsJson(ws, {
+            type: 'room-assigned',
+            base: d.base,
+            room: requested,
+            instance: d.instance,
+            capacity: DUNGEON_CAPACITY,
+            roomCount: this.countRoom(requested),
+            ts: now,
+          });
+          this.sendRoomSnapshot(ws, requested);
+        } else {
+          this.assignDungeon(ws, a, d.base, now);
+        }
+        return;
       }
-      a.lastSeenAt = now;
-      ws.serializeAttachment(a);
+
+      const room = this.moveSocketRoom(ws, a, requested, now);
       this.sendRoomSnapshot(ws, room);
       if (a.partyId) this.sendPartyState(a.partyId);
       return;
@@ -356,9 +656,19 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       const oldRoom = cleanRoom(a.room);
       const wantedRoom = m.room != null ? cleanRoom(m.room) : oldRoom;
-      if (wantedRoom !== oldRoom) {
-        this.roomBroadcast(oldRoom, { type: 'leave', id: a.pid, room: oldRoom, ts: now }, ws);
-        a.room = wantedRoom;
+      const wantedDungeon = dungeonInfo(wantedRoom);
+      const currentDungeon = dungeonInfo(oldRoom);
+      let currentRoom = oldRoom;
+
+      if (wantedDungeon) {
+        if (currentDungeon && currentDungeon.instance && currentDungeon.base === wantedDungeon.base) {
+          currentRoom = oldRoom;
+        } else {
+          currentRoom = this.assignDungeon(ws, a, wantedDungeon.base, now);
+        }
+      } else if (wantedRoom !== oldRoom) {
+        currentRoom = this.moveSocketRoom(ws, a, wantedRoom, now);
+        this.sendRoomSnapshot(ws, currentRoom);
       }
 
       a.lastMove = now;
@@ -372,16 +682,13 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.l = Math.max(1, Math.min(999, Math.round(Number(m.l) || Number(a.l) || 1)));
       a.b = Math.max(0, Math.round(Number(m.b) || Number(a.b) || 0));
       a.q = (Number(a.q) || 0) + 1;
+      a.room = currentRoom;
 
       const pushSnapshot = now - (Number(a.lastSnapshotPush) || 0) >= 1200;
       if (pushSnapshot) a.lastSnapshotPush = now;
       ws.serializeAttachment(a);
 
-      const currentRoom = cleanRoom(a.room);
-      if (wantedRoom !== oldRoom) {
-        this.roomBroadcast(currentRoom, { type: 'join', player: packetFromAtt(a), room: currentRoom, ts: now }, ws);
-      }
-      this.roomBroadcast(currentRoom, { type: 'move', player: packetFromAtt(a) }, ws);
+      this.roomBroadcast(currentRoom, { type: 'move', player: packetFromAtt(a), room: currentRoom }, ws);
       if (pushSnapshot) this.sendRoomSnapshot(ws, currentRoom);
       return;
     }
@@ -394,7 +701,9 @@ export class RealtimeHub extends BaseRealtimeHub {
     const pid = String(a.pid || '');
     const room = cleanRoom(a.room);
     const partyId = String(a.partyId || '');
+    this.indexRemove(ws, room);
     if (!pid) {
+      this.maybeCleanupDungeon(room);
       this.sendOnlineCount();
       return;
     }
@@ -406,6 +715,8 @@ export class RealtimeHub extends BaseRealtimeHub {
       }
       this.roomBroadcast(room, { type: 'leave', id: pid, room, ts: Date.now() }, ws);
       if (partyId) this.sendPartyState(partyId);
+      this.pruneDungeonReservations(Date.now());
+      this.maybeCleanupDungeon(room, Date.now());
       this.sendOnlineCount();
     }, 5000);
   }
