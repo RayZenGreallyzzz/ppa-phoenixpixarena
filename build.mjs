@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v311-authority-latejoin-gate-20260918-1606';
+const CLIENT_BUILD = 'v312-server-only-dungeon-spawn-20260918-1622';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -120,7 +120,23 @@ output = output.split(rangedMobEventNeedle).join(rangedMobEventPatch);
 
 const localRespawnNeedle = "if(P.scene==='dungeon'&&!e.isBoss&&e.si!==undefined)RESPAWN_Q.push({at:Date.now()+MOB_RESPAWN_MS,si:e.si});";
 if (!output.includes(localRespawnNeedle)) throw new Error('PPA local mob respawn patch target not found');
-output = output.split(localRespawnNeedle).join("if(P.scene==='dungeon'&&!e.isBoss&&e.si!==undefined&&!(window.PPA_SERVER_MOBS_ACTIVE&&window.PPA_SERVER_MOBS_ACTIVE()))RESPAWN_Q.push({at:Date.now()+MOB_RESPAWN_MS,si:e.si});");
+output = output.split(localRespawnNeedle).join("if(P.scene==='dungeon'&&!e.isBoss&&e.si!==undefined&&!window.PPA_REALTIME_V2_ACTIVE)RESPAWN_Q.push({at:Date.now()+MOB_RESPAWN_MS,si:e.si});");
+
+// In online mode the old single-player dungeon spawner is forbidden from
+// creating the mob roster. The server catalog/snapshot creates alive mobs.
+const localSpawnLoopNeedle = "for(let si=0;si<DG_ACTIVE_SPAWNS.length;si++)spawnMobAtPoint(si,false);";
+if (!output.includes(localSpawnLoopNeedle)) throw new Error('PPA local dungeon spawn loop target not found');
+output = output.replace(localSpawnLoopNeedle,
+  "if(!window.PPA_REALTIME_V2_ACTIVE){for(let si=0;si<DG_ACTIVE_SPAWNS.length;si++)spawnMobAtPoint(si,false);}else if(window.PPA_MOB_SERVER_REGISTER){setTimeout(()=>window.PPA_MOB_SERVER_REGISTER(),0);}"
+);
+
+// Block every accidental normal-mob creation path in an online dungeon.
+// Only the authoritative bridge may temporarily set __PPA_SERVER_SPAWN_CALL.
+const spawnMobFnNeedle = "function spawnMobAtPoint(si,fx){";
+if (!output.includes(spawnMobFnNeedle)) throw new Error('PPA spawnMobAtPoint gate target not found');
+output = output.replace(spawnMobFnNeedle,
+  "function spawnMobAtPoint(si,fx){if(window.PPA_REALTIME_V2_ACTIVE&&P&&P.scene==='dungeon'&&!window.__PPA_SERVER_SPAWN_CALL)return;"
+);
 
 const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
