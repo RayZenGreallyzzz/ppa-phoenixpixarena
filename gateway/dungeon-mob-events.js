@@ -1,7 +1,8 @@
 (function(){
   'use strict';
 
-  var seq=0, applying=0, lastRoom='', lastRegister=0;
+  var seq=0, applying=0, lastRoom='', lastRegister=0, catalogRoom='', authReady=false;
+  var authority=new Map();
 
   function rt(){try{return window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null}catch(_){return null}}
   function room(){var d=rt();return String((d&&d.room)||'')}
@@ -12,6 +13,24 @@
   function siOf(key){var m=String(key||'').match(/^s(\d{1,4})$/);return m?Number(m[1]):-1}
   function entities(){try{return (typeof EN!=='undefined'&&Array.isArray(EN))?EN:[]}catch(_){return[]}}
   function find(key){var a=entities();for(var i=0;i<a.length;i++)if(keyOf(a[i])===key)return a[i];return null}
+  function currentCatalog(){
+    var rows=[];
+    entities().forEach(function(e){
+      var key=keyOf(e);if(!key)return;
+      var mhp=Math.max(1,Number(e.mhp)||Number(e.hp)||1);
+      rows.push([key,Math.round(mhp*100)/100]);
+    });
+    return rows;
+  }
+  function quarantineLocalMobs(){
+    entities().forEach(function(e){
+      if(!keyOf(e))return;
+      e.__ppaAwaitAuthority=true;
+      applying++;
+      try{e.hp=0}catch(_){}
+      applying--;
+    });
+  }
   function isServerMode(){return active()}
   window.PPA_SERVER_MOBS_ACTIVE=isServerMode;
 
@@ -44,19 +63,27 @@
   function register(force){
     try{
       if(!active())return false;
-      var now=Date.now(),r=room();
-      if(!force&&r===lastRoom&&now-lastRegister<2500)return true;
-      var rows=[];
-      entities().forEach(function(e){
-        var key=keyOf(e);if(!key)return;
-        var mhp=Math.max(1,Number(e.mhp)||Number(e.hp)||1);
-        rows.push([key,Math.round(mhp*100)/100]);
-      });
+      var now=Date.now(),r=room(),rows=currentCatalog();
       if(!rows.length)return false;
+      if(!force&&r===lastRoom&&now-lastRegister<2500)return true;
+
+      // First authoritative handshake for this instance:
+      // send the original local roster, then hide/quarantine it. From this
+      // point onward ONLY the server snapshot decides which spawn ids exist.
+      var firstForRoom=(catalogRoom!==r);
+      if(firstForRoom){
+        catalogRoom=r;
+        authReady=false;
+        authority.clear();
+      }
+
       lastRoom=r;lastRegister=now;
-      return !!window.PPA_RT_SEND({type:'mob-catalog',room:r,rows:rows});
+      var ok=!!window.PPA_RT_SEND({type:'mob-catalog',room:r,rows:rows});
+      if(ok&&firstForRoom)quarantineLocalMobs();
+      return ok;
     }catch(_){return false}
   }
+
   window.PPA_MOB_SERVER_REGISTER=function(){return register(true)};
 
   window.PPA_MOB_EVENT_DAMAGE=function(e,amount){
@@ -78,6 +105,9 @@
     var key=String(row[0]||''),hp=Number(row[1]),mhp=Number(row[2]),respawnAt=Number(row[3])||0;
     var killer=String(row[4]||''),party=String(row[5]||'');
     if(!/^s\d{1,4}$/.test(key)||!Number.isFinite(hp)||!Number.isFinite(mhp))return;
+
+    authority.set(key,{hp:hp,mhp:mhp,respawnAt:respawnAt,killer:killer,party:party});
+
     var e=find(key);
     if(hp>0){
       if(!e){
@@ -86,15 +116,50 @@
         e=find(key);
       }
       if(!e)return;
+      e.__ppaAwaitAuthority=false;
       e.__ppaEventKiller='';e.__ppaEventParty='';
       applying++;
-      try{e.mhp=Math.max(1,mhp);e.hp=Math.min(e.mhp,Math.max(1,hp))}finally{applying--}
+      try{
+        e.mhp=Math.max(1,mhp);
+        e.hp=Math.min(e.mhp,Math.max(1,hp));
+      }finally{applying--}
       return;
     }
+
+    // Dead is also authoritative. If local spawn has not been created yet,
+    // keeping it in authority Map is enough; reconcile() will remove it later.
     if(!e)return;
+    e.__ppaAwaitAuthority=false;
     e.__ppaEventKiller=killer;e.__ppaEventParty=party;e.__ppaServerRespawnAt=respawnAt;
     applying++;
     try{e.hp=0}finally{applying--}
+  }
+
+  function reconcileAuthority(){
+    if(!active()||!authReady)return;
+    authority.forEach(function(st,key){
+      var e=find(key);
+      if(Number(st.hp)>0){
+        if(!e){
+          var si=siOf(key);
+          try{if(si>=0&&typeof spawnMobAtPoint==='function')spawnMobAtPoint(si,false)}catch(_){}
+          e=find(key);
+        }
+        if(e&&(Number(e.hp)<=0||e.__ppaAwaitAuthority)){
+          e.__ppaAwaitAuthority=false;
+          applying++;
+          try{
+            e.mhp=Math.max(1,Number(st.mhp)||1);
+            e.hp=Math.min(e.mhp,Math.max(1,Number(st.hp)||1));
+          }finally{applying--}
+        }
+      }else if(e&&Number(e.hp)>0){
+        e.__ppaEventKiller=String(st.killer||'');
+        e.__ppaEventParty=String(st.party||'');
+        applying++;
+        try{e.hp=0}finally{applying--}
+      }
+    });
   }
 
   window.PPA_DUNGEON_MOB_EVENT_RECEIVE=function(m){
@@ -102,11 +167,17 @@
       if(!m||String(m.room||'')!==room())return;
       if(m.type==='mob-authority-snapshot'){
         var rows=Array.isArray(m.rows)?m.rows:[];
+        if(catalogRoom!==room()&&rows.length===0)return;
+        authority.clear();
         for(var i=0;i<rows.length;i++)applyRow(rows[i]);
+        authReady=true;
+        reconcileAuthority();
         return;
       }
       if(m.type==='mob-authority'){
         applyRow([m.key,m.hp,m.mhp,m.respawnAt,m.killer,m.party]);
+        authReady=true;
+        reconcileAuthority();
         return;
       }
     }catch(err){console.warn('PPA authoritative mob receive',err)}
@@ -114,8 +185,12 @@
 
   function tick(){
     installDropGuard();
-    if(!active()){lastRoom='';return}
+    if(!active()){
+      lastRoom='';catalogRoom='';authReady=false;authority.clear();
+      return;
+    }
     register(false);
+    reconcileAuthority();
   }
 
   function boot(){
