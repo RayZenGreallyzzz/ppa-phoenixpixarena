@@ -122,6 +122,7 @@
       var base=dropLoot;
       var wrapped=function(e){
         if(!e||!e.isDungeon60Boss)return base.apply(this,arguments);
+        if(window.PPA_MOB_REWARD_ELIGIBLE&&!window.PPA_MOB_REWARD_ELIGIBLE(e))return;
         // Dragon has its own table; never inherit Phoenix feather/rune rolls.
         try{
           if(typeof pushMaterialDrop==='function'){
