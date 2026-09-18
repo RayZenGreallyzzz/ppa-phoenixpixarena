@@ -27,6 +27,25 @@
     return entityCache.get(String(key||''))||null;
   }
   function cacheEntity(e){var k=keyOf(e);if(k){entityCache.set(k,e);entityCacheLen=entities().length;entityCacheAt=Date.now()}}
+
+  var MATERIALIZE_R=1450;
+  function shouldMaterialize(st){
+    try{
+      if(!st||!(Number(st.hp)>0))return false;
+      var x=Number(st.x),y=Number(st.y);
+      if(!Number.isFinite(x)||!Number.isFinite(y))return false;
+      if(typeof P==='undefined'||!P)return false;
+      return Math.hypot(x-Number(P.x||0),y-Number(P.y||0))<=MATERIALIZE_R;
+    }catch(_){return false}
+  }
+  function removeEntity(e){
+    try{
+      var a=entities(),i=a.indexOf(e);
+      if(i>=0)a.splice(i,1);
+      var k=keyOf(e);if(k)entityCache.delete(k);
+      entityCacheLen=a.length;entityCacheAt=Date.now();
+    }catch(_){}
+  }
   function currentCatalog(){
     var rows=[];
     try{
@@ -185,7 +204,7 @@
     diagCache={
       room:room(),serverRoom:String(rd.serverRoom||''),instance:Number(rd.dungeonInstance)||0,
       ready:authReady,count:authority.size,catalog:catalogCount||authority.size,
-      mobs:mobs,locked:locked,keyHash:'ok',authHash:'ok',localHash:'ok',
+      mobs:mobs,locked:locked,keyHash:'ok',authHash:'ok',localHash:'near',
       maxDelta:Math.round(maxDelta),samples:[]
     };
     diagCacheAt=now;
@@ -222,6 +241,8 @@
 
     var e=find(key);
     if(hp>0){
+      var _st=authority.get(key);
+      if(!e&&!shouldMaterialize(_st))return;
       if(!e){
         var si=siOf(key);
         try{
@@ -268,9 +289,14 @@
 
   function reconcileAuthority(){
     if(!active()||!authReady)return;
+    var changed=false;
     authority.forEach(function(st,key){
-      var e=find(key);
+      var e=find(key),near=shouldMaterialize(st);
       if(Number(st.hp)>0){
+        if(!near){
+          if(e){removeEntity(e);changed=true}
+          return;
+        }
         if(!e){
           var si=siOf(key);
           try{
@@ -280,7 +306,7 @@
             }
           }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
           e=find(key);
-          if(e)cacheEntity(e);
+          if(e){cacheEntity(e);changed=true}
         }
         if(e&&(Number(e.hp)<=0||e.__ppaAwaitAuthority)){
           e.__ppaAwaitAuthority=false;
@@ -296,6 +322,7 @@
         applying++;
         try{e.hp=0}finally{applying--}
       }
+
       e=find(key);
       if(e&&Number(st.hp)>0){
         lockServerMob(e);
@@ -312,6 +339,7 @@
         }finally{applying--}
       }
     });
+    if(changed)rebuildEntityCache(true);
   }
 
   function pruneToAuthority(){
@@ -366,6 +394,19 @@
       }
       if(m.type==='mob-attack'){
         var key=String(m.key||''),e=find(key),target=String(m.target||'');
+        if(!e&&target&&target===selfId()){
+          var st=authority.get(key);
+          if(st){
+            var si=siOf(key);
+            try{
+              if(si>=0&&typeof spawnMobAtPoint==='function'){
+                window.__PPA_SERVER_SPAWN_CALL=true;
+                try{spawnMobAtPoint(si,false)}finally{window.__PPA_SERVER_SPAWN_CALL=false}
+              }
+            }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
+            e=find(key);if(e)cacheEntity(e);
+          }
+        }
         if(e){
           lockServerMob(e);
           e.__ppaServerTarget=target;
