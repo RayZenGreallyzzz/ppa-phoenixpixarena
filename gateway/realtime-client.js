@@ -6,7 +6,8 @@
     ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastRoomSync:0,
     pendingRoom:'',pendingSince:0,lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,
     lastAnim:'',lastLevel:null,lastBm:null,onlineCount:0,started:false,pingSent:0,pingMs:null,
-    lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null
+    lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null,
+    assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40
   };
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
@@ -22,11 +23,23 @@
     if(!r||r==='offline'||r==='local'||r==='none'||r==='null'||r==='undefined')return 'safe';
     return r;
   }
-  function room(){
+  function dungeonInfo(v){
+    var r=canonicalRoom(v);
+    if(r.indexOf('dungeon-')!==0)return null;
+    var m=r.match(/^(dungeon-[a-z0-9_-]*?)-i([1-9]\d*)$/);
+    if(m)return{base:m[1],room:r,instance:Math.max(1,Number(m[2])||1)};
+    return{base:r,room:'',instance:0};
+  }
+  function rawRoom(){
     try{
       if(socialOpen()&&RT.lastRoom)return RT.lastRoom;
       return canonicalRoom(typeof ppaOnlineRoomKey==='function'?ppaOnlineRoomKey():'safe');
     }catch(_){return RT.lastRoom||'safe'}
+  }
+  function room(){
+    var raw=rawRoom(),want=dungeonInfo(raw),cur=dungeonInfo(RT.lastRoom);
+    if(want&&cur&&cur.instance&&want.base===cur.base)return RT.lastRoom;
+    return raw;
   }
   function mobileUi(){try{return innerWidth<=900||matchMedia('(pointer:coarse)').matches}catch(_){return false}}
   function selfLevel(){try{return Math.max(1,Math.floor(Number(P&&P.lvl)||1))}catch(_){return 1}}
@@ -154,11 +167,27 @@
     wanted=canonicalRoom(wanted);
     if(RT.lastRoom&&wanted!==RT.lastRoom)clearRemotes();
     RT.lastRoom=wanted;RT.pendingRoom='';RT.pendingSince=0;RT.roomPeers=null;
+    var d=dungeonInfo(wanted);RT.dungeonInstance=d&&d.instance?d.instance:0;
     try{if(typeof PPA_ONLINE!=='undefined')PPA_ONLINE.roomKey=RT.lastRoom}catch(_){}
   }
 
   function sendRoom(force){
-    var now=Date.now(),wanted=room();
+    var now=Date.now(),raw=rawRoom(),wantD=dungeonInfo(raw),curD=dungeonInfo(RT.lastRoom);
+    if(wantD){
+      if(curD&&curD.instance&&curD.base===wantD.base){
+        RT.assignBase='';RT.assignAt=0;
+        if(!force&&now-RT.lastRoomSync<1200)return;
+        if(send({type:'room',room:RT.lastRoom}))RT.lastRoomSync=now;
+        return;
+      }
+      if(!force&&RT.assignBase===wantD.base&&now-RT.assignAt<900)return;
+      RT.assignBase=wantD.base;RT.assignAt=now;
+      if(send({type:'room-request',base:wantD.base}))RT.lastRoomSync=now;
+      return;
+    }
+
+    RT.assignBase='';RT.assignAt=0;
+    var wanted=raw;
     if(!RT.lastRoom){commitRoom(wanted)}
     else if(wanted!==RT.lastRoom){
       if(force)commitRoom(wanted);
@@ -174,8 +203,14 @@
 
   function resyncRoom(){
     if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN)return false;
-    var wanted=room();
-    if(!RT.lastRoom||wanted!==RT.lastRoom)commitRoom(wanted);
+    var raw=rawRoom(),wantD=dungeonInfo(raw),curD=dungeonInfo(RT.lastRoom);
+    if(wantD){
+      if(!(curD&&curD.instance&&curD.base===wantD.base)){sendRoom(true);return true}
+      var okD=send({type:'room',room:RT.lastRoom});
+      if(okD){RT.lastRoomSync=Date.now();sendMove(true)}
+      return okD;
+    }
+    if(!RT.lastRoom||raw!==RT.lastRoom)commitRoom(raw);
     var ok=send({type:'room',room:RT.lastRoom});
     if(ok){RT.lastRoomSync=Date.now();sendMove(true)}
     return ok;
@@ -183,6 +218,8 @@
 
   function sendMove(force){
     if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN)return;
+    var raw=rawRoom(),wantD=dungeonInfo(raw),curD=dungeonInfo(RT.lastRoom);
+    if(wantD&&!(curD&&curD.instance&&curD.base===wantD.base))return;
     var now=Date.now();if(!force&&now-RT.lastMove<220)return;
     try{
       var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),f=Number(P.face)||1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm();
@@ -215,6 +252,20 @@
     if(m.type==='hello'){
       try{if(typeof PPA_ONLINE!=='undefined'){PPA_ONLINE.selfId=String(m.pid||PPA_ONLINE.selfId||'');PPA_ONLINE.selfName=String(m.name||selfName())}}catch(_){}
       sendRoom(true);sendMove(true);return;
+    }
+    if(m.type==='room-assigned'){
+      var desired=dungeonInfo(rawRoom()),base=canonicalRoom(m.base||'');
+      if(!desired||desired.base!==base)return;
+      var assigned=dungeonInfo(m.room);
+      if(!assigned||!assigned.instance||assigned.base!==base)return;
+      commitRoom(assigned.room);
+      RT.assignBase='';RT.assignAt=0;RT.serverRoom=assigned.room;
+      RT.dungeonInstance=assigned.instance;
+      if(Number.isFinite(Number(m.capacity)))RT.dungeonCapacity=Math.max(1,Number(m.capacity)||40);
+      if(Number.isFinite(Number(m.roomCount)))RT.roomPeers=Math.max(1,Number(m.roomCount)||1);
+      RT.lastRoomSync=Date.now();
+      sendMove(true);
+      return;
     }
     if(m.type==='pong'){
       if(m.room)RT.serverRoom=canonicalRoom(m.room);
@@ -295,7 +346,7 @@
   window.PPA_RT_SEND=send;
   window.PPA_REALTIME_RESYNC=resyncRoom;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
-  window.PPA_REALTIME_DIAG=function(){return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null}};
+  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null}};
 
   function boot(){
     if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();
