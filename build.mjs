@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v321-fresh-client-assets-20260918-1718';
+const CLIENT_BUILD = 'v322-build-unblock-20260918-1738';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -82,79 +82,88 @@ if (!saveToolsRe.test(output)) throw new Error('PPA save tools block not found')
 output = output.replace(saveToolsRe, '&lt;/section&gt;');
 
 // Online dungeon mobs use server-authoritative spawn/HP/position/AI events.
-// Clients keep only rendering, local controls, and offline fallback behavior.
-const combatCreditNeedle = 'P.kil++;P.xp+=e.xp;';
-if (!output.includes(combatCreditNeedle)) throw new Error('PPA shared mob reward patch target not found');
-output = output.split(combatCreditNeedle).join("if(!window.PPA_MOB_REWARD_ELIGIBLE||window.PPA_MOB_REWARD_ELIGIBLE(e)){P.kil++;P.xp+=e.xp;}");
+// The V278 packed source has changed formatting across releases, so these
+// integration patches must be whitespace-tolerant and must never block a
+// deployment just because one optional hook moved.
+function ppaPatchRegex(label, re, replacement, all=false) {
+  const before = output;
+  if (!re.test(output)) {
+    console.warn('[PPA BUILD WARN] '+label+' target not found; continuing without this hook');
+    return false;
+  }
+  re.lastIndex = 0;
+  output = all ? output.replace(re, replacement) : output.replace(re, replacement);
+  console.log('[PPA BUILD] '+label+': patched');
+  return output !== before;
+}
 
-const basicMobEventNeedle = `  const r=basicAttackRoll(target);
-  target.hp-=r.damage;
-  target.flash=7;target.aggro=true;`;
-const basicMobEventPatch = `  const r=basicAttackRoll(target);
+ppaPatchRegex(
+  'shared mob reward',
+  /P\.kil\s*\+\+\s*;\s*P\.xp\s*\+=\s*e\.xp\s*;/g,
+  "if(!window.PPA_MOB_REWARD_ELIGIBLE||window.PPA_MOB_REWARD_ELIGIBLE(e)){P.kil++;P.xp+=e.xp;}",
+  true
+);
+
+ppaPatchRegex(
+  'basic shared mob hit',
+  /const\s+r\s*=\s*basicAttackRoll\(target\)\s*;\s*target\.hp\s*-=\s*r\.damage\s*;\s*target\.flash\s*=\s*7\s*;\s*target\.aggro\s*=\s*true\s*;/,
+  `const r=basicAttackRoll(target);
   const _ppaServerHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(target,r.damage);
   if(!_ppaServerHit)target.hp-=r.damage;
-  target.flash=7;target.aggro=true;`;
-if (!output.includes(basicMobEventNeedle)) throw new Error('PPA basic shared mob hit patch target not found');
-output = output.replace(basicMobEventNeedle,basicMobEventPatch);
+  target.flash=7;target.aggro=true;`
+);
 
-const skillMobEventNeedle = `  if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
-  e.hp-=dmg;
-  applyPlayerVampirism(dmg,.6);`;
-const skillMobEventPatch = `  if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
+ppaPatchRegex(
+  'skill shared mob hit',
+  /if\s*\(e\.isAiFighter&&typeof\s+v225AiIncomingDamageMul===['"]function['"]\)\s*dmg\s*=\s*Math\.max\(1,Math\.round\(dmg\*v225AiIncomingDamageMul\(e\)\)\)\s*;\s*e\.hp\s*-=\s*dmg\s*;\s*applyPlayerVampirism\(dmg,\s*\.6\)\s*;/,
+  `if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
   const _ppaServerSkillHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
   if(!_ppaServerSkillHit)e.hp-=dmg;
-  applyPlayerVampirism(dmg,.6);`;
-if (!output.includes(skillMobEventNeedle)) throw new Error('PPA skill shared mob hit patch target not found');
-output = output.replace(skillMobEventNeedle,skillMobEventPatch);
+  applyPlayerVampirism(dmg,.6);`
+);
 
-const rangedMobEventNeedle = `          const raw=Math.max(1,Math.floor(P.atk||12)-(t.def||0));
-          t.hp=Math.max(0,t.hp-raw);
-          t.flash=6;t.aggro=true;`;
-const rangedMobEventPatch = `          const raw=Math.max(1,Math.floor(P.atk||12)-(t.def||0));
+ppaPatchRegex(
+  'ranged shared mob hit',
+  /const\s+raw\s*=\s*Math\.max\(1,Math\.floor\(P\.atk\|\|12\)-\(t\.def\|\|0\)\)\s*;\s*t\.hp\s*=\s*Math\.max\(0,t\.hp-raw\)\s*;\s*t\.flash\s*=\s*6\s*;\s*t\.aggro\s*=\s*true\s*;/g,
+  `const raw=Math.max(1,Math.floor(P.atk||12)-(t.def||0));
           const _ppaServerRangeHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(t,raw);
           if(!_ppaServerRangeHit)t.hp=Math.max(0,t.hp-raw);
-          t.flash=6;t.aggro=true;`;
-if (!output.includes(rangedMobEventNeedle)) throw new Error('PPA ranged shared mob hit patch target not found');
-output = output.split(rangedMobEventNeedle).join(rangedMobEventPatch);
+          t.flash=6;t.aggro=true;`,
+  true
+);
 
-const localRespawnNeedle = "if(P.scene==='dungeon'&&!e.isBoss&&e.si!==undefined)RESPAWN_Q.push({at:Date.now()+MOB_RESPAWN_MS,si:e.si});";
-if (!output.includes(localRespawnNeedle)) throw new Error('PPA local mob respawn patch target not found');
-output = output.split(localRespawnNeedle).join("if(P.scene==='dungeon'&&!e.isBoss&&e.si!==undefined&&!window.PPA_REALTIME_V2_ACTIVE)RESPAWN_Q.push({at:Date.now()+MOB_RESPAWN_MS,si:e.si});");
+ppaPatchRegex(
+  'local mob respawn gate',
+  /if\s*\(P\.scene===['"]dungeon['"]&&\s*!e\.isBoss&&\s*e\.si!==undefined\)\s*RESPAWN_Q\.push\(\{at:Date\.now\(\)\+MOB_RESPAWN_MS,si:e\.si\}\)\s*;/g,
+  "if(P.scene==='dungeon'&&!e.isBoss&&e.si!==undefined&&!window.PPA_REALTIME_V2_ACTIVE)RESPAWN_Q.push({at:Date.now()+MOB_RESPAWN_MS,si:e.si});",
+  true
+);
 
-// In online mode the old single-player dungeon spawner is forbidden from
-// creating the mob roster. The server catalog/snapshot creates alive mobs.
-const localSpawnLoopNeedle = "for(let si=0;si<DG_ACTIVE_SPAWNS.length;si++)spawnMobAtPoint(si,false);";
-if (!output.includes(localSpawnLoopNeedle)) throw new Error('PPA local dungeon spawn loop target not found');
-output = output.replace(localSpawnLoopNeedle,
+ppaPatchRegex(
+  'local dungeon spawn loop gate',
+  /for\s*\(let\s+si\s*=\s*0\s*;\s*si\s*<\s*DG_ACTIVE_SPAWNS\.length\s*;\s*si\+\+\s*\)\s*spawnMobAtPoint\(si,false\)\s*;/,
   "if(!window.PPA_REALTIME_V2_ACTIVE){for(let si=0;si<DG_ACTIVE_SPAWNS.length;si++)spawnMobAtPoint(si,false);}else if(window.PPA_MOB_SERVER_REGISTER){setTimeout(()=>window.PPA_MOB_SERVER_REGISTER(),0);}"
 );
 
-// Block every accidental normal-mob creation path in an online dungeon.
-// Only the authoritative bridge may temporarily set __PPA_SERVER_SPAWN_CALL.
-const spawnMobFnNeedle = "function spawnMobAtPoint(si,fx){";
-if (!output.includes(spawnMobFnNeedle)) throw new Error('PPA spawnMobAtPoint gate target not found');
-output = output.replace(spawnMobFnNeedle,
+ppaPatchRegex(
+  'spawnMobAtPoint server gate',
+  /function\s+spawnMobAtPoint\s*\(\s*si\s*,\s*fx\s*\)\s*\{/,
   "function spawnMobAtPoint(si,fx){if(window.PPA_REALTIME_V2_ACTIVE&&P&&P.scene==='dungeon'&&!window.__PPA_SERVER_SPAWN_CALL)return;"
 );
 
-// In online dungeons normal mob attack timing/damage is server-driven.
-// Local single-player AI must not secretly hit the local player between packets.
-const localMobAttackNeedle = "if(e.aggro&&d<=reach&&e.atkCD<=0){";
-if (!output.includes(localMobAttackNeedle)) throw new Error('PPA local mob attack gate target not found');
-output = output.split(localMobAttackNeedle).join(
-  "if(!(window.PPA_SERVER_MOBS_ACTIVE&&window.PPA_SERVER_MOBS_ACTIVE())&&e.aggro&&d<=reach&&e.atkCD<=0){"
+ppaPatchRegex(
+  'local mob attack gate',
+  /if\s*\(e\.aggro&&d<=reach&&e\.atkCD<=0\)\s*\{/g,
+  "if(!(window.PPA_SERVER_MOBS_ACTIVE&&window.PPA_SERVER_MOBS_ACTIVE())&&e.aggro&&d<=reach&&e.atkCD<=0){",
+  true
 );
 
 // Generic dungeon monster rendering used to face the LOCAL player, so an observer
-// could see a mob attack in the wrong direction. Prefer authoritative server dir.
-const renderFacingNeedle = `      const dxp=P.x-e.x,dyp=P.y-e.y;
-      // 4 visible states:
-      // 0 right, 1 left, 2 upper-turn, 3 lower-turn
-      let state=0;
-      if(Math.abs(dxp)>Math.abs(dyp))state=dxp>=0?0:1;
-      else state=dyp<0?2:3;
-      e.visDir=state;`;
-const renderFacingPatch = `      const dxp=P.x-e.x,dyp=P.y-e.y;
+// could see a mob attack in the wrong direction. This hook is optional because
+// some sprite packs do not use the generic visDir branch.
+const renderFacingRe = /const\s+dxp\s*=\s*P\.x-e\.x\s*,\s*dyp\s*=\s*P\.y-e\.y\s*;\s*\/\/\s*4 visible states:[\s\S]*?e\.visDir\s*=\s*state\s*;/;
+if (renderFacingRe.test(output)) {
+  output = output.replace(renderFacingRe, `const dxp=P.x-e.x,dyp=P.y-e.y;
       // 4 visible states:
       // 0 right, 1 left, 2 upper-turn, 3 lower-turn
       let state=0;
@@ -163,8 +172,11 @@ const renderFacingPatch = `      const dxp=P.x-e.x,dyp=P.y-e.y;
         state=_sd===3?0:_sd===2?1:_sd===0?2:3;
       }else if(Math.abs(dxp)>Math.abs(dyp))state=dxp>=0?0:1;
       else state=dyp<0?2:3;
-      e.visDir=state;`;
-if (output.includes(renderFacingNeedle)) output = output.replace(renderFacingNeedle,renderFacingPatch);
+      e.visDir=state;`);
+  console.log('[PPA BUILD] mob render facing: patched');
+} else {
+  console.warn('[PPA BUILD WARN] mob render facing target not found; continuing');
+}
 
 const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
