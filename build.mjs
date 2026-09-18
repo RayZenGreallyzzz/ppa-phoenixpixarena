@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v330-dragon60-authority-20260918-1925';
+const CLIENT_BUILD = 'v331-dragon60-final-20260918-1938';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -218,6 +218,31 @@ ppaPatchRegex(
   /\}else if\s*\(e\.isDungeon21Boss&&P\.scene===['"]dungeon['"]\)\s*\{/,
   "}else if(e.isDungeon60Boss&&P.scene==='dungeon'){\n        const ln=document.getElementById('locName');\n        ln.innerHTML='ДРАКОН ПЕПЛА ПОВЕРЖЕН<div class=\"sub\">Откат 6 часов</div>';\n        ln.classList.add('show');\n        setTimeout(()=>ln.classList.remove('show'),2500);\n      }else if(e.isDungeon21Boss&&P.scene==='dungeon'){"
 );
+
+ppaPatchRegex(
+  'dragon60 keeper card text',
+  /Те же типы мобов · усиление ×3 · без босса/g,
+  "Те же типы мобов · усиление ×3 · босс: Дракон Пепла · 25 000 HP",
+  true
+);
+
+ppaPatchRegex(
+  'dragon60 dungeon subtitle',
+  /Уровни 41–60 · те же типы мобов · HP \/ DEF \/ ATK ×3 от 21–40 · БОССА НЕТ/g,
+  "Уровни 41–60 · мобы ×3 · Дракон Пепла · 25 000 HP · урон 130",
+  true
+);
+
+ppaPatchRegex(
+  'dragon60 dungeon hud',
+  /waveEl\.textContent=['"]ДАНЖ 41–60 · МОБЫ ×3 · БОССА НЕТ['"]\s*;/g,
+  "const _dragon60=EN.find(function(x){return x&&x.isDungeon60Boss&&x.hp>0});"
+  + "waveEl.textContent=_dragon60"
+  + "?('ДРАКОН ПЕПЛА · '+Math.max(0,Math.ceil(_dragon60.hp)).toLocaleString('ru-RU')+' / '+Math.ceil(_dragon60.mhp).toLocaleString('ru-RU')+' HP')"
+  + ":'ДРАКОН ПЕПЛА · ожидание / откат';",
+  true
+);
+
 /* ======================================================================== */
 
 const filesToPublish = [
