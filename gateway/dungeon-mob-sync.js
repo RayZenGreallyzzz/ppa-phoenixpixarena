@@ -4,7 +4,7 @@
   var S={
     started:false,room:'',seq:0,lastSend:0,lastHeartbeat:0,
     states:new Map(),hp:new Map(),tombs:new Map(),seen:0,
-    owned:0,remoteOwned:0,synced:0,lastNetAt:0
+    owned:0,remoteOwned:0,synced:0,lastNetAt:0,intentUntil:0,lastIntentAt:0
   };
   var APPLYING=0;
 
@@ -95,11 +95,37 @@
     if(until>old)S.tombs.set(key,until);
   }
 
+  function markCombatIntent(ms){
+    var now=Date.now();
+    S.lastIntentAt=now;
+    S.intentUntil=Math.max(S.intentUntil,now+Math.max(250,Number(ms)||900));
+  }
+  function isCombatControl(t){
+    if(!t||!t.closest)return false;
+    return !!t.closest('#bAtk,#s1,#s2,#s3,#s4');
+  }
+  function armCombatIntent(){
+    document.addEventListener('pointerdown',function(e){
+      if(isCombatControl(e.target))markCombatIntent(e.target&&e.target.id==='bAtk'?1200:2200);
+    },true);
+    document.addEventListener('touchstart',function(e){
+      if(isCombatControl(e.target))markCombatIntent(e.target&&e.target.id==='bAtk'?1200:2200);
+    },{capture:true,passive:true});
+  }
+  function damageAllowed(e){
+    var now=Date.now();
+    if(now<=S.intentUntil){
+      if(e)e.__ppaCombatTrackedUntil=Math.max(Number(e.__ppaCombatTrackedUntil)||0,now+15000);
+      return true;
+    }
+    return !!(e&&now<Number(e.__ppaCombatTrackedUntil||0));
+  }
+
   function sendDamage(e,key,before,after){
     var amount=Math.max(0,Number(before)-Number(after));
-    if(!(amount>0)||!key)return;
+    if(!(amount>0)||!key||!damageAllowed(e))return false;
     var id=(selfId()||'self')+':'+(++S.seq)+':'+Date.now().toString(36);
-    send({type:'mob-damage',key:key,amount:r2(amount),before:r2(before),event:id});
+    return send({type:'mob-damage',key:key,amount:r2(amount),before:r2(before),event:id});
   }
 
   function localCombatEvidence(e){
@@ -139,13 +165,18 @@
           Promise.resolve().then(function(){
             if(Number(e.__ppaDamageToken)!==token)return;
             if(!active())return;
-            if(!localCombatEvidence(e)){
+            if(!damageAllowed(e)){
               hp=old;
               e.__ppaLethalPending=false;
               return;
             }
             S.hp.set(key,{hp:Math.max(0,nv),at:Date.now()});
-            sendDamage(e,key,old,nv);
+            if(!sendDamage(e,key,old,nv)){
+              hp=old;
+              e.__ppaLethalPending=false;
+              S.hp.delete(key);
+              return;
+            }
             if(!lethal)hp=nv;
           });
         }
@@ -230,7 +261,9 @@
       S.states.set(key,{from:from,x:x,y:y,aggro:z[5]==null?null:Number(z[5])!==0,
         animDir:z[6]==null?null:Number(z[6]),animMoving:z[7]==null?null:Number(z[7])!==0,
         spiderDir:z[8]==null?null:Number(z[8]),spiderMoving:z[9]==null?null:Number(z[9])!==0,at:now});
-      S.hp.set(key,{hp:hp,at:now});
+      // Position/animation snapshots are not death authority.
+      // Positive HP is useful for late joiners; zero HP is accepted only through mob-dead/mob-hp.
+      if(hp>0)S.hp.set(key,{hp:hp,at:now});
     }
     var dead=Array.isArray(m.dead)?m.dead:[];
     for(var j=0;j<dead.length;j++){
@@ -308,7 +341,7 @@
       if(tomb>now){setHp(e,0);continue}
 
       var h=S.hp.get(key);
-      if(h&&now-h.at<3500&&Number.isFinite(Number(h.hp))&&!e.__ppaLethalPending)setHp(e,h.hp);
+      if(h&&now-h.at<3500&&Number.isFinite(Number(h.hp))&&Number(h.hp)>0&&!e.__ppaLethalPending)setHp(e,h.hp);
 
       var owner=ownerFor(e,ps);
       if(owner&&owner!==sid){
@@ -333,6 +366,7 @@
     if(S.started)return;S.started=true;
     installDropGuard();
     setTimeout(installDropGuard,250);
+    armCombatIntent();
     setInterval(tick,50);
     document.addEventListener('visibilitychange',function(){if(!document.hidden){S.lastSend=0;S.lastHeartbeat=0}},{passive:true});
   }
