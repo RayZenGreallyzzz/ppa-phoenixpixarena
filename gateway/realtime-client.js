@@ -26,6 +26,12 @@
   }
   function rawRoom(){
     try{
+      // 41-60 must use a dungeon-* room or server-authoritative mobs/bosses never activate.
+      if(typeof P!=='undefined'&&P&&P.scene==='dungeon'&&typeof DUNGEON_MODE!=='undefined'){
+        if(DUNGEON_MODE==='41-60')return 'dungeon-41-60';
+        if(DUNGEON_MODE==='21+')return 'dungeon-21-40';
+        if(DUNGEON_MODE==='1-20')return 'dungeon-1-20';
+      }
       return canonicalRoom(typeof ppaOnlineRoomKey==='function'?ppaOnlineRoomKey():'safe');
     }catch(_){return RT.lastRoom||'safe'}
   }
