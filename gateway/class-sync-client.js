@@ -1,6 +1,8 @@
 (function(){
   'use strict';
-  var done=false,tries=0;
+
+  var lastSynced='',busy=false,timer=0;
+
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var t=tg();return t&&t.initData?String(t.initData):''}
   function normalize(v){
@@ -19,24 +21,30 @@
   }
   function currentClass(){
     var vals=[];
-    try{if(window.P){vals.push(P.classKey,P.cls,P.className,P._saved&&P._saved.cls)}}catch(_){}
-    try{if(window.INV){vals.push(INV.classKey,INV.cls,INV.className)}}catch(_){}
+    try{if(typeof P!=='undefined'&&P)vals.push(P.classKey,P.cls,P.className,P._saved&&P._saved.cls)}catch(_){}
+    try{if(typeof INV!=='undefined'&&INV)vals.push(INV.classKey,INV.cls,INV.className)}catch(_){}
     try{var s=JSON.parse(localStorage.getItem('pxSave')||'null');if(s)vals.push(s.classKey,s.cls,s.className)}catch(_){}
     for(var i=0;i<vals.length;i++){var k=normalize(vals[i]);if(k)return k}
     return'';
   }
+  function arm(ms){clearTimeout(timer);timer=setTimeout(sync,Math.max(700,ms||4000))}
   async function sync(){
-    if(done)return;
+    if(busy){arm(2500);return}
     var d=initData(),k=currentClass();
-    if(!d||!k){if(++tries<20)setTimeout(sync,350);return}
-    done=true;
+    if(!d||!k){arm(2500);return}
+    if(k===lastSynced){arm(10000);return}
+    busy=true;
     try{
       var r=await fetch('/api/profile/sync-class',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({initData:d,classKey:k}),credentials:'same-origin',cache:'no-store'});
       var j=null;try{j=await r.json()}catch(_){}
       if(!r.ok||!j||j.ok===false)throw new Error((j&&j.message)||('HTTP '+r.status));
+      lastSynced=k;
       try{sessionStorage.setItem('ppaSyncedClass',k)}catch(_){}
-      setTimeout(function(){try{if(window.PPA_REALTIME_RECONNECT)window.PPA_REALTIME_RECONNECT()}catch(_){}},180);
-    }catch(e){done=false;if(++tries<20)setTimeout(sync,700)}
+    }catch(e){}
+    busy=false;arm(lastSynced===k?10000:3000);
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(sync,450)},{once:true});else setTimeout(sync,450);
+
+  try{lastSynced=String(sessionStorage.getItem('ppaSyncedClass')||'')}catch(_){}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){arm(500)},{once:true});else arm(500);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)arm(700)},{passive:true});
 })();
