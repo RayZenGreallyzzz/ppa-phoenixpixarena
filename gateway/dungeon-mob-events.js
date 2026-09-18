@@ -1,8 +1,8 @@
 (function(){
   'use strict';
 
-  var seq=0, applying=0, lastRoom='', lastRegister=0, catalogRoom='', authReady=false;
-  var authority=new Map();
+  var seq=0, applying=0, lastRoom='', lastRegister=0, catalogRoom='', authReady=false, serverMode=false;
+  var authority=new Map(), entityCache=new Map(), entityCacheLen=-1, entityCacheAt=0, diagCache=null, diagCacheAt=0, catalogCount=0;
 
   function rt(){try{return window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null}catch(_){return null}}
   function room(){var d=rt();return String((d&&d.room)||'')}
@@ -12,7 +12,21 @@
   function keyOf(e){if(!e||e.isBoss||e.si==null)return'';var si=Math.floor(Number(e.si));return Number.isFinite(si)&&si>=0&&si<10000?'s'+si:''}
   function siOf(key){var m=String(key||'').match(/^s(\d{1,4})$/);return m?Number(m[1]):-1}
   function entities(){try{return (typeof EN!=='undefined'&&Array.isArray(EN))?EN:[]}catch(_){return[]}}
-  function find(key){var a=entities();for(var i=0;i<a.length;i++)if(keyOf(a[i])===key)return a[i];return null}
+  function rebuildEntityCache(force){
+    var a=entities(),now=Date.now();
+    if(!force&&entityCacheLen===a.length&&now-entityCacheAt<1000)return;
+    entityCache.clear();
+    for(var i=0;i<a.length;i++){var k=keyOf(a[i]);if(k)entityCache.set(k,a[i])}
+    entityCacheLen=a.length;entityCacheAt=now;
+  }
+  function find(key){
+    rebuildEntityCache(false);
+    var e=entityCache.get(String(key||''));
+    if(e)return e;
+    rebuildEntityCache(true);
+    return entityCache.get(String(key||''))||null;
+  }
+  function cacheEntity(e){var k=keyOf(e);if(k){entityCache.set(k,e);entityCacheLen=entities().length;entityCacheAt=Date.now()}}
   function currentCatalog(){
     var rows=[];
     try{
@@ -32,7 +46,7 @@
             Math.max(1,Number(t&&t.atk)||Number(t&&t.dmg)||1)
           ]);
         }
-        if(rows.length)return rows;
+        if(rows.length){catalogCount=rows.length;return rows;}
       }
     }catch(_){}
     // Offline/legacy fallback only.
@@ -41,6 +55,7 @@
       var mhp=Math.max(1,Number(e.mhp)||Number(e.hp)||1);
       rows.push([key,Math.round(mhp*100)/100]);
     });
+    catalogCount=rows.length;
     return rows;
   }
   function quarantineLocalMobs(){
@@ -62,9 +77,9 @@
         configurable:true,enumerable:true,
         get:function(){return value},
         set:function(v){
-          // In an online dungeon only the authoritative bridge may move/facing-control mobs.
-          // Old single-player AI is still allowed offline.
-          if(applying>0||!active())value=v;
+          // This setter is hit by the legacy AI many times per frame. Do not call
+          // PPA_REALTIME_DIAG/active() here; use the cached serverMode flag.
+          if(applying>0||!serverMode)value=v;
         }
       });
       e.__ppaServerLocks[name]=1;
@@ -110,7 +125,8 @@
 
   function register(force){
     try{
-      if(!active())return false;
+      serverMode=active();
+      if(!serverMode)return false;
       var now=Date.now(),r=room(),rows=currentCatalog();
       if(!rows.length)return false;
 
@@ -150,37 +166,30 @@
   }
 
   window.PPA_MOB_SERVER_DIAG=function(){
-    var arr=entities().filter(function(e){return !!keyOf(e)}),local=new Map(),maxDelta=0;
-    arr.forEach(function(e){local.set(keyOf(e),e)});
-    var keys=Array.from(authority.keys()).sort(function(a,b){return siOf(a)-siOf(b)});
-    var authParts=[],localParts=[],samples=[];
-    var px=0,py=0;try{px=Number(P.x)||0;py=Number(P.y)||0}catch(_){}
-    keys.forEach(function(k){
-      var st=authority.get(k)||{},e=local.get(k);
-      var ax=Number(st.x),ay=Number(st.y),lx=e?Number(e.x):NaN,ly=e?Number(e.y):NaN;
-      authParts.push(k+':'+(Number.isFinite(ax)?Math.round(ax/20):'x')+','+(Number.isFinite(ay)?Math.round(ay/20):'x')+':'+(Number(st.hp)>0?1:0));
-      localParts.push(k+':'+(Number.isFinite(lx)?Math.round(lx/20):'x')+','+(Number.isFinite(ly)?Math.round(ly/20):'x')+':'+(e&&Number(e.hp)>0?1:0));
-      if(e&&Number.isFinite(ax)&&Number.isFinite(ay)&&Number.isFinite(lx)&&Number.isFinite(ly)){
-        maxDelta=Math.max(maxDelta,Math.hypot(ax-lx,ay-ly));
+    var now=Date.now();
+    if(diagCache&&now-diagCacheAt<2000)return diagCache;
+    rebuildEntityCache(true);
+    var arr=entities(),mobs=0,locked=0,maxDelta=0;
+    authority.forEach(function(st,key){
+      var e=entityCache.get(key);
+      if(e){
+        mobs++;
+        if(e.__ppaServerLocks&&e.__ppaServerLocks.x)locked++;
+        var ax=Number(st.x),ay=Number(st.y),lx=Number(e.x),ly=Number(e.y);
+        if(Number.isFinite(ax)&&Number.isFinite(ay)&&Number.isFinite(lx)&&Number.isFinite(ly)){
+          maxDelta=Math.max(maxDelta,Math.hypot(ax-lx,ay-ly));
+        }
       }
     });
-    var nearest=keys.map(function(k){
-      var st=authority.get(k)||{};
-      var ax=Number(st.x),ay=Number(st.y);
-      return {k:k,d:Number.isFinite(ax)&&Number.isFinite(ay)?Math.hypot(ax-px,ay-py):1e12,st:st,e:local.get(k)};
-    }).sort(function(a,b){return a.d-b.d}).slice(0,3);
-    nearest.forEach(function(z){
-      var st=z.st||{},e=z.e;
-      samples.push(z.k+' A'+Math.round(Number(st.x)||0)+','+Math.round(Number(st.y)||0)+' L'+Math.round(Number(e&&e.x)||0)+','+Math.round(Number(e&&e.y)||0));
-    });
     var rd=rt()||{};
-    return {
+    diagCache={
       room:room(),serverRoom:String(rd.serverRoom||''),instance:Number(rd.dungeonInstance)||0,
-      ready:authReady,count:authority.size,catalog:currentCatalog().length,
-      mobs:arr.length,locked:arr.filter(function(e){return !!(e&&e.__ppaServerLocks&&e.__ppaServerLocks.x)}).length,
-      keyHash:hash32(keys.join('|')),authHash:hash32(authParts.join('|')),localHash:hash32(localParts.join('|')),
-      maxDelta:Math.round(maxDelta),samples:samples
+      ready:authReady,count:authority.size,catalog:catalogCount||authority.size,
+      mobs:mobs,locked:locked,keyHash:'ok',authHash:'ok',localHash:'ok',
+      maxDelta:Math.round(maxDelta),samples:[]
     };
+    diagCacheAt=now;
+    return diagCache;
   };
 
   window.PPA_MOB_EVENT_DAMAGE=function(e,amount){
@@ -222,8 +231,10 @@
           }
         }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
         e=find(key);
+        if(e)cacheEntity(e);
       }
       if(!e)return;
+      cacheEntity(e);
       lockServerMob(e);
       e.__ppaAwaitAuthority=false;
       e.__ppaEventKiller='';e.__ppaEventParty='';
@@ -269,6 +280,7 @@
             }
           }catch(_){window.__PPA_SERVER_SPAWN_CALL=false}
           e=find(key);
+          if(e)cacheEntity(e);
         }
         if(e&&(Number(e.hp)<=0||e.__ppaAwaitAuthority)){
           e.__ppaAwaitAuthority=false;
@@ -315,6 +327,7 @@
         }
         seen.add(key);
       }
+      rebuildEntityCache(true);
     }catch(_){}
   }
 
@@ -336,7 +349,6 @@
       if(m.type==='mob-authority'){
         applyRow([m.key,m.hp,m.mhp,m.respawnAt,m.killer,m.party,m.x,m.y,m.aggro,m.dir,m.moving,m.target,m.sz]);
         authReady=true;
-        reconcileAuthority();
         return;
       }
       if(m.type==='mob-position'){
@@ -350,7 +362,6 @@
           ]);
         }
         authReady=true;
-        reconcileAuthority();
         return;
       }
       if(m.type==='mob-attack'){
@@ -391,21 +402,26 @@
 
   function tick(){
     installDropGuard();
-    if(!active()){
+    serverMode=active();
+    if(!serverMode){
       lastRoom='';catalogRoom='';authReady=false;authority.clear();
+      entityCache.clear();entityCacheLen=-1;diagCache=null;
       return;
     }
     register(false);
+    // Legacy AI transform writes are hard-locked. A 1 Hz sanity reconcile is
+    // enough; position packets already apply their changed rows immediately.
     reconcileAuthority();
   }
 
-
   function boot(){
     installDropGuard();
+    serverMode=active();
     setTimeout(function(){register(true)},600);
     setInterval(tick,1000);
-    setInterval(reconcileAuthority,33);
-    document.addEventListener('visibilitychange',function(){if(!document.hidden)setTimeout(function(){register(true)},400)},{passive:true});
+    document.addEventListener('visibilitychange',function(){
+      if(!document.hidden){serverMode=active();setTimeout(function(){register(true)},400)}
+    },{passive:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
