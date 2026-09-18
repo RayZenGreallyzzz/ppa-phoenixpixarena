@@ -24,7 +24,7 @@ function cleanClass(v) {
 
 function cleanMobKey(v) {
   v = String(v || '');
-  return /^s\d{1,4}$/.test(v) ? v : '';
+  return (/^s\d{1,4}$/.test(v) || v === 'b60') ? v : '';
 }
 
 function finite(v, min, max, fallback = 0) {
@@ -36,6 +36,7 @@ function finite(v, min, max, fallback = 0) {
 const DUNGEON_CAPACITY = 40;
 const DUNGEON_RESERVE_MS = 90_000;
 const DUNGEON_MOB_RESPAWN_MS = 10_000;
+const DUNGEON_BOSS60_RESPAWN_MS = 6 * 60 * 60 * 1000;
 
 function dungeonInfo(v) {
   const room = cleanRoom(v);
@@ -717,8 +718,13 @@ export class RealtimeHub extends BaseRealtimeHub {
       const hx = Number(rec.hx), hy = Number(rec.hy);
       const sp = Math.max(0.1, Number(rec.sp) || 1);
       const sz = Math.max(8, Number(rec.sz) || 30);
-      const reach = 42 + (sz - 30) * 0.35;
-      const leash = 180;
+      const mobKey = String(ck).slice(prefix.length);
+      const boss60 = mobKey === 'b60';
+      const reach = boss60 ? 112 : (42 + (sz - 30) * 0.35);
+      const leash = boss60 ? 420 : 180;
+      const aggroRadius = boss60 ? 420 : 185;
+      const reacquireRadius = boss60 ? 520 : 260;
+      const attackEvery = boss60 ? 1200 : 850;
       let target = rec.target ? byPid.get(String(rec.target)) : null;
 
       // Normal dungeon mobs must be able to attack without relying on the old
@@ -730,7 +736,7 @@ export class RealtimeHub extends BaseRealtimeHub {
           const pd = Math.hypot(p.x - x, p.y - y);
           if (pd < bd) { bd = pd; best = p; }
         }
-        if (best && bd <= 185) {
+        if (best && bd <= aggroRadius) {
           rec.aggro = true;
           rec.target = best.pid;
           target = best;
@@ -743,7 +749,7 @@ export class RealtimeHub extends BaseRealtimeHub {
           const pd = Math.hypot(p.x - x, p.y - y);
           if (pd < bd) { bd = pd; best = p; }
         }
-        if (best && bd <= 260) {
+        if (best && bd <= reacquireRadius) {
           target = best;
           rec.target = best.pid;
         }
@@ -753,7 +759,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (rec.aggro && target) {
         const dx = target.x - x, dy = target.y - y, dist = Math.hypot(dx, dy);
         const homeD = Math.hypot(x - hx, y - hy);
-        if (dist > 260 || homeD > leash + 20) {
+        if (dist > reacquireRadius || homeD > leash + 20) {
           rec.aggro = false;
           rec.target = '';
           target = null;
@@ -768,7 +774,7 @@ export class RealtimeHub extends BaseRealtimeHub {
           }
           const nextAttackAt = Math.max(0, Number(rec.nextAttackAt) || 0);
           if (now >= nextAttackAt) {
-            rec.nextAttackAt = now + 850;
+            rec.nextAttackAt = now + attackEvery;
             this.roomBroadcast(room, {
               type: 'mob-attack',
               room,
@@ -998,7 +1004,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         rec.moving = false;
         rec.nextAttackAt = 0;
         health.set(ck, rec);
-        respawnAt = now + DUNGEON_MOB_RESPAWN_MS;
+        respawnAt = now + (key === 'b60' ? DUNGEON_BOSS60_RESPAWN_MS : DUNGEON_MOB_RESPAWN_MS);
         dead.set(ck, { room, key, at: respawnAt, killer, party });
         setTimeout(async () => {
           try {
