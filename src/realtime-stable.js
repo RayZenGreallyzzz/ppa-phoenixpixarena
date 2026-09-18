@@ -449,19 +449,60 @@ export class RealtimeHub extends BaseRealtimeHub {
   }
 
   pruneMobStores(now = Date.now()) {
-    const { health, dead, events } = this.mobStores();
-    for (const [ck, d] of dead) {
-      if (!d || Number(d.at) <= now) {
-        dead.delete(ck);
-        health.delete(ck);
-      }
-    }
+    const { events } = this.mobStores();
     for (const [id, at] of events) if (now - Number(at || 0) > 15000) events.delete(id);
+  }
+
+  processMobRespawns(room, now = Date.now()) {
+    room = cleanRoom(room);
+    if (!room.startsWith('dungeon-')) return;
+    this.pruneMobStores(now);
+    const { health, dead } = this.mobStores();
+    for (const [ck, d] of [...dead.entries()]) {
+      if (!d || d.room !== room || Number(d.at) > now) continue;
+      const rec = health.get(ck);
+      if (!rec) { dead.delete(ck); continue; }
+      rec.hp = Math.max(1, Number(rec.mhp) || 1);
+      rec.updatedAt = now;
+      rec.killer = '';
+      rec.party = '';
+      health.set(ck, rec);
+      dead.delete(ck);
+      this.roomBroadcast(room, {
+        type: 'mob-authority', room, key: d.key,
+        hp: rec.hp, mhp: rec.mhp, respawnAt: 0,
+        killer: '', party: '', ts: now,
+      }, null);
+    }
+  }
+
+  sendMobAuthoritySnapshot(ws, room, now = Date.now()) {
+    room = cleanRoom(room);
+    if (!room.startsWith('dungeon-')) return;
+    this.processMobRespawns(room, now);
+    const { health, dead } = this.mobStores();
+    const prefix = room + '|';
+    const rows = [];
+    for (const [ck, rec] of health.entries()) {
+      if (!String(ck).startsWith(prefix) || !rec) continue;
+      const key = String(ck).slice(prefix.length);
+      const d = dead.get(ck);
+      rows.push([
+        key,
+        Math.max(0, Number(rec.hp) || 0),
+        Math.max(1, Number(rec.mhp) || 1),
+        d && Number(d.at) > now ? Number(d.at) : 0,
+        d ? String(d.killer || '') : '',
+        d ? String(d.party || '') : '',
+      ]);
+      if (rows.length >= 256) break;
+    }
+    wsJson(ws, { type: 'mob-authority-snapshot', room, rows, ts: now });
   }
 
   mobDeadRows(room, now = Date.now()) {
     room = cleanRoom(room);
-    this.pruneMobStores(now);
+    this.processMobRespawns(room, now);
     const { dead } = this.mobStores();
     const out = [];
     for (const d of dead.values()) {
@@ -522,23 +563,79 @@ export class RealtimeHub extends BaseRealtimeHub {
     const a = attOf(ws);
     const now = Date.now();
 
+    if (m.type === 'mob-catalog') {
+      const room = cleanRoom(a.room);
+      if (!room.startsWith('dungeon-') || cleanRoom(m.room || room) !== room) return;
+      this.processMobRespawns(room, now);
+      const { health } = this.mobStores();
+      const rows = Array.isArray(m.rows) ? m.rows.slice(0, 256) : [];
+      for (const row of rows) {
+        if (!Array.isArray(row) || row.length < 2) continue;
+        const key = cleanMobKey(row[0]);
+        const mhp = Math.max(1, finite(row[1], 1, 10000000, 1));
+        if (!key) continue;
+        const ck = this.mobCompound(room, key);
+        let rec = health.get(ck);
+        if (!rec) {
+          rec = { hp: mhp, mhp, updatedAt: now, killer: '', party: '' };
+          health.set(ck, rec);
+        } else {
+          rec.mhp = mhp;
+          if (!Number.isFinite(Number(rec.hp))) rec.hp = mhp;
+          rec.hp = Math.max(0, Math.min(Number(rec.hp) || 0, mhp));
+          rec.updatedAt = now;
+          health.set(ck, rec);
+        }
+      }
+      this.sendMobAuthoritySnapshot(ws, room, now);
+      return;
+    }
+
     if (m.type === 'mob-hit-event') {
       const room = cleanRoom(a.room);
       const key = cleanMobKey(m.key);
       const amount = finite(m.amount, 0, 10000000, 0);
+      const mhp = Math.max(1, finite(m.mhp, 1, 10000000, 1));
       const event = String(m.event || '').slice(0, 96);
       if (!room.startsWith('dungeon-') || cleanRoom(m.room || room) !== room) return;
       if (!key || !(amount > 0)) return;
+
+      this.processMobRespawns(room, now);
+      const { health, dead, events } = this.mobStores();
+      if (event && events.has(event)) return;
+      if (event) events.set(event, now);
+
+      const ck = this.mobCompound(room, key);
+      let rec = health.get(ck);
+      if (!rec) rec = { hp: mhp, mhp, updatedAt: now, killer: '', party: '' };
+      rec.mhp = Math.max(1, Number(rec.mhp) || mhp);
+      const existingDead = dead.get(ck);
+      if (existingDead && Number(existingDead.at) > now) {
+        this.sendMobAuthoritySnapshot(ws, room, now);
+        return;
+      }
+
+      rec.hp = Math.max(0, Math.min(rec.mhp, Number(rec.hp) || rec.mhp) - amount);
+      rec.updatedAt = now;
+      rec.killer = String(a.pid || '');
+      rec.party = String(a.partyId || '');
+      health.set(ck, rec);
+
+      let respawnAt = 0, killer = rec.killer, party = rec.party;
+      if (rec.hp <= 0) {
+        respawnAt = now + 10000;
+        dead.set(ck, { room, key, at: respawnAt, killer, party });
+        setTimeout(() => {
+          try { this.processMobRespawns(room, Date.now()); } catch (_) {}
+        }, 10050);
+      }
+
       this.roomBroadcast(room, {
-        type: 'mob-hit-event',
-        room,
-        key,
-        amount: Math.round(amount * 100) / 100,
-        attacker: String(a.pid || ''),
-        party: String(a.partyId || ''),
-        event,
-        ts: now,
-      }, ws);
+        type: 'mob-authority', room, key,
+        hp: Math.round(rec.hp * 100) / 100,
+        mhp: Math.round(rec.mhp * 100) / 100,
+        respawnAt, killer, party, event, ts: now,
+      }, null);
       return;
     }
 
@@ -682,6 +779,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     if (m.type === 'ping') {
       a.lastSeenAt = now;
       ws.serializeAttachment(a);
+      this.processMobRespawns(cleanRoom(a.room), now);
       wsJson(ws, {
         type: 'pong',
         ts: now,
