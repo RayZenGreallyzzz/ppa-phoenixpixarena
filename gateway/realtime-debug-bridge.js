@@ -17,6 +17,10 @@
     try{
       var box=document.getElementById('ppaPerfMonitorSafe');
       if(!box||box.style.display==='none')return;
+      box.style.height='auto';
+      box.style.minHeight='0';
+      box.style.maxHeight='none';
+      box.style.overflow='visible';
       var d=window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null;
       if(!d)return;
 
@@ -41,18 +45,21 @@
       var ma=null;try{ma=window.PPA_MOB_SERVER_DIAG?window.PPA_MOB_SERVER_DIAG():null}catch(_){}
       var authLine='';
       if(ma){
-        authLine='<div class="d">MOB '+(ma.ready?'READY':'WAIT')+' · A '+Math.max(0,Number(ma.count)||0)+'/'+Math.max(0,Number(ma.catalog)||0)+' · L '+Math.max(0,Number(ma.mobs)||0)+' · LOCK '+Math.max(0,Number(ma.locked)||0)+'</div>'+
-          '<div class="d">MOB HASH K '+esc(ma.keyHash||'—')+' · A '+esc(ma.authHash||'—')+' · L '+esc(ma.localHash||'—')+' · Δ '+Math.max(0,Number(ma.maxDelta)||0)+'</div>';
+        authLine='<div class="'+(ma.ready?'g':'w')+'">MOB '+(ma.ready?'READY':'WAIT')+
+          ' A'+Math.max(0,Number(ma.count)||0)+'/'+Math.max(0,Number(ma.catalog)||0)+
+          ' L'+Math.max(0,Number(ma.mobs)||0)+' K'+esc(ma.keyHash||'—')+
+          ' A'+esc(ma.authHash||'—')+' L'+esc(ma.localHash||'—')+
+          ' Δ'+Math.max(0,Number(ma.maxDelta)||0)+'</div>';
       }else if(String(room).indexOf('dungeon-')===0){
         authLine='<div class="b">MOB BRIDGE OFF</div>';
       }
       var instLine=inst?('<div class="d">INSTANCE '+inst+' · '+roomPeers+' / '+cap+'</div>'):'';
 
       box.innerHTML='<div><span class="'+fcls+'">FPS '+fps+'</span> &nbsp; <span class="'+clsPing(ping)+'">PING '+(ping==null?'—':ping+' ms')+'</span></div>'+
-        '<div class="d">PLAYERS '+players+' · ROOM '+roomPeers+' · VISIBLE '+visible+' / '+drawn+'</div>'+instLine+
+        '<div class="d">PLAYERS '+players+' · ROOM '+roomPeers+' · VISIBLE '+visible+' / '+drawn+'</div>'+instLine+authLine+
         '<div class="d">WS '+(d.connected?'✓':'×')+' · SERVER '+(age==null?'—':age+' ms')+'</div>'+
         '<div class="d">CLIENT '+esc(room)+'</div>'+
-        '<div class="d">SERVER '+esc(serverRoom)+'</div>'+authLine+mobLine;
+        '<div class="d">SERVER '+esc(serverRoom)+'</div>'+mobLine;
     }catch(_){}
   }
 
