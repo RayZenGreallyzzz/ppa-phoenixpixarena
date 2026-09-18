@@ -564,11 +564,14 @@ export class RealtimeHub extends BaseRealtimeHub {
           rec = { hp: 0, mhp, updatedAt: now };
           health.set(ck, rec);
         } else if (!rec || now - Number(rec.updatedAt || 0) > 30000) {
-          rec = { hp: Math.min(clientHp, mhp), mhp, updatedAt: now };
+          // A state snapshot is never allowed to manufacture a death.
+          // Fresh mobs start from positive client HP (or full HP if client reported 0).
+          const seedHp = clientHp > 0 ? Math.min(clientHp, mhp) : mhp;
+          rec = { hp: Math.max(1, seedHp), mhp, updatedAt: now };
           health.set(ck, rec);
         } else {
           rec.mhp = Math.max(1, Number(rec.mhp) || mhp);
-          rec.hp = Math.max(0, Math.min(Number(rec.hp) || 0, rec.mhp));
+          rec.hp = Math.max(1, Math.min(Number(rec.hp) || rec.mhp, rec.mhp));
           rec.updatedAt = now;
         }
         rows.push([
