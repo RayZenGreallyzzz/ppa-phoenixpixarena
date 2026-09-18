@@ -60,7 +60,7 @@ function packetFromAtt(a) {
     y: Number(a.y) || 0,
     h: Math.max(0, Number(a.h) || 0),
     m: Math.max(1, Number(a.m) || 1),
-    f: Number(a.f) || 1,
+    f: Number.isFinite(Number(a.f)) ? Number(a.f) : 1,
     a: String(a.a || 'idle').slice(0, 12),
     l: Math.max(1, Math.min(999, Math.round(Number(a.l) || 1))),
     b: Math.max(0, Math.round(Number(a.b) || 0)),
@@ -720,7 +720,10 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.y = Number.isFinite(Number(m.y)) ? Math.round(Number(m.y) * 10) / 10 : Number(a.y) || 0;
       a.h = Math.max(0, Math.round(Number(m.h) || 0));
       a.m = Math.max(1, Math.round(Number(m.m) || 1));
-      a.f = Math.max(1, Math.min(8, Math.round(Number(m.f) || 1)));
+      {
+        const face = Number(m.f);
+        a.f = Number.isFinite(face) ? Math.max(-8, Math.min(8, Math.round(face))) : (Number.isFinite(Number(a.f)) ? Number(a.f) : 1);
+      }
       a.a = String(m.a || 'idle').slice(0, 12);
       a.l = Math.max(1, Math.min(999, Math.round(Number(m.l) || Number(a.l) || 1)));
       a.b = Math.max(0, Math.round(Number(m.b) || Number(a.b) || 0));
