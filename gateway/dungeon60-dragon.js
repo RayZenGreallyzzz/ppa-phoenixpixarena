@@ -115,7 +115,72 @@
     }catch(err){console.warn('PPA dragon60 draw',err);return false}
   };
 
+  function installDragonLoot(){
+    try{
+      if(window.__PPA_DRAGON60_LOOT_V1)return;
+      if(typeof dropLoot!=='function')return;
+      var base=dropLoot;
+      var wrapped=function(e){
+        if(!e||!e.isDungeon60Boss)return base.apply(this,arguments);
+        // Dragon has its own table; never inherit Phoenix feather/rune rolls.
+        try{
+          if(typeof pushMaterialDrop==='function'){
+            pushMaterialDrop(e,'common',4+Math.floor(Math.random()*4));
+            if(Math.random()<.80)pushMaterialDrop(e,'uncommon',2+Math.floor(Math.random()*3));
+            if(Math.random()<.50)pushMaterialDrop(e,'rare',1+Math.floor(Math.random()*2));
+          }
+          if(typeof pushStoneDrop==='function'){
+            if(Math.random()<.75)pushStoneDrop(e,'normal',1+Math.floor(Math.random()*2));
+            if(Math.random()<.08)pushStoneDrop(e,'premium',1);
+            if(Math.random()<.12)pushStoneDrop(e,'rune',1);
+          }
+          if(typeof genItem==='function'&&typeof LOOT!=='undefined'&&Array.isArray(LOOT)){
+            var roll=Math.random(),rar=roll<.02?'epic':(roll<.16?'rare':null);
+            if(rar){
+              var it=genItem(60,true,rar);
+              LOOT.push({x:e.x+(Math.random()-.5)*42,y:e.y+(Math.random()-.5)*42,kind:'gear',item:it,gear:it,bob:Math.random()*6});
+            }
+          }
+        }catch(_){}
+        return;
+      };
+      wrapped.__ppaDragon60=1;
+      try{dropLoot=wrapped}catch(_){}
+      try{window.dropLoot=wrapped}catch(_){}
+      window.__PPA_DRAGON60_LOOT_V1=true;
+    }catch(_){}
+  }
+
+  function installDragonInfo(){
+    try{
+      if(window.__PPA_DRAGON60_INFO_V1)return;
+      if(typeof mobDropInfo!=='function')return;
+      var base=mobDropInfo;
+      var wrapped=function(e){
+        if(e&&e.isDungeon60Boss)return [
+          ['Золото','100%'],
+          ['Синий шмот/оружие','14%'],
+          ['Фиолетовый шмот/оружие','2%'],
+          ['Обычный ресурс ×4–7','100%'],
+          ['Зелёный ресурс ×2–4','80%'],
+          ['Синий ресурс ×1–2','50%'],
+          ['Обычный камень заточки ×1–2','75%'],
+          ['Премиум камень заточки','8%'],
+          ['Премиум руна заточки','12%'],
+          ['Перо Феникса','не выпадает']
+        ];
+        return base.apply(this,arguments);
+      };
+      try{mobDropInfo=wrapped}catch(_){}
+      try{window.mobDropInfo=wrapped}catch(_){}
+      window.__PPA_DRAGON60_INFO_V1=true;
+    }catch(_){}
+  }
+
   window.PPA_DRAGON60_DIAG=function(){
     var e=boss();return{present:!!e,hp:e?Number(e.hp)||0:0,mhp:e?Number(e.mhp)||0:0,state:e?e.dragonState:'none'};
   };
+
+  installDragonLoot();installDragonInfo();
+  setTimeout(function(){installDragonLoot();installDragonInfo()},400);
 })();
