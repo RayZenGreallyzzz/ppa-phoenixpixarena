@@ -17,6 +17,11 @@ function cleanPet(v) {
   return String(v || '').trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 48);
 }
 
+function cleanClass(v) {
+  v = String(v || '').trim().toLowerCase();
+  return ['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'].includes(v) ? v : '';
+}
+
 function cleanMobKey(v) {
   v = String(v || '');
   return /^s\d{1,4}$/.test(v) ? v : '';
@@ -727,6 +732,10 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.a = String(m.a || 'idle').slice(0, 12);
       a.l = Math.max(1, Math.min(999, Math.round(Number(m.l) || Number(a.l) || 1)));
       a.b = Math.max(0, Math.round(Number(m.b) || Number(a.b) || 0));
+      {
+        const liveClass = cleanClass(m.c);
+        if (liveClass) a.classKey = liveClass;
+      }
       a.q = (Number(a.q) || 0) + 1;
       a.room = currentRoom;
 
