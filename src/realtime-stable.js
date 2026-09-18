@@ -826,6 +826,17 @@ export class RealtimeHub extends BaseRealtimeHub {
     return false;
   }
 
+  mobFacingDir(dx, dy, prev = 1) {
+    const ax = Math.abs(Number(dx) || 0), ay = Math.abs(Number(dy) || 0);
+    prev = Math.round(Number(prev));
+    if (!(ax + ay > 0.01)) return (prev >= 0 && prev <= 3) ? prev : 1;
+    const horiz = prev === 2 || prev === 3;
+    // 22% hysteresis around diagonals: stops up/side/up/side flicker.
+    if (horiz && ax >= ay * 0.78) return dx < 0 ? 2 : 3;
+    if (!horiz && prev >= 0 && prev <= 1 && ay >= ax * 0.78) return dy < 0 ? 0 : 1;
+    return ax > ay ? (dx < 0 ? 2 : 3) : (dy < 0 ? 0 : 1);
+  }
+
   tickMobAI(room, now = Date.now()) {
     room = cleanRoom(room);
     if (!mobAuthorityRoom(room)) return false;
@@ -920,7 +931,7 @@ export class RealtimeHub extends BaseRealtimeHub {
           moving = step > 0.01;
         } else if (dist <= reach && !titan) {
           if (Math.abs(dx) + Math.abs(dy) > 0.01) {
-            rec.dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 0 : 1);
+            rec.dir = this.mobFacingDir(dx, dy, rec.dir);
           }
           const nextAttackAt = Math.max(0, Number(rec.nextAttackAt) || 0);
           if (now >= nextAttackAt) {
@@ -966,7 +977,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       let fx = vx, fy = vy;
       if (!moving && target) { fx = target.x - x; fy = target.y - y; }
       if (Math.abs(fx) + Math.abs(fy) > 0.01) {
-        rec.dir = Math.abs(fx) > Math.abs(fy) ? (fx < 0 ? 2 : 3) : (fy < 0 ? 0 : 1);
+        rec.dir = this.mobFacingDir(fx, fy, rec.dir);
       }
       rec.moving = moving;
       rec.updatedAt = now;
