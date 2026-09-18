@@ -95,41 +95,19 @@
     if(until>old)S.tombs.set(key,until);
   }
 
-  function markCombatIntent(kind,ms){
-    var now=Date.now();
-    S.lastIntentAt=now;
-    S.intentKind=String(kind||'');
-    S.intentUntil=now+Math.max(250,Number(ms)||900);
+  function markExplicitHit(e,ttl){
+    if(!e)return false;
+    e.__ppaExplicitHitUntil=Date.now()+Math.max(120,Number(ttl)||900);
+    return true;
   }
-  function combatControl(t){
-    if(!t||!t.closest)return null;
-    return t.closest('#bAtk,#s1,#s2,#s3,#s4');
-  }
-  function armCombatIntent(){
-    document.addEventListener('pointerdown',function(e){
-      var b=combatControl(e.target);if(!b)return;
-      markCombatIntent(b.id==='bAtk'?'basic':'skill',b.id==='bAtk'?12000:2600);
-    },true);
-    document.addEventListener('touchstart',function(e){
-      var b=combatControl(e.target);if(!b)return;
-      markCombatIntent(b.id==='bAtk'?'basic':'skill',b.id==='bAtk'?12000:2600);
-    },{capture:true,passive:true});
-  }
+  window.PPA_MOB_MARK_HIT=function(e,ttl){
+    try{
+      if(!active()||!mobKey(e))return true;
+      return markExplicitHit(e,ttl);
+    }catch(_){return false}
+  };
   function damageAllowed(e){
-    var now=Date.now();
-    // Basic Smart Attack can spend several seconds walking to its chosen target,
-    // so keep that intent longer but accept damage only for the selected target.
-    if(now<=S.intentUntil){
-      if(S.intentKind==='basic'){
-        var p=player();
-        if(!p||p.tid==null||!e||String(p.tid)!==String(e.id))return false;
-      }
-      if(e)e.__ppaCombatTrackedUntil=Math.max(Number(e.__ppaCombatTrackedUntil)||0,now+15000);
-      return true;
-    }
-    // Legitimate DoT may continue after the button press, but only on a mob that
-    // was already hit during that explicit combat intent.
-    return !!(e&&now<Number(e.__ppaCombatTrackedUntil||0));
+    return !!(e&&Date.now()<=Number(e.__ppaExplicitHitUntil||0));
   }
 
   function sendDamage(e,key,before,after){
@@ -377,14 +355,14 @@
     if(S.started)return;S.started=true;
     installDropGuard();
     setTimeout(installDropGuard,250);
-    armCombatIntent();
     setInterval(tick,50);
     document.addEventListener('visibilitychange',function(){if(!document.hidden){S.lastSend=0;S.lastHeartbeat=0}},{passive:true});
   }
 
   window.PPA_MOB_SYNC_DIAG=function(){return{
     room:S.room,active:active(),seen:S.seen,owned:S.owned,remoteOwned:S.remoteOwned,
-    synced:S.synced,tombs:S.tombs.size,states:S.states.size,netAge:S.lastNetAt?Date.now()-S.lastNetAt:null
+    synced:S.synced,tombs:S.tombs.size,states:S.states.size,netAge:S.lastNetAt?Date.now()-S.lastNetAt:null,
+    damageMode:'explicit-hit'
   }};
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
