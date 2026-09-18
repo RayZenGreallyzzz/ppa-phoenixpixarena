@@ -24,7 +24,7 @@ function cleanClass(v) {
 
 function cleanMobKey(v) {
   v = String(v || '');
-  return (/^s\d{1,4}$/.test(v) || v === 'b60') ? v : '';
+  return (/^s\d{1,4}$/.test(v) || ['p20','b40','b60','wtitan'].includes(v)) ? v : '';
 }
 
 function finite(v, min, max, fallback = 0) {
@@ -36,7 +36,26 @@ function finite(v, min, max, fallback = 0) {
 const DUNGEON_CAPACITY = 40;
 const DUNGEON_RESERVE_MS = 90_000;
 const DUNGEON_MOB_RESPAWN_MS = 10_000;
+const DUNGEON_PHOENIX_RESPAWN_MS = 2 * 60 * 60 * 1000;
+const DUNGEON_LORD40_RESPAWN_MS = 6 * 60 * 60 * 1000;
 const DUNGEON_BOSS60_RESPAWN_MS = 6 * 60 * 60 * 1000;
+
+function mobAuthorityRoom(v) {
+  const room = cleanRoom(v);
+  return room.startsWith('dungeon-') || room === 'worldboss';
+}
+
+function mobRespawnAt(key, rec, now = Date.now()) {
+  key = cleanMobKey(key);
+  if (key === 'p20') return now + DUNGEON_PHOENIX_RESPAWN_MS;
+  if (key === 'b40') return now + DUNGEON_LORD40_RESPAWN_MS;
+  if (key === 'b60') return now + DUNGEON_BOSS60_RESPAWN_MS;
+  if (key === 'wtitan') {
+    const resetAt = Math.max(0, Number(rec && rec.resetAt) || 0);
+    return resetAt > now ? resetAt : now + 24 * 60 * 60 * 1000;
+  }
+  return now + DUNGEON_MOB_RESPAWN_MS;
+}
 
 function dungeonInfo(v) {
   const room = cleanRoom(v);
@@ -462,7 +481,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
   async ensureMobRoomLoaded(room) {
     room = cleanRoom(room);
-    if (!room.startsWith('dungeon-')) return;
+    if (!mobAuthorityRoom(room)) return;
     const loaded = this.mobLoadedRooms();
     if (loaded.has(room)) return;
     loaded.add(room);
@@ -493,6 +512,11 @@ export class RealtimeHub extends BaseRealtimeHub {
         sz: Math.max(8, Number(row.sz) || 30),
         dmg: Math.max(1, Number(row.dmg) || 1),
         nextAttackAt: Math.max(0, Number(row.nextAttackAt) || 0),
+        nextSpecialAt: Math.max(0, Number(row.nextSpecialAt) || 0),
+        nextAoeAt: Math.max(0, Number(row.nextAoeAt) || 0),
+        specialImpactAt: Math.max(0, Number(row.specialImpactAt) || 0),
+        specialKind: String(row.specialKind || ''),
+        resetAt: Math.max(0, Number(row.resetAt) || 0),
         aggro: !!row.aggro,
         target: String(row.target || ''),
         dir: Number.isFinite(Number(row.dir)) ? Number(row.dir) : 1,
@@ -511,7 +535,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
   async persistMobRoom(room) {
     room = cleanRoom(room);
-    if (!room.startsWith('dungeon-')) return;
+    if (!mobAuthorityRoom(room)) return;
     const { health, dead } = this.mobStores();
     const prefix = room + '|';
     const mobs = {};
@@ -534,6 +558,11 @@ export class RealtimeHub extends BaseRealtimeHub {
         sz: Math.max(8, Number(rec.sz) || 30),
         dmg: Math.max(1, Number(rec.dmg) || 1),
         nextAttackAt: Math.max(0, Number(rec.nextAttackAt) || 0),
+        nextSpecialAt: Math.max(0, Number(rec.nextSpecialAt) || 0),
+        nextAoeAt: Math.max(0, Number(rec.nextAoeAt) || 0),
+        specialImpactAt: Math.max(0, Number(rec.specialImpactAt) || 0),
+        specialKind: String(rec.specialKind || ''),
+        resetAt: Math.max(0, Number(rec.resetAt) || 0),
         aggro: !!rec.aggro,
         target: String(rec.target || ''),
         dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1,
@@ -558,7 +587,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
   processMobRespawns(room, now = Date.now()) {
     room = cleanRoom(room);
-    if (!room.startsWith('dungeon-')) return false;
+    if (!mobAuthorityRoom(room)) return false;
     this.pruneMobStores(now);
     const { health, dead } = this.mobStores();
     let changed = false;
@@ -576,6 +605,10 @@ export class RealtimeHub extends BaseRealtimeHub {
       rec.target = '';
       rec.moving = false;
       rec.nextAttackAt = 0;
+      rec.nextSpecialAt = 0;
+      rec.nextAoeAt = 0;
+      rec.specialImpactAt = 0;
+      rec.specialKind = '';
       health.set(ck, rec);
       dead.delete(ck);
       changed = true;
@@ -592,7 +625,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
   sendMobAuthoritySnapshot(ws, room, now = Date.now()) {
     room = cleanRoom(room);
-    if (!room.startsWith('dungeon-')) return;
+    if (!mobAuthorityRoom(room)) return;
     this.processMobRespawns(room, now);
     const { health, dead } = this.mobStores();
     const prefix = room + '|';
@@ -660,7 +693,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
   ensureMobAiLoop(room) {
     room = cleanRoom(room);
-    if (!room.startsWith('dungeon-')) return;
+    if (!mobAuthorityRoom(room)) return;
     const loops = this.mobAiLoops();
     if (loops.has(room)) return;
     loops.add(room);
@@ -686,9 +719,102 @@ export class RealtimeHub extends BaseRealtimeHub {
     return this._mobPersistTimes;
   }
 
+  bossDelay(seed, now, base, span) {
+    let h = Math.floor(now / 1000) | 0;
+    const t = String(seed || '');
+    for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) | 0;
+    h = Math.abs(h);
+    return base + (span > 0 ? (h % span) : 0);
+  }
+
+  tickBossSpecial(room, now, rec, mobKey, players, x, y) {
+    if (!rec || !(Number(rec.hp) > 0) || !players.length) return false;
+    const nearest = () => {
+      let best = null, bd = Infinity;
+      for (const p of players) {
+        const d = Math.hypot(p.x - x, p.y - y);
+        if (d < bd) { bd = d; best = p; }
+      }
+      return { p: best, d: bd };
+    };
+    const n = nearest();
+
+    if (mobKey === 'p20' || mobKey === 'b40') {
+      if (!n.p || n.d > 620) return false;
+      const phoenix = mobKey === 'p20';
+      const kind = phoenix ? 'phoenix-aoe' : 'lord40-aoe';
+      const radius = phoenix ? 205 : 180;
+      const dmg = phoenix ? 36 : 26;
+      if (!(Number(rec.nextSpecialAt) > 0)) {
+        rec.nextSpecialAt = now + this.bossDelay(mobKey, now, 9000, 4001);
+      }
+      if (!rec.specialImpactAt && now >= Number(rec.nextSpecialAt || 0)) {
+        rec.specialKind = kind;
+        rec.specialImpactAt = now + 700;
+        rec.nextSpecialAt = now + this.bossDelay(mobKey, now + 701, phoenix ? 10000 : 9000, 4001);
+        this.roomBroadcast(room, {
+          type: 'boss-special', room, key: mobKey, kind, phase: 'telegraph',
+          x, y, radius, dmg, damageType: 'magic',
+          impactAt: rec.specialImpactAt, dir: Number(rec.dir) || 1, ts: now,
+        }, null);
+      }
+      if (rec.specialImpactAt && now >= Number(rec.specialImpactAt)) {
+        const targets = players.filter(p => Math.hypot(p.x - x, p.y - y) <= radius).map(p => p.pid);
+        this.roomBroadcast(room, {
+          type: 'boss-special', room, key: mobKey, kind, phase: 'impact',
+          x, y, radius, dmg, damageType: 'magic', targets,
+          dir: Number(rec.dir) || 1, ts: now,
+        }, null);
+        rec.specialImpactAt = 0;
+        rec.specialKind = '';
+      }
+      return true;
+    }
+
+    if (mobKey === 'wtitan') {
+      if (!n.p || n.d > 2200) return false;
+      if (!(Number(rec.nextSpecialAt) > 0)) rec.nextSpecialAt = now + 5000;
+      if (now >= Number(rec.nextSpecialAt || 0)) {
+        while (now >= rec.nextSpecialAt) rec.nextSpecialAt += 5000;
+        this.roomBroadcast(room, {
+          type: 'boss-special', room, key: mobKey, kind: 'titan-crystal', phase: 'launch',
+          target: n.p.pid, tx: Math.round(n.p.x * 10) / 10, ty: Math.round(n.p.y * 10) / 10,
+          x, y, dmg: 14, damageType: 'magic', dir: Number(rec.dir) || 1, ts: now,
+        }, null);
+      }
+      if (!(Number(rec.nextAoeAt) > 0)) {
+        const choices = [7000, 12000, 16000];
+        rec.nextAoeAt = now + choices[Math.abs(Math.floor(now / 1000)) % choices.length];
+      }
+      if (!rec.specialImpactAt && now >= Number(rec.nextAoeAt || 0)) {
+        const choices = [7000, 12000, 16000];
+        rec.nextAoeAt = now + choices[Math.abs(Math.floor(now / 1000) + 1) % choices.length];
+        rec.specialKind = 'titan-aoe';
+        rec.specialImpactAt = now + 620;
+        this.roomBroadcast(room, {
+          type: 'boss-special', room, key: mobKey, kind: 'titan-aoe', phase: 'telegraph',
+          x, y, radius: 330, dmg: 22, damageType: 'magic',
+          impactAt: rec.specialImpactAt, dir: Number(rec.dir) || 1, ts: now,
+        }, null);
+      }
+      if (rec.specialImpactAt && rec.specialKind === 'titan-aoe' && now >= Number(rec.specialImpactAt)) {
+        const targets = players.filter(p => Math.hypot(p.x - x, p.y - (y + 8)) <= 330).map(p => p.pid);
+        this.roomBroadcast(room, {
+          type: 'boss-special', room, key: mobKey, kind: 'titan-aoe', phase: 'impact',
+          x, y, radius: 330, dmg: 22, damageType: 'magic', targets,
+          dir: Number(rec.dir) || 1, ts: now,
+        }, null);
+        rec.specialImpactAt = 0;
+        rec.specialKind = '';
+      }
+      return true;
+    }
+    return false;
+  }
+
   tickMobAI(room, now = Date.now()) {
     room = cleanRoom(room);
-    if (!room.startsWith('dungeon-')) return false;
+    if (!mobAuthorityRoom(room)) return false;
 
     const ticks = this.mobAiTickTimes();
     const prev = Number(ticks.get(room) || 0);
@@ -719,12 +845,16 @@ export class RealtimeHub extends BaseRealtimeHub {
       const sp = Math.max(0.1, Number(rec.sp) || 1);
       const sz = Math.max(8, Number(rec.sz) || 30);
       const mobKey = String(ck).slice(prefix.length);
+      const phoenix = mobKey === 'p20';
+      const lord40 = mobKey === 'b40';
       const boss60 = mobKey === 'b60';
-      const reach = boss60 ? 112 : (42 + (sz - 30) * 0.35);
-      const leash = boss60 ? 420 : 180;
-      const aggroRadius = boss60 ? 420 : 185;
-      const reacquireRadius = boss60 ? 520 : 260;
-      const attackEvery = boss60 ? 1200 : 850;
+      const titan = mobKey === 'wtitan';
+      const stationaryBoss = phoenix || lord40 || titan;
+      const reach = lord40 ? 112 : (phoenix ? 100 : (boss60 ? 112 : (titan ? 0 : (42 + (sz - 30) * 0.35))));
+      const leash = boss60 ? 420 : (stationaryBoss ? 0 : 180);
+      const aggroRadius = titan ? 1800 : ((phoenix || lord40) ? 620 : (boss60 ? 420 : 185));
+      const reacquireRadius = titan ? 2200 : ((phoenix || lord40) ? 700 : (boss60 ? 520 : 260));
+      const attackEvery = lord40 ? 1200 : (phoenix ? 1100 : (boss60 ? 1200 : 850));
       let target = rec.target ? byPid.get(String(rec.target)) : null;
 
       // Normal dungeon mobs must be able to attack without relying on the old
@@ -755,6 +885,8 @@ export class RealtimeHub extends BaseRealtimeHub {
         }
       }
 
+      this.tickBossSpecial(room, now, rec, mobKey, players, x, y);
+
       let vx = 0, vy = 0, moving = false;
       if (rec.aggro && target) {
         const dx = target.x - x, dy = target.y - y, dist = Math.hypot(dx, dy);
@@ -763,12 +895,12 @@ export class RealtimeHub extends BaseRealtimeHub {
           rec.aggro = false;
           rec.target = '';
           target = null;
-        } else if (dist > reach && dist > 0.001) {
+        } else if (dist > reach && dist > 0.001 && !stationaryBoss) {
           const step = Math.min(dist - reach, sp * 60 * (dt / 1000));
           vx = dx / dist * step;
           vy = dy / dist * step;
           moving = step > 0.01;
-        } else if (dist <= reach) {
+        } else if (dist <= reach && !titan) {
           if (Math.abs(dx) + Math.abs(dy) > 0.01) {
             rec.dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 0 : 1);
           }
@@ -790,7 +922,9 @@ export class RealtimeHub extends BaseRealtimeHub {
         }
       }
 
-      if (!rec.aggro) {
+      if (stationaryBoss) {
+        x = hx; y = hy; rec.x = hx; rec.y = hy; moving = false;
+      } else if (!rec.aggro) {
         const dx = hx - x, dy = hy - y, dist = Math.hypot(dx, dy);
         if (dist > 1) {
           const step = Math.min(dist, sp * 60 * (dt / 1000));
@@ -839,7 +973,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
   async maybePersistMobMovement(room, now = Date.now()) {
     room = cleanRoom(room);
-    if (!room.startsWith('dungeon-')) return;
+    if (!mobAuthorityRoom(room)) return;
     const times = this.mobPersistTimes();
     const prev = Number(times.get(room) || 0);
     if (now - prev < 2000) return;
@@ -912,7 +1046,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     if (m.type === 'mob-catalog') {
       const room = cleanRoom(a.room);
-      if (!room.startsWith('dungeon-') || cleanRoom(m.room || room) !== room) return;
+      if (!mobAuthorityRoom(room) || cleanRoom(m.room || room) !== room) return;
       await this.ensureMobRoomLoaded(room);
       if (this.processMobRespawns(room, now)) await this.persistMobRoom(room);
 
@@ -927,6 +1061,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         const sp = Math.max(0.1, finite(row[4], 0.1, 100, 1));
         const sz = Math.max(8, finite(row[5], 8, 500, 30));
         const dmg = Math.max(1, finite(row[6], 1, 1000000, 1));
+        const clientResetAt = key === 'wtitan' ? finite(row[7], now - 300000, now + 36 * 60 * 60 * 1000, 0) : 0;
         if (!key) continue;
 
         const ck = this.mobCompound(room, key);
@@ -937,6 +1072,8 @@ export class RealtimeHub extends BaseRealtimeHub {
             x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0,
             hx: Number.isFinite(x) ? x : 0, hy: Number.isFinite(y) ? y : 0,
             sp, sz, dmg, nextAttackAt: 0,
+            nextSpecialAt: 0, nextAoeAt: 0, specialImpactAt: 0, specialKind: '',
+            resetAt: clientResetAt > now ? clientResetAt : 0,
             aggro: false, target: '', dir: 1, moving: false, positioned: true,
           };
           health.set(ck, rec);
@@ -952,6 +1089,7 @@ export class RealtimeHub extends BaseRealtimeHub {
             rec.positioned = true;
           }
           rec.sp = sp; rec.sz = sz; rec.dmg = dmg;
+          if (key === 'wtitan' && clientResetAt > now && !(Number(rec.resetAt) > now)) rec.resetAt = clientResetAt;
           rec.updatedAt = now;
           health.set(ck, rec);
         }
@@ -969,7 +1107,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       const amount = finite(m.amount, 0, 10000000, 0);
       const mhp = Math.max(1, finite(m.mhp, 1, 10000000, 1));
       const event = String(m.event || '').slice(0, 96);
-      if (!room.startsWith('dungeon-') || cleanRoom(m.room || room) !== room) return;
+      if (!mobAuthorityRoom(room) || cleanRoom(m.room || room) !== room) return;
       if (!key || !(amount > 0)) return;
 
       await this.ensureMobRoomLoaded(room);
@@ -1003,8 +1141,12 @@ export class RealtimeHub extends BaseRealtimeHub {
         rec.target = '';
         rec.moving = false;
         rec.nextAttackAt = 0;
+        rec.nextSpecialAt = 0;
+        rec.nextAoeAt = 0;
+        rec.specialImpactAt = 0;
+        rec.specialKind = '';
         health.set(ck, rec);
-        respawnAt = now + (key === 'b60' ? DUNGEON_BOSS60_RESPAWN_MS : DUNGEON_MOB_RESPAWN_MS);
+        respawnAt = mobRespawnAt(key, rec, now);
         dead.set(ck, { room, key, at: respawnAt, killer, party });
         setTimeout(async () => {
           try {
@@ -1222,6 +1364,11 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       const room = this.moveSocketRoom(ws, a, requested, now);
       this.sendRoomSnapshot(ws, room);
+      if (mobAuthorityRoom(room)) {
+        await this.ensureMobRoomLoaded(room);
+        if (this.processMobRespawns(room, now)) await this.persistMobRoom(room);
+        this.sendMobAuthoritySnapshot(ws, room, now);
+      }
       if (a.partyId) this.sendPartyState(a.partyId);
       return;
     }
@@ -1270,7 +1417,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (pushSnapshot) a.lastSnapshotPush = now;
       ws.serializeAttachment(a);
 
-      if (currentRoom.startsWith('dungeon-')) {
+      if (mobAuthorityRoom(currentRoom)) {
         await this.ensureMobRoomLoaded(currentRoom);
         this.tickMobAI(currentRoom, now);
         if (this.roomHasAggroMob(currentRoom)) this.ensureMobAiLoop(currentRoom);
