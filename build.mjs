@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v343-clan-ui-srcdoc-fix-20260919-0120';
+const CLIENT_BUILD = 'v344-dungeon41-realtime-spawn-fix-20260919-0132';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -448,6 +448,18 @@ if (renderFacingRe.test(output)) {
   console.warn('[PPA BUILD WARN] mob render facing target not found; continuing');
 }
 
+
+/* === DUNGEON 41-60 REALTIME ROOM ======================================= */
+ppaPatchRegex(
+  '41-60 realtime room key',
+  /if\s*\(scene===['"]dungeon21['"]\)return['"]dungeon-21-40['"];?/,
+  "if(scene==='dungeon21')return'dungeon-21-40';\n  if(scene==='dungeon41')return'dungeon-41-60';"
+);
+if (!output.includes("if(scene==='dungeon41')return'dungeon-41-60';")) {
+  throw new Error('Dungeon 41-60 realtime room patch did not apply');
+}
+
+/* ======================================================================== */
 
 /* === DUNGEON 41-60 BALANCE ============================================= */
 ppaPatchRegex(
