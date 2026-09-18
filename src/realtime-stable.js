@@ -863,6 +863,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       const lord40 = mobKey === 'b40';
       const boss60 = mobKey === 'b60';
       const titan = mobKey === 'wtitan';
+      const isAuthorityBoss = phoenix || lord40 || boss60 || titan;
       const stationaryBoss = phoenix || lord40 || titan;
       const reach = lord40 ? 112 : (phoenix ? 100 : (boss60 ? 112 : (titan ? 0 : (42 + (sz - 30) * 0.35))));
       const leash = boss60 ? 420 : (stationaryBoss ? 0 : 180);
@@ -874,7 +875,10 @@ export class RealtimeHub extends BaseRealtimeHub {
       // Normal dungeon mobs must be able to attack without relying on the old
       // client AI. Acquire the nearest player only in a small local radius so
       // we do not wake the whole room at once.
-      if (!rec.aggro && players.length) {
+      // Preserve the original dungeon behaviour: ordinary mobs do NOT wake
+      // just because the player walks past them. They aggro when hit
+      // (mob-hit-event sets rec.aggro/target). Bosses still acquire nearby players.
+      if (!rec.aggro && isAuthorityBoss && players.length) {
         let best = null, bd = Infinity;
         for (const p of players) {
           const pd = Math.hypot(p.x - x, p.y - y);
