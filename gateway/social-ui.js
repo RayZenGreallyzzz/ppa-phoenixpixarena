@@ -85,7 +85,18 @@
       .ppaPartyMeta{margin-top:3px;color:#a99b86;font:7.5px monospace}
       @media(max-width:600px){
         #ppaPlayerCard{top:45%}#ppaFriendsPanel{top:45%;max-height:68vh}.ppaFriendsTab{font-size:7px}
-        #ppaPartyHud{top:300px;left:6px;width:134px}.ppaPartyHudRow{padding:5px 6px}.ppaPartyHudName{font-size:9px}
+        /* Phone: keep the party directly under the top-left PPA/stat values,
+           compact enough not to cover the character or combat area. */
+        #ppaPartyHud{top:112px;left:5px;width:112px}
+        .ppaPartyHudTitle{margin:0 0 2px 1px;font-size:7.5px;letter-spacing:.45px}
+        .ppaPartyHudRow{margin:2px 0;padding:3px 4px 4px;border-radius:5px}
+        .ppaPartyHudTop{gap:2px}
+        .ppaPartyHudName{font-size:7.5px}
+        .ppaPartyCrown{font-size:8px}
+        .ppaPartyYou{font-size:5.8px}
+        .ppaPartyKick{width:18px;min-width:18px;height:18px;font-size:10px;border-radius:4px}
+        .ppaPartyHp{height:3px;margin-top:3px}
+        .ppaPartyMeta{margin-top:2px;font-size:6px}
       }
     `;document.head.appendChild(st);
   }
