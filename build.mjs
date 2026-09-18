@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v334-temp-boss-access-20260918-2110';
+const CLIENT_BUILD = 'v334-test-all-dungeons-open-20260918-2112';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -211,6 +211,30 @@ function renderJoin(){
 
 function esc(s){`
 );
+
+/* === TEMP QA: ALL DUNGEONS OPEN ========================================== */
+// Temporary tester switch. Set to false/remove this block after boss QA.
+output = output.replace('<head>', '<head>\n<script>window.PPA_TEST_ALL_DUNGEONS=true;</script>');
+
+ppaPatchRegex(
+  'temporary unlock dungeon 21-40',
+  /function\s+dungeon21Unlocked\(\)\s*\{[\s\S]*?return\s+lv>=21&&lv<=40;\s*\}/,
+  "function dungeon21Unlocked(){if(window.PPA_TEST_ALL_DUNGEONS===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=21&&lv<=40;}"
+);
+
+ppaPatchRegex(
+  'temporary unlock dungeon 41-60',
+  /function\s+dungeon41Unlocked\(\)\s*\{[\s\S]*?return\s+lv>=DUNGEON41_LEVEL_REQ&&lv<=DUNGEON41_LEVEL_MAX;\s*\}/,
+  "function dungeon41Unlocked(){if(window.PPA_TEST_ALL_DUNGEONS===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=DUNGEON41_LEVEL_REQ&&lv<=DUNGEON41_LEVEL_MAX;}"
+);
+
+ppaPatchRegex(
+  'temporary dungeon test status',
+  /st\.textContent='Твой уровень: '\+lv\+' · доступные диапазоны отмечены выше\.';/,
+  "st.textContent=window.PPA_TEST_ALL_DUNGEONS===true?'ТЕСТ · ограничения по уровню временно отключены.':'Твой уровень: '+lv+' · доступные диапазоны отмечены выше.';"
+);
+
+/* ======================================================================== */
 
 ppaPatchRegex(
   'shared mob reward',
