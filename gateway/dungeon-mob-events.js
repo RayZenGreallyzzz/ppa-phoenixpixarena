@@ -2,7 +2,7 @@
   'use strict';
 
   var seq=0, applying=0, lastRoom='', lastRegister=0, catalogRoom='', authReady=false, serverMode=false, worldCycle='';
-  var authority=new Map(), deadUntil=new Map(), entityCache=new Map(), entityCacheLen=-1, entityCacheAt=0, diagCache=null, diagCacheAt=0, catalogCount=0;
+  var authority=new Map(), deadUntil=new Map(), entityCache=new Map(), entityCacheLen=-1, entityCacheAt=0, diagCache=null, diagCacheAt=0, catalogCount=0, smoothEntities=new Set(), smoothRaf=0, smoothLast=0;
 
   function rt(){try{return window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null}catch(_){return null}}
   function room(){var d=rt();return String((d&&d.room)||'')}
@@ -72,6 +72,7 @@
       var a=entities(),i=a.indexOf(e);
       if(i>=0)a.splice(i,1);
       var k=keyOf(e);if(k)entityCache.delete(k);
+      try{smoothEntities.delete(e)}catch(_){}
       entityCacheLen=a.length;entityCacheAt=Date.now();
     }catch(_){}
   }
@@ -394,8 +395,17 @@
         e.mhp=Math.max(1,mhp);
         e.hp=Math.min(e.mhp,Math.max(1,hp));
         if(Number.isFinite(sz)&&sz>0)e.sz=sz;
-        if(Number.isFinite(x)){e.x=x;e.__ppaServerX=x}
-        if(Number.isFinite(y)){e.y=y;e.__ppaServerY=y}
+        if(Number.isFinite(x)&&Number.isFinite(y)){
+          e.__ppaServerX=x;e.__ppaServerY=y;
+          var _dx=x-Number(e.x||0),_dy=y-Number(e.y||0),_dist=Math.hypot(_dx,_dy);
+          // First materialization / teleport / large correction snaps immediately.
+          // Normal 10 Hz server movement is interpolated on render frames.
+          if(!Number.isFinite(Number(e.x))||!Number.isFinite(Number(e.y))||_dist>150||e.__ppaSmoothReady!==true){
+            e.x=x;e.y=y;e.__ppaSmoothReady=true;
+          }else{
+            e.__ppaTargetX=x;e.__ppaTargetY=y;smoothEntities.add(e);
+          }
+        }
         e.aggro=aggro;
         if(Number.isFinite(dir)){
           var vd=visualDir(dir);
@@ -454,8 +464,12 @@
         e.__ppaServerTarget=String(st.target||'');
         applying++;
         try{
-          if(Number.isFinite(Number(st.x)))e.x=Number(st.x);
-          if(Number.isFinite(Number(st.y)))e.y=Number(st.y);
+          if(Number.isFinite(Number(st.x))&&Number.isFinite(Number(st.y))){
+            var _tx=Number(st.x),_ty=Number(st.y),_dd=Math.hypot(_tx-Number(e.x||0),_ty-Number(e.y||0));
+            e.__ppaServerX=_tx;e.__ppaServerY=_ty;
+            if(_dd>150||e.__ppaSmoothReady!==true){e.x=_tx;e.y=_ty;e.__ppaSmoothReady=true}
+            else{e.__ppaTargetX=_tx;e.__ppaTargetY=_ty;smoothEntities.add(e)}
+          }
           if(Number.isFinite(Number(st.sz))&&Number(st.sz)>0)e.sz=Number(st.sz);
           e.aggro=!!st.aggro;
           var d=Number(st.dir);
@@ -636,6 +650,27 @@
     }catch(err){console.warn('PPA authoritative mob receive',err)}
   };
 
+  function smoothServerMovement(ts){
+    smoothRaf=requestAnimationFrame(smoothServerMovement);
+    if(!serverMode||!smoothEntities.size)return;
+    var dt=smoothLast?Math.max(8,Math.min(50,ts-smoothLast)):16;smoothLast=ts;
+    var alpha=1-Math.exp(-dt/48);
+    smoothEntities.forEach(function(e){
+      try{
+        if(!e||!keyOf(e)||!(Number(e.hp)>0)){smoothEntities.delete(e);return}
+        var tx=Number(e.__ppaTargetX),ty=Number(e.__ppaTargetY);
+        if(!Number.isFinite(tx)||!Number.isFinite(ty)){smoothEntities.delete(e);return}
+        var x=Number(e.x),y=Number(e.y),dx=tx-x,dy=ty-y,d=Math.hypot(dx,dy);
+        applying++;
+        try{
+          if(d>150){e.x=tx;e.y=ty}
+          else{e.x=x+dx*alpha;e.y=y+dy*alpha}
+        }finally{applying--}
+        if(d<0.35){applying++;try{e.x=tx;e.y=ty}finally{applying--}smoothEntities.delete(e)}
+      }catch(_){smoothEntities.delete(e)}
+    });
+  }
+
   function tick(){
     installDropGuard();
     installBossRuntimeGuards();
@@ -656,6 +691,7 @@
 
   function boot(){
     installDropGuard();
+    if(!smoothRaf){smoothLast=0;smoothRaf=requestAnimationFrame(smoothServerMovement)}
     installBossRuntimeGuards();
     serverMode=active();
     setTimeout(function(){register(true)},600);
