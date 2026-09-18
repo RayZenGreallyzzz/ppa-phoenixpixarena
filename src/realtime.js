@@ -114,7 +114,7 @@ function packetFromAtt(a) {
     i: a.pid, n: a.name, c: a.classKey || 'ГЕРОЙ', g: a.clanId || '', cn: '',
     x: Number(a.x) || 0, y: Number(a.y) || 0,
     h: Math.max(0, Number(a.h) || 0), m: Math.max(1, Number(a.m) || 1),
-    f: Number(a.f) || 1, a: String(a.a || 'idle').slice(0, 12),
+    f: Number.isFinite(Number(a.f)) ? Number(a.f) : 1, a: String(a.a || 'idle').slice(0, 12),
     l: Math.max(1, Math.min(999, Math.round(Number(a.l) || 1))),
     b: Math.max(0, Math.round(Number(a.b) || 0)),
     p: String(a.partyId || ''), q: Number(a.q) || 0, t: Date.now(),
@@ -192,6 +192,31 @@ export class RealtimeHub {
     }
   }
 
+  partyLeaders() {
+    if (!this._partyLeaders) this._partyLeaders = new Map();
+    return this._partyLeaders;
+  }
+
+  partyLeader(partyId, preferred = '') {
+    partyId = String(partyId || '');
+    if (!partyId) return '';
+    const live = [];
+    for (const ws of this.sockets()) {
+      const a = attOf(ws);
+      if (String(a.partyId || '') === partyId && a.pid) live.push(String(a.pid));
+    }
+    if (!live.length) {
+      this.partyLeaders().delete(partyId);
+      return '';
+    }
+    let leader = String(this.partyLeaders().get(partyId) || '');
+    const pref = String(preferred || '');
+    if (pref && live.includes(pref)) leader = pref;
+    if (!leader || !live.includes(leader)) leader = live[0];
+    this.partyLeaders().set(partyId, leader);
+    return leader;
+  }
+
   sendPartyState(partyId) {
     partyId = String(partyId || '');
     if (!partyId) return;
@@ -200,8 +225,23 @@ export class RealtimeHub {
       const a = attOf(ws);
       if (a.partyId === partyId) live.push({ ws, a });
     }
-    const members = live.map(({ a }) => ({ id: a.pid, name: a.name, cls: a.classKey || '', level: Math.max(1, Number(a.l) || 1), bm: Math.max(0, Number(a.b) || 0), room: cleanRoom(a.room) }));
-    for (const x of live) wsJson(x.ws, { type: 'party-state', partyId, members, ts: Date.now() });
+    if (!live.length) {
+      this.partyLeaders().delete(partyId);
+      return;
+    }
+    const leaderId = this.partyLeader(partyId);
+    const members = live.map(({ a }) => ({
+      id: a.pid,
+      name: a.name,
+      cls: a.classKey || '',
+      level: Math.max(1, Number(a.l) || 1),
+      bm: Math.max(0, Number(a.b) || 0),
+      room: cleanRoom(a.room),
+      hp: Math.max(0, Number(a.h) || 0),
+      mhp: Math.max(1, Number(a.m) || 1),
+      leader: String(a.pid || '') === leaderId,
+    }));
+    for (const x of live) wsJson(x.ws, { type: 'party-state', partyId, leaderId, members, ts: Date.now() });
   }
 
   async fetch(request) {
@@ -265,7 +305,10 @@ export class RealtimeHub {
       a.y = Number.isFinite(Number(m.y)) ? Math.round(Number(m.y) * 10) / 10 : Number(a.y) || 0;
       a.h = Math.max(0, Math.round(Number(m.h) || 0));
       a.m = Math.max(1, Math.round(Number(m.m) || 1));
-      a.f = Math.max(1, Math.min(8, Math.round(Number(m.f) || 1)));
+      {
+        const face = Number(m.f);
+        a.f = Number.isFinite(face) ? Math.max(-8, Math.min(8, Math.round(face))) : (Number.isFinite(Number(a.f)) ? Number(a.f) : 1);
+      }
       a.a = String(m.a || 'idle').slice(0, 12);
       a.l = Math.max(1, Math.min(999, Math.round(Number(m.l) || Number(a.l) || 1)));
       a.b = Math.max(0, Math.round(Number(m.b) || Number(a.b) || 0));
@@ -306,9 +349,30 @@ export class RealtimeHub {
       if (members + addCount > 5) { wsJson(ws, { type: 'party-notice', ok: false, message: 'В группе уже 5 игроков.' }); return; }
       ia.partyId = partyId; a.partyId = partyId;
       inviterWs.serializeAttachment(ia); ws.serializeAttachment(a);
+      this.partyLeader(partyId, ia.pid);
       this.sendPartyState(partyId);
       wsJson(inviterWs, { type: 'party-notice', ok: true, message: a.name + ' вступил(а) в группу.' });
       wsJson(ws, { type: 'party-notice', ok: true, message: 'Ты вступил(а) в группу.' });
+      return;
+    }
+
+    if (m.type === 'party-kick') {
+      const partyId = String(a.partyId || '');
+      const targetPid = cleanPid(m.target);
+      if (!partyId || !targetPid) { wsJson(ws, { type: 'party-notice', ok: false, message: 'Группа не найдена.' }); return; }
+      const leaderId = this.partyLeader(partyId);
+      if (leaderId !== String(a.pid || '')) { wsJson(ws, { type: 'party-notice', ok: false, message: 'Исключать игроков может только лидер группы.' }); return; }
+      if (targetPid === String(a.pid || '')) { wsJson(ws, { type: 'party-notice', ok: false, message: 'Используй «Покинуть группу».' }); return; }
+      const targetWs = this.socketByPid(targetPid);
+      if (!targetWs) { wsJson(ws, { type: 'party-notice', ok: false, message: 'Игрок уже не в сети.' }); return; }
+      const ta = attOf(targetWs);
+      if (String(ta.partyId || '') !== partyId) { wsJson(ws, { type: 'party-notice', ok: false, message: 'Игрок уже не в этой группе.' }); return; }
+      ta.partyId = '';
+      targetWs.serializeAttachment(ta);
+      wsJson(targetWs, { type: 'party-state', partyId: '', leaderId: '', members: [], ts: now });
+      wsJson(targetWs, { type: 'party-notice', ok: false, message: 'Ты исключён(а) из группы.' });
+      wsJson(ws, { type: 'party-notice', ok: true, message: ta.name + ' исключён(а) из группы.' });
+      this.sendPartyState(partyId);
       return;
     }
 
@@ -321,8 +385,10 @@ export class RealtimeHub {
     if (m.type === 'party-leave') {
       const oldParty = String(a.partyId || '');
       if (!oldParty) { wsJson(ws, { type: 'party-state', partyId: '', members: [], ts: now }); return; }
+      const wasLeader = this.partyLeader(oldParty) === String(a.pid || '');
       a.partyId = ''; ws.serializeAttachment(a);
-      wsJson(ws, { type: 'party-state', partyId: '', members: [], ts: now });
+      wsJson(ws, { type: 'party-state', partyId: '', leaderId: '', members: [], ts: now });
+      if (wasLeader) this.partyLeaders().delete(oldParty);
       this.sendPartyState(oldParty);
       return;
     }
