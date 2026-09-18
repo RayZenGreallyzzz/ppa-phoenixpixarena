@@ -467,7 +467,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     let saved = null;
     try { saved = await this.ctx.storage.get(this.mobStorageKey(room)); } catch (_) { saved = null; }
-    if (!saved || typeof saved !== 'object' || !saved.mobs) return;
+    if (!saved || typeof saved !== 'object' || Number(saved.version || 0) < 2 || !saved.mobs) return;
 
     const { health, dead } = this.mobStores();
     const now = Date.now();
@@ -539,7 +539,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         positioned: !!rec.positioned,
       };
     }
-    try { await this.ctx.storage.put(this.mobStorageKey(room), { version: 1, mobs }); } catch (_) {}
+    try { await this.ctx.storage.put(this.mobStorageKey(room), { version: 2, mobs }); } catch (_) {}
   }
 
   forgetMobRoom(room) {
