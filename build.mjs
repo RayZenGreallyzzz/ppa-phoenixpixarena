@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v301-all-player-classes-20260918-1142';
+const CLIENT_BUILD = 'v302-party-xp-credit-20260918-1155';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -80,6 +80,10 @@ output = output.replace(catchNeedle, catchPatch);
 const saveToolsRe = /&lt;div id=&quot;saveTools&quot;&gt;[\s\S]*?&lt;\/div&gt;\s*&lt;\/section&gt;/;
 if (!saveToolsRe.test(output)) throw new Error('PPA save tools block not found');
 output = output.replace(saveToolsRe, '&lt;/section&gt;');
+
+const combatCreditNeedle = 'P.kil++;P.xp+=e.xp;';
+if (!output.includes(combatCreditNeedle)) throw new Error('PPA combat credit patch target not found');
+output = output.split(combatCreditNeedle).join("if(!window.PPA_MOB_REWARD_ELIGIBLE||window.PPA_MOB_REWARD_ELIGIBLE(e)){P.kil++;P.xp+=e.xp;}"); 
 
 const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
