@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v336-qa-open-smooth-mobs-20260918-2136';
+const CLIENT_BUILD = 'v337-qa-gates-hit-aggro-20260918-2152';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -53,7 +53,7 @@ output = output.replace(
 );
 
 if (!output.includes('<head>')) throw new Error('PPA <head> not found');
-output = output.replace('<head>', '<head>\n<script>window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=true;</script>');
+output = output.replace('<head>', '<head>\n<script>window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=true;window.PPA_TEST_ALL_DUNGEONS=true;</script>');
 
 const legacyInitNeedle = 'async function PPAOnlineInit(){\n';
 if (!output.includes(legacyInitNeedle)) throw new Error('Legacy PPAOnlineInit patch target not found');
@@ -213,45 +213,48 @@ function esc(s){`
 );
 
 /* === TEMP QA: ALL DUNGEONS OPEN ========================================== */
-// Temporary tester switch. Set to false/remove this block after boss QA.
-output = output.replace('<head>', '<head>\n<script>window.PPA_TEST_ALL_DUNGEONS=true;</script>');
-
+// Temporary tester switch. Remove after boss QA.
 ppaPatchRegex(
-  'temporary unlock dungeon 21-40',
-  /function\s+dungeon21Unlocked\(\)\s*\{[\s\S]*?return\s+lv>=21&&lv<=40;\s*\}/,
-  "function dungeon21Unlocked(){if(window.PPA_TEST_ALL_DUNGEONS===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=21&&lv<=40;}"
-);
-
-ppaPatchRegex(
-  'temporary unlock dungeon 41-60',
-  /function\s+dungeon41Unlocked\(\)\s*\{[\s\S]*?return\s+lv>=DUNGEON41_LEVEL_REQ&&lv<=DUNGEON41_LEVEL_MAX;\s*\}/,
+  'temporary unlock dungeon functions',
+  /function\s+dungeon1Unlocked\(\)\s*\{[\s\S]*?\}\s*function\s+dungeon21Unlocked\(\)\s*\{[\s\S]*?\}\s*function\s+dungeon41Unlocked\(\)\s*\{[\s\S]*?\}/,
+  "function dungeon1Unlocked(){if(window.PPA_TEST_ALL_DUNGEONS===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=1&&lv<=20;}"+
+  "function dungeon21Unlocked(){if(window.PPA_TEST_ALL_DUNGEONS===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=21&&lv<=40;}"+
   "function dungeon41Unlocked(){if(window.PPA_TEST_ALL_DUNGEONS===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=DUNGEON41_LEVEL_REQ&&lv<=DUNGEON41_LEVEL_MAX;}"
 );
 
 ppaPatchRegex(
-  'temporary dungeon test status',
-  /st\.textContent='Твой уровень: '\+lv\+' · доступные диапазоны отмечены выше\.';/,
-  "st.textContent=window.PPA_TEST_ALL_DUNGEONS===true?'ТЕСТ · ограничения по уровню временно отключены.':'Твой уровень: '+lv+' · доступные диапазоны отмечены выше.';"
+  'temporary unlock dungeon gate status',
+  /const\s+ok1=dungeon1Unlocked\(\),ok21=dungeon21Unlocked\(\),ok41=dungeon41Unlocked\(\);/,
+  "const ok1=true,ok21=true,ok41=true;"
 );
 
 ppaPatchRegex(
-  'temporary unlock dungeon buttons hard gate',
-  /const\s+ok21=dungeon21Unlocked\(\),ok41=dungeon41Unlocked\(\);/,
-  "const ok21=window.PPA_TEST_ALL_DUNGEONS===true||dungeon21Unlocked(),ok41=window.PPA_TEST_ALL_DUNGEONS===true||dungeon41Unlocked();"
+  'temporary unlock dungeon 1 click',
+  /if\(!dungeon1Unlocked\(\)\)\{updateDungeonGateMenu\(\);return\}/,
+  "if(window.PPA_TEST_ALL_DUNGEONS!==true&&!dungeon1Unlocked()){updateDungeonGateMenu();return}"
 );
-
 ppaPatchRegex(
-  'temporary unlock dungeon 21 click hard gate',
+  'temporary unlock dungeon 21 click',
   /if\(!dungeon21Unlocked\(\)\)\{updateDungeonGateMenu\(\);return\}/,
   "if(window.PPA_TEST_ALL_DUNGEONS!==true&&!dungeon21Unlocked()){updateDungeonGateMenu();return}"
 );
-
 ppaPatchRegex(
-  'temporary unlock dungeon 41 click hard gate',
+  'temporary unlock dungeon 41 click',
   /if\(!dungeon41Unlocked\(\)\)\{updateDungeonGateMenu\(\);return\}/,
   "if(window.PPA_TEST_ALL_DUNGEONS!==true&&!dungeon41Unlocked()){updateDungeonGateMenu();return}"
 );
 
+ppaPatchRegex(
+  'temporary unlock hard scene gate',
+  /if\(!allowed\)\{\s*showPickup\('Подземелье недоступно для текущего уровня','#ff9b72'\);\s*return;\s*\}/,
+  "if(window.PPA_TEST_ALL_DUNGEONS!==true&&!allowed){showPickup('Подземелье недоступно для текущего уровня','#ff9b72');return;}"
+);
+
+ppaPatchRegex(
+  'temporary dungeon test status text',
+  /st\.textContent='Твой уровень: '\+lv\+' · доступные диапазоны отмечены выше\.';/,
+  "st.textContent='ТЕСТ · ограничения по уровню временно отключены · ур. '+lv;"
+);
 
 /* ======================================================================== */
 
