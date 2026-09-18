@@ -483,6 +483,16 @@ export class RealtimeHub extends BaseRealtimeHub {
         updatedAt: Math.max(0, Number(row.updatedAt) || now),
         killer: String(row.killer || ''),
         party: String(row.party || ''),
+        x: Number.isFinite(Number(row.x)) ? Number(row.x) : undefined,
+        y: Number.isFinite(Number(row.y)) ? Number(row.y) : undefined,
+        hx: Number.isFinite(Number(row.hx)) ? Number(row.hx) : undefined,
+        hy: Number.isFinite(Number(row.hy)) ? Number(row.hy) : undefined,
+        sp: Math.max(0.1, Number(row.sp) || 1),
+        sz: Math.max(8, Number(row.sz) || 30),
+        aggro: !!row.aggro,
+        target: String(row.target || ''),
+        dir: Number.isFinite(Number(row.dir)) ? Number(row.dir) : 1,
+        moving: !!row.moving,
       });
       if (deadUntil > now) {
         dead.set(ck, {
@@ -511,6 +521,16 @@ export class RealtimeHub extends BaseRealtimeHub {
         deadUntil: d ? Math.max(0, Number(d.at) || 0) : 0,
         killer: d ? String(d.killer || '') : String(rec.killer || ''),
         party: d ? String(d.party || '') : String(rec.party || ''),
+        x: Number.isFinite(Number(rec.x)) ? Number(rec.x) : null,
+        y: Number.isFinite(Number(rec.y)) ? Number(rec.y) : null,
+        hx: Number.isFinite(Number(rec.hx)) ? Number(rec.hx) : null,
+        hy: Number.isFinite(Number(rec.hy)) ? Number(rec.hy) : null,
+        sp: Math.max(0.1, Number(rec.sp) || 1),
+        sz: Math.max(8, Number(rec.sz) || 30),
+        aggro: !!rec.aggro,
+        target: String(rec.target || ''),
+        dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1,
+        moving: !!rec.moving,
       };
     }
     try { await this.ctx.storage.put(this.mobStorageKey(room), { version: 1, mobs }); } catch (_) {}
@@ -542,13 +562,20 @@ export class RealtimeHub extends BaseRealtimeHub {
       rec.updatedAt = now;
       rec.killer = '';
       rec.party = '';
+      if (Number.isFinite(Number(rec.hx))) rec.x = Number(rec.hx);
+      if (Number.isFinite(Number(rec.hy))) rec.y = Number(rec.hy);
+      rec.aggro = false;
+      rec.target = '';
+      rec.moving = false;
       health.set(ck, rec);
       dead.delete(ck);
       changed = true;
       this.roomBroadcast(room, {
         type: 'mob-authority', room, key: d.key,
         hp: rec.hp, mhp: rec.mhp, respawnAt: 0,
-        killer: '', party: '', ts: now,
+        killer: '', party: '',
+        x: rec.x, y: rec.y, aggro: false, dir: rec.dir, moving: false,
+        ts: now,
       }, null);
     }
     return changed;
@@ -572,10 +599,145 @@ export class RealtimeHub extends BaseRealtimeHub {
         d && Number(d.at) > now ? Number(d.at) : 0,
         d ? String(d.killer || '') : '',
         d ? String(d.party || '') : '',
+        Number.isFinite(Number(rec.x)) ? Math.round(Number(rec.x) * 10) / 10 : null,
+        Number.isFinite(Number(rec.y)) ? Math.round(Number(rec.y) * 10) / 10 : null,
+        rec.aggro ? 1 : 0,
+        Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1,
+        rec.moving ? 1 : 0,
+        String(rec.target || ''),
       ]);
       if (rows.length >= 256) break;
     }
     wsJson(ws, { type: 'mob-authority-snapshot', room, rows, ts: now });
+  }
+
+  mobAiTickTimes() {
+    if (!this._mobAiTickTimes) this._mobAiTickTimes = new Map();
+    return this._mobAiTickTimes;
+  }
+
+  mobPersistTimes() {
+    if (!this._mobPersistTimes) this._mobPersistTimes = new Map();
+    return this._mobPersistTimes;
+  }
+
+  tickMobAI(room, now = Date.now()) {
+    room = cleanRoom(room);
+    if (!room.startsWith('dungeon-')) return false;
+
+    const ticks = this.mobAiTickTimes();
+    const prev = Number(ticks.get(room) || 0);
+    if (prev && now - prev < 90) return false;
+    const dt = Math.max(40, Math.min(180, prev ? now - prev : 100));
+    ticks.set(room, now);
+
+    const { health, dead } = this.mobStores();
+    const prefix = room + '|';
+    const players = [];
+    for (const ws of this.roomSockets(room)) {
+      const p = attOf(ws);
+      if (!p.pid || !(Number(p.h) > 0)) continue;
+      if (!Number.isFinite(Number(p.x)) || !Number.isFinite(Number(p.y))) continue;
+      players.push({ pid: String(p.pid), x: Number(p.x), y: Number(p.y) });
+    }
+
+    const byPid = new Map(players.map((p) => [p.pid, p]));
+    const rows = [];
+    for (const [ck, rec] of health.entries()) {
+      if (!String(ck).startsWith(prefix) || !rec || !(Number(rec.hp) > 0)) continue;
+      const drec = dead.get(ck);
+      if (drec && Number(drec.at) > now) continue;
+      if (![rec.x, rec.y, rec.hx, rec.hy].every((v) => Number.isFinite(Number(v)))) continue;
+
+      let x = Number(rec.x), y = Number(rec.y);
+      const hx = Number(rec.hx), hy = Number(rec.hy);
+      const sp = Math.max(0.1, Number(rec.sp) || 1);
+      const sz = Math.max(8, Number(rec.sz) || 30);
+      const reach = 42 + (sz - 30) * 0.35;
+      const leash = 180;
+      let target = rec.target ? byPid.get(String(rec.target)) : null;
+
+      if (rec.aggro && !target && players.length) {
+        let best = null, bd = Infinity;
+        for (const p of players) {
+          const pd = Math.hypot(p.x - x, p.y - y);
+          if (pd < bd) { bd = pd; best = p; }
+        }
+        if (best && bd <= 260) {
+          target = best;
+          rec.target = best.pid;
+        }
+      }
+
+      let vx = 0, vy = 0, moving = false;
+      if (rec.aggro && target) {
+        const dx = target.x - x, dy = target.y - y, dist = Math.hypot(dx, dy);
+        const homeD = Math.hypot(x - hx, y - hy);
+        if (dist > 260 || homeD > leash + 20) {
+          rec.aggro = false;
+          rec.target = '';
+          target = null;
+        } else if (dist > reach && dist > 0.001) {
+          const step = Math.min(dist - reach, sp * 60 * (dt / 1000));
+          vx = dx / dist * step;
+          vy = dy / dist * step;
+          moving = step > 0.01;
+        }
+      }
+
+      if (!rec.aggro) {
+        const dx = hx - x, dy = hy - y, dist = Math.hypot(dx, dy);
+        if (dist > 1) {
+          const step = Math.min(dist, sp * 60 * (dt / 1000));
+          vx = dx / dist * step;
+          vy = dy / dist * step;
+          moving = step > 0.01;
+        }
+      }
+
+      if (moving) {
+        x += vx; y += vy;
+        const homeD = Math.hypot(x - hx, y - hy);
+        if (homeD > leash) {
+          const dx = x - hx, dy = y - hy;
+          x = hx + dx / homeD * leash;
+          y = hy + dy / homeD * leash;
+        }
+        rec.x = x; rec.y = y;
+      }
+
+      let fx = vx, fy = vy;
+      if (!moving && target) { fx = target.x - x; fy = target.y - y; }
+      if (Math.abs(fx) + Math.abs(fy) > 0.01) {
+        rec.dir = Math.abs(fx) > Math.abs(fy) ? (fx < 0 ? 2 : 3) : (fy < 0 ? 0 : 1);
+      }
+      rec.moving = moving;
+      rec.updatedAt = now;
+      rows.push([
+        String(ck).slice(prefix.length),
+        Math.round(x * 10) / 10,
+        Math.round(y * 10) / 10,
+        rec.aggro ? 1 : 0,
+        Number(rec.dir) || 1,
+        moving ? 1 : 0,
+        String(rec.target || ''),
+      ]);
+    }
+
+    if (rows.length) {
+      this.roomBroadcast(room, { type: 'mob-position', room, rows, ts: now }, null);
+    }
+    return rows.length > 0;
+  }
+
+  async maybePersistMobMovement(room, now = Date.now()) {
+    room = cleanRoom(room);
+    if (!room.startsWith('dungeon-')) return;
+    const times = this.mobPersistTimes();
+    const prev = Number(times.get(room) || 0);
+    if (now - prev < 2000) return;
+    times.set(room, now);
+    await this.persistMobRoom(room);
   }
 
   mobDeadRows(room, now = Date.now()) {
@@ -652,16 +814,30 @@ export class RealtimeHub extends BaseRealtimeHub {
         if (!Array.isArray(row) || row.length < 2) continue;
         const key = cleanMobKey(row[0]);
         const mhp = Math.max(1, finite(row[1], 1, 10000000, 1));
+        const x = finite(row[2], -100000, 100000, NaN);
+        const y = finite(row[3], -100000, 100000, NaN);
+        const sp = Math.max(0.1, finite(row[4], 0.1, 100, 1));
+        const sz = Math.max(8, finite(row[5], 8, 500, 30));
         if (!key) continue;
         const ck = this.mobCompound(room, key);
         let rec = health.get(ck);
         if (!rec) {
-          rec = { hp: mhp, mhp, updatedAt: now, killer: '', party: '' };
+          rec = {
+            hp: mhp, mhp, updatedAt: now, killer: '', party: '',
+            x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0,
+            hx: Number.isFinite(x) ? x : 0, hy: Number.isFinite(y) ? y : 0,
+            sp, sz, aggro: false, target: '', dir: 1, moving: false,
+          };
           health.set(ck, rec);
         } else {
           rec.mhp = mhp;
           if (!Number.isFinite(Number(rec.hp))) rec.hp = mhp;
           rec.hp = Math.max(0, Math.min(Number(rec.hp) || 0, mhp));
+          if (!Number.isFinite(Number(rec.hx)) && Number.isFinite(x)) rec.hx = x;
+          if (!Number.isFinite(Number(rec.hy)) && Number.isFinite(y)) rec.hy = y;
+          if (!Number.isFinite(Number(rec.x)) && Number.isFinite(x)) rec.x = x;
+          if (!Number.isFinite(Number(rec.y)) && Number.isFinite(y)) rec.y = y;
+          rec.sp = sp; rec.sz = sz;
           rec.updatedAt = now;
           health.set(ck, rec);
         }
@@ -700,6 +876,8 @@ export class RealtimeHub extends BaseRealtimeHub {
       rec.updatedAt = now;
       rec.killer = String(a.pid || '');
       rec.party = String(a.partyId || '');
+      rec.aggro = rec.hp > 0;
+      rec.target = rec.hp > 0 ? String(a.pid || '') : '';
       health.set(ck, rec);
 
       let respawnAt = 0, killer = rec.killer, party = rec.party;
@@ -719,7 +897,9 @@ export class RealtimeHub extends BaseRealtimeHub {
         type: 'mob-authority', room, key,
         hp: Math.round(rec.hp * 100) / 100,
         mhp: Math.round(rec.mhp * 100) / 100,
-        respawnAt, killer, party, event, ts: now,
+        respawnAt, killer, party, event,
+        x: rec.x, y: rec.y, aggro: !!rec.aggro, dir: rec.dir, moving: !!rec.moving,
+        target: String(rec.target || ''), ts: now,
       }, null);
       return;
     }
@@ -961,6 +1141,12 @@ export class RealtimeHub extends BaseRealtimeHub {
       const pushSnapshot = now - (Number(a.lastSnapshotPush) || 0) >= 1200;
       if (pushSnapshot) a.lastSnapshotPush = now;
       ws.serializeAttachment(a);
+
+      if (currentRoom.startsWith('dungeon-')) {
+        await this.ensureMobRoomLoaded(currentRoom);
+        this.tickMobAI(currentRoom, now);
+        await this.maybePersistMobMovement(currentRoom, now);
+      }
 
       this.roomBroadcast(currentRoom, { type: 'move', player: packetFromAtt(a), room: currentRoom }, ws);
       if (pushSnapshot) this.sendRoomSnapshot(ws, currentRoom);
