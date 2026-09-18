@@ -1,15 +1,15 @@
 (function(){
   'use strict';
 
-  var seq=0, applying=0, lastRoom='', lastRegister=0, catalogRoom='', authReady=false, serverMode=false;
+  var seq=0, applying=0, lastRoom='', lastRegister=0, catalogRoom='', authReady=false, serverMode=false, worldCycle='';
   var authority=new Map(), deadUntil=new Map(), entityCache=new Map(), entityCacheLen=-1, entityCacheAt=0, diagCache=null, diagCacheAt=0, catalogCount=0;
 
   function rt(){try{return window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null}catch(_){return null}}
   function room(){var d=rt();return String((d&&d.room)||'')}
-  function active(){try{return typeof P!=='undefined'&&P&&P.scene==='dungeon'&&/^dungeon-/.test(room())&&typeof window.PPA_RT_SEND==='function'}catch(_){return false}}
+  function active(){try{if(typeof P==='undefined'||!P||typeof window.PPA_RT_SEND!=='function')return false;var r=room();return (P.scene==='dungeon'&&/^dungeon-/.test(r))||(P.scene==='worldboss'&&r==='worldboss')}catch(_){return false}}
   function selfId(){try{return String((typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE&&PPA_ONLINE.selfId)||'')}catch(_){return''}}
   function partyId(){try{return String((window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'')}catch(_){return''}}
-  function keyOf(e){if(!e)return'';if(e.isDungeon60Boss)return'b60';if(e.isBoss||e.si==null)return'';var si=Math.floor(Number(e.si));return Number.isFinite(si)&&si>=0&&si<10000?'s'+si:''}
+  function keyOf(e){if(!e)return'';if(e.isWorldCrystalBoss)return'wtitan';if(e.isDungeon60Boss)return'b60';if(e.isDungeon21Boss&&!e.isArenaBoss)return'b40';if(e.isDungeonPhoenixBoss)return'p20';if(e.isBoss||e.si==null)return'';var si=Math.floor(Number(e.si));return Number.isFinite(si)&&si>=0&&si<10000?'s'+si:''}
   function siOf(key){var m=String(key||'').match(/^s(\d{1,4})$/);return m?Number(m[1]):-1}
   function entities(){try{return (typeof EN!=='undefined'&&Array.isArray(EN))?EN:[]}catch(_){return[]}}
   function rebuildEntityCache(force){
@@ -27,6 +27,18 @@
   function materializeKey(key,fx){
     key=String(key||'');
     try{
+      if(key==='wtitan'&&typeof spawnWorldCrystalBoss==='function'){
+        window.__PPA_SERVER_SPAWN_CALL=true;
+        try{var wt=spawnWorldCrystalBoss();if(wt)cacheEntity(wt);return wt||find(key)||null}finally{window.__PPA_SERVER_SPAWN_CALL=false}
+      }
+      if(key==='p20'&&typeof spawnBoss==='function'){
+        window.__PPA_SERVER_SPAWN_CALL=true;
+        try{spawnBoss();var ph=find(key);if(ph)cacheEntity(ph);return ph||null}finally{window.__PPA_SERVER_SPAWN_CALL=false}
+      }
+      if(key==='b40'&&typeof spawnDungeon21Boss==='function'){
+        window.__PPA_SERVER_SPAWN_CALL=true;
+        try{var l=spawnDungeon21Boss();var b40=l||find(key);if(b40)cacheEntity(b40);return b40||null}finally{window.__PPA_SERVER_SPAWN_CALL=false}
+      }
       if(key==='b60'){
         if(typeof window.PPA_DRAGON60_SPAWN_FROM_SERVER==='function'){
           var b=window.PPA_DRAGON60_SPAWN_FROM_SERVER();
@@ -66,6 +78,17 @@
   function currentCatalog(){
     var rows=[];
     try{
+      if(typeof P!=='undefined'&&P&&P.scene==='worldboss'){
+        var pos=(typeof WORLD_CRYSTAL_BOSS_POS!=='undefined'&&WORLD_CRYSTAL_BOSS_POS)||{x:0,y:0};
+        var resetAt=0;try{if(typeof worldBossNextResetAt==='function')resetAt=Number(worldBossNextResetAt())||0}catch(_){}
+        rows.push(['wtitan',
+          Math.max(1,Number(typeof WORLD_CRYSTAL_BOSS_HP!=='undefined'?WORLD_CRYSTAL_BOSS_HP:70000)||70000),
+          Math.round(Number(pos.x||0)*10)/10,Math.round(Number(pos.y||0)*10)/10,
+          .1,142,Math.max(1,Number(typeof WORLD_CRYSTAL_PROJECTILE_DAMAGE!=='undefined'?WORLD_CRYSTAL_PROJECTILE_DAMAGE:14)||14),
+          resetAt
+        ]);
+        catalogCount=rows.length;return rows;
+      }
       if(typeof DG_ACTIVE_SPAWNS!=='undefined'&&Array.isArray(DG_ACTIVE_SPAWNS)){
         for(var si=0;si<DG_ACTIVE_SPAWNS.length;si++){
           var lvl=(typeof DG_SPAWN_LVL!=='undefined'&&DG_SPAWN_LVL)?Number(DG_SPAWN_LVL[si])||1:1;
@@ -94,14 +117,25 @@
             Math.max(1,Number(spec&&spec.dmg)||Number(t&&t.atk)||Number(t&&t.dmg)||1)
           ]);
         }
-        if(typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='41-60'&&typeof DG_BOSS_IMG!=='undefined'&&Array.isArray(DG_BOSS_IMG)){
+        if(typeof DG_BOSS_IMG!=='undefined'&&Array.isArray(DG_BOSS_IMG)){
           var bp=null;
           try{
             if(typeof dgNearestWalk==='function')bp=dgNearestWalk(Number(DG_BOSS_IMG[0]||0)*scale,Number(DG_BOSS_IMG[1]||0)*scale);
           }catch(_){}
           var bx=bp&&Number.isFinite(Number(bp.x))?Number(bp.x):Number(DG_BOSS_IMG[0]||0)*scale;
           var by=bp&&Number.isFinite(Number(bp.y))?Number(bp.y):Number(DG_BOSS_IMG[1]||0)*scale;
-          rows.push(['b60',25000,Math.round(bx*10)/10,Math.round(by*10)/10,1.05,180,130]);
+          bx=Math.round(bx*10)/10;by=Math.round(by*10)/10;
+          if(typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='1-20'){
+            rows.push(['p20',2613,bx,by,.1,150,85]);
+          }else if(typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='21+'){
+            rows.push(['b40',
+              Math.max(1,Number(typeof DUNGEON21_BOSS_HP!=='undefined'?DUNGEON21_BOSS_HP:9000)||9000),
+              bx,by,.1,150,
+              Math.max(1,Number(typeof DUNGEON21_BOSS_STAFF_DMG!=='undefined'?DUNGEON21_BOSS_STAFF_DMG:190)||190)
+            ]);
+          }else if(typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='41-60'){
+            rows.push(['b60',25000,bx,by,1.05,180,130]);
+          }
         }
         if(rows.length){catalogCount=rows.length;return rows;}
       }
@@ -150,6 +184,22 @@
     return d===3?0:d===2?1:d===0?2:3;
   }
 
+  function bossDirName(serverDir){
+    var d=Math.round(Number(serverDir));
+    return d===0?'up':d===1?'down':d===2?'left':'right';
+  }
+  function applyBossVisualDir(e,serverDir,moving){
+    if(!e||!Number.isFinite(Number(serverDir)))return;
+    var d=Math.round(Number(serverDir)),name=bossDirName(d);
+    try{
+      if(e.isDungeon21Boss)e.d21Dir=name;
+      if(e.isWorldCrystalBoss)e.wbDir=name;
+      if(e.isDungeonPhoenixBoss)e.face=(d===2?-1:(d===3?1:(e.face||1)));
+      if(e.isDungeon60Boss)e.face=(d===2?-1:(d===3?1:(e.face||1)));
+      e.__ppaServerDir=d;e.__ppaServerMoving=!!moving;
+    }catch(_){}
+  }
+
   function lockServerMob(e){
     if(!e||!keyOf(e))return;
     lockProp(e,'hp');
@@ -157,6 +207,7 @@
     lockProp(e,'aggro');
     lockProp(e,'spiderDir');lockProp(e,'spiderMoving');
     lockProp(e,'animDir');lockProp(e,'animMoving');
+    lockProp(e,'d21Dir');lockProp(e,'wbDir');
   }
 
   function isServerMode(){return active()}
@@ -276,7 +327,7 @@
     var key=String(row[0]||''),hp=Number(row[1]),mhp=Number(row[2]),respawnAt=Number(row[3])||0;
     var killer=String(row[4]||''),party=String(row[5]||'');
     var x=Number(row[6]),y=Number(row[7]),aggro=!!row[8],dir=Number(row[9]),moving=!!row[10],target=String(row[11]||''),sz=Number(row[12]);
-    if(!(/^s\d{1,4}$/.test(key)||key==='b60')||!Number.isFinite(hp)||!Number.isFinite(mhp))return;
+    if(!(/^s\d{1,4}$/.test(key)||key==='p20'||key==='b40'||key==='b60'||key==='wtitan')||!Number.isFinite(hp)||!Number.isFinite(mhp))return;
 
     var now=Date.now(),tomb=Number(deadUntil.get(key)||0);
     if(hp<=0&&respawnAt>now){
@@ -324,7 +375,7 @@
         e.aggro=aggro;
         if(Number.isFinite(dir)){
           var vd=visualDir(dir);
-          e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=dir;e.__ppaVisualDir=vd;
+          e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=dir;e.__ppaVisualDir=vd;applyBossVisualDir(e,dir,moving);
         }
         e.spiderMoving=moving;e.animMoving=moving;e.__ppaServerMoving=moving;
       }finally{applying--}
@@ -333,6 +384,9 @@
 
     // Dead is also authoritative. If local spawn has not been created yet,
     // keeping it in authority Map is enough; reconcile() will remove it later.
+    if(key==='wtitan'){
+      try{if(typeof worldBossMarkKilled==='function')worldBossMarkKilled()}catch(_){}
+    }
     if(!e)return;
     lockServerMob(e);
     e.__ppaAwaitAuthority=false;
@@ -381,7 +435,7 @@
           if(Number.isFinite(Number(st.sz))&&Number(st.sz)>0)e.sz=Number(st.sz);
           e.aggro=!!st.aggro;
           var d=Number(st.dir);
-          if(Number.isFinite(d)){var vd=visualDir(d);e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=d;e.__ppaVisualDir=vd}
+          if(Number.isFinite(d)){var vd=visualDir(d);e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=d;e.__ppaVisualDir=vd;applyBossVisualDir(e,d,!!st.moving)}
           e.spiderMoving=!!st.moving;e.animMoving=!!st.moving;
         }finally{applying--}
       }
@@ -439,6 +493,68 @@
         authReady=true;
         return;
       }
+      if(m.type==='boss-special'){
+        var bk=String(m.key||''),be=find(bk),phase=String(m.phase||''),kind=String(m.kind||''),now=Date.now();
+        if(!be){
+          var bst=authority.get(bk);
+          if(bst&&Number(bst.hp)>0)be=materializeKey(bk,false);
+        }
+        if(be){
+          lockServerMob(be);
+          var bd=Number(m.dir);
+          applying++;
+          try{
+            if(Number.isFinite(bd))applyBossVisualDir(be,bd,false);
+            if(kind==='phoenix-aoe'){
+              if(phase==='telegraph'){
+                be.phoenixAoePending=true;be.phoenixAoeImpactAt=Number(m.impactAt)||now+700;be.phoenixAoeFxUntil=(Number(m.impactAt)||now+700)+350;
+              }else if(phase==='impact'){
+                be.phoenixAoePending=false;be.phoenixAoeFxUntil=now+350;
+              }
+            }else if(kind==='lord40-aoe'){
+              if(phase==='telegraph'){
+                be.d21AoePending=true;be.d21AoeImpactAt=Number(m.impactAt)||now+700;be.d21AoeFxUntil=(Number(m.impactAt)||now+700)+350;be.d21State='attack';be.d21ActionUntil=(Number(m.impactAt)||now+700)+200;
+              }else if(phase==='impact'){
+                be.d21AoePending=false;be.d21AoeFxUntil=now+350;be.d21State='attack';be.d21ActionUntil=now+250;
+              }
+            }else if(kind==='titan-aoe'){
+              if(phase==='telegraph'){
+                be.wbAoePending=true;be.wbAoeImpactAt=Number(m.impactAt)||now+620;be.wbState='stomp';be.wbActionUntil=(Number(m.impactAt)||now+620)+100;
+                try{if(typeof WORLD_CRYSTAL_STOMP_FX!=='undefined')WORLD_CRYSTAL_STOMP_FX={x:be.x,y:be.y+10,born:now,duration:700}}catch(_){}
+              }else if(phase==='impact'){
+                be.wbAoePending=false;be.wbState='aoe';be.wbActionUntil=now+900;
+                try{if(typeof WORLD_CRYSTAL_AOE_FX!=='undefined'&&typeof WORLD_CRYSTAL_AOE_RADIUS!=='undefined')WORLD_CRYSTAL_AOE_FX={x:be.x,y:be.y+8,born:now,duration:950,r:WORLD_CRYSTAL_AOE_RADIUS}}catch(_){}
+              }
+            }else if(kind==='titan-crystal'&&phase==='launch'){
+              be.wbState='throw';be.wbActionUntil=now+520;
+              try{
+                if(typeof WORLD_CRYSTAL_PROJECTILES!=='undefined'&&Array.isArray(WORLD_CRYSTAL_PROJECTILES)){
+                  var sx=Number(be.x),sy=Number(be.y)-105,tx=Number(m.tx),ty=Number(m.ty)-18;
+                  var dx=tx-sx,dy=ty-sy,dist=Math.max(1,Math.hypot(dx,dy)),speed=8.5;
+                  WORLD_CRYSTAL_PROJECTILES.push({x:sx,y:sy,vx:dx/dist*speed,vy:dy/dist*speed,life:220,born:now,angle:Math.atan2(dy,dx),dmg:Math.max(1,Number(m.dmg)||14),__ppaServerTarget:String(m.target||'')});
+                }
+              }catch(_){}
+            }
+          }finally{applying--}
+        }
+        if(phase==='impact'){
+          var targets=Array.isArray(m.targets)?m.targets:[],mine=selfId();
+          if(targets.indexOf(mine)>=0){
+            try{
+              var dodge=(typeof effectivePlayerDodge==='function')?Number(effectivePlayerDodge())||0:Number(P&&P.dodge)||0;
+              if(Math.random()*100<dodge){
+                if(typeof showPickup==='function')showPickup('Уворот!','#88ffcc');
+              }else{
+                var raw=Math.max(1,Number(m.dmg)||1),dtype=String(m.damageType||'magic');
+                var dealt=(typeof playerDmg==='function')?playerDmg(raw,dtype):raw;
+                P.hp=Math.max(0,Number(P.hp||0)-Math.max(1,Number(dealt)||1));
+                if(typeof showPickup==='function')showPickup(kind==='phoenix-aoe'?'Огненный AOE · −'+Math.max(1,Math.round(dealt)):kind==='lord40-aoe'?'AOE Скверны · −'+Math.max(1,Math.round(dealt)):'Кристальный удар · −'+Math.max(1,Math.round(dealt)),kind==='lord40-aoe'?'#a8ff62':'#66bbff');
+              }
+            }catch(_){}
+          }
+        }
+        return;
+      }
       if(m.type==='mob-attack'){
         var key=String(m.key||''),e=find(key),target=String(m.target||'');
         if(!e&&target&&target===selfId()){
@@ -453,12 +569,14 @@
           e.atkAnim=12;
           e.atkCD=50;
           if(e.isDungeon60Boss&&typeof window.PPA_DRAGON60_ON_ATTACK==='function')window.PPA_DRAGON60_ON_ATTACK(e,m);
+          if(e.isDungeon21Boss){e.d21State='attack';e.d21ActionUntil=Date.now()+520}
+          if(e.isWorldCrystalBoss){e.wbState='throw';e.wbActionUntil=Date.now()+520}
           var dir=Number(m.dir);
           applying++;
           try{
             if(Number.isFinite(Number(m.x)))e.x=Number(m.x);
             if(Number.isFinite(Number(m.y)))e.y=Number(m.y);
-            if(Number.isFinite(dir)){var vd=visualDir(dir);e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=dir;e.__ppaVisualDir=vd}
+            if(Number.isFinite(dir)){var vd=visualDir(dir);e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=dir;e.__ppaVisualDir=vd;applyBossVisualDir(e,dir,false)}
             e.spiderMoving=false;e.animMoving=false;
           }finally{applying--}
         }
@@ -490,7 +608,10 @@
       entityCache.clear();entityCacheLen=-1;diagCache=null;
       return;
     }
-    register(false);
+    if(typeof P!=='undefined'&&P&&P.scene==='worldboss'){
+      var cyc='';try{if(typeof worldBossDailyKey==='function')cyc=String(worldBossDailyKey()||'')}catch(_){}
+      if(cyc&&worldCycle!==cyc){worldCycle=cyc;authReady=false;register(true)}else register(false);
+    }else register(false);
     // Legacy AI transform writes are hard-locked. A 1 Hz sanity reconcile is
     // enough; position packets already apply their changed rows immediately.
     reconcileAuthority();
