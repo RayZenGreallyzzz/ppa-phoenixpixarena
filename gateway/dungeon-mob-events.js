@@ -399,31 +399,12 @@
     reconcileAuthority();
   }
 
-  function ensureDiagOverlay(){
-    var id='ppaMobDiagOverlay',el=document.getElementById(id);
-    if(!el){
-      el=document.createElement('div');el.id=id;
-      el.style.cssText='position:fixed;left:50%;top:30px;transform:translateX(-50%);z-index:2147483646;pointer-events:none;background:rgba(0,0,0,.78);border:1px solid rgba(90,255,210,.65);border-radius:5px;padding:3px 5px;color:#9fffdc;font:700 8px/1.25 monospace;white-space:pre;text-align:left;max-width:94vw';
-      document.body.appendChild(el);
-    }
-    try{
-      if(!active()){el.style.display='none';return}
-      el.style.display='block';
-      var d=window.PPA_MOB_SERVER_DIAG?window.PPA_MOB_SERVER_DIAG():{};
-      el.textContent=
-        'MOB '+(d.ready?'READY':'WAIT')+' · '+String(d.room||'?')+' / '+String(d.serverRoom||'?')+'\n'+
-        'A '+d.count+'/'+d.catalog+' · L '+d.mobs+' · LOCK '+d.locked+' · Δ'+d.maxDelta+'\n'+
-        'K '+d.keyHash+' · A '+d.authHash+' · L '+d.localHash+'\n'+
-        (Array.isArray(d.samples)?d.samples.join(' | '):'');
-    }catch(_){}
-  }
 
   function boot(){
     installDropGuard();
     setTimeout(function(){register(true)},600);
     setInterval(tick,1000);
     setInterval(reconcileAuthority,33);
-    setInterval(ensureDiagOverlay,500);
     document.addEventListener('visibilitychange',function(){if(!document.hidden)setTimeout(function(){register(true)},400)},{passive:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
