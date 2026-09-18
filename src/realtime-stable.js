@@ -513,6 +513,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         dmg: Math.max(1, Number(row.dmg) || 1),
         nextAttackAt: Math.max(0, Number(row.nextAttackAt) || 0),
         nextSpecialAt: Math.max(0, Number(row.nextSpecialAt) || 0),
+        nextProjectileAt: Math.max(0, Number(row.nextProjectileAt) || 0),
         nextAoeAt: Math.max(0, Number(row.nextAoeAt) || 0),
         specialImpactAt: Math.max(0, Number(row.specialImpactAt) || 0),
         specialKind: String(row.specialKind || ''),
@@ -559,6 +560,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         dmg: Math.max(1, Number(rec.dmg) || 1),
         nextAttackAt: Math.max(0, Number(rec.nextAttackAt) || 0),
         nextSpecialAt: Math.max(0, Number(rec.nextSpecialAt) || 0),
+        nextProjectileAt: Math.max(0, Number(rec.nextProjectileAt) || 0),
         nextAoeAt: Math.max(0, Number(rec.nextAoeAt) || 0),
         specialImpactAt: Math.max(0, Number(rec.specialImpactAt) || 0),
         specialKind: String(rec.specialKind || ''),
@@ -606,6 +608,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       rec.moving = false;
       rec.nextAttackAt = 0;
       rec.nextSpecialAt = 0;
+      rec.nextProjectileAt = 0;
       rec.nextAoeAt = 0;
       rec.specialImpactAt = 0;
       rec.specialKind = '';
@@ -745,6 +748,17 @@ export class RealtimeHub extends BaseRealtimeHub {
       const kind = phoenix ? 'phoenix-aoe' : 'lord40-aoe';
       const radius = phoenix ? 205 : 180;
       const dmg = phoenix ? 36 : 26;
+      if (phoenix) {
+        if (!(Number(rec.nextProjectileAt) > 0)) rec.nextProjectileAt = now + 2500;
+        if (now >= Number(rec.nextProjectileAt || 0)) {
+          while (now >= rec.nextProjectileAt) rec.nextProjectileAt += 2500;
+          this.roomBroadcast(room, {
+            type: 'boss-special', room, key: mobKey, kind: 'phoenix-fire', phase: 'launch',
+            target: n.p.pid, tx: Math.round(n.p.x * 10) / 10, ty: Math.round(n.p.y * 10) / 10,
+            x, y, dmg: 85, damageType: 'magic', dir: Number(rec.dir) || 1, ts: now,
+          }, null);
+        }
+      }
       if (!(Number(rec.nextSpecialAt) > 0)) {
         rec.nextSpecialAt = now + this.bossDelay(mobKey, now, 9000, 4001);
       }
@@ -1072,7 +1086,7 @@ export class RealtimeHub extends BaseRealtimeHub {
             x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0,
             hx: Number.isFinite(x) ? x : 0, hy: Number.isFinite(y) ? y : 0,
             sp, sz, dmg, nextAttackAt: 0,
-            nextSpecialAt: 0, nextAoeAt: 0, specialImpactAt: 0, specialKind: '',
+            nextSpecialAt: 0, nextProjectileAt: 0, nextAoeAt: 0, specialImpactAt: 0, specialKind: '',
             resetAt: clientResetAt > now ? clientResetAt : 0,
             aggro: false, target: '', dir: 1, moving: false, positioned: true,
           };
