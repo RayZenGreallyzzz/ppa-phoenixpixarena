@@ -489,6 +489,8 @@ export class RealtimeHub extends BaseRealtimeHub {
         hy: row.hy != null && Number.isFinite(Number(row.hy)) ? Number(row.hy) : undefined,
         sp: Math.max(0.1, Number(row.sp) || 1),
         sz: Math.max(8, Number(row.sz) || 30),
+        dmg: Math.max(1, Number(row.dmg) || 1),
+        nextAttackAt: Math.max(0, Number(row.nextAttackAt) || 0),
         aggro: !!row.aggro,
         target: String(row.target || ''),
         dir: Number.isFinite(Number(row.dir)) ? Number(row.dir) : 1,
@@ -528,6 +530,8 @@ export class RealtimeHub extends BaseRealtimeHub {
         hy: Number.isFinite(Number(rec.hy)) ? Number(rec.hy) : null,
         sp: Math.max(0.1, Number(rec.sp) || 1),
         sz: Math.max(8, Number(rec.sz) || 30),
+        dmg: Math.max(1, Number(rec.dmg) || 1),
+        nextAttackAt: Math.max(0, Number(rec.nextAttackAt) || 0),
         aggro: !!rec.aggro,
         target: String(rec.target || ''),
         dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1,
@@ -725,6 +729,22 @@ export class RealtimeHub extends BaseRealtimeHub {
           vx = dx / dist * step;
           vy = dy / dist * step;
           moving = step > 0.01;
+        } else if (dist <= reach) {
+          const nextAttackAt = Math.max(0, Number(rec.nextAttackAt) || 0);
+          if (now >= nextAttackAt) {
+            rec.nextAttackAt = now + 850;
+            this.roomBroadcast(room, {
+              type: 'mob-attack',
+              room,
+              key: String(ck).slice(prefix.length),
+              target: String(target.pid || ''),
+              dmg: Math.max(1, Math.round(Number(rec.dmg) || 1)),
+              x: Math.round(x * 10) / 10,
+              y: Math.round(y * 10) / 10,
+              dir: Number(rec.dir) || 1,
+              ts: now,
+            }, null);
+          }
         }
       }
 
@@ -861,6 +881,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         const y = finite(row[3], -100000, 100000, NaN);
         const sp = Math.max(0.1, finite(row[4], 0.1, 100, 1));
         const sz = Math.max(8, finite(row[5], 8, 500, 30));
+        const dmg = Math.max(1, finite(row[6], 1, 1000000, 1));
         if (!key) continue;
         const ck = this.mobCompound(room, key);
         let rec = health.get(ck);
@@ -869,7 +890,8 @@ export class RealtimeHub extends BaseRealtimeHub {
             hp: mhp, mhp, updatedAt: now, killer: '', party: '',
             x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0,
             hx: Number.isFinite(x) ? x : 0, hy: Number.isFinite(y) ? y : 0,
-            sp, sz, aggro: false, target: '', dir: 1, moving: false, positioned: true,
+            sp, sz, dmg, nextAttackAt: 0,
+            aggro: false, target: '', dir: 1, moving: false, positioned: true,
           };
           health.set(ck, rec);
         } else {
@@ -883,7 +905,7 @@ export class RealtimeHub extends BaseRealtimeHub {
             }
             rec.positioned = true;
           }
-          rec.sp = sp; rec.sz = sz;
+          rec.sp = sp; rec.sz = sz; rec.dmg = dmg;
           rec.updatedAt = now;
           health.set(ck, rec);
         }
