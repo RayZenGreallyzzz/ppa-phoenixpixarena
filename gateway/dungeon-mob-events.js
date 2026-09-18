@@ -226,6 +226,26 @@
   }
   window.PPA_MOB_REWARD_ELIGIBLE=rewardAllowed;
 
+  function installBossRuntimeGuards(){
+    try{
+      [['spawnBoss','spawn'],['spawnDungeon21Boss','spawn'],['spawnWorldCrystalBoss','spawn'],
+       ['phoenixDungeonAoeUpdate','ai'],['dungeon21BossUpdate','ai'],['worldCrystalBossUpdate','ai']].forEach(function(pair){
+        var name=pair[0],kind=pair[1],base=window[name];
+        if(typeof base!=='function'||base.__ppaServerBossGuard)return;
+        var wrapped=function(){
+          if(active()){
+            if(kind==='spawn'&&!window.__PPA_SERVER_SPAWN_CALL)return null;
+            if(kind==='ai')return;
+          }
+          return base.apply(this,arguments);
+        };
+        wrapped.__ppaServerBossGuard=1;
+        wrapped.__ppaServerBossBase=base;
+        try{window[name]=wrapped}catch(_){}
+      });
+    }catch(_){}
+  }
+
   function installDropGuard(){
     try{
       if(typeof dropLoot!=='function'||dropLoot.__ppaServerGuard)return;
@@ -602,6 +622,7 @@
 
   function tick(){
     installDropGuard();
+    installBossRuntimeGuards();
     serverMode=active();
     if(!serverMode){
       lastRoom='';catalogRoom='';authReady=false;authority.clear();deadUntil.clear();
@@ -619,6 +640,7 @@
 
   function boot(){
     installDropGuard();
+    installBossRuntimeGuards();
     serverMode=active();
     setTimeout(function(){register(true)},600);
     setInterval(tick,1000);
