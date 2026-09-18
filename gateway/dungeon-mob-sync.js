@@ -59,6 +59,16 @@
     e.__ppaRewardParty=String(party||'');
   }
 
+  // The base game awards XP/kills locally whenever an entity reaches 0 HP.
+  // Realtime deaths happen on every client, so only the killer (or killer's
+  // current party) is allowed to receive combat credit.
+  window.PPA_MOB_REWARD_ELIGIBLE=function(e){
+    try{
+      if(!active()||!mobKey(e))return true;
+      return !!(e&&e.__ppaLootEligible===true);
+    }catch(_){return true}
+  };
+
   function installDropGuard(){
     try{
       if(window.__PPA_DUNGEON_DROP_GUARD_V297)return true;
