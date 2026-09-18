@@ -835,10 +835,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     const ax = Math.abs(Number(dx) || 0), ay = Math.abs(Number(dy) || 0);
     prev = Math.round(Number(prev));
     if (!(ax + ay > 0.01)) return (prev >= 0 && prev <= 3) ? prev : 1;
-    const horiz = prev === 2 || prev === 3;
-    // 22% hysteresis around diagonals: stops up/side/up/side flicker.
-    if (horiz && ax >= ay * 0.78) return dx < 0 ? 2 : 3;
-    if (!horiz && prev >= 0 && prev <= 1 && ay >= ax * 0.78) return dy < 0 ? 0 : 1;
+    // Exactly the same dominant-axis rule as the old local dungeon AI.
     return ax > ay ? (dx < 0 ? 2 : 3) : (dy < 0 ? 0 : 1);
   }
 
@@ -882,12 +879,24 @@ export class RealtimeHub extends BaseRealtimeHub {
       const isAuthorityBoss = phoenix || lord40 || boss60 || titan;
       const stationaryBoss = phoenix || lord40 || titan;
       const reach = lord40 ? 112 : (phoenix ? 100 : (boss60 ? 112 : (titan ? 0 : (42 + (sz - 30) * 0.35))));
-      const leash = boss60 ? 420 : (stationaryBoss ? 0 : 260);
       const normalLevel = Math.max(1, Math.round(Number(rec.lvl) || 1));
-      const normalAggroRadius = normalLevel <= 2 ? 140 : (normalLevel <= 4 ? 165 : (normalLevel <= 6 ? 190 : (normalLevel <= 10 ? 220 : 250)));
+      const normalAggroRadius = normalLevel <= 2 ? 90 : (normalLevel <= 4 ? 115 : (normalLevel <= 6 ? 140 : (normalLevel <= 10 ? 170 : 200)));
       const aggroRadius = titan ? 1800 : ((phoenix || lord40) ? 620 : (boss60 ? 420 : normalAggroRadius));
-      const reacquireRadius = titan ? 2200 : ((phoenix || lord40) ? 700 : (boss60 ? 520 : 360));
+      const reacquireRadius = titan ? 2200 : ((phoenix || lord40) ? 700 : (boss60 ? 520 : 260));
       const attackEvery = lord40 ? 1200 : (phoenix ? 1100 : (boss60 ? 1200 : 850));
+      const hasRoomBounds = !isAuthorityBoss &&
+        [rec.roomMinX, rec.roomMinY, rec.roomMaxX, rec.roomMaxY].every((v) => Number.isFinite(Number(v))) &&
+        Number(rec.roomMaxX) > Number(rec.roomMinX) && Number(rec.roomMaxY) > Number(rec.roomMinY);
+      const roomPad = Math.max(10, sz * 0.18);
+      const inOwnRoom = (px, py, pad = 0) => !hasRoomBounds || (
+        px >= Number(rec.roomMinX) + pad && px <= Number(rec.roomMaxX) - pad &&
+        py >= Number(rec.roomMinY) + pad && py <= Number(rec.roomMaxY) - pad
+      );
+      const clampOwnRoom = (px, py, pad = 0) => ({
+        x: hasRoomBounds ? Math.max(Number(rec.roomMinX) + pad, Math.min(Number(rec.roomMaxX) - pad, px)) : px,
+        y: hasRoomBounds ? Math.max(Number(rec.roomMinY) + pad, Math.min(Number(rec.roomMaxY) - pad, py)) : py,
+      });
+      const leash = boss60 ? 420 : (stationaryBoss ? 0 : (hasRoomBounds ? Infinity : 260));
       let target = rec.target ? byPid.get(String(rec.target)) : null;
 
       // Original dungeon behaviour: ordinary mobs aggro when a player passes
@@ -896,6 +905,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (!rec.aggro && players.length) {
         let best = null, bd = Infinity;
         for (const p of players) {
+          if (!isAuthorityBoss && !inOwnRoom(p.x, p.y, 0)) continue;
           const pd = Math.hypot(p.x - x, p.y - y);
           if (pd < bd) { bd = pd; best = p; }
         }
@@ -909,10 +919,11 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (rec.aggro && !target && players.length) {
         let best = null, bd = Infinity;
         for (const p of players) {
+          if (!isAuthorityBoss && !inOwnRoom(p.x, p.y, 0)) continue;
           const pd = Math.hypot(p.x - x, p.y - y);
           if (pd < bd) { bd = pd; best = p; }
         }
-        if (best && bd <= reacquireRadius) {
+        if (best && (isAuthorityBoss ? bd <= reacquireRadius : true)) {
           target = best;
           rec.target = best.pid;
         }
@@ -922,18 +933,31 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       let vx = 0, vy = 0, moving = false;
       if (rec.aggro && target) {
-        const dx = target.x - x, dy = target.y - y, dist = Math.hypot(dx, dy);
+        let chaseX = target.x, chaseY = target.y;
+        let edgeChase = false;
+        if (!isAuthorityBoss && hasRoomBounds && !inOwnRoom(target.x, target.y, 0)) {
+          const edge = clampOwnRoom(target.x, target.y, Math.max(12, sz * 0.22));
+          chaseX = edge.x; chaseY = edge.y; edgeChase = true;
+        }
+        const dx = chaseX - x, dy = chaseY - y, dist = Math.hypot(dx, dy);
         const homeD = Math.hypot(x - hx, y - hy);
-        if (dist > reacquireRadius || homeD > leash + 20) {
+        if (isAuthorityBoss && (dist > reacquireRadius || homeD > leash + 20)) {
           rec.aggro = false;
           rec.target = '';
           target = null;
-        } else if (dist > reach && dist > 0.001 && !stationaryBoss) {
-          const step = Math.min(dist - reach, sp * 60 * (dt / 1000));
+        } else if (edgeChase && dist <= Math.max(14, sp * 3.2)) {
+          // Player left this mob's room: reach the doorway/edge, drop aggro,
+          // then the next ticks naturally walk the mob back home.
+          rec.aggro = false;
+          rec.target = '';
+          target = null;
+        } else if (dist > (edgeChase ? 10 : reach) && dist > 0.001 && !stationaryBoss) {
+          const stop = edgeChase ? 10 : reach;
+          const step = Math.min(Math.max(0, dist - stop), sp * 60 * (dt / 1000));
           vx = dx / dist * step;
           vy = dy / dist * step;
           moving = step > 0.01;
-        } else if (dist <= reach && !titan) {
+        } else if (!edgeChase && dist <= reach && !titan) {
           if (Math.abs(dx) + Math.abs(dy) > 0.01) {
             rec.dir = this.mobFacingDir(dx, dy, rec.dir);
           }
@@ -969,11 +993,16 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       if (moving) {
         x += vx; y += vy;
-        const homeD = Math.hypot(x - hx, y - hy);
-        if (homeD > leash) {
-          const dx = x - hx, dy = y - hy;
-          x = hx + dx / homeD * leash;
-          y = hy + dy / homeD * leash;
+        if (hasRoomBounds) {
+          const cl = clampOwnRoom(x, y, roomPad);
+          x = cl.x; y = cl.y;
+        } else {
+          const homeD = Math.hypot(x - hx, y - hy);
+          if (homeD > leash) {
+            const dx = x - hx, dy = y - hy;
+            x = hx + dx / homeD * leash;
+            y = hy + dy / homeD * leash;
+          }
         }
         rec.x = x; rec.y = y;
       }
@@ -1003,7 +1032,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       // packets/sec. Render interpolation fills the gaps smoothly and cuts mobile load.
       const sends = this.mobPositionBroadcastTimes();
       const lastSend = Number(sends.get(room) || 0);
-      if (!lastSend || now - lastSend >= 160) {
+      if (!lastSend || now - lastSend >= 100) {
         sends.set(room, now);
         this.roomBroadcast(room, { type: 'mob-position', room, rows, ts: now }, null);
       }
@@ -1103,6 +1132,13 @@ export class RealtimeHub extends BaseRealtimeHub {
         const dmg = Math.max(1, finite(row[6], 1, 1000000, 1));
         const clientResetAt = key === 'wtitan' ? finite(row[7], now - 300000, now + 36 * 60 * 60 * 1000, 0) : 0;
         const mobLevel = Math.max(1, Math.min(999, Math.round(finite(row[8], 1, 999, 1))));
+        const mobRoomIndex = row[9] == null ? -1 : Math.round(finite(row[9], -1, 10000, -1));
+        const roomMinX = row[10] == null ? NaN : finite(row[10], -100000, 100000, NaN);
+        const roomMinY = row[11] == null ? NaN : finite(row[11], -100000, 100000, NaN);
+        const roomMaxX = row[12] == null ? NaN : finite(row[12], -100000, 100000, NaN);
+        const roomMaxY = row[13] == null ? NaN : finite(row[13], -100000, 100000, NaN);
+        const hasRoomBounds = mobRoomIndex >= 0 && [roomMinX, roomMinY, roomMaxX, roomMaxY].every(Number.isFinite)
+          && roomMaxX > roomMinX && roomMaxY > roomMinY;
         if (!key) continue;
 
         const ck = this.mobCompound(room, key);
@@ -1116,6 +1152,9 @@ export class RealtimeHub extends BaseRealtimeHub {
             nextSpecialAt: 0, nextProjectileAt: 0, nextAoeAt: 0, specialImpactAt: 0, specialKind: '',
             resetAt: clientResetAt > now ? clientResetAt : 0,
             lvl: mobLevel,
+            roomIndex: hasRoomBounds ? mobRoomIndex : -1,
+            roomMinX: hasRoomBounds ? roomMinX : null, roomMinY: hasRoomBounds ? roomMinY : null,
+            roomMaxX: hasRoomBounds ? roomMaxX : null, roomMaxY: hasRoomBounds ? roomMaxY : null,
             aggro: false, target: '', dir: 1, moving: false, positioned: true,
           };
           health.set(ck, rec);
@@ -1131,6 +1170,11 @@ export class RealtimeHub extends BaseRealtimeHub {
             rec.positioned = true;
           }
           rec.sp = sp; rec.sz = sz; rec.dmg = dmg; rec.lvl = mobLevel;
+          if (hasRoomBounds) {
+            rec.roomIndex = mobRoomIndex;
+            rec.roomMinX = roomMinX; rec.roomMinY = roomMinY;
+            rec.roomMaxX = roomMaxX; rec.roomMaxY = roomMaxY;
+          }
           if (key === 'wtitan' && clientResetAt > now && !(Number(rec.resetAt) > now)) rec.resetAt = clientResetAt;
           rec.updatedAt = now;
           health.set(ck, rec);
