@@ -12,12 +12,6 @@
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var t=tg();return t&&t.initData?String(t.initData):''}
-  function socialOpen(){
-    try{
-      var c=document.getElementById('ppaPlayerCard'),p=document.getElementById('ppaFriendsPanel');
-      return !!((c&&c.classList.contains('on'))||(p&&p.classList.contains('on')));
-    }catch(_){return false}
-  }
   function canonicalRoom(v){
     var r=String(v==null?'':v).trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,72);
     if(!r||r==='offline'||r==='local'||r==='none'||r==='null'||r==='undefined')return 'safe';
@@ -32,7 +26,6 @@
   }
   function rawRoom(){
     try{
-      if(socialOpen()&&RT.lastRoom)return RT.lastRoom;
       return canonicalRoom(typeof ppaOnlineRoomKey==='function'?ppaOnlineRoomKey():'safe');
     }catch(_){return RT.lastRoom||'safe'}
   }
