@@ -60,7 +60,8 @@
         '<div class="d">WS '+(d.connected?'✓':'×')+' · RX AGE '+(age==null?'—':age+' ms')+'</div>'+
         '<div class="d">BUILD '+esc(window.PPA_CLIENT_BUILD||'—')+'</div>'+
         '<div class="d">CLIENT '+esc(room)+'</div>'+
-        '<div class="d">SERVER '+esc(serverRoom)+'</div>'+mobLine;
+        '<div class="d">SERVER '+esc(serverRoom)+'</div>'+
+        '<div class="d">BUILD '+esc(window.PPA_CLIENT_BUILD||'—')+'</div>'+mobLine;
     }catch(_){}
   }
 
