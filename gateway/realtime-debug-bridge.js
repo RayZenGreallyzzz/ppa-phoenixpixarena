@@ -63,5 +63,5 @@
     }catch(_){}
   }
 
-  setInterval(refresh,250);
+  setInterval(refresh,750);
 })();
