@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v337-safezone-mob-leak-fix-20260918-2259';
+const CLIENT_BUILD = 'v338-aggro-class-range-fix-20260918-2310';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -211,6 +211,30 @@ function renderJoin(){
 
 function esc(s){`
 );
+
+/* === CLASS RANGE CONSISTENCY ============================================ */
+ppaPatchRegex(
+  'AI gnome range matches player',
+  /gnome:\{name:'ГНОМ-КАНОНИР',role:'Средняя дистанция · пробивание · контроль',range:265,type:'physical'/,
+  "gnome:{name:'ГНОМ-КАНОНИР',role:'Средняя дистанция · пробивание · контроль',range:360,type:'physical'"
+);
+ppaPatchRegex(
+  'AI archer range matches player',
+  /archer:\{name:'ЛУЧНИК',role:'Дальний бой · кайт · замедление',range:330,type:'physical'/,
+  "archer:{name:'ЛУЧНИК',role:'Дальний бой · кайт · замедление',range:420,type:'physical'"
+);
+ppaPatchRegex(
+  'AI mage range matches player',
+  /mage:\{name:'МАГ',role:'Дальний бой · магический урон · контроль',range:300,type:'magic'/,
+  "mage:{name:'МАГ',role:'Дальний бой · магический урон · контроль',range:390,type:'magic'"
+);
+ppaPatchRegex(
+  'AI priest range matches player',
+  /priest:\{name:'ЖРЕЦ',role:'Дальний бой · лечение · выживание',range:255,type:'magic'/,
+  "priest:{name:'ЖРЕЦ',role:'Дальний бой · лечение · выживание',range:330,type:'magic'"
+);
+
+/* ======================================================================== */
 
 /* === TEMP QA: ALL DUNGEONS OPEN ========================================== */
 // Temporary tester switch. Remove after boss QA.
