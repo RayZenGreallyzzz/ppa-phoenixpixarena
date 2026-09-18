@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v333-server-boss-authority-20260918-2042';
+const CLIENT_BUILD = 'v334-temp-boss-access-20260918-2110';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -53,7 +53,7 @@ output = output.replace(
 );
 
 if (!output.includes('<head>')) throw new Error('PPA <head> not found');
-output = output.replace('<head>', '<head>\n<script>window.PPA_REALTIME_V2_ACTIVE=true;</script>');
+output = output.replace('<head>', '<head>\n<script>window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=true;</script>');
 
 const legacyInitNeedle = 'async function PPAOnlineInit(){\n';
 if (!output.includes(legacyInitNeedle)) throw new Error('Legacy PPAOnlineInit patch target not found');
@@ -293,6 +293,30 @@ if (renderFacingRe.test(output)) {
   console.warn('[PPA BUILD WARN] mob render facing target not found; continuing');
 }
 
+
+/* === TEMP BOSS ACCESS FOR LIVE TESTING =================================== */
+// Temporary QA switch: all dungeon brackets + Crystal Titan can be entered
+// regardless of character level / daily world-boss lock. Remove the flag or
+// set it to false to restore release restrictions.
+ppaPatchRegex(
+  'test unlock dungeon 21-40',
+  /function\s+dungeon21Unlocked\(\)\s*\{[\s\S]*?return\s+lv>=21&&lv<=40\s*;\s*\}/,
+  "function dungeon21Unlocked(){if(window.PPA_BOSS_TEST_OPEN===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=21&&lv<=40;}"
+);
+
+ppaPatchRegex(
+  'test unlock dungeon 41-60',
+  /function\s+dungeon41Unlocked\(\)\s*\{[\s\S]*?return\s+lv>=DUNGEON41_LEVEL_REQ&&lv<=DUNGEON41_LEVEL_MAX\s*;\s*\}/,
+  "function dungeon41Unlocked(){if(window.PPA_BOSS_TEST_OPEN===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=DUNGEON41_LEVEL_REQ&&lv<=DUNGEON41_LEVEL_MAX;}"
+);
+
+ppaPatchRegex(
+  'test unlock world boss daily entry',
+  /const\s+available\s*=\s*String\(st\.killedCycle\|\|['"]['"]\)!==cycle\s*;/,
+  "const available=window.PPA_BOSS_TEST_OPEN===true||String(st.killedCycle||'')!==cycle;"
+);
+
+/* ======================================================================== */
 
 /* === SERVER-AUTHORITATIVE BOSSES ========================================= */
 ppaPatchRegex(
