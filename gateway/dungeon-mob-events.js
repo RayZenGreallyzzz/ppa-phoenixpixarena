@@ -182,10 +182,10 @@
   }
 
   function visualDir(serverDir){
-    var d=Number(serverDir);
-    if(!Number.isFinite(d))return 3;
-    d=Math.round(d);
-    return d===3?0:d===2?1:d===0?2:3;
+    var d=Math.round(Number(serverDir));
+    // Animated dungeon atlases use the SAME rows as the server:
+    // 0=up/back, 1=down/front, 2=left, 3=right.
+    return d>=0&&d<=3?d:1;
   }
 
   function bossDirName(serverDir){
@@ -624,8 +624,12 @@
           var dir=Number(m.dir);
           applying++;
           try{
-            if(Number.isFinite(Number(m.x)))e.x=Number(m.x);
-            if(Number.isFinite(Number(m.y)))e.y=Number(m.y);
+            if(Number.isFinite(Number(m.x))&&Number.isFinite(Number(m.y))){
+              var _ax=Number(m.x),_ay=Number(m.y),_ad=Math.hypot(_ax-Number(e.x||0),_ay-Number(e.y||0));
+              e.__ppaServerX=_ax;e.__ppaServerY=_ay;
+              if(_ad>150||e.__ppaSmoothReady!==true){e.x=_ax;e.y=_ay;e.__ppaSmoothReady=true}
+              else{e.__ppaTargetX=_ax;e.__ppaTargetY=_ay;smoothEntities.add(e)}
+            }
             if(Number.isFinite(dir)){var vd=visualDir(dir);e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=dir;e.__ppaVisualDir=vd;applyBossVisualDir(e,dir,false)}
             e.spiderMoving=false;e.animMoving=false;
           }finally{applying--}
@@ -661,6 +665,20 @@
         var tx=Number(e.__ppaTargetX),ty=Number(e.__ppaTargetY);
         if(!Number.isFinite(tx)||!Number.isFinite(ty)){smoothEntities.delete(e);return}
         var x=Number(e.x),y=Number(e.y),dx=tx-x,dy=ty-y,d=Math.hypot(dx,dy);
+        if(d>0.15){
+          var pd=Number(e.__ppaServerDir);
+          var ax=Math.abs(dx),ay=Math.abs(dy),nd;
+          if(Number.isFinite(pd)&&pd>=0&&pd<=3){
+            // Keep the current axis while movement is near-diagonal; switch only
+            // when the other axis is clearly dominant.
+            var horiz=(pd===2||pd===3);
+            if(horiz&&ax>=ay*.78)nd=dx<0?2:3;
+            else if(!horiz&&ay>=ax*.78)nd=dy<0?0:1;
+          }
+          if(nd===undefined)nd=ax>ay?(dx<0?2:3):(dy<0?0:1);
+          e.__ppaServerDir=nd;e.__ppaVisualDir=nd;
+          e.spiderDir=nd;e.animDir=nd;applyBossVisualDir(e,nd,!!e.__ppaServerMoving);
+        }
         applying++;
         try{
           if(d>150){e.x=tx;e.y=ty}
