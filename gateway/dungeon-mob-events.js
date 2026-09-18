@@ -208,6 +208,7 @@
     lockProp(e,'spiderDir');lockProp(e,'spiderMoving');
     lockProp(e,'animDir');lockProp(e,'animMoving');
     lockProp(e,'d21Dir');lockProp(e,'wbDir');
+    if(e.isDungeonPhoenixBoss)lockProp(e,'fireCD');
   }
 
   function isServerMode(){return active()}
@@ -537,6 +538,18 @@
               }else if(phase==='impact'){
                 be.d21AoePending=false;be.d21AoeFxUntil=now+350;be.d21State='attack';be.d21ActionUntil=now+250;
               }
+            }else if(kind==='phoenix-fire'&&phase==='launch'){
+              be.spit=26;
+              try{
+                if(typeof PR!=='undefined'&&Array.isArray(PR)){
+                  var sx=Number(be.x),sy=Number(be.y)-10,tx=Number(m.tx),ty=Number(m.ty);
+                  var dx=tx-sx,dy=ty-sy,base=Math.atan2(dy,dx),targetId=String(m.target||'');
+                  for(var fk=-1;fk<=1;fk++){
+                    var fa=base+fk*.26,fs=4.4;
+                    PR.push({x:sx,y:sy,vx:Math.cos(fa)*fs,vy:Math.sin(fa)*fs,life:170,dmg:Math.max(1,Number(m.dmg)||85),dmgType:'magic',__ppaServerTarget:targetId});
+                  }
+                }
+              }catch(_){}
             }else if(kind==='titan-aoe'){
               if(phase==='telegraph'){
                 be.wbAoePending=true;be.wbAoeImpactAt=Number(m.impactAt)||now+620;be.wbState='stomp';be.wbActionUntil=(Number(m.impactAt)||now+620)+100;
