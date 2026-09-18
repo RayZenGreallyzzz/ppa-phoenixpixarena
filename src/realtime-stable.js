@@ -258,11 +258,28 @@ export class RealtimeHub extends BaseRealtimeHub {
 
   reservedSlots(room, exceptKey = '', now = Date.now()) {
     room = cleanRoom(room);
-    let count = 0;
     const occupied = this.roomPidSet(room);
+    const partyNeeds = new Map();
+
     for (const [key, r] of this.dungeonReservations()) {
       if (key === exceptKey || !r || r.room !== room || Number(r.expiresAt || 0) <= now) continue;
-      const pids = r.pids instanceof Set ? r.pids : new Set(r.pids || []);
+      const partyId = String(r.partyId || '');
+      if (!partyId) continue;
+      partyNeeds.set(partyId, r.pids instanceof Set ? new Set(r.pids) : new Set(r.pids || []));
+    }
+
+    // An active party member inside an instance implicitly reserves seats for the
+    // rest of the live party. This survives Durable Object hibernation because
+    // partyId lives in the WebSocket attachment, not only in memory.
+    for (const ws of this.roomSockets(room)) {
+      const a = attOf(ws);
+      const partyId = String(a.partyId || '');
+      if (!partyId || exceptKey.endsWith('|' + partyId)) continue;
+      if (!partyNeeds.has(partyId)) partyNeeds.set(partyId, new Set(this.partyPids(partyId)));
+    }
+
+    let count = 0;
+    for (const pids of partyNeeds.values()) {
       for (const pid of pids) if (!occupied.has(String(pid))) count++;
     }
     return count;
@@ -370,6 +387,32 @@ export class RealtimeHub extends BaseRealtimeHub {
         pids: new Set(unit),
         expiresAt: now + DUNGEON_RESERVE_MS,
       });
+
+      // If a party was created or enlarged after somebody already entered this
+      // dungeon, move the members who are already in the same dungeon base to
+      // the newly selected instance. Members who are still in town are not
+      // teleported; their seats remain reserved until they enter normally.
+      for (const peer of this.sockets()) {
+        if (peer === ws) continue;
+        const pa = attOf(peer);
+        if (String(pa.partyId || '') !== partyId) continue;
+        const pd = dungeonInfo(pa.room);
+        if (!pd || !pd.instance || pd.base !== base || pd.room === target) continue;
+        this.moveSocketRoom(peer, pa, target, now);
+        const ti = dungeonInfo(target);
+        wsJson(peer, {
+          type: 'room-assigned',
+          base,
+          room: target,
+          instance: ti ? ti.instance : 1,
+          capacity: DUNGEON_CAPACITY,
+          roomCount: this.countRoom(target),
+          partyReserved: unit.length,
+          migrated: true,
+          ts: now,
+        });
+        this.sendRoomSnapshot(peer, target);
+      }
     }
 
     this.moveSocketRoom(ws, a, target, now);
