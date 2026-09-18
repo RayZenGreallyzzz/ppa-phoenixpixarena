@@ -58,7 +58,12 @@
       var drawRemoteSprite=function(r,now,nearCount){
         if(!r||!r.hasPos)return false;
         var key=classKey(r.cls);
-        if(!key)return fallback(r,now,nearCount);
+        if(!key){
+          if(!r.__ppaClassWaitAt)r.__ppaClassWaitAt=Date.now();
+          if(Date.now()-r.__ppaClassWaitAt<3000)return false;
+          return fallback(r,now,nearCount);
+        }
+        r.__ppaClassWaitAt=0;
 
         var mdx=(Number(r.tx)||0)-(Number(r.x)||0),mdy=(Number(r.ty)||0)-(Number(r.y)||0);
         var moving=Math.hypot(mdx,mdy)>.55||String(r.anim||'')==='run';
