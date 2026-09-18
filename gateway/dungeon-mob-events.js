@@ -398,15 +398,21 @@
         e.hp=Math.min(e.mhp,Math.max(1,hp));
         if(Number.isFinite(sz)&&sz>0)e.sz=sz;
         if(Number.isFinite(x)&&Number.isFinite(y)){
-          e.__ppaServerX=x;e.__ppaServerY=y;
-          var _dx=x-Number(e.x||0),_dy=y-Number(e.y||0),_dist=Math.hypot(_dx,_dy);
-          // First materialization / teleport / large correction snaps immediately.
-          // Normal 10 Hz server movement is interpolated on render frames.
-          if(!Number.isFinite(Number(e.x))||!Number.isFinite(Number(e.y))||_dist>150||e.__ppaSmoothReady!==true){
-            e.x=x;e.y=y;e.__ppaSmoothReady=true;
+          var _now=Date.now(),_prevX=Number(e.__ppaServerX),_prevY=Number(e.__ppaServerY),_prevAt=Number(e.__ppaServerAt)||0;
+          var _netDt=_prevAt>0?Math.max(16,_now-_prevAt):0;
+          if(_netDt>0&&_netDt<1500&&Number.isFinite(_prevX)&&Number.isFinite(_prevY)){
+            e.__ppaServerVX=(x-_prevX)*1000/_netDt;
+            e.__ppaServerVY=(y-_prevY)*1000/_netDt;
           }else{
-            e.__ppaTargetX=x;e.__ppaTargetY=y;smoothEntities.add(e);
+            e.__ppaServerVX=0;e.__ppaServerVY=0;
           }
+          e.__ppaServerX=x;e.__ppaServerY=y;e.__ppaServerAt=_now;
+          var _dx=x-Number(e.x||0),_dy=y-Number(e.y||0),_dist=Math.hypot(_dx,_dy);
+          if(!Number.isFinite(Number(e.x))||!Number.isFinite(Number(e.y))||_dist>180||e.__ppaSmoothReady!==true){
+            e.x=x;e.y=y;e.__ppaSmoothReady=true;
+          }
+          e.__ppaTargetX=x;e.__ppaTargetY=y;
+          smoothEntities.add(e);
         }
         e.aggro=aggro;
         if(Number.isFinite(dir)){
@@ -658,35 +664,39 @@
 
   function smoothServerMovement(ts){
     smoothRaf=requestAnimationFrame(smoothServerMovement);
-    if(!serverMode||!smoothEntities.size)return;
+    if(!serverMode||!smoothEntities.size){smoothLast=ts;return}
     var dt=smoothLast?Math.max(8,Math.min(50,ts-smoothLast)):16;smoothLast=ts;
-    var alpha=1-Math.exp(-dt/48);
+    var alpha=1-Math.exp(-dt/58),now=Date.now();
     smoothEntities.forEach(function(e){
       try{
         if(!e||!keyOf(e)||!(Number(e.hp)>0)){smoothEntities.delete(e);return}
-        var tx=Number(e.__ppaTargetX),ty=Number(e.__ppaTargetY);
-        if(!Number.isFinite(tx)||!Number.isFinite(ty)){smoothEntities.delete(e);return}
+        var sx=Number(e.__ppaServerX),sy=Number(e.__ppaServerY);
+        if(!Number.isFinite(sx)||!Number.isFinite(sy)){smoothEntities.delete(e);return}
+        var moving=!!e.__ppaServerMoving;
+        var age=Math.max(0,Math.min(650,now-(Number(e.__ppaServerAt)||now)))/1000;
+        var vx=moving?(Number(e.__ppaServerVX)||0):0,vy=moving?(Number(e.__ppaServerVY)||0):0;
+        var tx=sx+vx*age,ty=sy+vy*age;
+        var maxLead=Math.max(18,Math.min(90,(Number(e.sp)||1)*48));
+        var lx=tx-sx,ly=ty-sy,lead=Math.hypot(lx,ly);
+        if(lead>maxLead){tx=sx+lx/lead*maxLead;ty=sy+ly/lead*maxLead}
         var x=Number(e.x),y=Number(e.y),dx=tx-x,dy=ty-y,d=Math.hypot(dx,dy);
-        if(d>0.15){
-          var pd=Number(e.__ppaServerDir);
-          var ax=Math.abs(dx),ay=Math.abs(dy),nd;
-          if(Number.isFinite(pd)&&pd>=0&&pd<=3){
-            // Keep the current axis while movement is near-diagonal; switch only
-            // when the other axis is clearly dominant.
-            var horiz=(pd===2||pd===3);
-            if(horiz&&ax>=ay*.78)nd=dx<0?2:3;
-            else if(!horiz&&ay>=ax*.78)nd=dy<0?0:1;
-          }
-          if(nd===undefined)nd=ax>ay?(dx<0?2:3):(dy<0?0:1);
-          e.__ppaServerDir=nd;e.__ppaVisualDir=nd;
-          e.spiderDir=nd;e.animDir=nd;applyBossVisualDir(e,nd,!!e.__ppaServerMoving);
-        }
         applying++;
         try{
-          if(d>150){e.x=tx;e.y=ty}
+          if(d>180){e.x=sx;e.y=sy}
           else{e.x=x+dx*alpha;e.y=y+dy*alpha}
         }finally{applying--}
-        if(d<0.35){applying++;try{e.x=tx;e.y=ty}finally{applying--}smoothEntities.delete(e)}
+        // Do not recalculate facing from interpolation noise. Server dir is
+        // authoritative and already matches atlas rows 0 up / 1 down / 2 left / 3 right.
+        var sd=Math.round(Number(e.__ppaServerDir));
+        if(sd>=0&&sd<=3){
+          e.spiderDir=sd;e.animDir=sd;
+          applyBossVisualDir(e,sd,moving);
+        }
+        e.spiderMoving=moving;e.animMoving=moving;
+        if(!moving&&Math.hypot(sx-Number(e.x),sy-Number(e.y))<0.35){
+          applying++;try{e.x=sx;e.y=sy}finally{applying--}
+          smoothEntities.delete(e);
+        }
       }catch(_){smoothEntities.delete(e)}
     });
   }
