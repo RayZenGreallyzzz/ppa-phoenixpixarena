@@ -581,7 +581,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         hp: rec.hp, mhp: rec.mhp, respawnAt: 0,
         killer: '', party: '',
         x: rec.x, y: rec.y, aggro: false, dir: rec.dir, moving: false,
-        ts: now,
+        sz: rec.sz, ts: now,
       }, null);
     }
     return changed;
@@ -611,10 +611,25 @@ export class RealtimeHub extends BaseRealtimeHub {
         Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1,
         rec.moving ? 1 : 0,
         String(rec.target || ''),
+        Math.max(8, Number(rec.sz) || 30),
       ]);
-      if (rows.length >= 256) break;
     }
-    wsJson(ws, { type: 'mob-authority-snapshot', room, rows, ts: now });
+
+    const chunkSize = 72;
+    if (!rows.length) {
+      wsJson(ws, { type: 'mob-authority-snapshot', room, rows: [], reset: true, done: true, ts: now });
+      return;
+    }
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      wsJson(ws, {
+        type: 'mob-authority-snapshot',
+        room,
+        rows: rows.slice(i, i + chunkSize),
+        reset: i === 0,
+        done: i + chunkSize >= rows.length,
+        ts: now,
+      });
+    }
   }
 
   mobAiTickTimes() {
@@ -776,15 +791,17 @@ export class RealtimeHub extends BaseRealtimeHub {
       }
       rec.moving = moving;
       rec.updatedAt = now;
-      rows.push([
-        String(ck).slice(prefix.length),
-        Math.round(x * 10) / 10,
-        Math.round(y * 10) / 10,
-        rec.aggro ? 1 : 0,
-        Number(rec.dir) || 1,
-        moving ? 1 : 0,
-        String(rec.target || ''),
-      ]);
+      if (rec.aggro || moving) {
+        rows.push([
+          String(ck).slice(prefix.length),
+          Math.round(x * 10) / 10,
+          Math.round(y * 10) / 10,
+          rec.aggro ? 1 : 0,
+          Number(rec.dir) || 1,
+          moving ? 1 : 0,
+          String(rec.target || ''),
+        ]);
+      }
     }
 
     if (rows.length) {
@@ -870,9 +887,10 @@ export class RealtimeHub extends BaseRealtimeHub {
       const room = cleanRoom(a.room);
       if (!room.startsWith('dungeon-') || cleanRoom(m.room || room) !== room) return;
       await this.ensureMobRoomLoaded(room);
-      const respawnChanged = this.processMobRespawns(room, now);
+      if (this.processMobRespawns(room, now)) await this.persistMobRoom(room);
+
       const { health } = this.mobStores();
-      const rows = Array.isArray(m.rows) ? m.rows.slice(0, 256) : [];
+      const rows = Array.isArray(m.rows) ? m.rows.slice(0, 64) : [];
       for (const row of rows) {
         if (!Array.isArray(row) || row.length < 2) continue;
         const key = cleanMobKey(row[0]);
@@ -883,6 +901,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         const sz = Math.max(8, finite(row[5], 8, 500, 30));
         const dmg = Math.max(1, finite(row[6], 1, 1000000, 1));
         if (!key) continue;
+
         const ck = this.mobCompound(room, key);
         let rec = health.get(ck);
         if (!rec) {
@@ -910,6 +929,8 @@ export class RealtimeHub extends BaseRealtimeHub {
           health.set(ck, rec);
         }
       }
+
+      if (m.done !== true) return;
       await this.persistMobRoom(room);
       this.sendMobAuthoritySnapshot(ws, room, now);
       return;
@@ -968,7 +989,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         mhp: Math.round(rec.mhp * 100) / 100,
         respawnAt, killer, party, event,
         x: rec.x, y: rec.y, aggro: !!rec.aggro, dir: rec.dir, moving: !!rec.moving,
-        target: String(rec.target || ''), ts: now,
+        target: String(rec.target || ''), sz: rec.sz, ts: now,
       }, null);
       return;
     }
