@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v298-dungeon-instances-40-20260918-1025';
+const CLIENT_BUILD = 'v299-social-clean-room-20260918-1035';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -86,9 +86,7 @@ const filesToPublish = [
   ['gateway/online-client.js','online-client.js','Online client bridge missing'],
   ['gateway/realtime-client.js','realtime-client.js','Realtime client bridge missing'],
   ['gateway/dungeon-mob-sync.js','dungeon-mob-sync.js','Dungeon mob sync bridge missing'],
-  ['gateway/realtime-presence-guard.js','realtime-presence-guard.js','Realtime presence guard missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
-  ['gateway/remote-id-bridge.js','remote-id-bridge.js','Realtime player id bridge missing'],
   ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],
   ['gateway/remote-pet-renderer.js','remote-pet-renderer.js','Remote pet renderer missing'],
   ['gateway/realtime-identity-sync.js','realtime-identity-sync.js','Realtime identity sync missing'],
@@ -96,7 +94,6 @@ const filesToPublish = [
   ['gateway/telegram-safe-ui.js','telegram-safe-ui.js','Telegram safe UI helper missing'],
   ['gateway/mobile-hud-tweaks.js','mobile-hud-tweaks.js','Mobile HUD tweaks missing'],
   ['gateway/social-ui.js','social-ui.js','Social UI missing'],
-  ['gateway/social-tap-guard.js','social-tap-guard.js','Social tap guard missing']
 ];
 for (const [srcName,dstName,err] of filesToPublish) {
   const src=path.join(ROOT,srcName);if(!fs.existsSync(src))throw new Error(`${err}: ${srcName}`);
@@ -105,7 +102,7 @@ for (const [srcName,dstName,err] of filesToPublish) {
 
 if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
 const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
-output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('dungeon-mob-sync.js')}"></script>\n<script src="${js('realtime-presence-guard.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('remote-id-bridge.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('social-tap-guard.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
+output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('dungeon-mob-sync.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -115,14 +112,11 @@ console.log('Mobile HUD tweaks: /game/mobile-hud-tweaks.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
 console.log('Dungeon mob sync: /game/dungeon-mob-sync.js');
-console.log('Realtime presence guard: /game/realtime-presence-guard.js');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
-console.log('Realtime player ids: /game/remote-id-bridge.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
 console.log('Remote pet renderer: /game/remote-pet-renderer.js');
 console.log('Realtime class sync: /game/class-sync-client.js');
 console.log('Social UI: /game/social-ui.js');
-console.log('Social tap guard: /game/social-tap-guard.js');
 console.log('Realtime identity sync: /game/realtime-identity-sync.js');
 console.log(`Client build cache key: ${CLIENT_BUILD}`);
 console.log('Legacy Supabase realtime: disabled');
