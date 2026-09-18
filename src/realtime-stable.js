@@ -878,18 +878,17 @@ export class RealtimeHub extends BaseRealtimeHub {
       const stationaryBoss = phoenix || lord40 || titan;
       const reach = lord40 ? 112 : (phoenix ? 100 : (boss60 ? 112 : (titan ? 0 : (42 + (sz - 30) * 0.35))));
       const leash = boss60 ? 420 : (stationaryBoss ? 0 : 180);
-      const aggroRadius = titan ? 1800 : ((phoenix || lord40) ? 620 : (boss60 ? 420 : 185));
+      const normalLevel = Math.max(1, Math.round(Number(rec.lvl) || 1));
+      const normalAggroRadius = normalLevel <= 2 ? 90 : (normalLevel <= 4 ? 115 : (normalLevel <= 6 ? 140 : (normalLevel <= 10 ? 170 : 200)));
+      const aggroRadius = titan ? 1800 : ((phoenix || lord40) ? 620 : (boss60 ? 420 : normalAggroRadius));
       const reacquireRadius = titan ? 2200 : ((phoenix || lord40) ? 700 : (boss60 ? 520 : 260));
       const attackEvery = lord40 ? 1200 : (phoenix ? 1100 : (boss60 ? 1200 : 850));
       let target = rec.target ? byPid.get(String(rec.target)) : null;
 
-      // Normal dungeon mobs must be able to attack without relying on the old
-      // client AI. Acquire the nearest player only in a small local radius so
-      // we do not wake the whole room at once.
-      // Preserve the original dungeon behaviour: ordinary mobs do NOT wake
-      // just because the player walks past them. They aggro when hit
-      // (mob-hit-event sets rec.aggro/target). Bosses still acquire nearby players.
-      if (!rec.aggro && isAuthorityBoss && players.length) {
+      // Original dungeon behaviour: ordinary mobs aggro when a player passes
+      // close to them. The radius is level-scaled (90/115/140/170/200), so only
+      // the nearby pack wakes up; hitting a mob still forces aggro immediately.
+      if (!rec.aggro && players.length) {
         let best = null, bd = Infinity;
         for (const p of players) {
           const pd = Math.hypot(p.x - x, p.y - y);
@@ -1091,6 +1090,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         const sz = Math.max(8, finite(row[5], 8, 500, 30));
         const dmg = Math.max(1, finite(row[6], 1, 1000000, 1));
         const clientResetAt = key === 'wtitan' ? finite(row[7], now - 300000, now + 36 * 60 * 60 * 1000, 0) : 0;
+        const mobLevel = Math.max(1, Math.min(999, Math.round(finite(row[8], 1, 999, 1))));
         if (!key) continue;
 
         const ck = this.mobCompound(room, key);
@@ -1103,6 +1103,7 @@ export class RealtimeHub extends BaseRealtimeHub {
             sp, sz, dmg, nextAttackAt: 0,
             nextSpecialAt: 0, nextProjectileAt: 0, nextAoeAt: 0, specialImpactAt: 0, specialKind: '',
             resetAt: clientResetAt > now ? clientResetAt : 0,
+            lvl: mobLevel,
             aggro: false, target: '', dir: 1, moving: false, positioned: true,
           };
           health.set(ck, rec);
@@ -1117,7 +1118,7 @@ export class RealtimeHub extends BaseRealtimeHub {
             }
             rec.positioned = true;
           }
-          rec.sp = sp; rec.sz = sz; rec.dmg = dmg;
+          rec.sp = sp; rec.sz = sz; rec.dmg = dmg; rec.lvl = mobLevel;
           if (key === 'wtitan' && clientResetAt > now && !(Number(rec.resetAt) > now)) rec.resetAt = clientResetAt;
           rec.updatedAt = now;
           health.set(ck, rec);
