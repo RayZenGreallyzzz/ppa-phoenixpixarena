@@ -102,6 +102,13 @@
     }catch(_){}
   }
 
+  function visualDir(serverDir){
+    var d=Number(serverDir);
+    if(!Number.isFinite(d))return 3;
+    d=Math.round(d);
+    return d===3?0:d===2?1:d===0?2:3;
+  }
+
   function lockServerMob(e){
     if(!e||!keyOf(e))return;
     lockProp(e,'hp');
@@ -283,7 +290,8 @@
         if(Number.isFinite(y)){e.y=y;e.__ppaServerY=y}
         e.aggro=aggro;
         if(Number.isFinite(dir)){
-          e.spiderDir=dir;e.animDir=dir;e.__ppaServerDir=dir;
+          var vd=visualDir(dir);
+          e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=dir;e.__ppaVisualDir=vd;
         }
         e.spiderMoving=moving;e.animMoving=moving;e.__ppaServerMoving=moving;
       }finally{applying--}
@@ -348,7 +356,7 @@
           if(Number.isFinite(Number(st.sz))&&Number(st.sz)>0)e.sz=Number(st.sz);
           e.aggro=!!st.aggro;
           var d=Number(st.dir);
-          if(Number.isFinite(d)){e.spiderDir=d;e.animDir=d}
+          if(Number.isFinite(d)){var vd=visualDir(d);e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=d;e.__ppaVisualDir=vd}
           e.spiderMoving=!!st.moving;e.animMoving=!!st.moving;
         }finally{applying--}
       }
@@ -431,7 +439,7 @@
           try{
             if(Number.isFinite(Number(m.x)))e.x=Number(m.x);
             if(Number.isFinite(Number(m.y)))e.y=Number(m.y);
-            if(Number.isFinite(dir)){e.spiderDir=dir;e.animDir=dir}
+            if(Number.isFinite(dir)){var vd=visualDir(dir);e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=dir;e.__ppaVisualDir=vd}
             e.spiderMoving=false;e.animMoving=false;
           }finally{applying--}
         }
