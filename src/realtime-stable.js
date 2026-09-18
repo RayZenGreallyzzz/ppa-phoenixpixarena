@@ -760,7 +760,7 @@ export class RealtimeHub extends BaseRealtimeHub {
           this.roomBroadcast(room, {
             type: 'boss-special', room, key: mobKey, kind: 'phoenix-fire', phase: 'launch',
             target: n.p.pid, tx: Math.round(n.p.x * 10) / 10, ty: Math.round(n.p.y * 10) / 10,
-            x, y, dmg: 85, damageType: 'magic', dir: Number(rec.dir) || 1, ts: now,
+            x, y, dmg: 85, damageType: 'magic', dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1, ts: now,
           }, null);
         }
       }
@@ -774,7 +774,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         this.roomBroadcast(room, {
           type: 'boss-special', room, key: mobKey, kind, phase: 'telegraph',
           x, y, radius, dmg, damageType: 'magic',
-          impactAt: rec.specialImpactAt, dir: Number(rec.dir) || 1, ts: now,
+          impactAt: rec.specialImpactAt, dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1, ts: now,
         }, null);
       }
       if (rec.specialImpactAt && now >= Number(rec.specialImpactAt)) {
@@ -782,7 +782,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         this.roomBroadcast(room, {
           type: 'boss-special', room, key: mobKey, kind, phase: 'impact',
           x, y, radius, dmg, damageType: 'magic', targets,
-          dir: Number(rec.dir) || 1, ts: now,
+          dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1, ts: now,
         }, null);
         rec.specialImpactAt = 0;
         rec.specialKind = '';
@@ -798,7 +798,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         this.roomBroadcast(room, {
           type: 'boss-special', room, key: mobKey, kind: 'titan-crystal', phase: 'launch',
           target: n.p.pid, tx: Math.round(n.p.x * 10) / 10, ty: Math.round(n.p.y * 10) / 10,
-          x, y, dmg: 14, damageType: 'magic', dir: Number(rec.dir) || 1, ts: now,
+          x, y, dmg: 14, damageType: 'magic', dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1, ts: now,
         }, null);
       }
       if (!(Number(rec.nextAoeAt) > 0)) {
@@ -813,7 +813,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         this.roomBroadcast(room, {
           type: 'boss-special', room, key: mobKey, kind: 'titan-aoe', phase: 'telegraph',
           x, y, radius: 330, dmg: 22, damageType: 'magic',
-          impactAt: rec.specialImpactAt, dir: Number(rec.dir) || 1, ts: now,
+          impactAt: rec.specialImpactAt, dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1, ts: now,
         }, null);
       }
       if (rec.specialImpactAt && rec.specialKind === 'titan-aoe' && now >= Number(rec.specialImpactAt)) {
@@ -821,7 +821,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         this.roomBroadcast(room, {
           type: 'boss-special', room, key: mobKey, kind: 'titan-aoe', phase: 'impact',
           x, y, radius: 330, dmg: 22, damageType: 'magic', targets,
-          dir: Number(rec.dir) || 1, ts: now,
+          dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1, ts: now,
         }, null);
         rec.specialImpactAt = 0;
         rec.specialKind = '';
@@ -972,7 +972,7 @@ export class RealtimeHub extends BaseRealtimeHub {
               dmg: Math.max(1, Math.round(Number(rec.dmg) || 1)),
               x: Math.round(x * 10) / 10,
               y: Math.round(y * 10) / 10,
-              dir: Number(rec.dir) || 1,
+              dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1,
               ts: now,
             }, null);
           }
@@ -1020,7 +1020,7 @@ export class RealtimeHub extends BaseRealtimeHub {
           Math.round(x * 10) / 10,
           Math.round(y * 10) / 10,
           rec.aggro ? 1 : 0,
-          Number(rec.dir) || 1,
+          Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1,
           moving ? 1 : 0,
           String(rec.target || ''),
         ]);
