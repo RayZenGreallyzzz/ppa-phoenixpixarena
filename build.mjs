@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v308-local-mobs-shared-hits-20260918-1505';
+const CLIENT_BUILD = 'v309-server-authority-hp-respawn-20260918-1525';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -92,8 +92,8 @@ const basicMobEventNeedle = `  const r=basicAttackRoll(target);
   target.hp-=r.damage;
   target.flash=7;target.aggro=true;`;
 const basicMobEventPatch = `  const r=basicAttackRoll(target);
-  if(window.PPA_MOB_EVENT_DAMAGE)window.PPA_MOB_EVENT_DAMAGE(target,r.damage);
-  target.hp-=r.damage;
+  const _ppaServerHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(target,r.damage);
+  if(!_ppaServerHit)target.hp-=r.damage;
   target.flash=7;target.aggro=true;`;
 if (!output.includes(basicMobEventNeedle)) throw new Error('PPA basic shared mob hit patch target not found');
 output = output.replace(basicMobEventNeedle,basicMobEventPatch);
@@ -102,8 +102,8 @@ const skillMobEventNeedle = `  if(e.isAiFighter&&typeof v225AiIncomingDamageMul=
   e.hp-=dmg;
   applyPlayerVampirism(dmg,.6);`;
 const skillMobEventPatch = `  if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
-  if(window.PPA_MOB_EVENT_DAMAGE)window.PPA_MOB_EVENT_DAMAGE(e,dmg);
-  e.hp-=dmg;
+  const _ppaServerSkillHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
+  if(!_ppaServerSkillHit)e.hp-=dmg;
   applyPlayerVampirism(dmg,.6);`;
 if (!output.includes(skillMobEventNeedle)) throw new Error('PPA skill shared mob hit patch target not found');
 output = output.replace(skillMobEventNeedle,skillMobEventPatch);
@@ -112,11 +112,15 @@ const rangedMobEventNeedle = `          const raw=Math.max(1,Math.floor(P.atk||1
           t.hp=Math.max(0,t.hp-raw);
           t.flash=6;t.aggro=true;`;
 const rangedMobEventPatch = `          const raw=Math.max(1,Math.floor(P.atk||12)-(t.def||0));
-          if(window.PPA_MOB_EVENT_DAMAGE)window.PPA_MOB_EVENT_DAMAGE(t,raw);
-          t.hp=Math.max(0,t.hp-raw);
+          const _ppaServerRangeHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(t,raw);
+          if(!_ppaServerRangeHit)t.hp=Math.max(0,t.hp-raw);
           t.flash=6;t.aggro=true;`;
 if (!output.includes(rangedMobEventNeedle)) throw new Error('PPA ranged shared mob hit patch target not found');
 output = output.split(rangedMobEventNeedle).join(rangedMobEventPatch);
+
+const localRespawnNeedle = "if(P.scene==='dungeon'&&!e.isBoss&&e.si!==undefined)RESPAWN_Q.push({at:Date.now()+MOB_RESPAWN_MS,si:e.si});";
+if (!output.includes(localRespawnNeedle)) throw new Error('PPA local mob respawn patch target not found');
+output = output.split(localRespawnNeedle).join("if(P.scene==='dungeon'&&!e.isBoss&&e.si!==undefined&&!(window.PPA_SERVER_MOBS_ACTIVE&&window.PPA_SERVER_MOBS_ACTIVE()))RESPAWN_Q.push({at:Date.now()+MOB_RESPAWN_MS,si:e.si});");
 
 const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
