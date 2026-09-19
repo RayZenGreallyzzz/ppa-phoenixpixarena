@@ -11,13 +11,13 @@
   var OTHER_SHARE=(1-WEAPON_SHARE)/6;
   var SLOT_ORDER=['weapon','helmet','armor','gloves','ring','legs','boots'];
   var SLOT_LABELS={
-    weapon:'⚔️ Оружие · все классы',
-    helmet:'🪖 Шлем · все классы',
-    armor:'🛡️ Броня · все классы',
-    gloves:'🧤 Перчатки · все классы',
-    ring:'💍 Кольцо · все классы',
-    legs:'👖 Поножи · все классы',
-    boots:'🥾 Сапоги · все классы'
+    weapon:'Оружие · все классы',
+    helmet:'Шлем · все классы',
+    armor:'Броня · все классы',
+    gloves:'Перчатки · все классы',
+    ring:'Кольцо · все классы',
+    legs:'Поножи · все классы',
+    boots:'Сапоги · все классы'
   };
 
   function slotShare(slot){return slot==='weapon'?WEAPON_SHARE:OTHER_SHARE}
@@ -141,12 +141,123 @@
     return out;
   }
 
+  function allBooks(){
+    try{
+      if(typeof ALL_GRIMOIRES!=='undefined'&&Array.isArray(ALL_GRIMOIRES))return ALL_GRIMOIRES;
+      if(Array.isArray(window.ALL_GRIMOIRES))return window.ALL_GRIMOIRES;
+    }catch(_){}
+    return [];
+  }
+
+  function booksOfType(type){
+    return allBooks().filter(function(g){return g&&g.type===type});
+  }
+
+  function bookText(g,type){
+    var kind=type==='active'?'Активная книга':'Пассивная книга';
+    var cls=String((g&&g.className)||'').trim();
+    var name=String((g&&g.n)||'Книга').trim();
+    return kind+' · '+(cls?cls+' · ':'')+name;
+  }
+
+  function appendBookType(out,type,totalChance){
+    var pool=booksOfType(type);
+    if(!pool.length||!(totalChance>0))return;
+    var each=totalChance/pool.length;
+    for(var i=0;i<pool.length;i++)out.push([bookText(pool[i],type),fmtProb(each)]);
+  }
+
+  function miniBossAtLeastOne(perPick){
+    perPick=Math.max(0,Math.min(1,Number(perPick)||0));
+    var sum=0;
+    for(var n=1;n<=10;n++)sum+=1-Math.pow(1-perPick,n);
+    return sum/10;
+  }
+
+  function expandBookRows(e,rows){
+    if(!Array.isArray(rows))return rows;
+    var active=booksOfType('active'),passive=booksOfType('passive');
+    if(!active.length||!passive.length)return rows;
+
+    var out=[];
+    var lv=Math.max(1,Math.floor(Number(e&&e.lvl)||1));
+
+    for(var i=0;i<rows.length;i++){
+      var row=rows[i];
+      if(!Array.isArray(row)||row.length<2){out.push(row);continue}
+      var label=String(row[0]||'');
+      var low=label.toLowerCase();
+      var chance=parsePct(row[1]);
+
+      // Normal mobs: exact total active/passive roll divided uniformly by
+      // every book in that type pool.
+      if(low==='активная книга'&&chance!=null){
+        appendBookType(out,'active',chance);
+        continue;
+      }
+      if(low==='пассивная книга'&&chance!=null){
+        appendBookType(out,'passive',chance);
+        continue;
+      }
+
+      // Phoenix: pushGrimoireDrop picks uniformly from ALL_GRIMOIRES.
+      if(e&&e.isDungeonPhoenixBoss&&low.indexOf('случайный гримуар')>=0&&chance!=null){
+        var all=allBooks(),each=all.length?chance/all.length:0;
+        for(var pg=0;pg<all.length;pg++)out.push([bookText(all[pg],all[pg].type),fmtProb(each)]);
+        continue;
+      }
+
+      // Lord 40: a 1% package gives one book 70% of the time and two books
+      // 30% of the time. Each draw is 35% active / 65% passive.
+      if(e&&e.isDungeon21Boss&&low.indexOf('тип книги')>=0){
+        var packageChance=0.01;
+        var ap=.35/active.length,pp=.65/passive.length;
+        var activeAtLeast=packageChance*(.70*ap+.30*(1-Math.pow(1-ap,2)));
+        var passiveAtLeast=packageChance*(.70*pp+.30*(1-Math.pow(1-pp,2)));
+        for(var la=0;la<active.length;la++)out.push([bookText(active[la],'active'),fmtProb(activeAtLeast)]);
+        for(var lp=0;lp<passive.length;lp++)out.push([bookText(passive[lp],'passive'),fmtProb(passiveAtLeast)]);
+        continue;
+      }
+
+      // Dungeon 41–60: one II/III book at 0.016%; type is selected 50/50.
+      if(e&&e.dungeon41&&low.indexOf('книга навыка ii')>=0&&chance!=null){
+        appendBookType(out,'active',chance*.5);
+        appendBookType(out,'passive',chance*.5);
+        continue;
+      }
+
+      // Mini-bosses 1–40: 1–10 independently weighted item picks.
+      // Show the exact per-kill probability of seeing each named book at
+      // least once, while preserving the existing rank line below.
+      if(e&&e.isDungeonElite&&!e.dungeon41&&low.indexOf('книги навыков')>=0){
+        var total=lv<=10?85:100;
+        var aw=lv<=20?4:6,pw=lv<=20?6:9;
+        var ac=miniBossAtLeastOne((aw/total)/active.length);
+        var pc=miniBossAtLeastOne((pw/total)/passive.length);
+        for(var ma=0;ma<active.length;ma++)out.push([bookText(active[ma],'active'),fmtProb(ac)]);
+        for(var mp=0;mp<passive.length;mp++)out.push([bookText(passive[mp],'passive'),fmtProb(pc)]);
+        if(lv<=20)out.push(['Ранг книги','I']);
+        continue;
+      }
+
+      // From level 11 upward gray equipment must not be shown for mini-bosses.
+      if(e&&e.isDungeonElite&&lv>=11&&lv<=20&&low.indexOf('возможный дроп')>=0){
+        out.push([row[0],String(row[1]||'').replace(/серый\s*\/\s*/i,'')]);
+        continue;
+      }
+
+      out.push(row);
+    }
+    return out;
+  }
+
   function installInfo(){
     try{
       if(typeof mobDropInfo!=='function'||mobDropInfo.__ppaDungeonSlotRows)return;
       var base=mobDropInfo;
       var wrapped=function(e){
         var rows=base.apply(this,arguments);
+        rows=expandBookRows(e,rows);
         return expandGearRows(e,rows);
       };
       wrapped.__ppaDungeonSlotRows=1;
