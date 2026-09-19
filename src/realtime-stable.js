@@ -1242,7 +1242,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     if (m.type === 'player-respawn-confirm') {
       if(a.arenaMatchId)return;
-      if(!a.deadLocked&&Number(a.h)>0){
+      if(!a.deadLocked&&Number(a.h)>0&&!m.wasDead){
         wsJson(ws,{type:'player-respawn-state',ok:true,room:cleanRoom(a.room),h:Math.max(1,Number(a.h)||1),m:Math.max(1,Number(a.m)||1),ts:now});
         return;
       }
@@ -2106,11 +2106,12 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.y = Number.isFinite(Number(m.y)) ? Math.round(Number(m.y) * 10) / 10 : Number(a.y) || 0;
       {
         const incomingH=Math.max(0,Math.round(Number(m.h)||0));
+        const incomingDead=(m.dead===true||Number(m.dead)===1);
         if(!a.arenaMatchId){
           if(a.deadLocked){
             // Zero HP is sticky. Normal movement/regen packets can NEVER revive.
             a.h=0;
-          }else if(incomingH<=0){
+          }else if(incomingDead||incomingH<=0){
             a.h=0;a.deadLocked=true;a.deadAt=now;a.pkEnabled=false;
             a.pkHpLockUntil=0;a.lastPkAttack=0;a.lastPkSkill=0;a.lastPkControl=0;
             wsJson(ws,{type:'player-death-state',locked:true,h:0,room:currentRoom,ts:now});
