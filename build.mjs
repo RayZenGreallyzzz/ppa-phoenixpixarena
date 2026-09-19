@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v346-dragon60-stat-buff-20260919-0930';
+const CLIENT_BUILD = 'v347-dragon60-phoenix-overlay-fix-20260919-0936';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -579,6 +579,12 @@ ppaPatchRegex(
   /\}else if\s*\(d<=reach&&e\.atkCD<=0\)\s*\{/g,
   "}else if(!(window.PPA_SERVER_MOBS_ACTIVE&&window.PPA_SERVER_MOBS_ACTIVE()&&(e.isDungeon60Boss||e.isDungeon21Boss||e.isDungeonPhoenixBoss||e.isWorldCrystalBoss))&&d<=reach&&e.atkCD<=0){",
   true
+);
+
+ppaPatchRegex(
+  'dragon60 exclude legacy phoenix renderer',
+  /if\s*\(e\.isBoss\)\s*\{\s*\/\/\s*Phoenix boss:/,
+  "if(e.isBoss&&!e.isDungeon60Boss){\n      // Phoenix boss:"
 );
 
 ppaPatchRegex(
