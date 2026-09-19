@@ -315,6 +315,10 @@
       if(canonicalRoom(m.room)!==canonicalRoom(RT.lastRoom))return;
       RT.serverRoom=canonicalRoom(m.room);reconcileSnapshot(m.players);return;
     }
+    if(m.type==='player-combat-fx'){
+      try{if(window.PPA_REMOTE_COMBAT_FX_RECEIVE)window.PPA_REMOTE_COMBAT_FX_RECEIVE(m)}catch(_){}
+      return;
+    }
     if(m.type==='move'){if(m.player)applyPlayer(m.player,false);return}
     if(m.type==='world-pvp-state'){
       window.PPA_WORLD_PVP_ON=!!m.enabled;
@@ -425,6 +429,19 @@
   },5000);
 
   window.PPA_RT_SEND=send;
+  window.PPA_RT_COMBAT_FX=function(d){
+    try{
+      d=d||{};
+      var kind=String(d.kind||'');
+      if(['gnome-cannon','archer-arrow','melee'].indexOf(kind)<0)return false;
+      return send({
+        type:'player-combat-fx',kind:kind,
+        x:Number(d.x)||0,y:Number(d.y)||0,tx:Number(d.tx)||0,ty:Number(d.ty)||0,
+        ang:Number.isFinite(Number(d.ang))?Number(d.ang):0,
+        animMs:Math.max(240,Math.min(700,Math.round(Number(d.animMs)||480)))
+      });
+    }catch(_){return false}
+  };
   window.PPA_WORLD_PVP_SET=function(enabled){
     return send({type:'world-pvp-toggle',enabled:!!enabled,room:RT.lastRoom||room()});
   };
