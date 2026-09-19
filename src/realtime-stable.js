@@ -806,6 +806,40 @@ export class RealtimeHub extends BaseRealtimeHub {
       return true;
     }
 
+    if (mobKey === 'b60') {
+      if (!n.p || n.d > 560) return false;
+      const radius = 235;
+      const dmg = 125;
+      if (!(Number(rec.nextAoeAt) > 0)) {
+        rec.nextAoeAt = now + this.bossDelay('b60-aoe', now, 10500, 4501);
+      }
+      if (!rec.specialImpactAt && now >= Number(rec.nextAoeAt || 0)) {
+        rec.specialKind = 'dragon60-aoe';
+        rec.specialImpactAt = now + 900;
+        rec.nextAoeAt = now + this.bossDelay('b60-aoe', now + 901, 10500, 4501);
+        // The special replaces roughly one normal claw attack instead of simply
+        // adding free DPS on top of the existing boss balance.
+        rec.nextAttackAt = Math.max(Number(rec.nextAttackAt) || 0, rec.specialImpactAt + 450);
+        this.roomBroadcast(room, {
+          type: 'boss-special', room, key: mobKey, kind: 'dragon60-aoe', phase: 'telegraph',
+          x, y, radius, dmg, damageType: 'magic',
+          impactAt: rec.specialImpactAt,
+          dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1, ts: now,
+        }, null);
+      }
+      if (rec.specialImpactAt && rec.specialKind === 'dragon60-aoe' && now >= Number(rec.specialImpactAt)) {
+        const targets = players.filter(p => Math.hypot(p.x - x, p.y - y) <= radius).map(p => p.pid);
+        this.roomBroadcast(room, {
+          type: 'boss-special', room, key: mobKey, kind: 'dragon60-aoe', phase: 'impact',
+          x, y, radius, dmg, damageType: 'magic', targets,
+          dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1, ts: now,
+        }, null);
+        rec.specialImpactAt = 0;
+        rec.specialKind = '';
+      }
+      return true;
+    }
+
     if (mobKey === 'wtitan') {
       if (!n.p || n.d > 2200) return false;
       if (!(Number(rec.nextSpecialAt) > 0)) rec.nextSpecialAt = now + 5000;
@@ -895,13 +929,19 @@ export class RealtimeHub extends BaseRealtimeHub {
       const controlMoveMul = Number(rec.rootUntil) > now
         ? 0
         : (Number(rec.slowUntil) > now ? Math.max(.25, Math.min(1, Number(rec.slowMul) || 1)) : 1);
-      const effectiveSp = sp * controlMoveMul;
+      let effectiveSp = sp * controlMoveMul;
       const sz = Math.max(8, Number(rec.sz) || 30);
       const mobKey = String(ck).slice(prefix.length);
       const phoenix = mobKey === 'p20';
       const lord40 = mobKey === 'b40';
       const boss60 = mobKey === 'b60';
       const titan = mobKey === 'wtitan';
+      if (boss60 && controlMoveMul > 0) {
+        // 780 ms swoop + 320 ms hover, with burst speed adjusted so average
+        // pursuit speed stays essentially unchanged.
+        const swoopPhase = now % 1100;
+        effectiveSp *= swoopPhase < 780 ? 1.41 : 0;
+      }
       const isAuthorityBoss = phoenix || lord40 || boss60 || titan;
       const stationaryBoss = phoenix || lord40 || titan;
       const reach = lord40 ? 112 : (phoenix ? 100 : (boss60 ? 112 : (titan ? 0 : (42 + (sz - 30) * 0.35))));
