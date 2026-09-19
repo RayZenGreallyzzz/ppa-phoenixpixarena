@@ -9,7 +9,7 @@
     onlineCount:0,started:false,pingSent:0,pingMs:null,
     lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null,
     assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40,
-    selfPid:'',arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,arenaLastRoundToken:'',
+    selfPid:'',arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,arenaLastRoundToken:'',arenaAutoTarget:false,arenaAutoTick:0,
     arenaQueuePromise:null,arenaQueueResolve:null,arenaQueueTimer:0,arenaQueueMode:''
   };
 
@@ -548,6 +548,58 @@
     var cls='';try{cls=String(selfClass()||'').toLowerCase()}catch(_){}
     return cls==='tank'||cls==='barbarian'||cls==='paladin'||cls==='assassin';
   }
+
+  function arenaJoystickActive(){
+    try{
+      var x=(typeof jX!=='undefined')?Number(jX)||0:0;
+      var y=(typeof jY!=='undefined')?Number(jY)||0:0;
+      return Math.abs(x)>0.08||Math.abs(y)>0.08;
+    }catch(_){return false}
+  }
+  function arenaSetFacingTo(tx,ty){
+    try{
+      var sx=Number(P.x)||0,sy=Number(P.y)||0,dx=Number(tx)-sx,dy=Number(ty)-sy;
+      if(!Number.isFinite(dx)||!Number.isFinite(dy)||(!dx&&!dy))return;
+      var ang=Math.atan2(dy,dx);
+      P.meleeAng=ang;
+      if(typeof dir8Canonical==='function')P.dir8=dir8Canonical(Math.cos(ang),Math.sin(ang));
+      if(Math.abs(dx)>.1)P.face=dx<0?-1:1;
+    }catch(_){}
+  }
+  function arenaAutoApproachStep(){
+    try{
+      if(!RT.arenaAutoTarget||!RT.arenaMatchId||!arenaCombatReady())return;
+      if(arenaJoystickActive())return;
+      var r=arenaRemoteById(RT.arenaOpponentId);if(!r)return;
+      var rp=arenaRemotePos(r),sx=Number(P.x)||0,sy=Number(P.y)||0;
+      if(!Number.isFinite(rp.x)||!Number.isFinite(rp.y))return;
+      var range=arenaBasicRangeClient();
+      var cls=String(selfClass()||'').toLowerCase();
+      var stopPad=cls==='assassin'?4:(arenaClientIsMelee()?8:34);
+      var dx=rp.x-sx,dy=rp.y-sy,dist=Math.hypot(dx,dy);
+      if(dist<=range+stopPad){
+        RT.arenaAutoTarget=false;
+        try{P.vx=0;P.vy=0}catch(_){}
+        arenaSetFacingTo(rp.x,rp.y);
+        try{if(typeof showPickup==='function')showPickup('АРЕНА · цель в радиусе','#9dff9f')}catch(_){}
+        return;
+      }
+      if(dist<1)return;
+      var speed=Math.max(2.2,Math.min(7.5,Number(P.spd)||4.5));
+      var step=Math.min(speed*1.15,Math.max(1,dist-(range+stopPad)));
+      var mx=dx/dist*step,my=dy/dist*step,nx=sx+mx,ny=sy+my;
+      try{
+        if(typeof pvpSlide==='function'){
+          var mv=pvpSlide(P.scene,sx,sy,mx,my,Math.max(10,(Number(P.sz)||60)*.24));
+          nx=mv.x;ny=mv.y;
+        }
+      }catch(_){}
+      P.x=nx;P.y=ny;
+      P.vx=mx;P.vy=my;
+      P.anim='run';
+      arenaSetFacingTo(rp.x,rp.y);
+    }catch(e){console.warn('Arena auto approach',e)}
+  }
   function arenaCombatReady(){
     try{
       if(!RT.arenaMatchId||!RT.arenaRoom||!RT.arenaOpponentId)return false;
@@ -579,9 +631,12 @@
       var clsNow=String(selfClass()||'').toLowerCase();
       var dist=Math.hypot(rp.x-sx,rp.y-sy),slack=clsNow==='assassin'?6:(arenaClientIsMelee()?12:58);
       if(dist>range+slack){
-        try{if(typeof showPickup==='function')showPickup('АРЕНА · соперник слишком далеко','#ffbd76')}catch(_){}
+        RT.arenaAutoTarget=true;
+        arenaSetFacingTo(rp.x,rp.y);
+        try{if(typeof showPickup==='function')showPickup('АРЕНА · цель выбрана · подбегаю','#ffd36d')}catch(_){}
         return true;
       }
+      RT.arenaAutoTarget=false;
       var now=Date.now(),rate=Math.max(.35,Math.min(4.5,Number(P.atkSpd)||1));
       var minMs=Math.max(180,Math.round(1000/rate*.82));
       if(now-RT.arenaLastAttack<minMs)return true;
@@ -606,10 +661,8 @@
       }
       try{
         var attackAng=Math.atan2(rp.y-sy,rp.x-sx);
-        P.meleeAng=attackAng;
-        if(typeof dir8Canonical==='function')P.dir8=dir8Canonical(Math.cos(attackAng),Math.sin(attackAng));
+        arenaSetFacingTo(rp.x,rp.y);
         P.attacking=true;P.anim='attack';P.animFrame=0;P.animTimer=0;P.shootT=1;P.recoil=1;
-        if(Math.abs(rp.x-sx)>.1)P.face=rp.x<sx?-1:1;
         P.shootCD=Math.max(1,Math.round(60/rate));
       }catch(_){}
       try{
@@ -625,6 +678,11 @@
       return true;
     }catch(e){console.warn('Arena direct basic',e);return false}
   }
+
+  setInterval(function(){
+    if(!RT.arenaAutoTarget)return;
+    arenaAutoApproachStep();
+  },33);
 
   function bindArenaAttackCapture(){
     if(window.__PPA_ARENA_ATTACK_CAPTURE)return;
@@ -714,7 +772,7 @@
   };
   window.PPA_RT_ARENA_CLEAR=function(){
     arenaQueueStatus('',false);
-    RT.arenaRoom='';RT.arenaMatchId='';RT.arenaSide='';RT.arenaOpponentId='';RT.arenaOpponentName='';RT.arenaLastAttack=0;RT.arenaLastRoundToken='';
+    RT.arenaRoom='';RT.arenaMatchId='';RT.arenaSide='';RT.arenaOpponentId='';RT.arenaOpponentName='';RT.arenaLastAttack=0;RT.arenaLastRoundToken='';RT.arenaAutoTarget=false;
     RT.arenaLeavingUntil=Date.now()+1400;
     commitRoom('safe');
     RT.lastRoomSync=0;
