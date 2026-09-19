@@ -117,6 +117,9 @@
     var id=remoteId(r);if(!id)return false;
     selectedPlayerId=id;
     window.PPA_WORLD_PVP_TARGET_ID=id;
+    // A PK player and a PvE mob must never compete for movement/attack ownership.
+    try{if(typeof cancelSmartAttack==='function')cancelSmartAttack()}catch(_){}
+    try{if(typeof P!=='undefined'&&P)P.tid=null}catch(_){}
     if(!quiet)popup('ПК ЦЕЛЬ · '+String(r.name||r.n||'Игрок'),'#ff9d80');
     return true;
   }
