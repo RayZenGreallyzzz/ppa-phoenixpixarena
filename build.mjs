@@ -465,23 +465,24 @@ if (!output.includes("P.smokeUntil=Date.now()+3000;P.smokeDodgeBonus=rv([35,45,5
 ppaPatchRegex(
   'server authoritative v189 skill damage',
   /e\.hp-=dmg;e\.flash=8;e\.aggro=true;P\.lastCombatAt=Date\.now\(\);/,
-  "const _ppaMobDeal=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);\n    if(!_ppaMobDeal)e.hp-=dmg;e.flash=8;e.aggro=true;P.lastCombatAt=Date.now();"
+  "const _ppaArenaDeal=e.__ppaArenaPlayer&&window.PPA_ARENA_SKILL_HIT&&window.PPA_ARENA_SKILL_HIT(e,dmg,crit,700,type||'physical');\n    const _ppaMobDeal=!_ppaArenaDeal&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);\n    if(!_ppaArenaDeal&&!_ppaMobDeal)e.hp-=dmg;e.flash=8;e.aggro=true;P.lastCombatAt=Date.now();"
 );
 
 ppaPatchRegex(
   'server authoritative root effect',
   /function\s+root\(e,ms\)\{if\(e&&!e\.isBoss\)e\.v189RootUntil=Math\.max\(e\.v189RootUntil\|\|0,Date\.now\(\)\+ms\)\}/,
-  "function root(e,ms){if(e&&!e.isBoss){e.v189RootUntil=Math.max(e.v189RootUntil||0,Date.now()+ms);if(window.PPA_MOB_EVENT_CONTROL)window.PPA_MOB_EVENT_CONTROL(e,'root',0,ms)}}"
+  "function root(e,ms){if(e&&!e.isBoss){e.v189RootUntil=Math.max(e.v189RootUntil||0,Date.now()+ms);if(e.__ppaArenaPlayer){if(window.PPA_ARENA_PLAYER_CONTROL)window.PPA_ARENA_PLAYER_CONTROL(e,'root',0,ms,700)}else if(window.PPA_MOB_EVENT_CONTROL)window.PPA_MOB_EVENT_CONTROL(e,'root',0,ms)}}"
 );
 
 ppaPatchRegex(
   'server authoritative slow effect',
   /function\s+slow\(e,mul,ms\)\{if\(e&&!e\.isBoss\)\{e\.v189SlowMul=Math\.max\(\.25,Math\.min\(\.95,mul\)\);e\.v189SlowUntil=Math\.max\(e\.v189SlowUntil\|\|0,Date\.now\(\)\+ms\)\}\}/,
-  "function slow(e,mul,ms){if(e&&!e.isBoss){e.v189SlowMul=Math.max(.25,Math.min(.95,mul));e.v189SlowUntil=Math.max(e.v189SlowUntil||0,Date.now()+ms);if(window.PPA_MOB_EVENT_CONTROL)window.PPA_MOB_EVENT_CONTROL(e,'slow',mul,ms)}}"
+  "function slow(e,mul,ms){if(e&&!e.isBoss){e.v189SlowMul=Math.max(.25,Math.min(.95,mul));e.v189SlowUntil=Math.max(e.v189SlowUntil||0,Date.now()+ms);if(e.__ppaArenaPlayer){if(window.PPA_ARENA_PLAYER_CONTROL)window.PPA_ARENA_PLAYER_CONTROL(e,'slow',mul,ms,700)}else if(window.PPA_MOB_EVENT_CONTROL)window.PPA_MOB_EVENT_CONTROL(e,'slow',mul,ms)}}"
 );
 
-if (!output.includes("const _ppaMobDeal=window.PPA_MOB_EVENT_DAMAGE")) {
-  throw new Error('Authoritative V189 skill damage patch did not apply');
+if (!output.includes("const _ppaArenaDeal=e.__ppaArenaPlayer") ||
+    !output.includes("const _ppaMobDeal=!_ppaArenaDeal&&window.PPA_MOB_EVENT_DAMAGE")) {
+  throw new Error('Arena/server V189 skill damage patch did not apply');
 }
 if (!output.includes("window.PPA_MOB_EVENT_CONTROL(e,'slow',mul,ms)")) {
   throw new Error('Authoritative slow skill patch did not apply');
@@ -494,8 +495,9 @@ ppaPatchRegex(
   'melee shared mob hit',
   /const\s+realDmg=\(e===tg\)\?dmg:basicAttackRoll\(e\)\.damage;\s*e\.hp-=realDmg;\s*applyPlayerVampirism\(realDmg,1\);/,
   `const realDmg=(e===tg)?dmg:basicAttackRoll(e).damage;
-    const _ppaServerMeleeHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,realDmg);
-    if(!_ppaServerMeleeHit)e.hp-=realDmg;
+    const _ppaArenaMeleeHit=e.__ppaArenaPlayer&&window.PPA_ARENA_SKILL_HIT&&window.PPA_ARENA_SKILL_HIT(e,realDmg,false,700,'physical');
+    const _ppaServerMeleeHit=!_ppaArenaMeleeHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,realDmg);
+    if(!_ppaArenaMeleeHit&&!_ppaServerMeleeHit)e.hp-=realDmg;
     applyPlayerVampirism(realDmg,1);`
 );
 
@@ -503,8 +505,9 @@ ppaPatchRegex(
   'melee chain lightning shared mob hit',
   /if\(cn\)\{const chainDmg=Math\.max\(1,Math\.floor\(dmg\*0\.4\*clanDamageMulFor\(cn\)\)-\(cn\.def\|\|0\)\*0\.4\);cn\.hp-=chainDmg;if\(cn\.isClanBoss\)clanBossTrackDamage\(chainDmg\);cn\.flash=6;ch\.push\(cn\);/,
   `if(cn){const chainDmg=Math.max(1,Math.floor(dmg*0.4*clanDamageMulFor(cn))-(cn.def||0)*0.4);
-          const _ppaServerChainHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(cn,chainDmg);
-          if(!_ppaServerChainHit)cn.hp-=chainDmg;
+          const _ppaArenaChainHit=cn.__ppaArenaPlayer&&window.PPA_ARENA_SKILL_HIT&&window.PPA_ARENA_SKILL_HIT(cn,chainDmg,false,700,'physical');
+          const _ppaServerChainHit=!_ppaArenaChainHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(cn,chainDmg);
+          if(!_ppaArenaChainHit&&!_ppaServerChainHit)cn.hp-=chainDmg;
           if(cn.isClanBoss)clanBossTrackDamage(chainDmg);cn.flash=6;ch.push(cn);`
 );
 
@@ -512,8 +515,9 @@ ppaPatchRegex(
   'legacy skill helper shared mob hit',
   /if\(e\.isAiFighter&&typeof v225AiIncomingDamageMul===['"]function['"]\)dmg=Math\.max\(1,Math\.round\(dmg\*v225AiIncomingDamageMul\(e\)\)\);\s*e\.hp-=dmg;\s*applyPlayerVampirism\(dmg,\.6\);/,
   `if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
-  const _ppaServerLegacySkillHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
-  if(!_ppaServerLegacySkillHit)e.hp-=dmg;
+  const _ppaArenaLegacySkillHit=e.__ppaArenaPlayer&&window.PPA_ARENA_SKILL_HIT&&window.PPA_ARENA_SKILL_HIT(e,dmg,false,700,'physical');
+  const _ppaServerLegacySkillHit=!_ppaArenaLegacySkillHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
+  if(!_ppaArenaLegacySkillHit&&!_ppaServerLegacySkillHit)e.hp-=dmg;
   applyPlayerVampirism(dmg,.6);`
 );
 
@@ -521,27 +525,31 @@ ppaPatchRegex(
   'skill dot shared mob hit',
   /if\(e\.isAiFighter&&typeof v225AiIncomingDamageMul===['"]function['"]\)d=Math\.max\(1,Math\.round\(d\*v225AiIncomingDamageMul\(e\)\)\);\s*e\.hp-=d;e\.flash=4;e\.aggro=true;e\.v189DotNext=now\+1000;/,
   `if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')d=Math.max(1,Math.round(d*v225AiIncomingDamageMul(e)));
-        const _ppaServerDotHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,d);
-        if(!_ppaServerDotHit)e.hp-=d;
+        const _ppaArenaDotHit=e.__ppaArenaPlayer&&window.PPA_ARENA_SKILL_HIT&&window.PPA_ARENA_SKILL_HIT(e,d,false,700,'dot');
+        const _ppaServerDotHit=!_ppaArenaDotHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,d);
+        if(!_ppaArenaDotHit&&!_ppaServerDotHit)e.hp-=d;
         e.flash=4;e.aggro=true;e.v189DotNext=now+1000;`
 );
 
 if (!output.includes("const _ppaServerMeleeHit=window.PPA_MOB_EVENT_DAMAGE")) {
   throw new Error('Melee authoritative damage patch did not apply');
 }
-if (!output.includes("const _ppaServerLegacySkillHit=window.PPA_MOB_EVENT_DAMAGE")) {
-  throw new Error('Legacy skill authoritative damage patch did not apply');
+if (!output.includes("const _ppaArenaLegacySkillHit=e.__ppaArenaPlayer") ||
+    !output.includes("const _ppaServerLegacySkillHit=!_ppaArenaLegacySkillHit&&window.PPA_MOB_EVENT_DAMAGE")) {
+  throw new Error('Arena/legacy skill authoritative damage patch did not apply');
 }
-if (!output.includes("const _ppaServerDotHit=window.PPA_MOB_EVENT_DAMAGE")) {
-  throw new Error('DoT authoritative damage patch did not apply');
+if (!output.includes("const _ppaArenaDotHit=e.__ppaArenaPlayer") ||
+    !output.includes("const _ppaServerDotHit=!_ppaArenaDotHit&&window.PPA_MOB_EVENT_DAMAGE")) {
+  throw new Error('Arena/DoT authoritative damage patch did not apply');
 }
 
 ppaPatchRegex(
   'skill shared mob hit',
   /if\s*\(e\.isAiFighter&&typeof\s+v225AiIncomingDamageMul===['"]function['"]\)\s*dmg\s*=\s*Math\.max\(1,Math\.round\(dmg\*v225AiIncomingDamageMul\(e\)\)\)\s*;\s*e\.hp\s*-=\s*dmg\s*;\s*applyPlayerVampirism\(dmg,\s*\.6\)\s*;/,
   `if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
-  const _ppaServerSkillHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
-  if(!_ppaServerSkillHit)e.hp-=dmg;
+  const _ppaArenaSkillHit=e.__ppaArenaPlayer&&window.PPA_ARENA_SKILL_HIT&&window.PPA_ARENA_SKILL_HIT(e,dmg,false,700,'physical');
+  const _ppaServerSkillHit=!_ppaArenaSkillHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
+  if(!_ppaArenaSkillHit&&!_ppaServerSkillHit)e.hp-=dmg;
   applyPlayerVampirism(dmg,.6);`
 );
 
@@ -549,8 +557,9 @@ ppaPatchRegex(
   'ranged shared mob hit',
   /const\s+raw\s*=\s*Math\.max\(1,Math\.floor\(P\.atk\|\|12\)-\(t\.def\|\|0\)\)\s*;\s*t\.hp\s*=\s*Math\.max\(0,t\.hp-raw\)\s*;\s*t\.flash\s*=\s*6\s*;\s*t\.aggro\s*=\s*true\s*;/g,
   `const raw=Math.max(1,Math.floor(P.atk||12)-(t.def||0));
-          const _ppaServerRangeHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(t,raw);
-          if(!_ppaServerRangeHit)t.hp=Math.max(0,t.hp-raw);
+          const _ppaArenaRangeHit=t.__ppaArenaPlayer&&window.PPA_ARENA_SKILL_HIT&&window.PPA_ARENA_SKILL_HIT(t,raw,false,700,'physical');
+          const _ppaServerRangeHit=!_ppaArenaRangeHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(t,raw);
+          if(!_ppaArenaRangeHit&&!_ppaServerRangeHit)t.hp=Math.max(0,t.hp-raw);
           t.flash=6;t.aggro=true;`,
   true
 );
@@ -753,6 +762,37 @@ ppaPatchRegex(
 
 if (!output.includes('autoAttackUnlocked')) {
   throw new Error('Premium AUTO entitlement patch did not apply');
+}
+
+/* === ONLINE ARENA COMBAT BRIDGE ======================================== */
+ppaPatchRegex(
+  'online arena basic attack hook',
+  /function\s+queueAttack\(e\)\s*\{\s*if\(e\)\{e\.preventDefault\(\);e\.stopPropagation\(\)\}/,
+  "function queueAttack(e){\n  if(e){e.preventDefault();e.stopPropagation()}\n  if(window.PPA_ARENA_TRY_BASIC_ATTACK&&window.PPA_ARENA_TRY_BASIC_ATTACK(e))return;"
+);
+
+ppaPatchRegex(
+  'online arena selected skill target',
+  /function\s+skillTarget\(maxRange\)\{\s*if\(P\.scene===['"]clanboss1['"]\)\{/,
+  "function skillTarget(maxRange){\n  if(window.PPA_ARENA_SKILL_TARGET){var _ppaArenaSkillTarget=window.PPA_ARENA_SKILL_TARGET(maxRange);if(_ppaArenaSkillTarget)return _ppaArenaSkillTarget;}\n  if(P.scene==='clanboss1'){"
+);
+
+ppaPatchRegex(
+  'online arena area target',
+  /function\s+around\(x,y,r\)\{([\s\S]*?)\n\s*return out;\n\s*\}/,
+  "function around(x,y,r){$1\n    if(window.PPA_ARENA_AROUND_TARGET)window.PPA_ARENA_AROUND_TARGET(x,y,r,out);\n    return out;\n  }"
+);
+
+ppaPatchRegex(
+  'online arena exit cleanup',
+  /function\s+pvpExitAfterMatch\(\)\{\s*const ov=/,
+  "function pvpExitAfterMatch(){\n  if(window.PPA_ARENA_MATCH_END)window.PPA_ARENA_MATCH_END();\n  const ov="
+);
+
+if (!output.includes("PPA_ARENA_TRY_BASIC_ATTACK(e)") ||
+    !output.includes("PPA_ARENA_SKILL_TARGET(maxRange)") ||
+    !output.includes("PPA_ARENA_AROUND_TARGET")) {
+  throw new Error('Online arena combat target bridge did not apply');
 }
 
 /* ======================================================================== */
@@ -1018,6 +1058,7 @@ const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
   ['gateway/online-client.js','online-client.js','Online client bridge missing'],
   ['gateway/realtime-client.js','realtime-client.js','Realtime client bridge missing'],
+  ['gateway/arena-pvp-client.js','arena-pvp-client.js','Arena PvP client missing'],
   ['gateway/world-combat-client.js','world-combat-client.js','World combat client missing'],
   ['gateway/dungeon60-dragon.js','dungeon60-dragon.js','Dungeon 60 dragon runtime missing'],
   ['gateway/dungeon-mob-events.js','dungeon-mob-events.js','Dungeon mob event bridge missing'],
@@ -1052,6 +1093,7 @@ console.log('Telegram safe UI: /game/telegram-safe-ui.js');
 console.log('Mobile HUD tweaks: /game/mobile-hud-tweaks.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
+console.log('Arena PvP: /game/arena-pvp-client.js');
 console.log('World combat: /game/world-combat-client.js');
 console.log('Dungeon 60 dragon: /game/dungeon60-dragon.js');
 console.log('Dungeon mob events: /game/dungeon-mob-events.js');
