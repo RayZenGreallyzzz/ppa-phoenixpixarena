@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v344-dungeon41-realtime-spawn-fix-20260919-0132';
+const CLIENT_BUILD = 'v345-dungeon41-mobs-stat-buff-20260919-0925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -463,9 +463,9 @@ if (!output.includes("if(scene==='dungeon41')return'dungeon-41-60';")) {
 
 /* === DUNGEON 41-60 BALANCE ============================================= */
 ppaPatchRegex(
-  '41-60 hp +10 from 21-40',
+  '41-60 mob stats +2000 hp +50 atk +40 def',
   /e\.hp=Math\.round\(ref\.hp\*3\);\s*e\.mhp=e\.hp;\s*e\.def=Math\.round\(ref\.def\*3\);\s*e\.dmg=Math\.round\(ref\.dmg\*3\);/,
-  "e.hp=Math.round(ref.hp*1.10);\n  e.mhp=e.hp;\n  e.def=Math.round(ref.def*1.07);\n  e.dmg=Math.round(ref.dmg*1.13);"
+  "e.hp=Math.round(ref.hp*1.10)+2000;\n  e.mhp=e.hp;\n  e.def=Math.round(ref.def*1.07)+40;\n  e.dmg=Math.round(ref.dmg*1.13)+50;"
 );
 
 /* ======================================================================== */
