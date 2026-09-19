@@ -124,7 +124,7 @@
           cx.font='600 10px Georgia, serif';cx.lineWidth=2.4;cx.strokeStyle='rgba(18,8,5,.92)';cx.strokeText(String(r.name||'Игрок').slice(0,18),sx,topY-8);
           cx.fillStyle=r.worldPvp?'#ff8d78':'#f2d39a';cx.fillText(String(r.name||'Игрок').slice(0,18),sx,topY-8);
           if(r.worldPvp){
-            cx.font='700 7px monospace';cx.fillStyle='#ff715d';cx.fillText('PVP',sx,topY-29);
+            cx.font='700 7px monospace';cx.fillStyle='#ff715d';cx.fillText('ПК',sx,topY-29);
           }
         }
         cx.textAlign='left';cx.textBaseline='alphabetic';cx.restore();
