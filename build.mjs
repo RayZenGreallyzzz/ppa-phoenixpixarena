@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v391-zero-hp-deathlock-respawn-20260919';
+const CLIENT_BUILD = 'v392-remote-gnome-projectile-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1140,6 +1140,19 @@ if (!output.includes("if(P.hp>0&&P.hp<P.mhp)P.hp=Math.min(P.mhp,P.hp+0.06);") ||
 
 /* ======================================================================== */
 
+/* === REMOTE PROJECTILE DRAW LAYER ======================================== */
+ppaPatchRegex(
+  'remote projectile render layer',
+  /try\{drawPlayerCannonballs\(\)\}catch\(_\)\{\}\s*try\{drawPlayerArrows\(\)\}catch\(_\)\{\}/,
+  "try{drawPlayerCannonballs()}catch(_){}\n  try{drawPlayerArrows()}catch(_){}\n  try{if(window.PPA_REMOTE_COMBAT_FX_DRAW)window.PPA_REMOTE_COMBAT_FX_DRAW()}catch(_){}"
+);
+
+if (!output.includes("PPA_REMOTE_COMBAT_FX_DRAW)window.PPA_REMOTE_COMBAT_FX_DRAW()")) {
+  throw new Error('Remote projectile render layer hook did not apply');
+}
+
+/* ======================================================================== */
+
 /* === RUNTIME BUILD AUDIT ================================================= */
 {
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
@@ -1186,6 +1199,9 @@ if (!output.includes("if(P.hp>0&&P.hp<P.mhp)P.hp=Math.min(P.mhp,P.hp+0.06);") ||
   }
   if (remoteFx.includes("__ppaAttackUntil") || remoteFx.includes("r.anim='attack'") || remoteFx.includes("r.face=")) {
     throw new Error('Remote combat FX must stay visual-only');
+  }
+  if (!remoteFx.includes('PPA_REMOTE_COMBAT_FX_DRAW')) {
+    throw new Error('Remote projectile draw API missing');
   }
 }
 
