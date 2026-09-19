@@ -282,8 +282,15 @@
   function interceptAttack(e){
     if(!window.PPA_WORLD_PVP_ON||!pvpScene())return;
     var r=selectedRemote();
-    // With PK enabled, a player is attacked only after an explicit tap-target.
-    // If no player is selected the normal PvE attack continues unchanged.
+    if(!r){
+      r=nearestAttackablePlayer();
+      if(r){
+        selectedPlayerId=remoteId(r);
+        window.PPA_WORLD_PVP_TARGET_ID=selectedPlayerId;
+      }
+    }
+    // PK ON prioritizes a nearby player already inside the normal attack range.
+    // If no player is close enough, the ordinary PvE attack continues unchanged.
     if(!r)return;
     if(!remoteInRange(r)){
       try{e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation()}catch(_){}
@@ -314,7 +321,12 @@
         if(!t||!window.PPA_WORLD_PVP_ON||!pvpScene())return;
         var b=t.closest?t.closest('#bAtk,#bA'):null;
         if(!b)return;
-        var r=selectedRemote();if(!r)return;
+        var r=selectedRemote();
+        if(!r){
+          r=nearestAttackablePlayer();
+          if(r){selectedPlayerId=remoteId(r);window.PPA_WORLD_PVP_TARGET_ID=selectedPlayerId;}
+        }
+        if(!r)return;
         if(!remoteInRange(r)){
           e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
           var now=Date.now();
@@ -339,6 +351,10 @@
       var wrapped=function(e){
         if(window.PPA_WORLD_PVP_ON&&pvpScene()){
           var r=selectedRemote();
+          if(!r){
+            r=nearestAttackablePlayer();
+            if(r){selectedPlayerId=remoteId(r);window.PPA_WORLD_PVP_TARGET_ID=selectedPlayerId;}
+          }
           if(r){
             if(remoteInRange(r)){
               if(attackRemote(r))return;
@@ -360,8 +376,15 @@
   window.PPA_WORLD_COMBAT_DIAG=function(){
     var r=selectedRemote(),d=null;
     try{if(r)d=Math.round(Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y)))}catch(_){}
-    return{pk:!!window.PPA_WORLD_PVP_ON,scene:scene(),selected:selectedPlayerId||'',target:!!r,distance:d,attackRange:Math.round(pvpAttackRange()),lastAttemptAt:lastPkAttemptAt,lastAckAt:lastPkAckAt,lastReject:lastPkReject};
+    var near=null;try{var nr=nearestAttackablePlayer();near=nr?remoteId(nr):''}catch(_){}
+    return{pk:!!window.PPA_WORLD_PVP_ON,scene:scene(),selected:selectedPlayerId||'',nearestAttackable:near||'',target:!!r,distance:d,attackRange:Math.round(pvpAttackRange()),lastAttemptAt:lastPkAttemptAt,lastAckAt:lastPkAckAt,lastReject:lastPkReject};
   };
+
+  function nearestAttackablePlayer(){
+    var r=nearestAutoPlayer();
+    if(!r)return null;
+    return Number(r.__ppaAutoDistance)<=pvpAttackRange()+18?r:null;
+  }
 
   function nearestAutoPlayer(){
     try{
@@ -406,16 +429,15 @@
         // only when already inside the normal basic-attack range. This keeps AUTO
         // useful without turning it into a map-wide player hunter.
         if(window.PPA_WORLD_PVP_ON&&pvpScene()){
-          var rp=nearestAutoPlayer();
-          var mobD=nearestPveDistance();
-          if(rp&&Number(rp.__ppaAutoDistance)<=pvpAttackRange()+18&&Number(rp.__ppaAutoDistance)<=mobD+24){
+          var rp=nearestAttackablePlayer();
+          if(rp){
             selectedPlayerId=remoteId(rp);window.PPA_WORLD_PVP_TARGET_ID=selectedPlayerId;
             attackRemote(rp);
             return;
           }
         }
 
-        // No nearby player (or PK off): keep the existing smart PvE target/chase.
+        // No nearby attackable player (or PK off): keep the existing smart PvE target/chase.
         // Clear an AUTO-created/stale player selection first so the manual PK
         // bridge cannot block the normal PvE smart attack.
         if(autoOn&&selectedPlayerId){
