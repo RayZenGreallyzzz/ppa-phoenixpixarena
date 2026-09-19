@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v394-server-elite-authority-20260920';
+const CLIENT_BUILD = 'v395-mobile-hud-menu-layer-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1183,6 +1183,12 @@ if (!output.includes("P.scene!=='dungeon'||P.dead||window.PPA_REALTIME_V2_ACTIVE
       socialUi.includes('PPA_WORLD_PK_ACTIVE') ||
       realtimeClient.includes("type:'world-pvp")) {
     throw new Error('Open-world PK client code returned');
+  }
+  if (worldCombat.includes('z-index:10050!important') ||
+      worldCombat.includes('z-index:10051!important') ||
+      !worldCombat.includes('z-index:40!important') ||
+      !worldCombat.includes('z-index:41!important')) {
+    throw new Error('PK/AUTO HUD layer must stay below menus');
   }
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
       !worldCombat.includes('PPA_PK_ACTIVE') ||
