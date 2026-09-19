@@ -430,11 +430,16 @@
         e.eliteMode=String(st.eliteMode||'');
         e.eliteExpiresAt=Math.max(0,Number(st.eliteExpiresAt)||0);
         e.eliteHpMultiplier=e.eliteMode==='1-20'?7:8;
+        var _eliteDmgBonus=e.eliteMode==='41-60'?42:(e.eliteMode==='21+'?14:12);
         e.def=(Number(e.__ppaServerEliteBaseDef)||0)+Math.max(0,Number(st.eliteDefBonus)||0);
+        e.dmg=(Number(e.__ppaServerEliteBaseDmg)||0)+_eliteDmgBonus;
+        e.eliteCombatBonusApplied=true;
       }else{
         if(e.__ppaServerEliteManaged){
           e.def=Number(e.__ppaServerEliteBaseDef)||Number(e.def)||0;
+          e.dmg=Number(e.__ppaServerEliteBaseDmg)||Number(e.dmg)||0;
         }
+        e.eliteCombatBonusApplied=false;
         e.isDungeonElite=false;
         e.eliteVisualScale=1;
         e.eliteWindowKey='';
