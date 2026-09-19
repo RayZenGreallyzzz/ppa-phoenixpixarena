@@ -41,12 +41,14 @@
         var x=wx-cam.x,y=wy-cam.y;
         cx.save();
         if(f.kind==='gnome-cannon'){
-          cx.fillStyle='rgba(214,125,42,.28)';
-          cx.beginPath();cx.arc(x,y,10,0,Math.PI*2);cx.fill();
-          cx.fillStyle='#24272b';cx.strokeStyle='#d68a3d';cx.lineWidth=2;
-          cx.beginPath();cx.arc(x,y,7,0,Math.PI*2);cx.fill();cx.stroke();
-          cx.fillStyle='rgba(255,221,155,.78)';
-          cx.beginPath();cx.arc(x-2,y-2,2,0,Math.PI*2);cx.fill();
+          // Remote cannonball uses the same world/projectile layer as local shots.
+          // Slightly stronger outline keeps it readable on dark dungeon floors.
+          cx.fillStyle='rgba(255,146,52,.34)';
+          cx.beginPath();cx.arc(x,y,11,0,Math.PI*2);cx.fill();
+          cx.fillStyle='#24272b';cx.strokeStyle='#f0a34f';cx.lineWidth=2.4;
+          cx.beginPath();cx.arc(x,y,7.5,0,Math.PI*2);cx.fill();cx.stroke();
+          cx.fillStyle='rgba(255,229,174,.92)';
+          cx.beginPath();cx.arc(x-2.2,y-2.2,2.2,0,Math.PI*2);cx.fill();
         }else{
           cx.translate(x,y);cx.rotate(f.ang);
           cx.fillStyle='#b98b55';cx.fillRect(-10,-1,16,2);
@@ -60,21 +62,14 @@
 
   function install(){
     try{
-      if(window.__PPA_REMOTE_COMBAT_FX_V1)return true;
-      if(typeof drawOnlinePlayers!=='function')return false;
-      var base=drawOnlinePlayers;
-      var wrapped=function(){
-        var v=base.apply(this,arguments);
-        drawFx();
-        return v;
-      };
-      drawOnlinePlayers=wrapped;
-      try{window.drawOnlinePlayers=wrapped}catch(_){}
-      window.__PPA_REMOTE_COMBAT_FX_V1=true;
+      if(window.__PPA_REMOTE_COMBAT_FX_V2)return true;
+      window.PPA_REMOTE_COMBAT_FX_DRAW=drawFx;
+      window.PPA_REMOTE_COMBAT_FX_DIAG=function(){return{queued:fx.length,ready:true}};
+      window.__PPA_REMOTE_COMBAT_FX_V2=true;
       return true;
     }catch(e){console.warn('PPA remote combat fx',e);return false}
   }
 
-  function boot(){if(install())return;setTimeout(boot,250)}
+  function boot(){install()}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
