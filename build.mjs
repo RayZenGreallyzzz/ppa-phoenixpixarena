@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v379-arena-hp-lifecycle-fix-20260919';
+const CLIENT_BUILD = 'v380-tight-melee-ranges-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -104,6 +104,89 @@ function ppaEscapeSrcdocCode(code) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;');
+}
+
+/* === TIGHT MELEE BASIC RANGES =========================================== */
+// Basic melee is intentionally short. These values are center-to-center
+// acquisition/hit ranges before the small target-body allowance below.
+ppaPatchRegex(
+  'melee fallback range 72',
+  /const\s+MELEE_RANGE\s*=\s*95\s*;/,
+  "const MELEE_RANGE=72;"
+);
+
+ppaPatchRegex(
+  'class authoritative basic melee range',
+  /function\s+playerBasicRange\(\)\s*\{\s*return\s+Math\.max\(60,Number\(P\.attackRange\)\|\|MELEE_RANGE\);\s*\}/,
+  `function playerBasicRange(){
+  const ck=(typeof classBaseKey==='function'?classBaseKey():'');
+  const melee={tank:72,barbarian:78,paladin:74,assassin:64};
+  if(melee[ck])return melee[ck];
+  return Math.max(60,Number(P.attackRange)||MELEE_RANGE);
+}
+function playerBasicTargetEdge(target){
+  if(!target||!Number.isFinite(Number(target.sz))||Number(target.sz)<=30)return 0;
+  const ck=(typeof classBaseKey==='function'?classBaseKey():'');
+  const melee=(ck==='tank'||ck==='barbarian'||ck==='paladin'||ck==='assassin');
+  return melee
+    ?Math.min(8,Math.max(0,(Number(target.sz)-30)*.15))
+    :Math.max(0,(Number(target.sz)-30)*.4);
+}`
+);
+
+ppaPatchRegex(
+  'tank basic range 72',
+  /hp:260,mp:20,atk:12,def_:34,spd:2\.00,atkSpd:0\.95,range:95,crit:3,dodge:3,critDmg:180/,
+  "hp:260,mp:20,atk:12,def_:34,spd:2.00,atkSpd:0.95,range:72,crit:3,dodge:3,critDmg:180"
+);
+ppaPatchRegex(
+  'barbarian basic range 78',
+  /hp:150,mp:30,atk:20,def_:12,spd:3\.50,atkSpd:1\.20,range:105,crit:10,dodge:3,critDmg:180/,
+  "hp:150,mp:30,atk:20,def_:12,spd:3.50,atkSpd:1.20,range:78,crit:10,dodge:3,critDmg:180"
+);
+ppaPatchRegex(
+  'paladin basic range 74',
+  /hp:170,mp:100,atk:14,def_:18,spd:3\.20,atkSpd:1\.05,range:100,crit:10,dodge:3,critDmg:180/,
+  "hp:170,mp:100,atk:14,def_:18,spd:3.20,atkSpd:1.05,range:74,crit:10,dodge:3,critDmg:180"
+);
+ppaPatchRegex(
+  'assassin basic range 64',
+  /hp:100,mp:60,atk:15,def_:5,spd:4\.50,atkSpd:1\.55,range:95,crit:20,dodge:3,critDmg:180/,
+  "hp:100,mp:60,atk:15,def_:5,spd:4.50,atkSpd:1.55,range:64,crit:20,dodge:3,critDmg:180"
+);
+
+ppaPatchRegex(
+  'basic target edge helper',
+  /const\s+edge=\(target\.sz&&target\.sz>30\)\?Math\.max\(0,\(target\.sz-30\)\*\.4\):0;/g,
+  "const edge=playerBasicTargetEdge(target);",
+  true
+);
+ppaPatchRegex(
+  'basic target edge helper e',
+  /const\s+edge=\(e\.sz&&e\.sz>30\)\?Math\.max\(0,\(e\.sz-30\)\*\.4\):0;/g,
+  "const edge=playerBasicTargetEdge(e);",
+  true
+);
+ppaPatchRegex(
+  'smart attack melee target edge',
+  /const\s+edge=\(target&&target\.sz&&target\.sz>30\)\s*\?Math\.max\(0,\(target\.sz-30\)\*\.4\)\s*:\s*0;/,
+  "const edge=playerBasicTargetEdge(target);"
+);
+ppaPatchRegex(
+  'melee hit target edge',
+  /:\s*Math\.max\(0,\(e\.sz-30\)\*0\.4\);/,
+  ": playerBasicTargetEdge(e);"
+);
+ppaPatchRegex(
+  'clan boss class melee reach',
+  /if\(edgeD>CLAN_BOSS_MELEE_EDGE_RANGE\)/,
+  "if(edgeD>playerBasicRange())"
+);
+
+if (!output.includes("assassin:64") ||
+    !output.includes("barbarian:78") ||
+    !output.includes("function playerBasicTargetEdge(target)")) {
+  throw new Error('Tight melee range patch did not apply');
 }
 
 /* === CLAN DIRECTORY / RANKING ============================================ */
@@ -413,7 +496,7 @@ ppaPatchRegex(
   'basic shared mob hit',
   /const\s+r\s*=\s*basicAttackRoll\(target\)\s*;\s*target\.hp\s*-=\s*r\.damage\s*;\s*target\.flash\s*=\s*7\s*;\s*target\.aggro\s*=\s*true\s*;/,
   `const r=basicAttackRoll(target);
-  const _ppaServerHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(target,r.damage);
+  const _ppaServerHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(target,r.damage,{kind:'basic',range:playerBasicRange()});
   if(!_ppaServerHit)target.hp-=r.damage;
   target.flash=7;target.aggro=true;`
 );
@@ -496,7 +579,7 @@ ppaPatchRegex(
   /const\s+realDmg=\(e===tg\)\?dmg:basicAttackRoll\(e\)\.damage;\s*e\.hp-=realDmg;\s*applyPlayerVampirism\(realDmg,1\);/,
   `const realDmg=(e===tg)?dmg:basicAttackRoll(e).damage;
     const _ppaArenaMeleeHit=e.__ppaArenaPlayer&&window.PPA_ARENA_SKILL_HIT&&window.PPA_ARENA_SKILL_HIT(e,realDmg,false,700,'physical');
-    const _ppaServerMeleeHit=!_ppaArenaMeleeHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,realDmg);
+    const _ppaServerMeleeHit=!_ppaArenaMeleeHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,realDmg,{kind:'basic',range:playerBasicRange()});
     if(!_ppaArenaMeleeHit&&!_ppaServerMeleeHit)e.hp-=realDmg;
     applyPlayerVampirism(realDmg,1);`
 );
@@ -532,7 +615,7 @@ ppaPatchRegex(
 );
 
 if (!output.includes("const _ppaArenaMeleeHit=e.__ppaArenaPlayer") ||
-    !output.includes("const _ppaServerMeleeHit=!_ppaArenaMeleeHit&&window.PPA_MOB_EVENT_DAMAGE")) {
+    !output.includes("window.PPA_MOB_EVENT_DAMAGE(e,realDmg,{kind:'basic',range:playerBasicRange()})")) {
   throw new Error('Arena/melee authoritative damage patch did not apply');
 }
 if (!output.includes("const _ppaArenaLegacySkillHit=e.__ppaArenaPlayer") ||
