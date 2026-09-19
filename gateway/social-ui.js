@@ -302,27 +302,11 @@
   }
 
   function armCanvasTap(){
-    var c=document.getElementById('c');if(!c||c.dataset.ppaSocialTapV5==='1')return false;
-    c.dataset.ppaSocialTapV5='1';
+    var c=document.getElementById('c');if(!c||c.dataset.ppaSocialTapV6==='1')return false;
+    c.dataset.ppaSocialTapV6='1';
     c.addEventListener('pointerdown',function(e){
       if(e.button!=null&&e.button!==0)return;
       var r=findRemoteAt(e.clientX,e.clientY);if(!r)return;
-
-      // One tap owner only:
-      // PK ON  -> select a combat target.
-      // PK OFF -> open the social player card.
-      // This prevents two capture handlers from fighting over the same canvas tap.
-      try{
-        var pkActive=window.PPA_WORLD_PK_ACTIVE
-          ?!!window.PPA_WORLD_PK_ACTIVE()
-          :!!window.PPA_WORLD_PVP_ON;
-        if(pkActive&&window.PPA_WORLD_PLAYER_SELECT){
-          e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
-          window.PPA_WORLD_PLAYER_SELECT(r);
-          return;
-        }
-      }catch(_){}
-
       e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
       openPlayer(r);
     },true);
