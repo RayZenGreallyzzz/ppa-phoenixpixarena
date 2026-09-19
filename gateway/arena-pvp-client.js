@@ -1,7 +1,6 @@
 (function(){
   'use strict';
 
-  var pending=null;
   var match={active:false,mode:'',matchId:'',room:'',side:'',opponentId:''};
   var lastBasicAt=0;
   var lastRoundToken='';
@@ -164,31 +163,8 @@
     }catch(_){return false}
   };
 
-  function resolveQueue(data){
-    if(!pending)return;
-    var p=pending;pending=null;
-    clearTimeout(p.timer);
-    p.resolve(data);
-  }
-  window.PPA_PVP_QUEUE_HANDLER=function(info){
-    info=info||{};
-    var mode=String(info.mode||'1x1').toLowerCase().replace('×','x');
-    if(mode!=='1x1'){
-      return Promise.resolve({matched:false,message:'Сначала проверяем живой 1×1 · 3×3/5×5 подключим после теста'});
-    }
-    if(pending)return pending.promise;
-    if(!window.PPA_RT_SEND||!window.PPA_RT_SEND({type:'arena-queue-join',mode:mode})){
-      return Promise.resolve({matched:false,message:'ONLINE переподключается'});
-    }
-    var resolveFn;
-    var promise=new Promise(function(resolve){resolveFn=resolve});
-    pending={promise:promise,resolve:resolveFn,timer:setTimeout(function(){
-      try{if(window.PPA_RT_SEND)window.PPA_RT_SEND({type:'arena-queue-cancel',mode:mode})}catch(_){}
-      resolveQueue({matched:false,message:'Соперник пока не найден · попробуй ещё раз'});
-    },90000)};
-    notice('1×1 · поиск реального игрока…');
-    return promise;
-  };
+  // Matchmaking is owned by realtime-client.js. This module only handles
+  // the confirmed match and combat packets.
 
   function resetRoundUi(){
     try{
@@ -226,18 +202,12 @@
 
   window.PPA_ARENA_NET_RECEIVE=function(m){
     if(!m||typeof m!=='object')return;
-    if(m.type==='arena-queue-state'){
-      if(m.state==='waiting')notice(m.message||'1×1 · ждём соперника…');
-      else if(m.state==='cancelled')resolveQueue({matched:false,message:m.message||'Поиск отменён'});
-      return;
-    }
     if(m.type==='arena-match'){
       match={
         active:true,mode:String(m.mode||'1x1'),matchId:String(m.matchId||''),
         room:String(m.room||''),side:String(m.side||'blue'),opponentId:String(m.opponentId||'')
       };
       window.PPA_AI_TRAINING_ACTIVE=false;
-      resolveQueue({matched:true,mode:match.mode,matchId:match.matchId,side:match.side,room:match.room});
       return;
     }
     if(m.type==='arena-hit'||m.type==='arena-skill-hit'){handleHit(m);return}
@@ -267,10 +237,6 @@
 
   window.PPA_ARENA_MATCH_END=function(){
     try{
-      if(pending){
-        if(window.PPA_RT_SEND)window.PPA_RT_SEND({type:'arena-queue-cancel',mode:'1x1'});
-        resolveQueue({matched:false,message:'Поиск отменён'});
-      }
       if(match.active&&window.PPA_RT_SEND)window.PPA_RT_SEND({type:'arena-leave',matchId:match.matchId});
     }catch(_){}
     match={active:false,mode:'',matchId:'',room:'',side:'',opponentId:''};
@@ -279,6 +245,6 @@
   };
 
   window.PPA_ARENA_DIAG=function(){
-    return{match:Object.assign({},match),waiting:!!pending,combatReady:combatReady(),enemy:!!nearestEnemy(1400)};
+    return{match:Object.assign({},match),combatReady:combatReady(),enemy:!!nearestEnemy(1400)};
   };
 })();
