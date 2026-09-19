@@ -553,7 +553,7 @@
     try{
       var x=(typeof jX!=='undefined')?Number(jX)||0:0;
       var y=(typeof jY!=='undefined')?Number(jY)||0:0;
-      return Math.abs(x)>0.08||Math.abs(y)>0.08;
+      return Math.abs(x)>0.04||Math.abs(y)>0.04;
     }catch(_){return false}
   }
   function arenaSetFacingTo(tx,ty){
@@ -596,13 +596,11 @@
       arenaSetFacingTo(rp.x,rp.y);
 
       if(dist<=range+stopPad){
-        // Same behavior as the game's normal smart attack:
-        // once in range, attack once when cooldown is ready.
-        if(Number(P.shootCD||0)<=0){
-          RT.arenaAutoTarget=false;
-          setTimeout(function(){try{arenaTryBasicDirect()}catch(_){}},0);
-        }
-        return {x:0,y:0};
+        // Auto-target only approaches. It NEVER attacks or holds movement.
+        // Once the target is in range, full manual joystick/attack control returns.
+        RT.arenaAutoTarget=false;
+        arenaSetFacingTo(rp.x,rp.y);
+        return null;
       }
 
       // Important: do NOT mutate P.x/P.y here.
