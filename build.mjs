@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v389-pk-hybrid-mobs-players-20260919';
+const CLIENT_BUILD = 'v390-server-death-lock-respawn-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1120,12 +1120,23 @@ ppaPatchRegex(
 
 /* ======================================================================== */
 
-/* === PK DEATH -> TOWN LABEL ============================================ */
+/* === ZERO HP IS DEATH ==================================================== */
 ppaPatchRegex(
-  'PK death town respawn label',
-  /if\(rb\)rb\.textContent=\(P\.scene===['"]dungeon['"]\|\|P\.scene===['"]clanboss1['"]\)\?['"]ВОЗРОДИТЬСЯ В РЕСП-ЗОНЕ['"]:['"]ВОЗРОДИТЬСЯ В ГОРОДЕ['"];/,
-  "if(rb)rb.textContent=(window.PPA_PK_DEATH_TO_CITY===true)?'ВОЗРОДИТЬСЯ В ГОРОДЕ':((P.scene==='dungeon'||P.scene==='clanboss1')?'ВОЗРОДИТЬСЯ В РЕСП-ЗОНЕ':'ВОЗРОДИТЬСЯ В ГОРОДЕ');"
+  'natural hp regen never revives zero hp',
+  /if\(P\.hp<P\.mhp\)P\.hp=Math\.min\(P\.mhp,P\.hp\+0\.06\);/,
+  "if(P.hp>0&&P.hp<P.mhp)P.hp=Math.min(P.mhp,P.hp+0.06);"
 );
+
+ppaPatchRegex(
+  'premium hp regen never revives zero hp',
+  /if\(hpPer>0&&P\.hp<P\.mhp\)P\.hp=Math\.min\(P\.mhp,P\.hp\+hpPer\*ticks\);/,
+  "if(hpPer>0&&P.hp>0&&P.hp<P.mhp)P.hp=Math.min(P.mhp,P.hp+hpPer*ticks);"
+);
+
+if (!output.includes("if(P.hp>0&&P.hp<P.mhp)P.hp=Math.min(P.mhp,P.hp+0.06);") ||
+    !output.includes("if(hpPer>0&&P.hp>0&&P.hp<P.mhp)P.hp=Math.min(P.mhp,P.hp+hpPer*ticks);")) {
+  throw new Error('Zero HP regen guard did not apply');
+}
 
 /* ======================================================================== */
 
@@ -1150,11 +1161,14 @@ ppaPatchRegex(
       !worldCombat.includes('PPA_PK_ACTIVE') ||
       !realtimeClient.includes("type:'player-pk-hit'") ||
       !realtimeClient.includes('pkAttackMixed') ||
-      !realtimeClient.includes('PPA_PK_DEATH_TO_CITY') ||
+      !realtimeClient.includes('player-respawn-confirm') ||
+      !realtimeClient.includes('serverDeadLocked') ||
       !arenaPvp.includes("player-pk-skill-hit") ||
       !arenaPvp.includes('nearestMobInfo') ||
       !realtimeServer.includes("m.type === 'player-pk-hit'") ||
-      !realtimeServer.includes('playerPkRoomAllowed')) {
+      !realtimeServer.includes('playerPkRoomAllowed') ||
+      !realtimeServer.includes("m.type === 'player-respawn-confirm'") ||
+      !realtimeServer.includes('deadLocked')) {
     throw new Error('New server-authoritative PK zone bridge is incomplete');
   }
   if (!realtimeClient.includes('PPA_PVP_QUEUE_HANDLER') ||
