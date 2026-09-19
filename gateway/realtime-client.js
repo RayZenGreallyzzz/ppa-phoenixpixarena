@@ -9,7 +9,8 @@
     onlineCount:0,started:false,pingSent:0,pingMs:null,
     lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null,
     assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40,
-    arenaRoom:'',arenaLeavingUntil:0
+    arenaRoom:'',arenaLeavingUntil:0,
+    arenaQueuePromise:null,arenaQueueResolve:null,arenaQueueTimer:0,arenaQueueMode:''
   };
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
@@ -104,6 +105,18 @@
   function status(text,col){try{if(typeof ppaOnlineSetStatus==='function'){ppaOnlineSetStatus(text,col);fixOnlineBadge()}}catch(_){}}
   function refreshBadge(){if(RT.ws&&RT.ws.readyState===WebSocket.OPEN)status(badgeText(),'#9fffc1')}
   function send(o){try{if(RT.ws&&RT.ws.readyState===WebSocket.OPEN){RT.ws.send(JSON.stringify(o));return true}}catch(_){}return false}
+
+  function arenaQueueNotice(text){
+    text=String(text||'');
+    try{if(typeof sendArenaMenuNotice==='function')sendArenaMenuNotice(text)}catch(_){}
+    try{if(typeof showPickup==='function')showPickup(text,'#ffd36d')}catch(_){}
+  }
+  function arenaQueueResolve(data){
+    var fn=RT.arenaQueueResolve;
+    RT.arenaQueueResolve=null;RT.arenaQueuePromise=null;RT.arenaQueueMode='';
+    if(RT.arenaQueueTimer){clearTimeout(RT.arenaQueueTimer);RT.arenaQueueTimer=0}
+    if(fn)try{fn(data||{matched:false})}catch(_){}
+  }
   function clearRemotes(){try{if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes)PPA_ONLINE.remotes.clear()}catch(_){}}
   function deleteRemote(id){try{if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes)PPA_ONLINE.remotes.delete(String(id||''))}catch(_){}}
 
@@ -324,12 +337,22 @@
       return;
     }
     if(String(m.type||'').indexOf('arena-')===0){
+      if(m.type==='arena-queue-state'){
+        if(m.state==='waiting')arenaQueueNotice(m.message||'1×1 · ждём соперника…');
+        else if(m.state==='cancelled')arenaQueueResolve({matched:false,message:m.message||'Поиск отменён'});
+      }
       if(m.type==='arena-match'&&m.room){
         RT.arenaRoom=canonicalRoom(m.room);
         RT.arenaLeavingUntil=0;
         commitRoom(RT.arenaRoom);
         RT.serverRoom=RT.arenaRoom;
         RT.lastRoomSync=Date.now();
+        arenaQueueNotice('СОПЕРНИК НАЙДЕН · вход на арену');
+        arenaQueueResolve({
+          matched:true,mode:String(m.mode||'1x1'),matchId:String(m.matchId||''),
+          side:String(m.side||'blue'),room:RT.arenaRoom,
+          opponentId:String(m.opponentId||''),opponentName:String(m.opponentName||'Игрок')
+        });
       }
       try{if(window.PPA_ARENA_NET_RECEIVE)window.PPA_ARENA_NET_RECEIVE(m)}catch(_){}
       return;
@@ -419,6 +442,28 @@
   },5000);
 
   window.PPA_RT_SEND=send;
+  window.PPA_PVP_QUEUE_HANDLER=function(info){
+    info=info||{};
+    var mode=String(info.mode||'1x1').toLowerCase().replace('×','x');
+    if(mode!=='1x1')return Promise.resolve({matched:false,message:'Сначала проверяем живой 1×1'});
+    if(RT.arenaQueuePromise)return RT.arenaQueuePromise;
+    if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN){
+      arenaQueueNotice('АРЕНА · ONLINE переподключается');
+      return Promise.resolve({matched:false,message:'ONLINE переподключается'});
+    }
+    RT.arenaQueueMode=mode;
+    RT.arenaQueuePromise=new Promise(function(resolve){RT.arenaQueueResolve=resolve});
+    if(!send({type:'arena-queue-join',mode:mode})){
+      arenaQueueResolve({matched:false,message:'Не удалось войти в очередь'});
+      return Promise.resolve({matched:false,message:'Не удалось войти в очередь'});
+    }
+    arenaQueueNotice('1×1 · ПОИСК СОПЕРНИКА…');
+    RT.arenaQueueTimer=setTimeout(function(){
+      try{send({type:'arena-queue-cancel',mode:mode})}catch(_){}
+      arenaQueueResolve({matched:false,message:'Соперник пока не найден'});
+    },90000);
+    return RT.arenaQueuePromise;
+  };
   window.PPA_RT_COMBAT_FX=function(d){
     try{
       d=d||{};
