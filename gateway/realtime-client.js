@@ -106,6 +106,18 @@
   function refreshBadge(){if(RT.ws&&RT.ws.readyState===WebSocket.OPEN)status(badgeText(),'#9fffc1')}
   function send(o){try{if(RT.ws&&RT.ws.readyState===WebSocket.OPEN){RT.ws.send(JSON.stringify(o));return true}}catch(_){}return false}
 
+  function arenaQueueStatus(text,on){
+    try{
+      var el=document.getElementById('ppaArenaQueueStatus');
+      if(!el){
+        el=document.createElement('div');el.id='ppaArenaQueueStatus';
+        el.style.cssText='position:fixed;left:50%;top:72px;transform:translateX(-50%);z-index:10080;display:none;max-width:82vw;padding:8px 12px;border:1px solid rgba(255,199,82,.65);border-radius:8px;background:rgba(10,12,15,.94);color:#ffd36d;font:700 11px/1.2 monospace;text-align:center;pointer-events:none;text-shadow:0 1px 2px #000';
+        document.body.appendChild(el);
+      }
+      el.textContent=String(text||'');
+      el.style.display=on?'block':'none';
+    }catch(_){}
+  }
   function arenaQueueNotice(text){
     text=String(text||'');
     try{if(typeof sendArenaMenuNotice==='function')sendArenaMenuNotice(text)}catch(_){}
@@ -338,8 +350,8 @@
     }
     if(String(m.type||'').indexOf('arena-')===0){
       if(m.type==='arena-queue-state'){
-        if(m.state==='waiting')arenaQueueNotice(m.message||'1×1 · ждём соперника…');
-        else if(m.state==='cancelled')arenaQueueResolve({matched:false,message:m.message||'Поиск отменён'});
+        if(m.state==='waiting'){arenaQueueNotice(m.message||'1×1 · ждём соперника…');arenaQueueStatus('ПОДБОР СОПЕРНИКА 1×1 · ОЖИДАНИЕ…',true)}
+        else if(m.state==='cancelled'){arenaQueueStatus('',false);arenaQueueResolve({matched:false,message:m.message||'Поиск отменён'})}
       }
       if(m.type==='arena-match'&&m.room){
         RT.arenaRoom=canonicalRoom(m.room);
@@ -347,7 +359,7 @@
         commitRoom(RT.arenaRoom);
         RT.serverRoom=RT.arenaRoom;
         RT.lastRoomSync=Date.now();
-        arenaQueueNotice('СОПЕРНИК НАЙДЕН · вход на арену');
+        arenaQueueStatus('СОПЕРНИК НАЙДЕН · ВХОД НА АРЕНУ',true);arenaQueueNotice('СОПЕРНИК НАЙДЕН · вход на арену');setTimeout(function(){arenaQueueStatus('',false)},1400);
         arenaQueueResolve({
           matched:true,mode:String(m.mode||'1x1'),matchId:String(m.matchId||''),
           side:String(m.side||'blue'),room:RT.arenaRoom,
@@ -457,10 +469,10 @@
       arenaQueueResolve({matched:false,message:'Не удалось войти в очередь'});
       return Promise.resolve({matched:false,message:'Не удалось войти в очередь'});
     }
-    arenaQueueNotice('1×1 · ПОИСК СОПЕРНИКА…');
+    arenaQueueNotice('1×1 · ПОИСК СОПЕРНИКА…');arenaQueueStatus('ПОДБОР СОПЕРНИКА 1×1 · ОЖИДАНИЕ…',true);
     RT.arenaQueueTimer=setTimeout(function(){
       try{send({type:'arena-queue-cancel',mode:mode})}catch(_){}
-      arenaQueueResolve({matched:false,message:'Соперник пока не найден'});
+      arenaQueueStatus('',false);arenaQueueResolve({matched:false,message:'Соперник пока не найден'});
     },90000);
     return RT.arenaQueuePromise;
   };
@@ -500,6 +512,7 @@
     }catch(_){return false}
   };
   window.PPA_RT_ARENA_CLEAR=function(){
+    arenaQueueStatus('',false);
     RT.arenaRoom='';
     RT.arenaLeavingUntil=Date.now()+1400;
     commitRoom('safe');
