@@ -104,14 +104,6 @@
         var hidden=Number(r.hiddenUntil)>Date.now();
         r.__ppaUntargetable=hidden;
         if(hidden)cx.globalAlpha=.38;
-        if(window.PPA_WORLD_PVP_ON&&String(window.PPA_WORLD_PVP_TARGET_ID||'')===String(r.id||r.i||r.__ppaPid||'')){
-          cx.save();
-          cx.globalAlpha=hidden?.28:.95;
-          cx.strokeStyle='#ff6556';
-          cx.lineWidth=2.4;
-          cx.beginPath();cx.ellipse(sx,sy+body*.43,body*.48,body*.20,0,0,Math.PI*2);cx.stroke();
-          cx.restore();
-        }
         cx.imageSmoothingEnabled=false;
         cx.fillStyle='rgba(0,0,0,.40)';cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.38,body*.14,0,0,Math.PI*2);cx.fill();
         if(flip){
