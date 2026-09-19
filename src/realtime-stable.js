@@ -1226,8 +1226,13 @@ export class RealtimeHub extends BaseRealtimeHub {
       const targetPid = String(m.target || '');
       const reject = (reason) => wsJson(ws, { type:'world-pvp-reject', reason:String(reason||'атака отклонена'), room, target:targetPid, ts:now });
       if (!worldPvpRoom(room)) { reject('в этой зоне ПК недоступен'); return; }
-      if (!a.worldPvp) { reject('режим ПК не подтверждён сервером'); return; }
       if (!(Number(a.h) > 0)) { reject('персонаж не может атаковать'); return; }
+      if (!a.worldPvp) {
+        a.worldPvp = true;
+        a.lastSeenAt = now;
+        ws.serializeAttachment(a);
+        wsJson(ws, { type:'world-pvp-state', enabled:true, room, ts:now });
+      }
       if (!targetPid || targetPid === String(a.pid || '')) { reject('цель не выбрана'); return; }
 
       let targetWs = null, ta = null;
@@ -1286,7 +1291,13 @@ export class RealtimeHub extends BaseRealtimeHub {
     if (m.type === 'world-pvp-skill-hit') {
       const room = cleanRoom(a.room);
       const targetPid = String(m.target || '');
-      if (!worldPvpRoom(room) || !a.worldPvp || !(Number(a.h) > 0) || !targetPid || targetPid === String(a.pid || '')) return;
+      if (!worldPvpRoom(room) || !(Number(a.h) > 0) || !targetPid || targetPid === String(a.pid || '')) return;
+      if (!a.worldPvp) {
+        a.worldPvp = true;
+        a.lastSeenAt = now;
+        ws.serializeAttachment(a);
+        wsJson(ws, { type:'world-pvp-state', enabled:true, room, ts:now });
+      }
 
       let targetWs = null, ta = null;
       for (const peer of this.roomSockets(room)) {
@@ -1338,8 +1349,14 @@ export class RealtimeHub extends BaseRealtimeHub {
       const room = cleanRoom(a.room);
       const targetPid = String(m.target || '');
       const kind = String(m.kind || '');
-      if (!worldPvpRoom(room) || !a.worldPvp || !(Number(a.h) > 0) ||
+      if (!worldPvpRoom(room) || !(Number(a.h) > 0) ||
           !targetPid || targetPid === String(a.pid || '') || (kind !== 'slow' && kind !== 'root')) return;
+      if (!a.worldPvp) {
+        a.worldPvp = true;
+        a.lastSeenAt = now;
+        ws.serializeAttachment(a);
+        wsJson(ws, { type:'world-pvp-state', enabled:true, room, ts:now });
+      }
 
       let targetWs = null, ta = null;
       for (const peer of this.roomSockets(room)) {
