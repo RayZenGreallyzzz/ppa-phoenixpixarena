@@ -60,20 +60,20 @@
       '@media(max-width:700px){#ppaWorldCombatToggles{right:19px}}';
     document.head.appendChild(st);
     box=document.createElement('div');box.id='ppaWorldCombatToggles';
-    var p=document.createElement('button');p.id='ppaWorldPvpBtn';p.textContent='PVP OFF';
-    var a=document.createElement('button');a.id='ppaWorldAutoBtn';a.textContent='AUTO';
+    var p=document.createElement('button');p.id='ppaWorldPvpBtn';p.textContent='ПК ВЫКЛ';
+    var a=document.createElement('button');a.id='ppaWorldAutoBtn';a.textContent='АВТО';
     box.appendChild(p);box.appendChild(a);document.body.appendChild(box);
 
     p.addEventListener('pointerdown',function(e){
       e.preventDefault();e.stopPropagation();
-      if(!pvpScene()){popup('PVP здесь недоступен','#ffb36b');return}
+      if(!pvpScene()){popup('ПК здесь недоступен','#ffb36b');return}
       var next=!window.PPA_WORLD_PVP_ON;
       if(typeof window.PPA_WORLD_PVP_SET!=='function'||!window.PPA_WORLD_PVP_SET(next)){
-        popup('PVP · сервер переподключается','#ffb36b');return;
+        popup('ПК · сервер переподключается','#ffb36b');return;
       }
       // Server ack is authoritative; optimistic UI makes the tap feel immediate.
       window.PPA_WORLD_PVP_ON=next;refresh();
-      popup(next?'PVP включён · можно атаковать только игроков с PVP ON':'PVP выключен',next?'#ff9d80':'#b9c0c7');
+      popup(next?'ПК включён · можно атаковать других игроков':'ПК выключен',next?'#ff9d80':'#b9c0c7');
     },{passive:false});
 
     a.addEventListener('pointerdown',function(e){
@@ -95,12 +95,12 @@
     var pb=document.getElementById('ppaWorldPvpBtn'),ab=document.getElementById('ppaWorldAutoBtn');
     if(pb){
       pb.style.display=pvpScene()?'':'none';
-      pb.textContent=window.PPA_WORLD_PVP_ON?'PVP ON':'PVP OFF';
+      pb.textContent=window.PPA_WORLD_PVP_ON?'ПК ВКЛ':'ПК ВЫКЛ';
       pb.classList.toggle('on',!!window.PPA_WORLD_PVP_ON);
     }
     if(ab){
       var unlocked=rememberUnlock();
-      ab.textContent=unlocked?(autoOn?'AUTO ON':'AUTO'):'AUTO';
+      ab.textContent=unlocked?(autoOn?'АВТО ВКЛ':'АВТО'):'АВТО';
       ab.classList.toggle('autoOn',!!autoOn&&unlocked);
       ab.classList.toggle('locked',!unlocked);
       ab.title=unlocked?'Автоматическая обычная атака по мобам':'Покупка от 5 Gram или любая Premium-подписка';
@@ -129,7 +129,7 @@
       if(!window.PPA_WORLD_PVP_ON||!pvpScene()||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
       var best=null,bd=Infinity,range=Math.max(60,Number(typeof playerBasicRange==='function'?playerBasicRange():P.attackRange)||60)+34;
       PPA_ONLINE.remotes.forEach(function(r){
-        if(!r||!r.hasPos||!r.worldPvp||Number(r.hp)<=0||sameParty(r))return;
+        if(!r||!r.hasPos||Number(r.hp)<=0||sameParty(r))return;
         if(Number(r.hiddenUntil)>Date.now())return;
         if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return;
         var d=Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y));
@@ -181,7 +181,7 @@
       var now=Date.now();
       if(autoOn&&rememberUnlock()&&worldCombatScene()&&!P.dead&&!transitioning&&now-lastAutoAt>=180){
         lastAutoAt=now;
-        // AUTO is PvE convenience only. It never auto-targets another player.
+        // АВТО — только PvE: ПК-цели оно никогда не выбирает автоматически.
         if(typeof queueAttack==='function')queueAttack();
       }
     }catch(_){}
