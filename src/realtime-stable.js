@@ -1369,6 +1369,10 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     if (m.type === 'arena-queue-join') {
       const mode = String(m.mode || '1x1').toLowerCase().replace('×','x');
+      if(a.deadLocked||!(Number(a.h)>0)){
+        wsJson(ws,{type:'arena-queue-state',state:'cancelled',mode,message:'Сначала возродись в респ-зоне',ts:now});
+        return;
+      }
       if (mode !== '1x1') {
         wsJson(ws,{type:'arena-queue-state',state:'cancelled',mode,message:'Сейчас доступен живой 1×1',ts:now});
         return;
@@ -2102,8 +2106,10 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       a.lastMove = now;
       a.lastSeenAt = now;
-      a.x = Number.isFinite(Number(m.x)) ? Math.round(Number(m.x) * 10) / 10 : Number(a.x) || 0;
-      a.y = Number.isFinite(Number(m.y)) ? Math.round(Number(m.y) * 10) / 10 : Number(a.y) || 0;
+      if(!a.deadLocked){
+        a.x = Number.isFinite(Number(m.x)) ? Math.round(Number(m.x) * 10) / 10 : Number(a.x) || 0;
+        a.y = Number.isFinite(Number(m.y)) ? Math.round(Number(m.y) * 10) / 10 : Number(a.y) || 0;
+      }
       {
         const incomingH=Math.max(0,Math.round(Number(m.h)||0));
         const incomingDead=(m.dead===true||Number(m.dead)===1);
