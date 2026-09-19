@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v353-authoritative-skill-control-20260919-1102';
+const CLIENT_BUILD = 'v354-all-class-mob-damage-authority-20260919-1115';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -400,6 +400,52 @@ if (!output.includes("window.PPA_MOB_EVENT_CONTROL(e,'slow',mul,ms)")) {
 }
 if (!output.includes("window.PPA_MOB_EVENT_CONTROL(e,'root',0,ms)")) {
   throw new Error('Authoritative root skill patch did not apply');
+}
+
+ppaPatchRegex(
+  'melee shared mob hit',
+  /const\s+realDmg=\(e===tg\)\?dmg:basicAttackRoll\(e\)\.damage;\s*e\.hp-=realDmg;\s*applyPlayerVampirism\(realDmg,1\);/,
+  `const realDmg=(e===tg)?dmg:basicAttackRoll(e).damage;
+    const _ppaServerMeleeHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,realDmg);
+    if(!_ppaServerMeleeHit)e.hp-=realDmg;
+    applyPlayerVampirism(realDmg,1);`
+);
+
+ppaPatchRegex(
+  'melee chain lightning shared mob hit',
+  /if\(cn\)\{const chainDmg=Math\.max\(1,Math\.floor\(dmg\*0\.4\*clanDamageMulFor\(cn\)\)-\(cn\.def\|\|0\)\*0\.4\);cn\.hp-=chainDmg;if\(cn\.isClanBoss\)clanBossTrackDamage\(chainDmg\);cn\.flash=6;ch\.push\(cn\);/,
+  `if(cn){const chainDmg=Math.max(1,Math.floor(dmg*0.4*clanDamageMulFor(cn))-(cn.def||0)*0.4);
+          const _ppaServerChainHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(cn,chainDmg);
+          if(!_ppaServerChainHit)cn.hp-=chainDmg;
+          if(cn.isClanBoss)clanBossTrackDamage(chainDmg);cn.flash=6;ch.push(cn);`
+);
+
+ppaPatchRegex(
+  'legacy skill helper shared mob hit',
+  /if\(e\.isAiFighter&&typeof v225AiIncomingDamageMul===['"]function['"]\)dmg=Math\.max\(1,Math\.round\(dmg\*v225AiIncomingDamageMul\(e\)\)\);\s*e\.hp-=dmg;\s*applyPlayerVampirism\(dmg,\.6\);/,
+  `if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
+  const _ppaServerLegacySkillHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
+  if(!_ppaServerLegacySkillHit)e.hp-=dmg;
+  applyPlayerVampirism(dmg,.6);`
+);
+
+ppaPatchRegex(
+  'skill dot shared mob hit',
+  /if\(e\.isAiFighter&&typeof v225AiIncomingDamageMul===['"]function['"]\)d=Math\.max\(1,Math\.round\(d\*v225AiIncomingDamageMul\(e\)\)\);\s*e\.hp-=d;e\.flash=4;e\.aggro=true;e\.v189DotNext=now\+1000;/,
+  `if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')d=Math.max(1,Math.round(d*v225AiIncomingDamageMul(e)));
+        const _ppaServerDotHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,d);
+        if(!_ppaServerDotHit)e.hp-=d;
+        e.flash=4;e.aggro=true;e.v189DotNext=now+1000;`
+);
+
+if (!output.includes("const _ppaServerMeleeHit=window.PPA_MOB_EVENT_DAMAGE")) {
+  throw new Error('Melee authoritative damage patch did not apply');
+}
+if (!output.includes("const _ppaServerLegacySkillHit=window.PPA_MOB_EVENT_DAMAGE")) {
+  throw new Error('Legacy skill authoritative damage patch did not apply');
+}
+if (!output.includes("const _ppaServerDotHit=window.PPA_MOB_EVENT_DAMAGE")) {
+  throw new Error('DoT authoritative damage patch did not apply');
 }
 
 ppaPatchRegex(
