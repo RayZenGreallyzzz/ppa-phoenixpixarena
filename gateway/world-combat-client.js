@@ -304,8 +304,6 @@
       au.classList.toggle('locked',!unlocked);
     }
 
-    syncPkAttackButton();
-
     if(!show){
       autoOn=false;fartMineId='';fartReturning=false;
       selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';
@@ -391,95 +389,9 @@
   // AUTO sets __PPA_AUTO_PVE_ONLY, so Premium AUTO never attacks players.
   window.PPA_WORLD_PK_TRY_BASIC_ATTACK=tryPkBasicAttack;
 
-  function pkAttackButtonTargetAvailable(){
-    try{return !!(window.PPA_WORLD_PVP_ON&&combatScene()&&(selectedRemote()||nearestRemote(520)))}catch(_){return false}
-  }
-
-  function syncPkAttackButton(){
-    try{
-      var btn=(typeof bA!=='undefined'&&bA)||document.getElementById('bAtk');
-      if(!btn||!pkAttackButtonTargetAvailable())return;
-      // The base PvE HUD disables attack when P.tid is empty. In PK mode a
-      // remote player is a valid target, so don't let that stale PvE state eat taps.
-      if(btn.disabled)btn.disabled=false;
-      if(btn.hasAttribute&&btn.hasAttribute('disabled'))btn.removeAttribute('disabled');
-      if(btn.getAttribute&&btn.getAttribute('aria-disabled')==='true')btn.setAttribute('aria-disabled','false');
-      try{if(getComputedStyle(btn).pointerEvents==='none')btn.style.pointerEvents='auto'}catch(_){}
-    }catch(_){}
-  }
-
-  function installPkAttackButtonState(){
-    if(window.__PPA_PK_ATTACK_BUTTON_STATE)return;
-    var btn=null;
-    try{btn=(typeof bA!=='undefined'&&bA)||document.getElementById('bAtk')}catch(_){btn=document.getElementById('bAtk')}
-    if(!btn){setTimeout(installPkAttackButtonState,250);return}
-    window.__PPA_PK_ATTACK_BUTTON_STATE=true;
-    try{
-      var mo=new MutationObserver(function(){syncPkAttackButton()});
-      mo.observe(btn,{attributes:true,attributeFilter:['disabled','aria-disabled']});
-      window.__PPA_PK_ATTACK_BUTTON_OBSERVER=mo;
-    }catch(_){}
-    syncPkAttackButton();
-  }
-
-  // Mobile fallback: bind once, in capture phase, directly to the actual red
-  // attack button. This is intentionally tiny and event-driven (no frame scan).
-  // It protects PK from any later touch/pointer wrappers around queueAttack().
-  function installAttackButtonFallback(){
-    if(window.__PPA_PK_ATTACK_BUTTON_FALLBACK)return;
-    var btn=null;
-    try{btn=(typeof bA!=='undefined'&&bA)||document.getElementById('bAtk')}catch(_){btn=document.getElementById('bAtk')}
-    if(!btn){setTimeout(installAttackButtonFallback,250);return}
-    window.__PPA_PK_ATTACK_BUTTON_FALLBACK=true;
-    var lastEventAt=0;
-    var fire=function(e){
-      try{
-        if(!window.PPA_WORLD_PVP_ON||!combatScene()||window.__PPA_AUTO_PVE_ONLY)return;
-        var now=Date.now();
-        if(now-lastEventAt<150)return;
-        if(!tryPkBasicAttack())return;
-        lastEventAt=now;
-        if(e){
-          e.preventDefault();
-          e.stopPropagation();
-          if(e.stopImmediatePropagation)e.stopImmediatePropagation();
-        }
-      }catch(_){}
-    };
-    btn.addEventListener('pointerdown',fire,{capture:true,passive:false});
-    btn.addEventListener('touchstart',fire,{capture:true,passive:false});
-    btn.addEventListener('click',fire,{capture:true,passive:false});
-  }
-
-  // Tap a visible player to lock the PK target. This listener exists only once
-  // and performs work only while PK is enabled.
-  function installCanvasTargeting(){
-    if(window.__PPA_PK_CANVAS_TARGETING)return;
-    window.__PPA_PK_CANVAS_TARGETING=true;
-
-    var cvEl=null;
-    try{cvEl=(typeof cv!=='undefined'&&cv)||document.querySelector('canvas')}catch(_){cvEl=document.querySelector('canvas')}
-    if(!cvEl)return;
-
-    cvEl.addEventListener('pointerdown',function(e){
-      try{
-        if(!window.PPA_WORLD_PVP_ON||!combatScene()||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return;
-        var rect=cvEl.getBoundingClientRect();
-        var sx=e.clientX,sy=e.clientY,best=null,bd=Infinity;
-        PPA_ONLINE.remotes.forEach(function(r){
-          if(!remoteTargetable(r))return;
-          var x=Number(r.__ppaClientX),y=Number(r.__ppaClientY),rad=Math.max(34,Number(r.__ppaClientRadius)||48);
-          if(!Number.isFinite(x)||!Number.isFinite(y))return;
-          var d=Math.hypot(sx-x,sy-y);
-          if(d<=rad&&d<bd){bd=d;best=r}
-        });
-        if(best){
-          selectRemote(best,false);
-          try{e.preventDefault();e.stopPropagation()}catch(_){}
-        }
-      }catch(_){}
-    },{capture:true,passive:false});
-  }
+  // PK input intentionally has no extra attack-button listeners and no observers.
+  // The base game owns bAtk and calls queueAttack(); build.mjs adds one PK branch
+  // at the start of queueAttack(). Player tap ownership lives in social-ui.js.
 
   function fartMineRadius(){
     try{return Math.max(40,Number(FART_MINE_RADIUS)||82)}catch(_){return 82}
@@ -616,11 +528,7 @@
 
   function boot(){
     ensureHud();
-    installCanvasTargeting();
-    installPkAttackButtonState();
-    installAttackButtonFallback();
     refresh();
-    syncPkAttackButton();
     setInterval(refresh,850);
     setInterval(autoTick,120);
   }
