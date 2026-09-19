@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v363-pk-hit-retry-20260919-1428';
+const CLIENT_BUILD = 'v356-build-guard-fix-pk-auto-20260919-1428';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -511,10 +511,12 @@ ppaPatchRegex(
 if (!output.includes("const _ppaServerMeleeHit=window.PPA_MOB_EVENT_DAMAGE")) {
   throw new Error('Melee authoritative damage patch did not apply');
 }
-if (!output.includes("const _ppaServerLegacySkillHit=window.PPA_MOB_EVENT_DAMAGE")) {
+if (!output.includes("const _ppaPkLegacySkillHit=e.__ppaRemotePlayer") ||
+    !output.includes("const _ppaServerLegacySkillHit=!_ppaPkLegacySkillHit&&window.PPA_MOB_EVENT_DAMAGE")) {
   throw new Error('Legacy skill authoritative damage patch did not apply');
 }
-if (!output.includes("const _ppaServerDotHit=window.PPA_MOB_EVENT_DAMAGE")) {
+if (!output.includes("const _ppaPkDotHit=e.__ppaRemotePlayer") ||
+    !output.includes("const _ppaServerDotHit=!_ppaPkDotHit&&window.PPA_MOB_EVENT_DAMAGE")) {
   throw new Error('DoT authoritative damage patch did not apply');
 }
 if (!output.includes("PPA_WORLD_PLAYER_CONTROL(e,'slow',mul,ms,700)")) {
