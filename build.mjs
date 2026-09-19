@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v356-dragon60-combat-motion-fx-20260919-1208';
+const CLIENT_BUILD = 'v357-world-pvp-auto-attack-20260919-1220';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -856,6 +856,7 @@ const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
   ['gateway/online-client.js','online-client.js','Online client bridge missing'],
   ['gateway/realtime-client.js','realtime-client.js','Realtime client bridge missing'],
+  ['gateway/world-combat-client.js','world-combat-client.js','World combat client missing'],
   ['gateway/dungeon60-dragon.js','dungeon60-dragon.js','Dungeon 60 dragon runtime missing'],
   ['gateway/dungeon-mob-events.js','dungeon-mob-events.js','Dungeon mob event bridge missing'],
   ['gateway/dungeon-drop-slots.js','dungeon-drop-slots.js','Dungeon drop slot helper missing'],
@@ -876,7 +877,7 @@ for (const [srcName,dstName,err] of filesToPublish) {
 
 if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
 const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
-output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
+output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
 <script src="${js('dungeon-drop-slots.js')}"></script>
 <script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
@@ -887,6 +888,7 @@ console.log('Telegram safe UI: /game/telegram-safe-ui.js');
 console.log('Mobile HUD tweaks: /game/mobile-hud-tweaks.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
+console.log('World combat: /game/world-combat-client.js');
 console.log('Dungeon 60 dragon: /game/dungeon60-dragon.js');
 console.log('Dungeon mob events: /game/dungeon-mob-events.js');
 console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
