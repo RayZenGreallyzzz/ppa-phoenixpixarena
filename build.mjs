@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v347-dragon60-phoenix-overlay-fix-20260919-0936';
+const CLIENT_BUILD = 'v348-dragon-occlusion-teleport-label-fix-20260919-0945';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -461,6 +461,31 @@ if (!output.includes("if(scene==='dungeon41')return'dungeon-41-60';")) {
 
 /* ======================================================================== */
 
+/* === DUNGEON TELEPORT DISPLAY LABELS ==================================== */
+ppaPatchRegex(
+  'dungeon teleport actual level labels',
+  /function\s+renderDungeonTeleportMenu\(\)\s*\{/,
+  "function dungeonTeleportDisplayLabel(i){var n=i*2+1;if(typeof DUNGEON_MODE!=='undefined'){if(DUNGEON_MODE==='21+')n+=20;else if(DUNGEON_MODE==='41-60')n+=40;}return n+'–'+(n+1);}\nfunction renderDungeonTeleportMenu(){"
+);
+
+ppaPatchRegex(
+  'dungeon teleport button actual level labels',
+  /b\.innerHTML=\(open\?'КОРИДОР '\+r\.label:'🔒 КОРИДОР '\+r\.label\)\+'<small>'\+\(open\?'Телепортировать':'Сначала пройди этот маршрут'\)\+'<\/small>';/,
+  "var _tpLabel=dungeonTeleportDisplayLabel(i);b.innerHTML=(open?'КОРИДОР '+_tpLabel:'🔒 КОРИДОР '+_tpLabel)+'<small>'+(open?'Телепортировать':'Сначала пройди этот маршрут')+'</small>';"
+);
+
+ppaPatchRegex(
+  'dungeon teleport pickup actual level label',
+  /const\s+label=DUNGEON_TELEPORT_ROUTES\[i\]\.label;/,
+  "const label=dungeonTeleportDisplayLabel(i);"
+);
+
+if (!output.includes("function dungeonTeleportDisplayLabel(i)")) {
+  throw new Error('Dungeon teleport label patch did not apply');
+}
+
+/* ======================================================================== */
+
 /* === DUNGEON 41-60 BALANCE ============================================= */
 ppaPatchRegex(
   '41-60 mob stats +2000 hp +50 atk +40 def',
@@ -563,6 +588,25 @@ ppaPatchRegex(
   /if\s*\(!kill&&Math\.hypot\(f\.x-P\.x,f\.y-\(P\.y-8\)\)<30\)\s*\{/,
   "if(!kill&&(!f.__ppaServerTarget||f.__ppaServerTarget===String((typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE&&PPA_ONLINE.selfId)||''))&&Math.hypot(f.x-P.x,f.y-(P.y-8))<30){"
 );
+
+/* ======================================================================== */
+
+/* === DRAGON 60 OCCLUSION / REPAINT FIX ================================== */
+ppaPatchRegex(
+  'dragon60 visual metrics',
+  /function\s+ppaMobVisualMetrics\(e\)\s*\{\s*if\(!e\)return\{w:0,h:0\};/,
+  "function ppaMobVisualMetrics(e){\n  if(!e)return{w:0,h:0};\n  if(e.isDungeon60Boss)return{w:270,h:270};"
+);
+
+ppaPatchRegex(
+  'dragon60 body-only occlusion repaint',
+  /function\s+ppaDrawWorldBodyOnly\(e\)\s*\{\s*if\(!e\|\|e\.hp<=0\)return;/,
+  "function ppaDrawWorldBodyOnly(e){\n  if(!e||e.hp<=0)return;\n  if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW_BODY)window.PPA_DRAGON60_DRAW_BODY(e);return;}"
+);
+
+if (!output.includes("if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW_BODY)window.PPA_DRAGON60_DRAW_BODY(e);return;}")) {
+  throw new Error('Dragon 60 occlusion repaint patch did not apply');
+}
 
 /* ======================================================================== */
 
