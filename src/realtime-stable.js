@@ -74,6 +74,30 @@ function wsJson(ws, data) {
   try { ws.send(JSON.stringify(data)); return true; } catch (_) { return false; }
 }
 
+// Arena basic attacks are class-authoritative. Never trust a client to turn
+// a melee class into a ranged attacker by reporting a larger attackRange.
+const ARENA_BASIC_RANGE_BY_CLASS=Object.freeze({
+  tank:95,barbarian:105,paladin:100,assassin:95,
+  gnome:360,archer:420,mage:390,priest:330
+});
+function arenaBasicRangeFor(a){
+  const cls=cleanClass(a&&a.classKey);
+  const fixed=ARENA_BASIC_RANGE_BY_CLASS[cls];
+  return Number.isFinite(Number(fixed))?Number(fixed):Math.max(60,Math.min(480,Number(a&&a.attackRange)||60));
+}
+function arenaIsMeleeClass(a){
+  const cls=cleanClass(a&&a.classKey);
+  return cls==='tank'||cls==='barbarian'||cls==='paladin'||cls==='assassin';
+}
+function arenaSkillRangeCapFor(a,requested){
+  const cls=cleanClass(a&&a.classKey);
+  const req=Math.max(80,Math.min(700,Number(requested)||180));
+  // Assassin damaging skills resolve next to the target (dash lands in melee;
+  // cross/sentence are close-range), so the server must never accept a 700px hit.
+  if(cls==='assassin')return Math.min(req,180);
+  return req;
+}
+
 function packetFromAtt(a) {
   return {
     i: String(a.pid || ''),
@@ -1286,8 +1310,11 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       const ax=Number(a.x),ay=Number(a.y),tx=Number(ta.x),ty=Number(ta.y);
       if (![ax,ay,tx,ty].every(Number.isFinite)) {reject('позиция синхронизируется');return}
-      const range=skill?Math.max(80,Math.min(700,finite(m.range,80,700,180))):Math.max(60,Math.min(480,Number(a.attackRange)||Number(m.range)||60));
-      if (Math.hypot(tx-ax,ty-ay)>range+74) {reject(skill?'соперник вне радиуса навыка':'соперник вне радиуса атаки');return}
+      const range=skill
+        ?arenaSkillRangeCapFor(a,finite(m.range,80,700,180))
+        :arenaBasicRangeFor(a);
+      const hitSlack=skill?42:(arenaIsMeleeClass(a)?34:58);
+      if (Math.hypot(tx-ax,ty-ay)>range+hitSlack) {reject(skill?'соперник вне радиуса навыка':'соперник вне радиуса атаки');return}
 
       if (skill) {
         if (now-Number(a.lastArenaSkill||0)<80)return;
@@ -1928,6 +1955,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.atk = finite(m.at, 1, 2500, Number(a.atk)||1);
       a.def = finite(m.df, 0, 2500, Number(a.def)||0);
       a.attackRange = finite(m.ar, 60, 480, Number(a.attackRange)||60);
+      if(a.arenaMatchId)a.attackRange=arenaBasicRangeFor(a);
       a.crit = finite(m.cr, 0, 60, Number(a.crit)||0);
       a.critDmg = finite(m.cd, 100, 350, Number(a.critDmg)||180);
       a.atkSpd = finite(m.as, .35, 4.5, Number(a.atkSpd)||1);
