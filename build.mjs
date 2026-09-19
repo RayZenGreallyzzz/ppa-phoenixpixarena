@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v361-remove-pk-keep-auto-20260919-1602';
+const CLIENT_BUILD = 'v362-mobile-sprite-fps-fix-20260919-1618';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -900,6 +900,7 @@ const filesToPublish = [
   ['gateway/dungeon-drop-slots.js','dungeon-drop-slots.js','Dungeon drop slot helper missing'],
   ['gateway/qa-test-access.js','qa-test-access.js','QA dungeon access helper missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
+  ['gateway/mobile-sprite-performance.js','mobile-sprite-performance.js','Mobile sprite performance helper missing'],
   ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],
   ['gateway/remote-pet-renderer.js','remote-pet-renderer.js','Remote pet renderer missing'],
   ['gateway/realtime-identity-sync.js','realtime-identity-sync.js','Realtime identity sync missing'],
@@ -917,7 +918,7 @@ if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
 const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
 output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
 <script src="${js('dungeon-drop-slots.js')}"></script>
-<script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
+<script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -931,6 +932,7 @@ console.log('Dungeon 60 dragon: /game/dungeon60-dragon.js');
 console.log('Dungeon mob events: /game/dungeon-mob-events.js');
 console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
+console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
 console.log('Remote pet renderer: /game/remote-pet-renderer.js');
 console.log('Realtime class sync: /game/class-sync-client.js');
