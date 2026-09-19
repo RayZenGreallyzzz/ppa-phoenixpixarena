@@ -553,6 +553,15 @@ export class RealtimeHub extends BaseRealtimeHub {
         sp: Math.max(0.1, Number(row.sp) || 1),
         sz: Math.max(8, Number(row.sz) || 30),
         dmg: Math.max(1, Number(row.dmg) || 1),
+        baseMhp: Math.max(1, Number(row.baseMhp) || Number(row.mhp) || 1),
+        baseDmg: Math.max(1, Number(row.baseDmg) || Number(row.dmg) || 1),
+        baseSz: Math.max(8, Number(row.baseSz) || Number(row.sz) || 30),
+        elite: !!row.elite,
+        eliteWindowKey: String(row.eliteWindowKey || ''),
+        eliteExpiresAt: Math.max(0, Number(row.eliteExpiresAt) || 0),
+        eliteMode: String(row.eliteMode || ''),
+        eliteDefBonus: Math.max(0, Number(row.eliteDefBonus) || 0),
+        eliteKilledKey: String(row.eliteKilledKey || ''),
         nextAttackAt: Math.max(0, Number(row.nextAttackAt) || 0),
         nextSpecialAt: Math.max(0, Number(row.nextSpecialAt) || 0),
         nextProjectileAt: Math.max(0, Number(row.nextProjectileAt) || 0),
@@ -605,6 +614,15 @@ export class RealtimeHub extends BaseRealtimeHub {
         sp: Math.max(0.1, Number(rec.sp) || 1),
         sz: Math.max(8, Number(rec.sz) || 30),
         dmg: Math.max(1, Number(rec.dmg) || 1),
+        baseMhp: Math.max(1, Number(rec.baseMhp) || Number(rec.mhp) || 1),
+        baseDmg: Math.max(1, Number(rec.baseDmg) || Number(rec.dmg) || 1),
+        baseSz: Math.max(8, Number(rec.baseSz) || Number(rec.sz) || 30),
+        elite: !!rec.elite,
+        eliteWindowKey: String(rec.eliteWindowKey || ''),
+        eliteExpiresAt: Math.max(0, Number(rec.eliteExpiresAt) || 0),
+        eliteMode: String(rec.eliteMode || ''),
+        eliteDefBonus: Math.max(0, Number(rec.eliteDefBonus) || 0),
+        eliteKilledKey: String(rec.eliteKilledKey || ''),
         nextAttackAt: Math.max(0, Number(rec.nextAttackAt) || 0),
         nextSpecialAt: Math.max(0, Number(rec.nextSpecialAt) || 0),
         nextProjectileAt: Math.max(0, Number(rec.nextProjectileAt) || 0),
@@ -782,6 +800,138 @@ export class RealtimeHub extends BaseRealtimeHub {
   mobPersistTimes() {
     if (!this._mobPersistTimes) this._mobPersistTimes = new Map();
     return this._mobPersistTimes;
+  }
+
+  eliteSyncTimes() {
+    if (!this._eliteSyncTimes) this._eliteSyncTimes = new Map();
+    return this._eliteSyncTimes;
+  }
+
+  eliteWindow(now = Date.now()) {
+    let year=0,month=0,day=0,hour=0,minute=0,second=0;
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB',{
+        timeZone:'Europe/Kyiv',year:'numeric',month:'2-digit',day:'2-digit',
+        hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+      }).formatToParts(new Date(now));
+      const p={};
+      for(const q of parts) if(q.type!=='literal')p[q.type]=q.value;
+      year=Number(p.year)||0;month=Number(p.month)||0;day=Number(p.day)||0;
+      hour=Number(p.hour)||0;minute=Number(p.minute)||0;second=Number(p.second)||0;
+    } catch (_) {
+      const d=new Date(now);
+      year=d.getUTCFullYear();month=d.getUTCMonth()+1;day=d.getUTCDate();
+      hour=d.getUTCHours();minute=d.getUTCMinutes();second=d.getUTCSeconds();
+    }
+    const slotHour=Math.floor(hour/2)*2;
+    const key=year+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0')+'-'+String(slotHour).padStart(2,'0');
+    const active=hour===slotHour&&minute<30;
+    const remainSec=active?Math.max(1,(30-minute)*60-second):0;
+    return{key,active,end:active?now+remainSec*1000:0};
+  }
+
+  eliteHash(str) {
+    let h=2166136261>>>0;
+    str=String(str||'');
+    for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)>>>0}
+    return h>>>0;
+  }
+
+  eliteModeForRoom(room) {
+    room=cleanRoom(room);
+    if(room.startsWith('dungeon-41-60'))return'41-60';
+    if(room.startsWith('dungeon-21-40'))return'21+';
+    if(room.startsWith('dungeon-1-20'))return'1-20';
+    return'';
+  }
+
+  demoteServerElite(rec, refill) {
+    if(!rec)return false;
+    const was=!!rec.elite;
+    const baseMhp=Math.max(1,Number(rec.baseMhp)||Number(rec.mhp)||1);
+    const baseDmg=Math.max(1,Number(rec.baseDmg)||Number(rec.dmg)||1);
+    const baseSz=Math.max(8,Number(rec.baseSz)||Number(rec.sz)||30);
+    rec.elite=false;rec.eliteWindowKey='';rec.eliteExpiresAt=0;rec.eliteMode='';rec.eliteDefBonus=0;
+    rec.mhp=baseMhp;rec.dmg=baseDmg;rec.sz=baseSz;
+    if(refill&&Number(rec.hp)>0)rec.hp=baseMhp;
+    else if(Number(rec.hp)>0)rec.hp=Math.max(1,Math.min(baseMhp,Number(rec.hp)||baseMhp));
+    return was;
+  }
+
+  mobAuthorityPayload(room,key,rec,now=Date.now()) {
+    return{
+      type:'mob-authority',room,key,
+      hp:Math.max(0,Number(rec.hp)||0),mhp:Math.max(1,Number(rec.mhp)||1),
+      respawnAt:0,killer:String(rec.killer||''),party:String(rec.party||''),
+      x:rec.x,y:rec.y,aggro:!!rec.aggro,dir:Number.isFinite(Number(rec.dir))?Number(rec.dir):1,
+      moving:!!rec.moving,target:String(rec.target||''),sz:Math.max(8,Number(rec.sz)||30),
+      elite:!!rec.elite,eliteWindowKey:String(rec.eliteWindowKey||''),
+      eliteExpiresAt:Math.max(0,Number(rec.eliteExpiresAt)||0),
+      eliteMode:String(rec.eliteMode||''),eliteDefBonus:Math.max(0,Number(rec.eliteDefBonus)||0),
+      ts:now
+    };
+  }
+
+  syncServerElite(room, now=Date.now(), broadcast=true) {
+    room=cleanRoom(room);
+    const mode=this.eliteModeForRoom(room);
+    if(!mode)return false;
+    const {health}=this.mobStores(),prefix=room+'|',rows=[];
+    for(const [ck,rec] of health.entries()){
+      if(!String(ck).startsWith(prefix)||!rec)continue;
+      const key=String(ck).slice(prefix.length);
+      if(!/^s\d{1,4}$/.test(key)||!Number.isFinite(Number(rec.roomIndex))||Number(rec.roomIndex)<0)continue;
+      rows.push({key,rec,roomIndex:Number(rec.roomIndex)});
+    }
+    if(!rows.length)return false;
+
+    const w=this.eliteWindow(now),rooms=[...new Set(rows.map(x=>x.roomIndex))].sort((a,b)=>a-b);
+    let selected=null;
+    if(w.active&&rooms.length){
+      const ri=rooms[this.eliteHash(w.key+'|'+mode+'|room')%rooms.length];
+      const cand=rows.filter(x=>x.roomIndex===ri).sort((a,b)=>Number(a.key.slice(1))-Number(b.key.slice(1)));
+      if(cand.length)selected=cand[this.eliteHash(w.key+'|'+mode+'|mob|'+ri)%cand.length];
+    }
+
+    let changed=false;
+    for(const item of rows){
+      const rec=item.rec;
+      const should=!!(selected&&item.key===selected.key&&rec.eliteKilledKey!==w.key);
+      if(!should&&rec.elite){
+        if(this.demoteServerElite(rec,true)){rec.updatedAt=now;changed=true;if(broadcast)this.roomBroadcast(room,this.mobAuthorityPayload(room,item.key,rec,now),null)}
+      }
+    }
+
+    if(selected&&selected.rec.eliteKilledKey!==w.key){
+      const rec=selected.rec;
+      const same=rec.elite&&String(rec.eliteWindowKey||'')===w.key;
+      const baseMhp=Math.max(1,Number(rec.baseMhp)||Number(rec.mhp)||1);
+      const baseDmg=Math.max(1,Number(rec.baseDmg)||Number(rec.dmg)||1);
+      const baseSz=Math.max(8,Number(rec.baseSz)||Number(rec.sz)||30);
+      const hpMul=(mode==='1-20')?7:8;
+      const dmgBonus=mode==='41-60'?42:(mode==='21+'?14:12);
+      const defBonus=mode==='41-60'?9:(mode==='21+'?3:2);
+      if(!same){
+        const ratio=Number(rec.hp)>0?Math.max(.05,Math.min(1,Number(rec.hp)/Math.max(1,Number(rec.mhp)||baseMhp))):0;
+        rec.elite=true;rec.eliteWindowKey=w.key;rec.eliteMode=mode;rec.eliteExpiresAt=w.end;rec.eliteDefBonus=defBonus;
+        rec.mhp=Math.round(baseMhp*hpMul);rec.dmg=baseDmg+dmgBonus;rec.sz=baseSz;
+        if(ratio>0)rec.hp=Math.max(1,Math.round(rec.mhp*ratio));
+        rec.updatedAt=now;changed=true;
+        if(broadcast)this.roomBroadcast(room,this.mobAuthorityPayload(room,selected.key,rec,now),null);
+      }else{
+        rec.eliteExpiresAt=w.end;
+      }
+    }
+    return changed;
+  }
+
+  maybeSyncServerElite(room,now=Date.now()) {
+    room=cleanRoom(room);
+    if(!this.eliteModeForRoom(room))return false;
+    const times=this.eliteSyncTimes(),prev=Number(times.get(room)||0);
+    if(now-prev<1500)return false;
+    times.set(room,now);
+    return this.syncServerElite(room,now,true);
   }
 
   bossDelay(seed, now, base, span) {
