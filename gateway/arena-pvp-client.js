@@ -258,7 +258,7 @@
     if(m.type==='arena-opponent-left'){
       popup('АРЕНА · соперник вышел','#ffbd76');
       resetRoundUi();
-      match.active=false;
+      try{if(window.PPA_ARENA_MATCH_END)window.PPA_ARENA_MATCH_END()}catch(_){}
       try{if(window.PPA_PVP_MATCH_CANCELLED)window.PPA_PVP_MATCH_CANCELLED({refund:false})}catch(_){}
       try{if(typeof changeScene==='function')changeScene('safe')}catch(_){}
       return;
