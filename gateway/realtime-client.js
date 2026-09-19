@@ -538,6 +538,16 @@
       y:Number.isFinite(Number(r&&r.ty))?Number(r.ty):Number(r&&r.y)
     };
   }
+  function arenaBasicRangeClient(){
+    var cls='';
+    try{cls=String(selfClass()||'').toLowerCase()}catch(_){}
+    var map={tank:95,barbarian:105,paladin:100,assassin:95,gnome:360,archer:420,mage:390,priest:330};
+    return Number(map[cls])||Math.max(60,Math.min(480,Number(P&&P.attackRange)||60));
+  }
+  function arenaClientIsMelee(){
+    var cls='';try{cls=String(selfClass()||'').toLowerCase()}catch(_){}
+    return cls==='tank'||cls==='barbarian'||cls==='paladin'||cls==='assassin';
+  }
   function arenaCombatReady(){
     try{
       if(!RT.arenaMatchId||!RT.arenaRoom||!RT.arenaOpponentId)return false;
@@ -565,9 +575,9 @@
       }
       var rp=arenaRemotePos(r),sx=Number(P.x)||0,sy=Number(P.y)||0;
       if(!Number.isFinite(rp.x)||!Number.isFinite(rp.y))return true;
-      var range=Math.max(60,Math.min(480,Number(P.attackRange)||60));
-      var dist=Math.hypot(rp.x-sx,rp.y-sy);
-      if(dist>range+46){
+      var range=arenaBasicRangeClient();
+      var dist=Math.hypot(rp.x-sx,rp.y-sy),slack=arenaClientIsMelee()?34:58;
+      if(dist>range+slack){
         try{if(typeof showPickup==='function')showPickup('АРЕНА · соперник слишком далеко','#ffbd76')}catch(_){}
         return true;
       }
