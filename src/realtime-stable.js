@@ -77,7 +77,7 @@ function wsJson(ws, data) {
 // Arena basic attacks are class-authoritative. Never trust a client to turn
 // a melee class into a ranged attacker by reporting a larger attackRange.
 const ARENA_BASIC_RANGE_BY_CLASS=Object.freeze({
-  tank:95,barbarian:105,paladin:100,assassin:95,
+  tank:72,barbarian:78,paladin:74,assassin:64,
   gnome:360,archer:420,mage:390,priest:330
 });
 function arenaBasicRangeFor(a){
@@ -1313,7 +1313,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       const range=skill
         ?arenaSkillRangeCapFor(a,finite(m.range,80,700,180))
         :arenaBasicRangeFor(a);
-      const hitSlack=skill?42:(arenaIsMeleeClass(a)?34:58);
+      const hitSlack=skill?42:(arenaIsMeleeClass(a)?12:58);
       if (Math.hypot(tx-ax,ty-ay)>range+hitSlack) {reject(skill?'соперник вне радиуса навыка':'соперник вне радиуса атаки');return}
 
       if (skill) {
