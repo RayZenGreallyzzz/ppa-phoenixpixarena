@@ -324,12 +324,12 @@
         var mine=String((window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
         if(String(m.target||'')===mine&&typeof P!=='undefined'&&P){
           P.hp=Math.max(0,Number(m.hp));
-          if(typeof showPickup==='function')showPickup('PVP · −'+Math.max(1,Math.round(Number(m.damage)||1)),'#ff8b72');
+          if(typeof showPickup==='function')showPickup('ПК · −'+Math.max(1,Math.round(Number(m.damage)||1)),'#ff8b72');
         }
         if(String(m.attacker||'')===mine){
           var rr=(window.PPA_ONLINE&&PPA_ONLINE.remotes)?PPA_ONLINE.remotes.get(String(m.target||'')):null;
           if(rr&&Number.isFinite(Number(m.hp)))rr.hp=Math.max(0,Number(m.hp));
-          if(typeof showPickup==='function')showPickup((m.crit?'КРИТ PVP · −':'PVP · −')+Math.max(1,Math.round(Number(m.damage)||1)),m.crit?'#ffd36a':'#ffb07a');
+          if(typeof showPickup==='function')showPickup((m.crit?'КРИТ ПК · −':'ПК · −')+Math.max(1,Math.round(Number(m.damage)||1)),m.crit?'#ffd36a':'#ffb07a');
         }
       }catch(_){}
       return
