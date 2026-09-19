@@ -642,6 +642,13 @@
                   }
                 }
               }catch(_){}
+            }else if(kind==='dragon60-aoe'){
+              if(typeof window.PPA_DRAGON60_ON_SPECIAL==='function')window.PPA_DRAGON60_ON_SPECIAL(be,m);
+              if(phase==='telegraph'){
+                be.dragonState='charge';be.dragonAttackUntil=(Number(m.impactAt)||now+900)+120;
+              }else if(phase==='impact'){
+                be.dragonState='attack';be.dragonAttackUntil=now+520;
+              }
             }else if(kind==='titan-aoe'){
               if(phase==='telegraph'){
                 be.wbAoePending=true;be.wbAoeImpactAt=Number(m.impactAt)||now+620;be.wbState='stomp';be.wbActionUntil=(Number(m.impactAt)||now+620)+100;
@@ -673,7 +680,14 @@
                 var raw=Math.max(1,Number(m.dmg)||1),dtype=String(m.damageType||'magic');
                 var dealt=(typeof playerDmg==='function')?playerDmg(raw,dtype):raw;
                 P.hp=Math.max(0,Number(P.hp||0)-Math.max(1,Number(dealt)||1));
-                if(typeof showPickup==='function')showPickup(kind==='phoenix-aoe'?'Огненный AOE · −'+Math.max(1,Math.round(dealt)):kind==='lord40-aoe'?'AOE Скверны · −'+Math.max(1,Math.round(dealt)):'Кристальный удар · −'+Math.max(1,Math.round(dealt)),kind==='lord40-aoe'?'#a8ff62':'#66bbff');
+                if(typeof showPickup==='function'){
+                  var hitText=kind==='phoenix-aoe'?'Огненный AOE · −'+Math.max(1,Math.round(dealt))
+                    :kind==='lord40-aoe'?'AOE Скверны · −'+Math.max(1,Math.round(dealt))
+                    :kind==='dragon60-aoe'?'Пепельная волна · −'+Math.max(1,Math.round(dealt))
+                    :'Кристальный удар · −'+Math.max(1,Math.round(dealt));
+                  var hitCol=kind==='lord40-aoe'?'#a8ff62':(kind==='dragon60-aoe'?'#ff9d58':'#66bbff');
+                  showPickup(hitText,hitCol);
+                }
               }
             }catch(_){}
           }
