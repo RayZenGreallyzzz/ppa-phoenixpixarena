@@ -104,6 +104,10 @@
         if(hidden)cx.globalAlpha=.38;
         cx.imageSmoothingEnabled=false;
         cx.fillStyle='rgba(0,0,0,.40)';cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.38,body*.14,0,0,Math.PI*2);cx.fill();
+        if(r.worldPvp){
+          cx.strokeStyle='rgba(255,85,62,.92)';cx.lineWidth=2;
+          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.48,body*.20,0,0,Math.PI*2);cx.stroke();
+        }
         cx.drawImage(a.img,frame*a.fw,row*a.fh,a.fw,a.fh,Math.round(sx-dw/2),Math.round(drawY),Math.round(dw),Math.round(dh));
 
         var dist=Math.hypot(r.x-P.x,r.y-P.y),topY=drawY-4;
@@ -118,7 +122,10 @@
             cx.fillStyle='#a9cfff';cx.fillText('['+String(r.clanName).slice(0,18)+']',sx,topY-18);
           }
           cx.font='600 10px Georgia, serif';cx.lineWidth=2.4;cx.strokeStyle='rgba(18,8,5,.92)';cx.strokeText(String(r.name||'Игрок').slice(0,18),sx,topY-8);
-          cx.fillStyle='#f2d39a';cx.fillText(String(r.name||'Игрок').slice(0,18),sx,topY-8);
+          cx.fillStyle=r.worldPvp?'#ff8d78':'#f2d39a';cx.fillText(String(r.name||'Игрок').slice(0,18),sx,topY-8);
+          if(r.worldPvp){
+            cx.font='700 7px monospace';cx.fillStyle='#ff715d';cx.fillText('PVP',sx,topY-29);
+          }
         }
         cx.textAlign='left';cx.textBaseline='alphabetic';cx.restore();
         return true;
