@@ -143,6 +143,30 @@
     }catch(_){return false}
   }
 
+  function nearestMobInfo(maxRange){
+    try{
+      if(match.active)return null;
+      var e=null;
+      if(typeof P!=='undefined'&&P&&P.tid!=null&&typeof EN!=='undefined'&&Array.isArray(EN)){
+        for(var i=0;i<EN.length;i++){
+          var cur=EN[i];
+          if(cur&&cur.id==P.tid&&Number(cur.hp)>0){
+            if(typeof targetIsValid!=='function'||targetIsValid(cur)){e=cur;break}
+          }
+        }
+      }
+      if(!e&&typeof findNear==='function')e=findNear();
+      if(!e||Number(e.hp)<=0)return null;
+      var d=Math.hypot(Number(e.x)-Number(P.x),Number(e.y)-Number(P.y));
+      var edge=(e.sz&&e.sz>30)?Math.max(0,(Number(e.sz)-30)*.4):0;
+      if(Number.isFinite(Number(maxRange))&&d>Number(maxRange)+edge)return null;
+      return{target:e,distance:d};
+    }catch(_){return null}
+  }
+  function remoteDistance(r){
+    try{var p=coords(r);return Math.hypot(Number(p.x)-Number(P.x),Number(p.y)-Number(P.y))}catch(_){return Infinity}
+  }
+
   window.PPA_ARENA_TRY_BASIC_ATTACK=tryBasicAttack;
   window.PPA_ARENA_ONLINE_ACTIVE=function(){return !!match.active};
 
@@ -150,15 +174,36 @@
     try{
       if(!combatReady())return null;
       var lim=Math.max(0,Number(maxRange)||0),r=nearestEnemy(lim>0?lim+46:900);
+      if(!r)return null;
+      if(match.active)return proxyFor(r);
+
+      // PK mode is hybrid PvE+PvP: let the native mob skill path win when
+      // the mob is at least as close as the nearest player.
+      var mob=nearestMobInfo(lim>0?lim:900);
+      var pd=remoteDistance(r);
+      if(mob&&mob.distance<=pd)return null;
       return proxyFor(r);
     }catch(_){return null}
   };
   window.PPA_ARENA_AROUND_TARGET=function(x,y,rad,out){
     try{
-      if(!combatReady())return out;
-      var r=nearestEnemy(1200),q=proxyFor(r);if(!q)return out;
-      if(Math.hypot(Number(q.x)-Number(x),Number(q.y)-Number(y))<=Math.max(0,Number(rad)||0)+36){
-        if(Array.isArray(out)&&out.indexOf(q)<0)out.push(q);
+      if(!combatReady()||!Array.isArray(out))return out;
+      var rr=Math.max(0,Number(rad)||0)+36;
+
+      if(match.active){
+        var r=nearestEnemy(1200),q=proxyFor(r);if(!q)return out;
+        if(Math.hypot(Number(q.x)-Number(x),Number(q.y)-Number(y))<=rr&&out.indexOf(q)<0)out.push(q);
+        return out;
+      }
+
+      // PK mode: native around() already populated mobs. Add all real players
+      // in the AoE so one skill can legitimately hit mobs and players together.
+      if(window.PPA_ONLINE&&PPA_ONLINE.remotes){
+        PPA_ONLINE.remotes.forEach(function(r){
+          if(!enemyRemote(r))return;
+          var q=proxyFor(r);if(!q)return;
+          if(Math.hypot(Number(q.x)-Number(x),Number(q.y)-Number(y))<=rr&&out.indexOf(q)<0)out.push(q);
+        });
       }
     }catch(_){}
     return out;
