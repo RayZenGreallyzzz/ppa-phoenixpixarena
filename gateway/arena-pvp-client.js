@@ -28,7 +28,7 @@
     };
   }
   function enemyRemote(r){
-    if(!r||!r.hasPos||!remoteId(r))return false;
+    if(!r||!remoteId(r))return false;
     if(Number(r.hp)<=0)return false;
     if(Number(r.hiddenUntil)>Date.now())return false;
     if(match.mode!=='1x1'&&r.arenaSide&&match.side&&String(r.arenaSide)===String(match.side))return false;
