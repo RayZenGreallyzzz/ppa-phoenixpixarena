@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v374-live-arena-1x1-20260919';
+const CLIENT_BUILD = 'v375-arena-matchmaking-core-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1058,10 +1058,11 @@ ppaPatchRegex(
       realtimeClient.includes("type:'world-pvp")) {
     throw new Error('Open-world PK client code returned');
   }
-  if (!arenaPvp.includes('PPA_PVP_QUEUE_HANDLER') ||
+  if (!realtimeClient.includes('PPA_PVP_QUEUE_HANDLER') ||
+      !realtimeClient.includes("type:'arena-queue-join'") ||
+      !realtimeClient.includes('PPA_ARENA_NET_RECEIVE') ||
       !arenaPvp.includes('PPA_ARENA_TRY_BASIC_ATTACK') ||
-      !arenaPvp.includes('PPA_ARENA_SKILL_HIT') ||
-      !realtimeClient.includes('PPA_ARENA_NET_RECEIVE')) {
+      !arenaPvp.includes('PPA_ARENA_SKILL_HIT')) {
     throw new Error('Online arena client bridge is incomplete');
   }
   if (remoteSprite.includes('forcedAttack') || remoteSprite.includes('__ppaAttackDir')) {
