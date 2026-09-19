@@ -398,6 +398,19 @@
     }catch(_){return false}
   };
 
+  window.PPA_MOB_EVENT_TAUNT=function(e,ms){
+    try{
+      if(applying||!active())return false;
+      var key=keyOf(e),dur=Math.max(500,Math.min(4000,Number(ms)||3000));
+      if(!/^s\d{1,4}$/.test(key))return false;
+      register(false);
+      var id=(selfId()||'self')+':taunt:'+Date.now().toString(36)+':'+(++seq);
+      return !!window.PPA_RT_SEND({
+        type:'mob-taunt-event',room:room(),key:key,duration:Math.round(dur),event:id
+      });
+    }catch(_){return false}
+  };
+
   function applyRow(row){
     if(!Array.isArray(row)||row.length<4)return;
     var key=String(row[0]||''),hp=Number(row[1]),mhp=Number(row[2]),respawnAt=Number(row[3])||0;
