@@ -5,6 +5,7 @@
   var lastAutoAt=0;
   var fartMineId='';
   var fartReturning=false;
+  var pkOn=false;
 
   function scene(){
     try{return String(P&&P.scene||'safe')}catch(_){return'safe'}
@@ -13,6 +14,24 @@
   function combatScene(){
     var s=scene();
     return s==='fartzone'||s==='dungeon'||s==='worldboss';
+  }
+
+  function pkZone(){
+    var s=scene();
+    if(s==='safe'||s==='pvp1'||s==='pvpteam'||s==='clansiege')return false;
+    // All ordinary non-safe gameplay maps are PvE+PvP zones.
+    return true;
+  }
+
+  function setPk(on,quiet){
+    on=!!on&&pkZone();
+    if(pkOn===on)return pkOn;
+    pkOn=on;
+    try{if(window.PPA_RT_SEND)window.PPA_RT_SEND({type:'player-pk-toggle',enabled:pkOn})}catch(_){}
+    try{if(!pkOn&&window.PPA_PK_CLEAR_TARGET)window.PPA_PK_CLEAR_TARGET()}catch(_){}
+    refresh();
+    if(!quiet)popup(pkOn?'ПК · ИГРОКИ ВРАЖДЕБНЫ':'ПК · ВЫКЛ',pkOn?'#ff8b72':'#c6b99f');
+    return pkOn;
   }
 
   function popup(text,col){
@@ -74,6 +93,7 @@
       '#ppaWorldCombatToggles{position:fixed!important;right:20px!important;bottom:263px!important;z-index:10050!important;display:none;gap:6px;align-items:center;justify-content:flex-end;pointer-events:auto!important;touch-action:none!important}'+
       '#ppaWorldCombatToggles button{position:relative;z-index:10051!important;height:29px;min-width:50px;padding:0 7px;border-radius:7px;border:1px solid rgba(220,170,80,.62);background:rgba(8,10,13,.92);color:#d8c7a0;font:700 8px/1 monospace;letter-spacing:.04em;box-shadow:0 2px 7px rgba(0,0,0,.62);pointer-events:auto!important;touch-action:none!important;-webkit-user-select:none;user-select:none}'+
       '#ppaWorldCombatToggles button.autoOn{border-color:#75d89d;color:#caffdc;background:rgba(12,62,35,.90)}'+
+      '#ppaWorldCombatToggles button.pkOn{border-color:#ff6b57;color:#ffe0da;background:rgba(92,20,16,.94);box-shadow:0 0 9px rgba(255,70,45,.34)}'+
       '#ppaWorldCombatToggles button.locked{opacity:.52;border-style:dashed}'+
       '@media(max-width:700px){#ppaWorldCombatToggles{right:17px!important;bottom:264px!important}}';
     document.head.appendChild(st);
@@ -86,8 +106,19 @@
     au.type='button';
     au.textContent='АВТО';
 
+    var pk=document.createElement('button');
+    pk.id='ppaPlayerPkBtn';
+    pk.type='button';
+    pk.textContent='ПК';
+
+    box.appendChild(pk);
     box.appendChild(au);
     document.body.appendChild(box);
+
+    bindActivate(pk,function(){
+      if(!pkZone())return;
+      setPk(!pkOn,false);
+    });
 
     bindActivate(au,function(){
       if(!combatScene())return;
@@ -116,8 +147,15 @@
 
   function refresh(){
     var box=ensureHud();
-    var show=combatScene()&&!((typeof transitioning!=='undefined')&&transitioning);
+    var show=(combatScene()||pkZone())&&!((typeof transitioning!=='undefined')&&transitioning);
     box.style.display=show?'flex':'none';
+
+    var pk=document.getElementById('ppaPlayerPkBtn');
+    if(pk){
+      pk.style.display=pkZone()?'inline-block':'none';
+      pk.textContent=pkOn?'ПК ВКЛ':'ПК';
+      pk.classList.toggle('pkOn',!!pkOn&&pkZone());
+    }
 
     var au=document.getElementById('ppaWorldAutoBtn');
     if(au){
@@ -130,6 +168,7 @@
     if(!show){
       autoOn=false;fartMineId='';fartReturning=false;
     }
+    if(!pkZone()&&pkOn)setPk(false,true);
   }
 
   function fartMineRadius(){
@@ -243,6 +282,9 @@
     }catch(_){}
   }
 
+  window.PPA_PK_ACTIVE=function(){return !!pkOn&&pkZone()};
+  window.PPA_PK_SET=function(v){return setPk(!!v,false)};
+  window.PPA_PK_ZONE=function(){return pkZone()};
   window.PPA_WORLD_COMBAT_REFRESH=refresh;
   window.PPA_WORLD_COMBAT_DIAG=function(){
     return{
@@ -250,7 +292,9 @@
       unlocked:!!autoUnlocked(),
       scene:scene(),
       fartMine:fartMineId||'',
-      returning:!!fartReturning
+      returning:!!fartReturning,
+      pk:!!pkOn,
+      pkZone:pkZone()
     };
   };
 
