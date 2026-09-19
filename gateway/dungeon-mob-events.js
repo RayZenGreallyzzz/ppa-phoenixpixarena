@@ -414,11 +414,48 @@
     }catch(_){return false}
   };
 
+  function applyServerEliteState(e,st){
+    try{
+      if(!e||!st)return;
+      var elite=!!st.elite;
+      if(elite){
+        if(!e.__ppaServerEliteManaged){
+          e.__ppaServerEliteManaged=true;
+          e.__ppaServerEliteBaseDef=Number(e.def)||0;
+          e.__ppaServerEliteBaseDmg=Number(e.dmg)||0;
+        }
+        e.isDungeonElite=true;
+        e.eliteVisualScale=2;
+        e.eliteWindowKey=String(st.eliteWindowKey||'');
+        e.eliteMode=String(st.eliteMode||'');
+        e.eliteExpiresAt=Math.max(0,Number(st.eliteExpiresAt)||0);
+        e.eliteHpMultiplier=e.eliteMode==='1-20'?7:8;
+        e.def=(Number(e.__ppaServerEliteBaseDef)||0)+Math.max(0,Number(st.eliteDefBonus)||0);
+      }else{
+        if(e.__ppaServerEliteManaged){
+          e.def=Number(e.__ppaServerEliteBaseDef)||Number(e.def)||0;
+        }
+        e.isDungeonElite=false;
+        e.eliteVisualScale=1;
+        e.eliteWindowKey='';
+        e.eliteMode='';
+        e.eliteExpiresAt=0;
+        e.eliteHpMultiplier=1;
+      }
+    }catch(_){}
+  }
+
   function applyRow(row){
     if(!Array.isArray(row)||row.length<4)return;
     var key=String(row[0]||''),hp=Number(row[1]),mhp=Number(row[2]),respawnAt=Number(row[3])||0;
     var killer=String(row[4]||''),party=String(row[5]||'');
     var x=Number(row[6]),y=Number(row[7]),aggro=!!row[8],dir=Number(row[9]),moving=!!row[10],target=String(row[11]||''),sz=Number(row[12]);
+    var prev=authority.get(key)||{};
+    var elite=row.length>13?!!row[13]:!!prev.elite;
+    var eliteWindowKey=row.length>14?String(row[14]||''):String(prev.eliteWindowKey||'');
+    var eliteExpiresAt=row.length>15?Math.max(0,Number(row[15])||0):Math.max(0,Number(prev.eliteExpiresAt)||0);
+    var eliteMode=row.length>16?String(row[16]||''):String(prev.eliteMode||'');
+    var eliteDefBonus=row.length>17?Math.max(0,Number(row[17])||0):Math.max(0,Number(prev.eliteDefBonus)||0);
     if(!(/^s\d{1,4}$/.test(key)||key==='p20'||key==='b40'||key==='b60'||key==='wtitan')||!Number.isFinite(hp)||!Number.isFinite(mhp))return;
 
     var now=Date.now(),tomb=Number(deadUntil.get(key)||0);
@@ -442,7 +479,9 @@
       hp:hp,mhp:mhp,respawnAt:respawnAt,killer:killer,party:party,
       x:Number.isFinite(x)?x:null,y:Number.isFinite(y)?y:null,
       aggro:aggro,dir:Number.isFinite(dir)?dir:1,moving:moving,target:target,
-      sz:Number.isFinite(sz)?sz:null
+      sz:Number.isFinite(sz)?sz:null,
+      elite:elite,eliteWindowKey:eliteWindowKey,eliteExpiresAt:eliteExpiresAt,
+      eliteMode:eliteMode,eliteDefBonus:eliteDefBonus
     });
 
     var e=find(key);
@@ -487,6 +526,7 @@
           e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=dir;e.__ppaVisualDir=vd;applyBossVisualDir(e,dir,moving);
         }
         e.spiderMoving=moving;e.animMoving=moving;e.__ppaServerMoving=moving;
+        applyServerEliteState(e,_st);
       }finally{applying--}
       return;
     }
@@ -502,7 +542,7 @@
     e.__ppaEventKiller=killer;e.__ppaEventParty=party;e.__ppaServerRespawnAt=respawnAt;
     e.__ppaServerTarget=target;
     applying++;
-    try{e.hp=0}finally{applying--}
+    try{e.hp=0;applyServerEliteState(e,authority.get(key)||{})}finally{applying--}
   }
 
   function reconcileAuthority(){
@@ -550,6 +590,7 @@
           var d=Number(st.dir);
           if(Number.isFinite(d)){var vd=visualDir(d);e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=d;e.__ppaVisualDir=vd;applyBossVisualDir(e,d,!!st.moving)}
           e.spiderMoving=!!st.moving;e.animMoving=!!st.moving;
+          applyServerEliteState(e,st);
         }finally{applying--}
       }
     });
@@ -593,7 +634,8 @@
         return;
       }
       if(m.type==='mob-authority'){
-        applyRow([m.key,m.hp,m.mhp,m.respawnAt,m.killer,m.party,m.x,m.y,m.aggro,m.dir,m.moving,m.target,m.sz]);
+        applyRow([m.key,m.hp,m.mhp,m.respawnAt,m.killer,m.party,m.x,m.y,m.aggro,m.dir,m.moving,m.target,m.sz,
+          m.elite?1:0,m.eliteWindowKey||'',m.eliteExpiresAt||0,m.eliteMode||'',m.eliteDefBonus||0]);
         authReady=true;
         return;
       }
@@ -604,7 +646,8 @@
           var st=authority.get(String(r[0]||''))||{hp:1,mhp:1,respawnAt:0,killer:'',party:''};
           applyRow([
             r[0],st.hp,st.mhp,st.respawnAt,st.killer,st.party,
-            r[1],r[2],r[3],r[4],r[5],r[6],st.sz
+            r[1],r[2],r[3],r[4],r[5],r[6],st.sz,
+            st.elite?1:0,st.eliteWindowKey||'',st.eliteExpiresAt||0,st.eliteMode||'',st.eliteDefBonus||0
           ]);
         }
         authReady=true;
