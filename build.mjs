@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v358-pk-player-priority-20260919-1426';
+const CLIENT_BUILD = 'v359-pk-core-rebuild-20260919-1522';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -626,6 +626,22 @@ ppaPatchRegex(
 
 if (!output.includes("function dungeonTeleportDisplayLabel(i)")) {
   throw new Error('Dungeon teleport label patch did not apply');
+}
+
+/* ======================================================================== */
+
+/* === CLEAN OPEN-WORLD PK CORE ATTACK HOOK ============================= */
+// The former PK runtime fought the base mobile input stack through multiple
+// pointer/touch/click capture layers. Put one authoritative branch directly
+// inside the game's real queueAttack() instead.
+ppaPatchRegex(
+  'pk direct core attack hook',
+  /function\s+queueAttack\(e\)\s*\{/,
+  "function queueAttack(e){\n  if(window.PPA_WORLD_PK_TRY_BASIC_ATTACK&&window.PPA_WORLD_PK_TRY_BASIC_ATTACK(e))return;"
+);
+
+if (!output.includes("PPA_WORLD_PK_TRY_BASIC_ATTACK(e)")) {
+  throw new Error('PK direct core attack hook did not apply');
 }
 
 /* ======================================================================== */
