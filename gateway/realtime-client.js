@@ -356,11 +356,12 @@
           var tid=String(m.target||''),aid=String(m.attacker||'');
           if(tid===self&&typeof P!=='undefined'&&P){
             P.hp=Math.max(0,Number(m.hp)||0);
-            if(P.hp<=0){P.dead=true;P.attacking=false}
+            if(P.hp<=0)P.attacking=false;
           }
           if(aid===self&&typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes){
             var pr=PPA_ONLINE.remotes.get(tid);
             if(pr&&Number.isFinite(Number(m.hp)))pr.hp=Math.max(0,Number(m.hp));
+            if(m.killed&&window.PPA_PK_CLEAR_TARGET)window.PPA_PK_CLEAR_TARGET();
           }
           try{
             if(typeof showPickup==='function'){
