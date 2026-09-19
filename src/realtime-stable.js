@@ -1231,7 +1231,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         const pa = attOf(peer);
         if (String(pa.pid || '') === targetPid) { targetWs = peer; ta = pa; break; }
       }
-      if (!targetWs || !ta || !ta.worldPvp || !(Number(ta.h) > 0)) return;
+      if (!targetWs || !ta || !(Number(ta.h) > 0)) return;
       if (String(a.partyId || '') && String(a.partyId || '') === String(ta.partyId || '')) return;
       if (Number(ta.hiddenUntil) > now) return;
 
