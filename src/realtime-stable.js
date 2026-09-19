@@ -1318,6 +1318,112 @@ export class RealtimeHub extends BaseRealtimeHub {
       return;
     }
 
+    if (m.type === 'world-pvp-skill-hit') {
+      const room = cleanRoom(a.room);
+      const targetPid = String(m.target || '');
+      const reject = (reason) => wsJson(ws, { type:'world-pvp-reject', reason:String(reason||'навык отклонён'), room, target:targetPid, ts:now });
+
+      if (!worldPvpRoom(room)) { reject('в этой зоне ПК недоступен'); return; }
+      if (!(Number(a.h) > 0)) { reject('персонаж не может атаковать'); return; }
+      if (!targetPid || targetPid === String(a.pid || '')) { reject('цель не выбрана'); return; }
+
+      // A hostile skill itself confirms PK intent, matching the basic-hit path.
+      if (!a.worldPvp) {
+        a.worldPvp = true;
+        ws.serializeAttachment(a);
+        wsJson(ws, { type:'world-pvp-state', enabled:true, room, ts:now });
+      }
+
+      let targetWs = null, ta = null;
+      for (const peer of this.roomSockets(room)) {
+        const pa = attOf(peer);
+        if (String(pa.pid || '') === targetPid) { targetWs = peer; ta = pa; break; }
+      }
+      if (!targetWs || !ta) { reject('цель уже не в этой локации'); return; }
+      if (!(Number(ta.h) > 0)) { reject('цель уже побеждена'); return; }
+      if (Number(ta.hiddenUntil) > now) { reject('цель скрыта дымовой завесой'); return; }
+
+      const ax = Number(a.x), ay = Number(a.y), tx = Number(ta.x), ty = Number(ta.y);
+      if (![ax,ay,tx,ty].every(Number.isFinite)) { reject('позиция цели синхронизируется'); return; }
+      const range = Math.max(80, Math.min(700, finite(m.range, 80, 700, 180)));
+      if (Math.hypot(tx - ax, ty - ay) > range + 74) { reject('цель вне радиуса навыка'); return; }
+
+      if (now - Number(a.lastWorldPvpSkillAt || 0) < 80) return;
+      a.lastWorldPvpSkillAt = now;
+
+      const atk = Math.max(1, Math.min(2500, Number(a.atk) || 1));
+      const maxClient = Math.max(12, Math.round((10 + atk) * 8));
+      let damage = Math.max(1, Math.min(maxClient, Math.round(Number(m.amount) || 1)));
+      const crit = !!m.crit;
+
+      ta.h = Math.max(0, Math.round(Number(ta.h) - damage));
+      ta.pvpHpLockUntil = now + 500;
+      ta.lastSeenAt = now;
+      targetWs.serializeAttachment(ta);
+
+      if (Number(a.hiddenUntil) > now) a.hiddenUntil = 0;
+      a.lastSeenAt = now;
+      ws.serializeAttachment(a);
+
+      const payload = {
+        type:'world-pvp-skill-hit', room, attacker:String(a.pid||''), target:targetPid,
+        damage, crit, hp:Math.max(0,Number(ta.h)||0), mhp:Math.max(1,Number(ta.m)||1),
+        damageType:String(m.damageType||'physical').slice(0,16), ts:now
+      };
+      wsJson(ws, payload);
+      wsJson(targetWs, payload);
+      this.roomBroadcast(room, { type:'move', player:packetFromAtt(ta), room, ts:now }, targetWs);
+      this.roomBroadcast(room, { type:'move', player:packetFromAtt(a), room, ts:now }, ws);
+      return;
+    }
+
+    if (m.type === 'world-pvp-control') {
+      const room = cleanRoom(a.room);
+      const targetPid = String(m.target || '');
+      const kind = String(m.kind || '');
+      const reject = (reason) => wsJson(ws, { type:'world-pvp-reject', reason:String(reason||'эффект отклонён'), room, target:targetPid, ts:now });
+
+      if (!worldPvpRoom(room)) { reject('в этой зоне ПК недоступен'); return; }
+      if (!(Number(a.h) > 0)) { reject('персонаж не может атаковать'); return; }
+      if (!targetPid || targetPid === String(a.pid || '')) { reject('цель не выбрана'); return; }
+      if (kind !== 'slow' && kind !== 'root') return;
+
+      if (!a.worldPvp) {
+        a.worldPvp = true;
+        ws.serializeAttachment(a);
+        wsJson(ws, { type:'world-pvp-state', enabled:true, room, ts:now });
+      }
+
+      let targetWs = null, ta = null;
+      for (const peer of this.roomSockets(room)) {
+        const pa = attOf(peer);
+        if (String(pa.pid || '') === targetPid) { targetWs = peer; ta = pa; break; }
+      }
+      if (!targetWs || !ta) { reject('цель уже не в этой локации'); return; }
+      if (!(Number(ta.h) > 0)) { reject('цель уже побеждена'); return; }
+      if (Number(ta.hiddenUntil) > now) { reject('цель скрыта дымовой завесой'); return; }
+
+      const ax = Number(a.x), ay = Number(a.y), tx = Number(ta.x), ty = Number(ta.y);
+      if (![ax,ay,tx,ty].every(Number.isFinite)) { reject('позиция цели синхронизируется'); return; }
+      const range = Math.max(80, Math.min(700, finite(m.range, 80, 700, 180)));
+      if (Math.hypot(tx - ax, ty - ay) > range + 74) { reject('цель вне радиуса навыка'); return; }
+      if (now - Number(a.lastWorldPvpControlAt || 0) < 120) return;
+      a.lastWorldPvpControlAt = now;
+
+      const duration = Math.max(100, Math.min(4500, Math.round(finite(m.duration, 100, 4500, 1000))));
+      const mul = kind === 'slow' ? Math.max(.25, Math.min(.95, finite(m.mul, .25, .95, .55))) : 0;
+      if (Number(a.hiddenUntil) > now) a.hiddenUntil = 0;
+      a.lastSeenAt = now;
+      ws.serializeAttachment(a);
+
+      wsJson(targetWs, {
+        type:'world-pvp-control', room, attacker:String(a.pid||''), target:targetPid,
+        kind, mul, duration, ts:now
+      });
+      this.roomBroadcast(room, { type:'move', player:packetFromAtt(a), room, ts:now }, ws);
+      return;
+    }
+
     if (m.type === 'player-stealth') {
       const duration = Math.max(0, Math.min(3000, Math.round(finite(m.duration, 0, 3000, 0))));
       const liveClass = String(a.classKey || '').toLowerCase();
