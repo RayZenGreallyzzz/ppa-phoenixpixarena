@@ -522,6 +522,9 @@ export class RealtimeHub extends BaseRealtimeHub {
         target: String(row.target || ''),
         dir: Number.isFinite(Number(row.dir)) ? Number(row.dir) : 1,
         moving: !!row.moving,
+        rootUntil: Math.max(0, Number(row.rootUntil) || 0),
+        slowUntil: Math.max(0, Number(row.slowUntil) || 0),
+        slowMul: Math.max(.25, Math.min(.95, Number(row.slowMul) || 1)),
         positioned: !!row.positioned && row.x != null && row.y != null && row.hx != null && row.hy != null,
       });
       if (deadUntil > now) {
@@ -569,6 +572,9 @@ export class RealtimeHub extends BaseRealtimeHub {
         target: String(rec.target || ''),
         dir: Number.isFinite(Number(rec.dir)) ? Number(rec.dir) : 1,
         moving: !!rec.moving,
+        rootUntil: Math.max(0, Number(rec.rootUntil) || 0),
+        slowUntil: Math.max(0, Number(rec.slowUntil) || 0),
+        slowMul: Math.max(.25, Math.min(.95, Number(rec.slowMul) || 1)),
         positioned: !!rec.positioned,
       };
     }
@@ -606,6 +612,9 @@ export class RealtimeHub extends BaseRealtimeHub {
       rec.aggro = false;
       rec.target = '';
       rec.moving = false;
+      rec.rootUntil = 0;
+      rec.slowUntil = 0;
+      rec.slowMul = 1;
       rec.nextAttackAt = 0;
       rec.nextSpecialAt = 0;
       rec.nextProjectileAt = 0;
@@ -870,6 +879,15 @@ export class RealtimeHub extends BaseRealtimeHub {
       let x = Number(rec.x), y = Number(rec.y);
       const hx = Number(rec.hx), hy = Number(rec.hy);
       const sp = Math.max(0.1, Number(rec.sp) || 1);
+      if (Number(rec.rootUntil) > 0 && now >= Number(rec.rootUntil)) rec.rootUntil = 0;
+      if (Number(rec.slowUntil) > 0 && now >= Number(rec.slowUntil)) {
+        rec.slowUntil = 0;
+        rec.slowMul = 1;
+      }
+      const controlMoveMul = Number(rec.rootUntil) > now
+        ? 0
+        : (Number(rec.slowUntil) > now ? Math.max(.25, Math.min(1, Number(rec.slowMul) || 1)) : 1);
+      const effectiveSp = sp * controlMoveMul;
       const sz = Math.max(8, Number(rec.sz) || 30);
       const mobKey = String(ck).slice(prefix.length);
       const phoenix = mobKey === 'p20';
@@ -945,7 +963,7 @@ export class RealtimeHub extends BaseRealtimeHub {
           rec.aggro = false;
           rec.target = '';
           target = null;
-        } else if (edgeChase && dist <= Math.max(14, sp * 3.2)) {
+        } else if (edgeChase && dist <= Math.max(14, effectiveSp * 3.2)) {
           // Player left this mob's room: reach the doorway/edge, drop aggro,
           // then the next ticks naturally walk the mob back home.
           rec.aggro = false;
@@ -953,7 +971,7 @@ export class RealtimeHub extends BaseRealtimeHub {
           target = null;
         } else if (dist > (edgeChase ? 10 : reach) && dist > 0.001 && !stationaryBoss) {
           const stop = edgeChase ? 10 : reach;
-          const step = Math.min(Math.max(0, dist - stop), sp * 60 * (dt / 1000));
+          const step = Math.min(Math.max(0, dist - stop), effectiveSp * 60 * (dt / 1000));
           vx = dx / dist * step;
           vy = dy / dist * step;
           moving = step > 0.01;
@@ -984,7 +1002,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       } else if (!rec.aggro) {
         const dx = hx - x, dy = hy - y, dist = Math.hypot(dx, dy);
         if (dist > 1) {
-          const step = Math.min(dist, sp * 60 * (dt / 1000));
+          const step = Math.min(dist, effectiveSp * 60 * (dt / 1000));
           vx = dx / dist * step;
           vy = dy / dist * step;
           moving = step > 0.01;
@@ -1155,7 +1173,8 @@ export class RealtimeHub extends BaseRealtimeHub {
             roomIndex: hasRoomBounds ? mobRoomIndex : -1,
             roomMinX: hasRoomBounds ? roomMinX : null, roomMinY: hasRoomBounds ? roomMinY : null,
             roomMaxX: hasRoomBounds ? roomMaxX : null, roomMaxY: hasRoomBounds ? roomMaxY : null,
-            aggro: false, target: '', dir: 1, moving: false, positioned: true,
+            aggro: false, target: '', dir: 1, moving: false,
+            rootUntil: 0, slowUntil: 0, slowMul: 1, positioned: true,
           };
           health.set(ck, rec);
         } else {
@@ -1234,6 +1253,9 @@ export class RealtimeHub extends BaseRealtimeHub {
         rec.aggro = false;
         rec.target = '';
         rec.moving = false;
+        rec.rootUntil = 0;
+        rec.slowUntil = 0;
+        rec.slowMul = 1;
         rec.nextAttackAt = 0;
         rec.nextSpecialAt = 0;
         rec.nextAoeAt = 0;
@@ -1258,6 +1280,47 @@ export class RealtimeHub extends BaseRealtimeHub {
         respawnAt, killer, party, event,
         x: rec.x, y: rec.y, aggro: !!rec.aggro, dir: rec.dir, moving: !!rec.moving,
         target: String(rec.target || ''), sz: rec.sz, ts: now,
+      }, null);
+      return;
+    }
+
+    if (m.type === 'mob-control-event') {
+      const room = cleanRoom(a.room);
+      const key = cleanMobKey(m.key);
+      const kind = String(m.kind || '');
+      const event = String(m.event || '').slice(0, 96);
+      const duration = Math.max(100, Math.min(6000, Math.round(finite(m.duration, 100, 6000, 0))));
+      const mul = Math.max(.25, Math.min(.95, finite(m.mul, .25, .95, .55)));
+      if (!mobAuthorityRoom(room) || cleanRoom(m.room || room) !== room) return;
+      // Crowd control is for ordinary dungeon mobs only; bosses remain control-immune.
+      if (!/^s\d{1,4}$/.test(key) || (kind !== 'slow' && kind !== 'root') || !(duration > 0)) return;
+
+      await this.ensureMobRoomLoaded(room);
+      if (this.processMobRespawns(room, now)) await this.persistMobRoom(room);
+      const { health, dead, events } = this.mobStores();
+      if (event && events.has(event)) return;
+      if (event) events.set(event, now);
+
+      const ck = this.mobCompound(room, key);
+      const rec = health.get(ck);
+      const tomb = dead.get(ck);
+      if (!rec || !(Number(rec.hp) > 0) || (tomb && Number(tomb.at) > now)) return;
+
+      if (kind === 'root') {
+        rec.rootUntil = Math.max(Number(rec.rootUntil) || 0, now + duration);
+      } else {
+        rec.slowMul = Math.max(.25, Math.min(1, Math.min(Number(rec.slowMul) || 1, mul)));
+        rec.slowUntil = Math.max(Number(rec.slowUntil) || 0, now + duration);
+      }
+      rec.updatedAt = now;
+      health.set(ck, rec);
+      if (rec.aggro || rec.moving) this.ensureMobAiLoop(room);
+      await this.persistMobRoom(room);
+      this.roomBroadcast(room, {
+        type: 'mob-control', room, key, kind,
+        mul: kind === 'slow' ? rec.slowMul : 0,
+        until: kind === 'root' ? rec.rootUntil : rec.slowUntil,
+        event, ts: now,
       }, null);
       return;
     }
