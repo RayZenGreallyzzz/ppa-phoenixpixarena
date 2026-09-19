@@ -395,6 +395,36 @@
     }catch(_){}
   }
 
+  function installQueueFallback(){
+    try{
+      if(window.__PPA_WORLD_PK_RUNTIME_CORE)return true;
+      var base=null;
+      try{if(typeof queueAttack==='function')base=queueAttack}catch(_){}
+      if(!base&&typeof window.queueAttack==='function')base=window.queueAttack;
+      if(typeof base!=='function')return false;
+
+      // If build.mjs already injected the direct branch there is nothing to wrap.
+      var src='';
+      try{src=Function.prototype.toString.call(base)}catch(_){}
+      if(src.indexOf('PPA_WORLD_PK_TRY_BASIC_ATTACK')>=0){
+        window.__PPA_WORLD_PK_RUNTIME_CORE='build-hook';
+        return true;
+      }
+
+      var wrapped=function(e){
+        try{
+          if(window.PPA_WORLD_PK_TRY_BASIC_ATTACK&&window.PPA_WORLD_PK_TRY_BASIC_ATTACK(e))return;
+        }catch(_){}
+        return base.apply(this,arguments);
+      };
+      wrapped.__ppaPkRuntimeCore=1;
+      try{window.queueAttack=wrapped}catch(_){}
+      try{queueAttack=wrapped}catch(_){}
+      window.__PPA_WORLD_PK_RUNTIME_CORE='runtime-wrap';
+      return true;
+    }catch(_){return false}
+  }
+
   window.PPA_WORLD_COMBAT_DIAG=function(){
     var r=selectedRemote();
     return{
@@ -407,13 +437,14 @@
       attackRange:Math.round(basicRange()),
       nearest:remoteId(nearestPlayer(Infinity))||'',
       lastAckAt:lastAckAt,
-      lastReject:lastReject
+      lastReject:lastReject,
+      coreHook:String(window.__PPA_WORLD_PK_RUNTIME_CORE||'none')
     };
   };
 
   function boot(){
-    ensureHud();refresh();
-    setInterval(refresh,500);
+    ensureHud();installQueueFallback();refresh();
+    setInterval(function(){installQueueFallback();refresh()},500);
     setInterval(autoTick,90);
   }
 
