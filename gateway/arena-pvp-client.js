@@ -235,13 +235,10 @@
     }
   };
 
-  window.PPA_ARENA_MATCH_END=function(){
-    try{
-      if(match.active&&window.PPA_RT_SEND)window.PPA_RT_SEND({type:'arena-leave',matchId:match.matchId});
-    }catch(_){}
+  window.PPA_ARENA_COMBAT_CLEAR=function(){
     match={active:false,mode:'',matchId:'',room:'',side:'',opponentId:''};
     lastRoundToken='';
-    try{if(window.PPA_RT_ARENA_CLEAR)window.PPA_RT_ARENA_CLEAR()}catch(_){}
+    return true;
   };
 
   window.PPA_ARENA_DIAG=function(){
