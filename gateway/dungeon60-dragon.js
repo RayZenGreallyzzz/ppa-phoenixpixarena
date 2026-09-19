@@ -45,8 +45,8 @@
       try{if(typeof eid!=='undefined')id=eid++}catch(_){}
       e={
         id:id,type:{n:'ДРАКОН ПЕПЛА'},x:p.x,y:p.y,hx:p.x,hy:p.y,
-        hp:25000,mhp:25000,mp:260,mmp:260,sp:1.05,sz:180,col:'#a83224',
-        dmg:130,dmgType:'physical',def:120,xp:900,gold:650,lvl:60,
+        hp:27000,mhp:27000,mp:260,mmp:260,sp:1.05,sz:180,col:'#a83224',
+        dmg:180,dmgType:'physical',def:160,xp:900,gold:650,lvl:60,
         atkCD:0,flash:0,bob:0,isBoss:true,isDungeon60Boss:true,
         dragonState:'idle',dragonAttackUntil:0,__ppaServerDir:1
       };
@@ -109,7 +109,7 @@
       cx.fillStyle='#b63a2c';cx.fillRect(sx-bw/2,barY,bw*Math.max(0,Math.min(1,Number(e.hp||0)/Math.max(1,Number(e.mhp)||1))),bh);
       cx.strokeStyle='rgba(239,168,105,.9)';cx.strokeRect(sx-bw/2,barY,bw,bh);
       cx.fillStyle='#f2c38c';cx.font='bold 12px monospace';cx.textAlign='center';
-      cx.fillText('🐉 ДРАКОН ПЕПЛА · '+Math.max(0,Math.ceil(Number(e.hp)||0))+' / '+Math.ceil(Number(e.mhp)||25000),sx,barY-8);
+      cx.fillText('🐉 ДРАКОН ПЕПЛА · '+Math.max(0,Math.ceil(Number(e.hp)||0))+' / '+Math.ceil(Number(e.mhp)||27000),sx,barY-8);
       cx.textAlign='left';
       return true;
     }catch(err){console.warn('PPA dragon60 draw',err);return false}
