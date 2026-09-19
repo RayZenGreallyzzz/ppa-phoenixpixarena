@@ -129,7 +129,7 @@
       if(!window.PPA_WORLD_PVP_ON||!pvpScene()||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
       var best=null,bd=Infinity,range=Math.max(60,Number(typeof playerBasicRange==='function'?playerBasicRange():P.attackRange)||60)+34;
       PPA_ONLINE.remotes.forEach(function(r){
-        if(!r||!r.hasPos||Number(r.hp)<=0||sameParty(r))return;
+        if(!r||!r.hasPos||Number(r.hp)<=0)return;
         if(Number(r.hiddenUntil)>Date.now())return;
         if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return;
         var d=Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y));
