@@ -383,6 +383,21 @@
     }catch(_){return false}
   };
 
+  window.PPA_MOB_EVENT_CONTROL=function(e,kind,mul,ms){
+    try{
+      if(applying||!active())return false;
+      var key=keyOf(e),k=String(kind||''),dur=Math.max(100,Math.min(6000,Number(ms)||0));
+      if(!/^s\d{1,4}$/.test(key)||(k!=='slow'&&k!=='root')||!(dur>0))return false;
+      register(false);
+      var id=(selfId()||'self')+':ctrl:'+Date.now().toString(36)+':'+(++seq);
+      return !!window.PPA_RT_SEND({
+        type:'mob-control-event',room:room(),key:key,kind:k,
+        mul:k==='slow'?Math.max(.25,Math.min(.95,Number(mul)||.55)):0,
+        duration:Math.round(dur),event:id
+      });
+    }catch(_){return false}
+  };
+
   function applyRow(row){
     if(!Array.isArray(row)||row.length<4)return;
     var key=String(row[0]||''),hp=Number(row[1]),mhp=Number(row[2]),respawnAt=Number(row[3])||0;
