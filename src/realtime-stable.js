@@ -1232,7 +1232,8 @@ export class RealtimeHub extends BaseRealtimeHub {
         if (String(pa.pid || '') === targetPid) { targetWs = peer; ta = pa; break; }
       }
       if (!targetWs || !ta || !(Number(ta.h) > 0)) return;
-      if (String(a.partyId || '') && String(a.partyId || '') === String(ta.partyId || '')) return;
+      // PK mode is an explicit hostile toggle: party membership does not grant
+      // protection in open-world combat. Safe town remains the hard no-PK zone.
       if (Number(ta.hiddenUntil) > now) return;
 
       const ax = Number(a.x), ay = Number(a.y), tx = Number(ta.x), ty = Number(ta.y);
