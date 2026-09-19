@@ -5,6 +5,8 @@
   // unnecessary realtime/player-target processing and caused mobile lag.
   var autoOn=false;
   var lastAutoAt=0;
+  var fartMineId='';
+  var fartReturning=false;
 
   function scene(){
     try{return String(P&&P.scene||'safe')}catch(_){return'safe'}
@@ -47,6 +49,95 @@
     return true;
   }
 
+  function fartMineRadius(){
+    try{return Math.max(40,Number(FART_MINE_RADIUS)||82)}catch(_){return 82}
+  }
+
+  function fartMineByLockedId(){
+    try{
+      if(!fartMineId)return null;
+      if(typeof fartMineById==='function')return fartMineById(fartMineId);
+      var a=FART_ZONE_STATE&&Array.isArray(FART_ZONE_STATE.mines)?FART_ZONE_STATE.mines:[];
+      for(var i=0;i<a.length;i++)if(a[i]&&String(a[i].id)===String(fartMineId))return a[i];
+    }catch(_){}
+    return null;
+  }
+
+  function fartNearestAutoMine(){
+    try{
+      if(scene()!=='fartzone')return null;
+      var st=(typeof FART_ZONE_STATE!=='undefined'&&FART_ZONE_STATE)||null;
+      if(st&&st.autoMineId){
+        var active=(typeof fartMineById==='function')?fartMineById(st.autoMineId):null;
+        if(active)return active;
+      }
+      var locked=fartMineByLockedId();
+      if(locked)return locked;
+      if(typeof fartNearestMine==='function')return fartNearestMine(fartMineRadius()+12);
+    }catch(_){}
+    return null;
+  }
+
+  function lockFartMine(){
+    var mine=fartNearestAutoMine();
+    if(!mine)return null;
+    fartMineId=String(mine.id||'');
+    return mine;
+  }
+
+  function fartGuardTarget(mine){
+    if(!mine)return null;
+    try{
+      var list=(typeof EN!=='undefined'&&Array.isArray(EN))?EN:[];
+      var radius=165;
+      try{radius=Math.max(125,Math.min(210,Number(FART_GUARD_AGGRO_RADIUS)||210))}catch(_){}
+      var best=null,bd=Infinity;
+      for(var i=0;i<list.length;i++){
+        var e=list[i];
+        if(!e||!e.isFartGuard||e.hp<=0||String(e.fartMineId||'')!==String(mine.id||''))continue;
+        // The farm leash is measured from the mine center, not from the player.
+        if(Math.hypot(Number(e.x||0)-Number(mine.x||0),Number(e.y||0)-Number(mine.y||0))>radius)continue;
+        var d=Math.hypot(Number(e.x||0)-Number(P.x||0),Number(e.y||0)-Number(P.y||0));
+        if(d<bd){bd=d;best=e}
+      }
+      return best;
+    }catch(_){return null}
+  }
+
+  function fartHasGuard(mine){
+    return !!fartGuardTarget(mine);
+  }
+
+  function attackSpecific(target){
+    try{
+      if(!target||target.hp<=0)return false;
+      P.tid=target.id;
+      var inRange=(typeof smartAttackDistance==='function'&&typeof smartAttackReach==='function')
+        ? smartAttackDistance(target)<=smartAttackReach(target)
+        : Math.hypot(target.x-P.x,target.y-P.y)<=Math.max(55,Number(P.attackRange)||60);
+      if(inRange&&P.shootCD<=0){
+        if(typeof cancelSmartAttack==='function')cancelSmartAttack();
+        attackQueued=true;
+      }else if(typeof startSmartAttack==='function'){
+        startSmartAttack(target);
+      }
+      return true;
+    }catch(_){return false}
+  }
+
+  window.PPA_FART_AUTO_MOVE=function(){
+    try{
+      if(!autoOn||scene()!=='fartzone'||!fartReturning)return null;
+      if(Math.hypot(Number(jX)||0,Number(jY)||0)>.08)return null;
+      var mine=fartMineByLockedId();
+      if(!mine||fartHasGuard(mine))return null;
+      var dx=Number(mine.x||0)-Number(P.x||0),dy=Number(mine.y||0)-Number(P.y||0);
+      var d=Math.hypot(dx,dy),stop=Math.max(42,fartMineRadius()*.62);
+      if(d<=stop){fartReturning=false;return null}
+      return{x:dx/Math.max(.001,d),y:dy/Math.max(.001,d)};
+    }catch(_){return null}
+  };
+
   function ensureHud(){
     var box=document.getElementById('ppaWorldCombatToggles');
     if(box)return box;
@@ -76,9 +167,17 @@
         popup('AUTO доступно после покупки от 5 Gram или любой Premium-подписки','#d9a7ff');
         refresh();return;
       }
+      if(!autoOn&&scene()==='fartzone'){
+        var mine=lockFartMine();
+        if(!mine){
+          popup('AUTO · подойди к руднику','#d8bc7b');
+          refresh();return;
+        }
+      }
       autoOn=!autoOn;
+      if(!autoOn){fartMineId='';fartReturning=false;try{if(typeof cancelSmartAttack==='function')cancelSmartAttack()}catch(_){}}
       refresh();
-      popup(autoOn?'AUTO АТАКА · ВКЛ':'AUTO АТАКА · ВЫКЛ',autoOn?'#8dffad':'#c6b99f');
+      popup(autoOn?(scene()==='fartzone'?'AUTO · РУДНИК ЗАКРЕПЛЁН':'AUTO АТАКА · ВКЛ'):'AUTO АТАКА · ВЫКЛ',autoOn?'#8dffad':'#c6b99f');
     };
 
     return box;
@@ -97,7 +196,11 @@
       au.classList.toggle('locked',!unlocked);
     }
 
-    if(!show)autoOn=false;
+    if(!show){
+      autoOn=false;fartMineId='';fartReturning=false;
+    }else if(scene()!=='fartzone'){
+      fartMineId='';fartReturning=false;
+    }
   }
 
   function autoTick(){
@@ -106,15 +209,33 @@
       if(!autoOn||!rememberUnlock()||!combatScene()||P.dead||transitioning||now-lastAutoAt<180)return;
       lastAutoAt=now;
 
-      // Use the original PvE smart attack path only. No player scans,
-      // no player targeting, no extra realtime packets.
+      // Fart Zone is mine-anchored: AUTO may fight only guards belonging to
+      // the locked mine. It never chains into the next mine's pack.
+      if(scene()==='fartzone'){
+        var mine=fartMineByLockedId()||lockFartMine();
+        if(!mine){autoOn=false;fartMineId='';fartReturning=false;refresh();return}
+        var target=fartGuardTarget(mine);
+        if(target){
+          fartReturning=false;
+          attackSpecific(target);
+          return;
+        }
+
+        // Mine cleared: drop combat target and run back inside the mining radius.
+        try{if(typeof cancelSmartAttack==='function')cancelSmartAttack()}catch(_){}
+        P.tid=null;
+        fartReturning=true;
+        return;
+      }
+
+      // Other PvE scenes keep the old continuous AUTO behavior.
       if(typeof queueAttack==='function')queueAttack();
     }catch(_){}
   }
 
   window.PPA_WORLD_COMBAT_REFRESH=refresh;
   window.PPA_AUTO_ATTACK_DIAG=function(){
-    return{auto:!!autoOn,unlocked:!!autoUnlocked(),scene:scene()};
+    return{auto:!!autoOn,unlocked:!!autoUnlocked(),scene:scene(),fartMine:fartMineId||'',returning:!!fartReturning};
   };
 
   function boot(){
