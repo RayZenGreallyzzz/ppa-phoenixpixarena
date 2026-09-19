@@ -90,8 +90,8 @@
 
     var st=document.createElement('style');
     st.textContent=
-      '#ppaWorldCombatToggles{position:fixed!important;right:20px!important;bottom:263px!important;z-index:10050!important;display:none;gap:6px;align-items:center;justify-content:flex-end;pointer-events:auto!important;touch-action:none!important}'+
-      '#ppaWorldCombatToggles button{position:relative;z-index:10051!important;height:29px;min-width:50px;padding:0 7px;border-radius:7px;border:1px solid rgba(220,170,80,.62);background:rgba(8,10,13,.92);color:#d8c7a0;font:700 8px/1 monospace;letter-spacing:.04em;box-shadow:0 2px 7px rgba(0,0,0,.62);pointer-events:auto!important;touch-action:none!important;-webkit-user-select:none;user-select:none}'+
+      '#ppaWorldCombatToggles{position:fixed!important;right:20px!important;bottom:263px!important;z-index:40!important;display:none;gap:6px;align-items:center;justify-content:flex-end;pointer-events:auto!important;touch-action:none!important}'+
+      '#ppaWorldCombatToggles button{position:relative;z-index:41!important;height:29px;min-width:50px;padding:0 7px;border-radius:7px;border:1px solid rgba(220,170,80,.62);background:rgba(8,10,13,.92);color:#d8c7a0;font:700 8px/1 monospace;letter-spacing:.04em;box-shadow:0 2px 7px rgba(0,0,0,.62);pointer-events:auto!important;touch-action:none!important;-webkit-user-select:none;user-select:none}'+
       '#ppaWorldCombatToggles button.autoOn{border-color:#75d89d;color:#caffdc;background:rgba(12,62,35,.90)}'+
       '#ppaWorldCombatToggles button.pkOn{border-color:#ff6b57;color:#ffe0da;background:rgba(92,20,16,.94);box-shadow:0 0 9px rgba(255,70,45,.34)}'+
       '#ppaWorldCombatToggles button.locked{opacity:.52;border-style:dashed}'+
