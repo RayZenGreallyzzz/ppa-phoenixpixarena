@@ -6,18 +6,6 @@
   var fartMineId='';
   var fartReturning=false;
 
-  // Open-world PK was removed. Keep these hard-off guards so stale cached
-  // globals from an older page cannot re-enable player targeting.
-  window.PPA_WORLD_PVP_ON=false;
-  window.PPA_WORLD_PVP_TARGET_ID='';
-  window.PPA_WORLD_PK_TRY_BASIC_ATTACK=null;
-  window.PPA_WORLD_SKILL_TARGET=null;
-  window.PPA_WORLD_AROUND_TARGET=null;
-  window.PPA_WORLD_SKILL_HIT=null;
-  window.PPA_WORLD_PLAYER_CONTROL=null;
-  window.PPA_WORLD_PLAYER_SELECT=null;
-  window.PPA_WORLD_PK_ACTIVE=null;
-
   function scene(){
     try{return String(P&&P.scene||'safe')}catch(_){return'safe'}
   }
