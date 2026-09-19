@@ -302,13 +302,63 @@
   }
 
   function armCanvasTap(){
-    var c=document.getElementById('c');if(!c||c.dataset.ppaSocialTapV4==='1')return false;
-    c.dataset.ppaSocialTapV4='1';
+    var c=document.getElementById('c');if(!c||c.dataset.ppaSocialTapV5==='1')return false;
+    c.dataset.ppaSocialTapV5='1';
+
+    var press=null,timer=0;
+    function clearPress(){
+      if(timer){clearTimeout(timer);timer=0}
+      press=null;
+    }
+    function inviteRemote(r){
+      if(!r||!window.PPA_RT_SEND)return false;
+      var id=remoteId(r,'');if(!id)return false;
+      if(window.PPA_RT_SEND({type:'party-invite',target:id})){
+        note('Приглашение в группу отправлено');
+        return true;
+      }
+      note('ONLINE переподключается',false);
+      return false;
+    }
+
     c.addEventListener('pointerdown',function(e){
       if(e.button!=null&&e.button!==0)return;
       var r=findRemoteAt(e.clientX,e.clientY);if(!r)return;
       e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
-      openPlayer(r);
+      clearPress();
+      press={id:e.pointerId,x:e.clientX,y:e.clientY,r:r,long:false};
+      try{c.setPointerCapture(e.pointerId)}catch(_){}
+      timer=setTimeout(function(){
+        if(!press||press.id!==e.pointerId)return;
+        press.long=true;
+        inviteRemote(press.r);
+        try{if(navigator.vibrate)navigator.vibrate(35)}catch(_){}
+      },1000);
+    },true);
+
+    c.addEventListener('pointermove',function(e){
+      if(!press||press.id!==e.pointerId)return;
+      if(Math.hypot(e.clientX-press.x,e.clientY-press.y)>14)clearPress();
+    },true);
+
+    c.addEventListener('pointerup',function(e){
+      if(!press||press.id!==e.pointerId)return;
+      e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+      var p=press;var wasLong=!!p.long;clearPress();
+      try{if(c.hasPointerCapture(e.pointerId))c.releasePointerCapture(e.pointerId)}catch(_){}
+      if(wasLong)return;
+      if(window.PPA_WORLD_PLAYER_SELECT){
+        window.PPA_WORLD_PLAYER_SELECT(p.r);
+      }else{
+        openPlayer(p.r);
+      }
+    },true);
+
+    c.addEventListener('pointercancel',function(e){
+      if(press&&press.id===e.pointerId)clearPress();
+    },true);
+    c.addEventListener('lostpointercapture',function(e){
+      if(press&&press.id===e.pointerId)clearPress();
     },true);
     return true;
   }
