@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v364-fart-mine-anchored-auto-20260919-1834';
+const CLIENT_BUILD = 'v365-lightweight-pk-basic-20260919-1928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -706,12 +706,23 @@ ppaPatchRegex(
 
 /* ======================================================================== */
 
-if (output.includes('PPA_WORLD_PK_TRY_BASIC_ATTACK') || output.includes('PPA_WORLD_SKILL_TARGET(maxRange)')) {
-  throw new Error('PK hooks unexpectedly present after rollback');
+/* === LIGHTWEIGHT WORLD PK CORE ========================================= */
+// One hook in the real attack command. The PK module does no global attack-button
+// interception and no per-frame player target scan, avoiding the laggy old attempt.
+ppaPatchRegex(
+  'world pk basic attack core hook',
+  /function\s+queueAttack\(e\)\s*\{/,
+  "function queueAttack(e){\n  if(window.PPA_WORLD_PK_TRY_BASIC_ATTACK&&window.PPA_WORLD_PK_TRY_BASIC_ATTACK(e))return;"
+);
+
+if (!output.includes("PPA_WORLD_PK_TRY_BASIC_ATTACK(e)")) {
+  throw new Error('World PK core attack hook did not apply');
 }
 if (!output.includes('autoAttackUnlocked')) {
   throw new Error('Premium AUTO entitlement patch did not apply');
 }
+
+/* ======================================================================== */
 
 /* ======================================================================== */
 
