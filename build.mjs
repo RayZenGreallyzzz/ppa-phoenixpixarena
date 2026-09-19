@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v386-arena-release-control-20260919';
+const CLIENT_BUILD = 'v387-pk-pvepvp-zones-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1125,6 +1125,7 @@ ppaPatchRegex(
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
   const socialUi=fs.readFileSync(path.join(ROOT,'gateway/social-ui.js'),'utf8');
   const realtimeClient=fs.readFileSync(path.join(ROOT,'gateway/realtime-client.js'),'utf8');
+  const realtimeServer=fs.readFileSync(path.join(ROOT,'src/realtime-stable.js'),'utf8');
   const arenaPvp=fs.readFileSync(path.join(ROOT,'gateway/arena-pvp-client.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
@@ -1135,6 +1136,14 @@ ppaPatchRegex(
       socialUi.includes('PPA_WORLD_PK_ACTIVE') ||
       realtimeClient.includes("type:'world-pvp")) {
     throw new Error('Open-world PK client code returned');
+  }
+  if (!worldCombat.includes('ppaPlayerPkBtn') ||
+      !worldCombat.includes('PPA_PK_ACTIVE') ||
+      !realtimeClient.includes("type:'player-pk-hit'") ||
+      !arenaPvp.includes("player-pk-skill-hit") ||
+      !realtimeServer.includes("m.type === 'player-pk-hit'") ||
+      !realtimeServer.includes('playerPkRoomAllowed')) {
+    throw new Error('New server-authoritative PK zone bridge is incomplete');
   }
   if (!realtimeClient.includes('PPA_PVP_QUEUE_HANDLER') ||
       !realtimeClient.includes("type:'arena-queue-join'") ||
