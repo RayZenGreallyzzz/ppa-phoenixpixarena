@@ -3,37 +3,15 @@
 
   var fx=[];
 
-  function remote(id){
-    try{
-      if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE&&PPA_ONLINE.remotes)return PPA_ONLINE.remotes.get(String(id||''))||null;
-    }catch(_){}
-    return null;
-  }
-
-  function dirFromAngle(a){
-    a=Number(a);
-    if(!Number.isFinite(a))return 2;
-    var oct=Math.round(a/(Math.PI/4));
-    return ((oct+2)+8)%8;
-  }
-
   window.PPA_REMOTE_COMBAT_FX_RECEIVE=function(m){
     try{
       if(!m||!m.from)return;
-      var r=remote(m.from),now=Date.now();
+      var now=Date.now();
       var ang=Number(m.ang);
       if(!Number.isFinite(ang)){
         var sx=Number(m.x),sy=Number(m.y),tx=Number(m.tx),ty=Number(m.ty);
         if([sx,sy,tx,ty].every(Number.isFinite))ang=Math.atan2(ty-sy,tx-sx);
       }
-      if(r){
-        r.__ppaAttackUntil=now+Math.max(260,Math.min(700,Number(m.animMs)||480));
-        r.__ppaAttackDir=dirFromAngle(ang);
-        r.__ppaAttackAngle=ang;
-        r.anim='attack';
-        if(Number.isFinite(ang))r.face=Math.cos(ang)<0?-1:1;
-      }
-
       var kind=String(m.kind||'');
       if(kind!=='gnome-cannon'&&kind!=='archer-arrow')return;
 
