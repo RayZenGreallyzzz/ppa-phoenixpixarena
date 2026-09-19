@@ -27,7 +27,6 @@
       if(ps.autoAttackUnlocked)return true;
       if(Number(ps.lastPremiumPurchaseAt)>0)return true; // any Premium subscription ever purchased
       if(Number(b.adventurer)>0||Number(b.unique)>0||Number(b.epic)>0)return true; // 5/10/30 Gram bundles
-      if(Number(INV.gramSpentLifetime)>=5)return true; // includes qualifying Premium-shop purchases
     }catch(_){}
     return false;
   }
