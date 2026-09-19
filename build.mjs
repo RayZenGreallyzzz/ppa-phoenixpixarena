@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v367-pk-direct-attack-button-fix-20260919-1943';
+const CLIENT_BUILD = 'v356-remote-combat-fx-20260919-1955';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -366,6 +366,41 @@ ppaPatchRegex(
 );
 
 /* ======================================================================== */
+
+ppaPatchRegex(
+  'gnome realtime cannon visual',
+  /PLAYER_CANNONBALLS\.push\(\{\s*x:muzzleX,\s*y:muzzleY,\s*vx:dx\/dist\*speed,\s*vy:dy\/dist\*speed,\s*remaining:dist,\s*target:target\s*\}\);/,
+  `PLAYER_CANNONBALLS.push({
+    x:muzzleX,
+    y:muzzleY,
+    vx:dx/dist*speed,
+    vy:dy/dist*speed,
+    remaining:dist,
+    target:target
+  });
+  if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX({
+    kind:'gnome-cannon',x:muzzleX,y:muzzleY,tx:target.x,ty:target.y,ang:ang,animMs:480
+  });`
+);
+
+ppaPatchRegex(
+  'archer realtime arrow visual',
+  /PLAYER_ARROWS\.push\(\{\s*x:startX,y:startY,\s*vx:Math\.cos\(ang\)\*speed,\s*vy:Math\.sin\(ang\)\*speed,\s*remaining:dist,\s*target:target,\s*ang:ang\s*\}\);/,
+  `PLAYER_ARROWS.push({
+    x:startX,y:startY,
+    vx:Math.cos(ang)*speed,
+    vy:Math.sin(ang)*speed,
+    remaining:dist,
+    target:target,
+    ang:ang
+  });
+  if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX({
+    kind:'archer-arrow',x:startX,y:startY,tx:target.x,ty:target.y,ang:ang,animMs:430
+  });`
+);
+
+if (!output.includes("kind:'gnome-cannon'")) throw new Error('Gnome realtime cannon visual patch did not apply');
+if (!output.includes("kind:'archer-arrow'")) throw new Error('Archer realtime arrow visual patch did not apply');
 
 ppaPatchRegex(
   'shared mob reward',
@@ -968,6 +1003,7 @@ const filesToPublish = [
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
   ['gateway/mobile-sprite-performance.js','mobile-sprite-performance.js','Mobile sprite performance helper missing'],
   ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],
+  ['gateway/remote-combat-fx.js','remote-combat-fx.js','Remote combat FX renderer missing'],
   ['gateway/remote-pet-renderer.js','remote-pet-renderer.js','Remote pet renderer missing'],
   ['gateway/realtime-identity-sync.js','realtime-identity-sync.js','Realtime identity sync missing'],
   ['gateway/class-sync-client.js','class-sync-client.js','Realtime class sync missing'],
@@ -984,7 +1020,7 @@ if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
 const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
 output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
 <script src="${js('dungeon-drop-slots.js')}"></script>
-<script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
+<script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -1000,6 +1036,7 @@ console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
+console.log('Remote combat FX: /game/remote-combat-fx.js');
 console.log('Remote pet renderer: /game/remote-pet-renderer.js');
 console.log('Realtime class sync: /game/class-sync-client.js');
 console.log('Social UI: /game/social-ui.js');
