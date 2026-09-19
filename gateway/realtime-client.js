@@ -541,7 +541,7 @@
   function arenaBasicRangeClient(){
     var cls='';
     try{cls=String(selfClass()||'').toLowerCase()}catch(_){}
-    var map={tank:72,barbarian:78,paladin:74,assassin:64,gnome:360,archer:420,mage:390,priest:330};
+    var map={tank:72,barbarian:78,paladin:74,assassin:48,gnome:360,archer:420,mage:390,priest:330};
     return Number(map[cls])||Math.max(60,Math.min(480,Number(P&&P.attackRange)||60));
   }
   function arenaClientIsMelee(){
@@ -576,7 +576,8 @@
       var rp=arenaRemotePos(r),sx=Number(P.x)||0,sy=Number(P.y)||0;
       if(!Number.isFinite(rp.x)||!Number.isFinite(rp.y))return true;
       var range=arenaBasicRangeClient();
-      var dist=Math.hypot(rp.x-sx,rp.y-sy),slack=arenaClientIsMelee()?12:58;
+      var clsNow=String(selfClass()||'').toLowerCase();
+      var dist=Math.hypot(rp.x-sx,rp.y-sy),slack=clsNow==='assassin'?6:(arenaClientIsMelee()?12:58);
       if(dist>range+slack){
         try{if(typeof showPickup==='function')showPickup('АРЕНА · соперник слишком далеко','#ffbd76')}catch(_){}
         return true;
@@ -604,7 +605,10 @@
         return true;
       }
       try{
-        P.attacking=true;P.anim='attack';P.animFrame=0;P.animTimer=0;
+        var attackAng=Math.atan2(rp.y-sy,rp.x-sx);
+        P.meleeAng=attackAng;
+        if(typeof dir8Canonical==='function')P.dir8=dir8Canonical(Math.cos(attackAng),Math.sin(attackAng));
+        P.attacking=true;P.anim='attack';P.animFrame=0;P.animTimer=0;P.shootT=1;P.recoil=1;
         if(Math.abs(rp.x-sx)>.1)P.face=rp.x<sx?-1:1;
         P.shootCD=Math.max(1,Math.round(60/rate));
       }catch(_){}
