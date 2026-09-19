@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v373-arena-clean-no-open-pk-20260919';
+const CLIENT_BUILD = 'v374-live-arena-1x1-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -531,8 +531,9 @@ ppaPatchRegex(
         e.flash=4;e.aggro=true;e.v189DotNext=now+1000;`
 );
 
-if (!output.includes("const _ppaServerMeleeHit=window.PPA_MOB_EVENT_DAMAGE")) {
-  throw new Error('Melee authoritative damage patch did not apply');
+if (!output.includes("const _ppaArenaMeleeHit=e.__ppaArenaPlayer") ||
+    !output.includes("const _ppaServerMeleeHit=!_ppaArenaMeleeHit&&window.PPA_MOB_EVENT_DAMAGE")) {
+  throw new Error('Arena/melee authoritative damage patch did not apply');
 }
 if (!output.includes("const _ppaArenaLegacySkillHit=e.__ppaArenaPlayer") ||
     !output.includes("const _ppaServerLegacySkillHit=!_ppaArenaLegacySkillHit&&window.PPA_MOB_EVENT_DAMAGE")) {
@@ -789,6 +790,18 @@ ppaPatchRegex(
   "function pvpExitAfterMatch(){\n  if(window.PPA_ARENA_MATCH_END)window.PPA_ARENA_MATCH_END();\n  const ov="
 );
 
+ppaPatchRegex(
+  'online arena cancel cleanup',
+  /function\s+pvpCancelMatch\(opts\)\{\s*opts=opts\|\|\{\};/,
+  "function pvpCancelMatch(opts){\n  if(window.PPA_ARENA_MATCH_END)window.PPA_ARENA_MATCH_END();\n  opts=opts||{};"
+);
+
+ppaPatchRegex(
+  'online arena manual leave cleanup',
+  /if\(\(P\.scene===['"]worldboss['"]\|\|P\.scene===['"]pvp1['"]\|\|P\.scene===['"]pvpteam['"]\)&&!transitioning\)changeScene\(['"]safe['"]\);/,
+  "if((P.scene==='worldboss'||P.scene==='pvp1'||P.scene==='pvpteam')&&!transitioning){if((P.scene==='pvp1'||P.scene==='pvpteam')&&window.PPA_ARENA_MATCH_END)window.PPA_ARENA_MATCH_END();changeScene('safe');}"
+);
+
 if (!output.includes("PPA_ARENA_TRY_BASIC_ATTACK(e)") ||
     !output.includes("PPA_ARENA_SKILL_TARGET(maxRange)") ||
     !output.includes("PPA_ARENA_AROUND_TARGET")) {
@@ -1034,6 +1047,7 @@ ppaPatchRegex(
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
   const socialUi=fs.readFileSync(path.join(ROOT,'gateway/social-ui.js'),'utf8');
   const realtimeClient=fs.readFileSync(path.join(ROOT,'gateway/realtime-client.js'),'utf8');
+  const arenaPvp=fs.readFileSync(path.join(ROOT,'gateway/arena-pvp-client.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
 
@@ -1043,6 +1057,12 @@ ppaPatchRegex(
       socialUi.includes('PPA_WORLD_PK_ACTIVE') ||
       realtimeClient.includes("type:'world-pvp")) {
     throw new Error('Open-world PK client code returned');
+  }
+  if (!arenaPvp.includes('PPA_PVP_QUEUE_HANDLER') ||
+      !arenaPvp.includes('PPA_ARENA_TRY_BASIC_ATTACK') ||
+      !arenaPvp.includes('PPA_ARENA_SKILL_HIT') ||
+      !realtimeClient.includes('PPA_ARENA_NET_RECEIVE')) {
+    throw new Error('Online arena client bridge is incomplete');
   }
   if (remoteSprite.includes('forcedAttack') || remoteSprite.includes('__ppaAttackDir')) {
     throw new Error('Remote attack FX is overriding movement facing again');
