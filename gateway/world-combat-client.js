@@ -1,12 +1,14 @@
 (function(){
   'use strict';
 
-  // AUTO only. PK/PvP logic was intentionally removed because it added
-  // unnecessary realtime/player-target processing and caused mobile lag.
   var autoOn=false;
   var lastAutoAt=0;
+  var lastPkAttackAt=0;
+  var lastPkNoticeAt=0;
+  var selectedPlayerId='';
   var fartMineId='';
   var fartReturning=false;
+  window.PPA_WORLD_PVP_ON=!!window.PPA_WORLD_PVP_ON;
 
   function scene(){
     try{return String(P&&P.scene||'safe')}catch(_){return'safe'}
@@ -47,6 +49,294 @@
       }
     }catch(_){}
     return true;
+  }
+
+  function remoteId(r){
+    return String((r&&(r.id||r.i||r.__ppaPid))||'');
+  }
+
+  function coords(r){
+    if(!r)return{x:NaN,y:NaN};
+    return{
+      x:Number.isFinite(Number(r.tx))?Number(r.tx):Number(r.x),
+      y:Number.isFinite(Number(r.ty))?Number(r.ty):Number(r.y)
+    };
+  }
+
+  function remoteTargetable(r){
+    if(!r||!r.hasPos||Number(r.hp)<=0)return false;
+    if(Number(r.hiddenUntil)>Date.now())return false;
+    try{if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return false}catch(_){}
+    var p=coords(r);
+    return !!remoteId(r)&&Number.isFinite(p.x)&&Number.isFinite(p.y);
+  }
+
+  function selectedRemote(){
+    try{
+      if(!selectedPlayerId||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
+      var r=PPA_ONLINE.remotes.get(String(selectedPlayerId))||null;
+      if(!remoteTargetable(r)){
+        if(!r||Number(r.hp)<=0){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID=''}
+        return null;
+      }
+      return r;
+    }catch(_){return null}
+  }
+
+  function distTo(r){
+    try{
+      var p=coords(r);
+      return Math.hypot(p.x-Number(P.x),p.y-Number(P.y));
+    }catch(_){return Infinity}
+  }
+
+  function basicRange(){
+    try{
+      var r=(typeof playerBasicRange==='function')?Number(playerBasicRange()):Number(P&&P.attackRange);
+      return Math.max(60,Number.isFinite(r)?r:60)+38;
+    }catch(_){return 98}
+  }
+
+  function nearestRemote(maxDistance){
+    try{
+      if(!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
+      var best=null,bd=Infinity;
+      PPA_ONLINE.remotes.forEach(function(r){
+        if(!remoteTargetable(r))return;
+        var d=distTo(r);
+        if(d<bd){bd=d;best=r}
+      });
+      if(!best)return null;
+      if(Number.isFinite(Number(maxDistance))&&bd>Number(maxDistance))return null;
+      return best;
+    }catch(_){return null}
+  }
+
+  function selectRemote(r,quiet){
+    if(!remoteTargetable(r))return false;
+    var id=remoteId(r);if(!id)return false;
+    selectedPlayerId=id;
+    window.PPA_WORLD_PVP_TARGET_ID=id;
+    if(!quiet)popup('ПК ЦЕЛЬ · '+String(r.name||r.n||'Игрок'),'#ff9d80');
+    return true;
+  }
+
+  window.PPA_WORLD_PLAYER_SELECT=function(r){return selectRemote(r,false)};
+  window.PPA_WORLD_PLAYER_CLEAR=function(){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID=''};
+  window.PPA_WORLD_SELECTED_REMOTE=selectedRemote;
+
+  function sendPkState(enabled){
+    if(typeof window.PPA_WORLD_PVP_SET!=='function')return false;
+    return !!window.PPA_WORLD_PVP_SET(!!enabled);
+  }
+
+  function togglePk(){
+    if(!combatScene()){popup('ПК здесь недоступен','#ffb36b');return}
+    var next=!window.PPA_WORLD_PVP_ON;
+    if(!sendPkState(next)){
+      popup('ПК · ONLINE переподключается','#ffb36b');
+      return;
+    }
+    window.PPA_WORLD_PVP_ON=next;
+    if(!next){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID=''}
+    refresh();
+    popup(next?'ПК ВКЛ · игроки доступны для атаки':'ПК ВЫКЛ',next?'#ff8b72':'#c6b99f');
+  }
+
+  function bindActivate(el,fn){
+    if(!el||el.__ppaBound)return;
+    el.__ppaBound=true;
+    var last=0;
+    var fire=function(e){
+      var now=Date.now();
+      if(now-last<260)return;
+      last=now;
+      try{
+        if(e){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation()}
+      }catch(_){}
+      fn();
+    };
+    el.addEventListener('pointerdown',fire,{passive:false});
+    el.addEventListener('touchstart',fire,{passive:false});
+    el.addEventListener('click',fire,{passive:false});
+  }
+
+  function ensureHud(){
+    var box=document.getElementById('ppaWorldCombatToggles');
+    if(box)return box;
+
+    var st=document.createElement('style');
+    st.textContent=
+      '#ppaWorldCombatToggles{position:fixed!important;right:20px!important;bottom:263px!important;z-index:10050!important;display:none;gap:6px;align-items:center;justify-content:flex-end;pointer-events:auto!important;touch-action:none!important}'+
+      '#ppaWorldCombatToggles button{position:relative;z-index:10051!important;height:29px;min-width:50px;padding:0 7px;border-radius:7px;border:1px solid rgba(220,170,80,.62);background:rgba(8,10,13,.92);color:#d8c7a0;font:700 8px/1 monospace;letter-spacing:.04em;box-shadow:0 2px 7px rgba(0,0,0,.62);pointer-events:auto!important;touch-action:none!important;-webkit-user-select:none;user-select:none}'+
+      '#ppaWorldCombatToggles button.pkOn{border-color:#ff6c5b;color:#ffd6ce;background:rgba(88,17,12,.92);box-shadow:0 0 10px rgba(255,72,50,.34)}'+
+      '#ppaWorldCombatToggles button.autoOn{border-color:#75d89d;color:#caffdc;background:rgba(12,62,35,.90)}'+
+      '#ppaWorldCombatToggles button.locked{opacity:.52;border-style:dashed}'+
+      '@media(max-width:700px){#ppaWorldCombatToggles{right:17px!important;bottom:264px!important}}';
+    document.head.appendChild(st);
+
+    box=document.createElement('div');
+    box.id='ppaWorldCombatToggles';
+
+    var pk=document.createElement('button');
+    pk.id='ppaWorldPkBtn';
+    pk.type='button';
+    pk.textContent='ПК';
+
+    var au=document.createElement('button');
+    au.id='ppaWorldAutoBtn';
+    au.type='button';
+    au.textContent='АВТО';
+
+    box.appendChild(pk);
+    box.appendChild(au);
+    document.body.appendChild(box);
+
+    bindActivate(pk,togglePk);
+    bindActivate(au,function(){
+      if(!combatScene())return;
+      if(!rememberUnlock()){
+        popup('АВТО доступно после покупки от 5 Gram или любой Premium-подписки','#d9a7ff');
+        refresh();return;
+      }
+      if(!autoOn&&scene()==='fartzone'){
+        var mine=lockFartMine();
+        if(!mine){
+          popup('АВТО · подойди к руднику','#d8bc7b');
+          refresh();return;
+        }
+      }
+      autoOn=!autoOn;
+      if(!autoOn){
+        fartMineId='';fartReturning=false;
+        try{if(typeof cancelSmartAttack==='function')cancelSmartAttack()}catch(_){}
+      }
+      refresh();
+      popup(autoOn?(scene()==='fartzone'?'АВТО · РУДНИК ЗАКРЕПЛЁН':'АВТО АТАКА · ВКЛ'):'АВТО АТАКА · ВЫКЛ',autoOn?'#8dffad':'#c6b99f');
+    });
+
+    return box;
+  }
+
+  function refresh(){
+    var box=ensureHud();
+    var show=combatScene()&&!((typeof transitioning!=='undefined')&&transitioning);
+    box.style.display=show?'flex':'none';
+
+    var pk=document.getElementById('ppaWorldPkBtn');
+    if(pk){
+      pk.textContent=window.PPA_WORLD_PVP_ON?'ПК ВКЛ':'ПК';
+      pk.classList.toggle('pkOn',!!window.PPA_WORLD_PVP_ON);
+    }
+
+    var au=document.getElementById('ppaWorldAutoBtn');
+    if(au){
+      var unlocked=rememberUnlock();
+      au.textContent=unlocked?(autoOn?'АВТО ВКЛ':'АВТО'):'АВТО';
+      au.classList.toggle('autoOn',!!autoOn&&unlocked);
+      au.classList.toggle('locked',!unlocked);
+    }
+
+    if(!show){
+      autoOn=false;fartMineId='';fartReturning=false;
+      selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';
+      if(window.PPA_WORLD_PVP_ON)sendPkState(false);
+      window.PPA_WORLD_PVP_ON=false;
+    }
+  }
+
+  function attackRemote(r){
+    try{
+      if(!window.PPA_WORLD_PVP_ON||!combatScene()||!remoteTargetable(r))return false;
+      var d=distTo(r),range=basicRange();
+      if(d>range+26){
+        var now=Date.now();
+        if(now-lastPkNoticeAt>900){lastPkNoticeAt=now;popup('ПК · цель вне радиуса атаки','#ffb36b')}
+        return true;
+      }
+      if(P.dead||Number(P.shootCD||0)>0)return true;
+
+      var now2=Date.now(),rate=Math.max(.35,Number(P.atkSpd)||1);
+      var minMs=Math.max(180,Math.round(1000/rate*.82));
+      if(now2-lastPkAttackAt<minMs)return true;
+
+      var rr={def:Math.max(0,Number(r.def)||0),isAiFighter:false};
+      var hit;
+      try{hit=(typeof basicAttackRoll==='function')?basicAttackRoll(rr):{damage:Math.max(1,Math.floor(10+(Number(P.atk)||12))),crit:false}}
+      catch(_){hit={damage:Math.max(1,Math.floor(10+(Number(P.atk)||12))),crit:false}}
+
+      if(!window.PPA_RT_SEND||!window.PPA_RT_SEND({
+        type:'world-pvp-hit',
+        target:remoteId(r),
+        amount:Math.max(1,Math.min(99999,Number(hit.damage)||1)),
+        crit:!!hit.crit,
+        range:Math.max(60,Math.min(480,range)),
+        pk:true
+      })){
+        popup('ПК · ONLINE переподключается','#ffb36b');
+        return true;
+      }
+
+      lastPkAttackAt=now2;
+      P.shootCD=Math.max(1,Math.round(60/(rate*(typeof shopAtkSpeedMul==='function'?shopAtkSpeedMul():1))));
+      P.attacking=true;P.anim='attack';P.animFrame=0;P.animTimer=0;
+
+      var p=coords(r),dx=p.x-Number(P.x);
+      if(Math.abs(dx)>.1)P.face=dx<0?-1:1;
+
+      if(Number(P.smokeUntil)>now2){
+        P.smokeUntil=0;P.smokeDodgeBonus=0;
+        if(window.PPA_PLAYER_STEALTH)window.PPA_PLAYER_STEALTH(0);
+      }
+      return true;
+    }catch(_){return false}
+  }
+
+  // Called from the game's real queueAttack() before the normal PvE path.
+  // AUTO sets __PPA_AUTO_PVE_ONLY, so Premium AUTO never attacks players.
+  window.PPA_WORLD_PK_TRY_BASIC_ATTACK=function(){
+    try{
+      if(window.__PPA_AUTO_PVE_ONLY)return false;
+      if(!window.PPA_WORLD_PVP_ON||!combatScene())return false;
+
+      var r=selectedRemote();
+      if(r)return attackRemote(r);
+
+      r=nearestRemote(basicRange()+26);
+      if(!r)return false;
+      selectRemote(r,true);
+      return attackRemote(r);
+    }catch(_){return false}
+  };
+
+  // Tap a visible player to lock the PK target. This listener exists only once
+  // and performs work only while PK is enabled.
+  function installCanvasTargeting(){
+    if(window.__PPA_PK_CANVAS_TARGETING)return;
+    window.__PPA_PK_CANVAS_TARGETING=true;
+
+    var cvEl=null;
+    try{cvEl=(typeof cv!=='undefined'&&cv)||document.querySelector('canvas')}catch(_){cvEl=document.querySelector('canvas')}
+    if(!cvEl)return;
+
+    cvEl.addEventListener('pointerdown',function(e){
+      try{
+        if(!window.PPA_WORLD_PVP_ON||!combatScene()||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return;
+        var rect=cvEl.getBoundingClientRect();
+        var sx=e.clientX,sy=e.clientY,best=null,bd=Infinity;
+        PPA_ONLINE.remotes.forEach(function(r){
+          if(!remoteTargetable(r))return;
+          var x=Number(r.__ppaClientX),y=Number(r.__ppaClientY),rad=Math.max(34,Number(r.__ppaClientRadius)||48);
+          if(!Number.isFinite(x)||!Number.isFinite(y))return;
+          var d=Math.hypot(sx-x,sy-y);
+          if(d<=rad&&d<bd){bd=d;best=r}
+        });
+        if(best){
+          selectRemote(best,false);
+          try{e.preventDefault();e.stopPropagation()}catch(_){}
+        }
+      }catch(_){}
+    },{capture:true,passive:false});
   }
 
   function fartMineRadius(){
@@ -95,7 +385,6 @@
       for(var i=0;i<list.length;i++){
         var e=list[i];
         if(!e||!e.isFartGuard||e.hp<=0||String(e.fartMineId||'')!==String(mine.id||''))continue;
-        // The farm leash is measured from the mine center, not from the player.
         if(Math.hypot(Number(e.x||0)-Number(mine.x||0),Number(e.y||0)-Number(mine.y||0))>radius)continue;
         var d=Math.hypot(Number(e.x||0)-Number(P.x||0),Number(e.y||0)-Number(P.y||0));
         if(d<bd){bd=d;best=e}
@@ -104,17 +393,15 @@
     }catch(_){return null}
   }
 
-  function fartHasGuard(mine){
-    return !!fartGuardTarget(mine);
-  }
+  function fartHasGuard(mine){return !!fartGuardTarget(mine)}
 
   function attackSpecific(target){
     try{
       if(!target||target.hp<=0)return false;
       P.tid=target.id;
       var inRange=(typeof smartAttackDistance==='function'&&typeof smartAttackReach==='function')
-        ? smartAttackDistance(target)<=smartAttackReach(target)
-        : Math.hypot(target.x-P.x,target.y-P.y)<=Math.max(55,Number(P.attackRange)||60);
+        ?smartAttackDistance(target)<=smartAttackReach(target)
+        :Math.hypot(target.x-P.x,target.y-P.y)<=Math.max(55,Number(P.attackRange)||60);
       if(inRange&&P.shootCD<=0){
         if(typeof cancelSmartAttack==='function')cancelSmartAttack();
         attackQueued=true;
@@ -138,79 +425,12 @@
     }catch(_){return null}
   };
 
-  function ensureHud(){
-    var box=document.getElementById('ppaWorldCombatToggles');
-    if(box)return box;
-
-    var st=document.createElement('style');
-    st.textContent=
-      '#ppaWorldCombatToggles{position:fixed;right:24px;bottom:263px;z-index:9998;display:none;align-items:center;justify-content:flex-end;pointer-events:auto}'+
-      '#ppaWorldCombatToggles button{height:27px;min-width:48px;padding:0 7px;border-radius:7px;border:1px solid rgba(220,170,80,.55);background:rgba(8,10,13,.88);color:#d8c7a0;font:700 8px/1 monospace;letter-spacing:.05em;box-shadow:0 2px 7px rgba(0,0,0,.55);touch-action:manipulation}'+
-      '#ppaWorldCombatToggles button.autoOn{border-color:#75d89d;color:#caffdc;background:rgba(12,62,35,.88)}'+
-      '#ppaWorldCombatToggles button.locked{opacity:.52;border-style:dashed}'+
-      '@media(max-width:700px){#ppaWorldCombatToggles{right:19px}}';
-    document.head.appendChild(st);
-
-    box=document.createElement('div');
-    box.id='ppaWorldCombatToggles';
-
-    var au=document.createElement('button');
-    au.id='ppaWorldAutoBtn';
-    au.type='button';
-    box.appendChild(au);
-    document.body.appendChild(box);
-
-    au.onclick=function(e){
-      try{e.preventDefault();e.stopPropagation()}catch(_){}
-      if(!combatScene())return;
-      if(!rememberUnlock()){
-        popup('AUTO доступно после покупки от 5 Gram или любой Premium-подписки','#d9a7ff');
-        refresh();return;
-      }
-      if(!autoOn&&scene()==='fartzone'){
-        var mine=lockFartMine();
-        if(!mine){
-          popup('AUTO · подойди к руднику','#d8bc7b');
-          refresh();return;
-        }
-      }
-      autoOn=!autoOn;
-      if(!autoOn){fartMineId='';fartReturning=false;try{if(typeof cancelSmartAttack==='function')cancelSmartAttack()}catch(_){}}
-      refresh();
-      popup(autoOn?(scene()==='fartzone'?'AUTO · РУДНИК ЗАКРЕПЛЁН':'AUTO АТАКА · ВКЛ'):'AUTO АТАКА · ВЫКЛ',autoOn?'#8dffad':'#c6b99f');
-    };
-
-    return box;
-  }
-
-  function refresh(){
-    var box=ensureHud();
-    var show=combatScene()&&!((typeof transitioning!=='undefined')&&transitioning);
-    box.style.display=show?'flex':'none';
-
-    var au=document.getElementById('ppaWorldAutoBtn');
-    if(au){
-      var unlocked=rememberUnlock();
-      au.textContent=unlocked?(autoOn?'АВТО ВКЛ':'АВТО'):'АВТО';
-      au.classList.toggle('autoOn',!!autoOn&&unlocked);
-      au.classList.toggle('locked',!unlocked);
-    }
-
-    if(!show){
-      autoOn=false;fartMineId='';fartReturning=false;
-    }else if(scene()!=='fartzone'){
-      fartMineId='';fartReturning=false;
-    }
-  }
-
   function autoTick(){
     try{
       var now=Date.now();
       if(!autoOn||!rememberUnlock()||!combatScene()||P.dead||transitioning||now-lastAutoAt<180)return;
       lastAutoAt=now;
 
-      // Fart Zone is mine-anchored: AUTO may fight only guards belonging to
-      // the locked mine. It never chains into the next mine's pack.
       if(scene()==='fartzone'){
         var mine=fartMineByLockedId()||lockFartMine();
         if(!mine){autoOn=false;fartMineId='';fartReturning=false;refresh();return}
@@ -220,28 +440,43 @@
           attackSpecific(target);
           return;
         }
-
-        // Mine cleared: drop combat target and run back inside the mining radius.
         try{if(typeof cancelSmartAttack==='function')cancelSmartAttack()}catch(_){}
         P.tid=null;
         fartReturning=true;
         return;
       }
 
-      // Other PvE scenes keep the old continuous AUTO behavior.
-      if(typeof queueAttack==='function')queueAttack();
-    }catch(_){}
+      if(typeof queueAttack==='function'){
+        window.__PPA_AUTO_PVE_ONLY=true;
+        try{queueAttack()}finally{window.__PPA_AUTO_PVE_ONLY=false}
+      }
+    }catch(_){window.__PPA_AUTO_PVE_ONLY=false}
   }
 
   window.PPA_WORLD_COMBAT_REFRESH=refresh;
-  window.PPA_AUTO_ATTACK_DIAG=function(){
-    return{auto:!!autoOn,unlocked:!!autoUnlocked(),scene:scene(),fartMine:fartMineId||'',returning:!!fartReturning};
+  window.PPA_WORLD_COMBAT_ACK=function(){lastPkNoticeAt=0};
+  window.PPA_WORLD_COMBAT_REJECT=function(reason){popup('ПК · '+String(reason||'атака отклонена'),'#ff8b72')};
+  window.PPA_WORLD_COMBAT_DIAG=function(){
+    var r=selectedRemote();
+    return{
+      pk:!!window.PPA_WORLD_PVP_ON,
+      auto:!!autoOn,
+      unlocked:!!autoUnlocked(),
+      scene:scene(),
+      selected:selectedPlayerId||'',
+      target:!!r,
+      distance:r?Math.round(distTo(r)):null,
+      attackRange:Math.round(basicRange()),
+      fartMine:fartMineId||'',
+      returning:!!fartReturning
+    };
   };
 
   function boot(){
     ensureHud();
+    installCanvasTargeting();
     refresh();
-    setInterval(refresh,900);
+    setInterval(refresh,850);
     setInterval(autoTick,120);
   }
 
