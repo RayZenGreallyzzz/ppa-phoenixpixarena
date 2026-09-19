@@ -104,23 +104,6 @@
         if(hidden)cx.globalAlpha=.38;
         cx.imageSmoothingEnabled=false;
         cx.fillStyle='rgba(0,0,0,.40)';cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.38,body*.14,0,0,Math.PI*2);cx.fill();
-        var selected=String(window.PPA_WORLD_PVP_TARGET_ID||'')===String(r.id||r.i||r.__ppaPid||'');
-        var localPk=!!window.PPA_WORLD_PVP_ON;
-        var attackable=localPk&&!hidden&&Number(r.hp)>0&&(!window.PPA_REMOTE_PLAYER_TARGETABLE||window.PPA_REMOTE_PLAYER_TARGETABLE(r));
-        if(selected&&attackable){
-          var tp=.5+.5*Math.sin(now*.014);
-          cx.strokeStyle='rgba(255,54,42,'+(.88+.12*tp)+')';cx.lineWidth=4;
-          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.62,body*.27,0,0,Math.PI*2);cx.stroke();
-          cx.strokeStyle='rgba(255,176,120,'+(.55+.25*tp)+')';cx.lineWidth=1.5;
-          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.76,body*.33,0,0,Math.PI*2);cx.stroke();
-        }else if(attackable){
-          cx.strokeStyle='rgba(255,62,48,.82)';cx.lineWidth=2.3;
-          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.50,body*.21,0,0,Math.PI*2);cx.stroke();
-        }else if(r.worldPvp){
-          // Another player's own PK flag is still visible even when my PK mode is off.
-          cx.strokeStyle='rgba(255,105,78,.62)';cx.lineWidth=1.5;
-          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.46,body*.19,0,0,Math.PI*2);cx.stroke();
-        }
         cx.drawImage(a.img,frame*a.fw,row*a.fh,a.fw,a.fh,Math.round(sx-dw/2),Math.round(drawY),Math.round(dw),Math.round(dh));
 
         var dist=Math.hypot(r.x-P.x,r.y-P.y),topY=drawY-4;
@@ -135,10 +118,7 @@
             cx.fillStyle='#a9cfff';cx.fillText('['+String(r.clanName).slice(0,18)+']',sx,topY-18);
           }
           cx.font='600 10px Georgia, serif';cx.lineWidth=2.4;cx.strokeStyle='rgba(18,8,5,.92)';cx.strokeText(String(r.name||'Игрок').slice(0,18),sx,topY-8);
-          cx.fillStyle=r.worldPvp?'#ff8d78':'#f2d39a';cx.fillText(String(r.name||'Игрок').slice(0,18),sx,topY-8);
-          if(r.worldPvp){
-            cx.font='700 7px monospace';cx.fillStyle='#ff715d';cx.fillText('ПК',sx,topY-29);
-          }
+          cx.fillStyle='#f2d39a';cx.fillText(String(r.name||'Игрок').slice(0,18),sx,topY-8);
         }
         cx.textAlign='left';cx.textBaseline='alphabetic';cx.restore();
         return true;
