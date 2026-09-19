@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v363-dungeon-long-session-respawn-heal-20260919-1824';
+const CLIENT_BUILD = 'v364-fart-mine-anchored-auto-20260919-1834';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -618,6 +618,61 @@ if (!output.includes("function dungeonTeleportDisplayLabel(i)")) {
   ];
   const missingSkills=activeIds.concat(passiveIds).filter((id)=>!output.includes(id));
   if(missingSkills.length)throw new Error('Class skill audit failed: '+missingSkills.join(', '));
+}
+
+/* ======================================================================== */
+
+/* === FART ZONE MINE-ANCHORED AUTO ===================================== */
+// AUTO combat may move the hero back to the locked mine after its own guards
+// are cleared. Manual joystick input still wins because the client helper
+// returns null while the player is steering.
+ppaPatchRegex(
+  'fart auto return movement input',
+  /const _smartMove=updateSmartAttackInput\(\);\s*\/\/ V139:[\s\S]*?const _moveX=_smartMove\?_smartMove\.x:jX;\s*const _moveY=_smartMove\?_smartMove\.y:jY;/,
+  `const _smartMove=updateSmartAttackInput();
+  // V139: Smart Attack only supplies movement when joystick is neutral.
+  // Fart AUTO adds a mine-return vector only after its locked guard pack is clear.
+  const _fartAutoMove=(!_smartMove&&P.scene==='fartzone'&&window.PPA_FART_AUTO_MOVE)
+    ?window.PPA_FART_AUTO_MOVE():null;
+  const _moveX=_smartMove?_smartMove.x:(_fartAutoMove?_fartAutoMove.x:jX);
+  const _moveY=_smartMove?_smartMove.y:(_fartAutoMove?_fartAutoMove.y:jY);`
+);
+
+// Guard respawn pauses production instead of permanently switching Auto Mining off.
+// Once the locked mine's guards are dead and the player is back in radius,
+// mining resumes from the same mine automatically.
+ppaPatchRegex(
+  'fart mining pause on guard respawn',
+  /\}else if\(fartMineHasLivingGuard\(mine\)\)\{\s*fartStopAutoMining\('⚔ Стражи вернулись — добыча остановлена'\);\s*\}else\{/,
+  `}else if(fartMineHasLivingGuard(mine)){
+        FART_ZONE_STATE.activeMineId=null;
+      }else{`
+);
+
+ppaPatchRegex(
+  'fart mining button keeps paused state',
+  /if\(fartMineHasLivingGuard\(nearest\)\)\{\s*if\(FART_ZONE_STATE\.autoMining\)fartStopAutoMining\('⚔ Стражи вернулись — добыча остановлена'\);\s*b\.disabled=true;\s*b\.innerHTML='🔒 АВТО ДОБЫЧА<br><span style="font-size:8px">СНАЧАЛА УБЕЙ СТРАЖЕЙ<\/span>';\s*return;\s*\}/,
+  `if(fartMineHasLivingGuard(nearest)){
+    if(FART_ZONE_STATE.autoMining&&FART_ZONE_STATE.autoMineId===nearest.id){
+      b.disabled=false;
+      b.classList.add('active');
+      b.innerHTML='БОЙ · ДОБЫЧА НА ПАУЗЕ<br><span style="font-size:8px">ПОСЛЕ ОХРАНЫ ПРОДОЛЖИТСЯ</span>';
+    }else{
+      b.disabled=true;
+      b.innerHTML='АВТО ДОБЫЧА<br><span style="font-size:8px">СНАЧАЛА УБЕЙ СТРАЖЕЙ</span>';
+    }
+    return;
+  }`
+);
+
+if (!output.includes("const _fartAutoMove=(!_smartMove&&P.scene==='fartzone'&&window.PPA_FART_AUTO_MOVE)")) {
+  throw new Error('Fart AUTO return movement patch did not apply');
+}
+if (!output.includes("FART_ZONE_STATE.activeMineId=null;\n      }else{")) {
+  throw new Error('Fart mining guard pause patch did not apply');
+}
+if (!output.includes("БОЙ · ДОБЫЧА НА ПАУЗЕ")) {
+  throw new Error('Fart mining paused-button patch did not apply');
 }
 
 /* ======================================================================== */
