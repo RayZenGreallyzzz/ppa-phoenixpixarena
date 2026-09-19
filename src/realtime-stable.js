@@ -1171,7 +1171,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     server.serializeAttachment({
       pid, telegramId, name, clanId, classKey,
       room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
-      lastSeenAt: Date.now(), lastSnapshotPush: 0, hiddenUntil: 0,
+      lastSeenAt: Date.now(), lastSnapshotPush: 0, lastMobSnapshotAt: 0, hiddenUntil: 0,
       q: 0, l: 1, b: 0,
     });
     this.indexAdd(server, 'safe');
@@ -1633,12 +1633,23 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     if (m.type === 'ping') {
       a.lastSeenAt = now;
-      ws.serializeAttachment(a);
       {
         const pingRoom = cleanRoom(a.room);
-        await this.ensureMobRoomLoaded(pingRoom);
-        if (this.processMobRespawns(pingRoom, now)) await this.persistMobRoom(pingRoom);
+        if (mobAuthorityRoom(pingRoom)) {
+          await this.ensureMobRoomLoaded(pingRoom);
+          if (this.processMobRespawns(pingRoom, now)) await this.persistMobRoom(pingRoom);
+
+          // Long farming sessions can miss a single respawn broadcast during a
+          // mobile WebSocket hiccup / Durable Object wake. Repair client state
+          // periodically with a fresh authoritative snapshot instead of allowing
+          // dead tombstones to accumulate until the dungeon looks empty.
+          if (now - Number(a.lastMobSnapshotAt || 0) >= 20000) {
+            a.lastMobSnapshotAt = now;
+            this.sendMobAuthoritySnapshot(ws, pingRoom, now);
+          }
+        }
       }
+      ws.serializeAttachment(a);
       wsJson(ws, {
         type: 'pong',
         ts: now,
