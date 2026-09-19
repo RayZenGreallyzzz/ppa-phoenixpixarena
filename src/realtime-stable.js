@@ -98,6 +98,15 @@ function arenaSkillRangeCapFor(a,requested){
   return req;
 }
 
+function playerPkRoomAllowed(v){
+  const room=cleanRoom(v);
+  if(!room||room==='safe')return false;
+  if(room.startsWith('pvp1-')||room.startsWith('pvpteam-'))return false;
+  if(room==='pvp1'||room==='pvpteam')return false;
+  if(room.startsWith('clansiege'))return false;
+  return true;
+}
+
 function packetFromAtt(a) {
   return {
     i: String(a.pid || ''),
@@ -1205,6 +1214,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
       lastSeenAt: Date.now(), lastSnapshotPush: 0, lastMobSnapshotAt: 0, hiddenUntil: 0,
       atk: 1, def: 0, attackRange: 60, crit: 0, critDmg: 180, atkSpd: 1,
+      pkEnabled:false,pkHpLockUntil:0,lastPkAttack:0,lastPkSkill:0,lastPkControl:0,
       arenaQueueMode:'',arenaQueuedAt:0,arenaMatchId:'',arenaMode:'',arenaSide:'',arenaHpLockUntil:0,
       arenaBlueWins:0,arenaRedWins:0,lastArenaAttack:0,lastArenaSkill:0,lastArenaControl:0,
       q: 0, l: 1, b: 0,
@@ -1229,6 +1239,99 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     const a = attOf(ws);
     const now = Date.now();
+
+    if (m.type === 'player-pk-toggle') {
+      const room=cleanRoom(a.room);
+      const enabled=!!m.enabled&&playerPkRoomAllowed(room)&&!a.arenaMatchId;
+      a.pkEnabled=enabled;
+      if(!enabled){a.lastPkAttack=0;a.lastPkSkill=0;a.lastPkControl=0}
+      ws.serializeAttachment(a);
+      wsJson(ws,{type:'player-pk-state',enabled,room,ts:now});
+      return;
+    }
+
+    if (m.type === 'player-pk-hit' || m.type === 'player-pk-skill-hit') {
+      const skill=m.type==='player-pk-skill-hit';
+      const room=cleanRoom(a.room),targetPid=String(m.target||'');
+      const reject=(reason)=>wsJson(ws,{type:'player-pk-reject',reason:String(reason||'атака отклонена'),target:targetPid,ts:now});
+      if(!a.pkEnabled){reject('режим ПК выключен');return}
+      if(!playerPkRoomAllowed(room)||a.arenaMatchId){reject('в этой зоне ПК запрещён');return}
+      if(!(Number(a.h)>0)||!targetPid||targetPid===String(a.pid||'')){reject('цель недоступна');return}
+
+      let targetWs=null,ta=null;
+      for(const peer of this.roomSockets(room)){
+        const pa=attOf(peer);
+        if(String(pa.pid||'')===targetPid){targetWs=peer;ta=pa;break}
+      }
+      if(!targetWs||!ta){reject('игрок уже не в этой зоне');return}
+      if(!(Number(ta.h)>0)){reject('игрок уже повержен');return}
+      if(Number(ta.hiddenUntil)>now){reject('игрок скрыт');return}
+
+      const ax=Number(a.x),ay=Number(a.y),tx=Number(ta.x),ty=Number(ta.y);
+      if(![ax,ay,tx,ty].every(Number.isFinite)){reject('позиция синхронизируется');return}
+      const range=skill?arenaSkillRangeCapFor(a,finite(m.range,80,700,180)):arenaBasicRangeFor(a);
+      const clsNow=cleanClass(a.classKey);
+      const slack=skill?42:(clsNow==='assassin'?6:(arenaIsMeleeClass(a)?12:58));
+      if(Math.hypot(tx-ax,ty-ay)>range+slack){reject(skill?'игрок вне радиуса навыка':'игрок вне радиуса атаки');return}
+
+      if(skill){
+        if(now-Number(a.lastPkSkill||0)<80)return;
+        a.lastPkSkill=now;
+      }else{
+        const atkSpd=Math.max(.35,Math.min(4.5,Number(a.atkSpd)||1));
+        const minDelay=Math.max(180,Math.round(1000/atkSpd*.82));
+        if(now-Number(a.lastPkAttack||0)<minDelay)return;
+        a.lastPkAttack=now;
+      }
+
+      const atk=Math.max(1,Math.min(2500,Number(a.atk)||1));
+      const maxClient=skill?Math.max(12,Math.round((10+atk)*8)):Math.max(8,Math.round((10+atk)*3.25));
+      let damage=Math.max(1,Math.min(maxClient,Math.round(Number(m.amount)||1)));
+      if(!skill){
+        const targetDef=Math.max(0,Math.min(2500,Number(ta.def)||0));
+        const softCap=Math.max(1,Math.round((10+atk)*(1-targetDef/(targetDef+170))*2.2));
+        damage=Math.max(1,Math.min(damage,softCap));
+      }
+
+      ta.h=Math.max(0,Math.round(Number(ta.h)-damage));
+      ta.pkHpLockUntil=now+900;
+      ta.lastSeenAt=now;
+      targetWs.serializeAttachment(ta);
+      if(Number(a.hiddenUntil)>now)a.hiddenUntil=0;
+      a.lastSeenAt=now;ws.serializeAttachment(a);
+
+      const payload={
+        type:skill?'player-pk-skill-hit':'player-pk-hit',room,
+        attacker:String(a.pid||''),target:targetPid,damage,crit:!!m.crit,
+        hp:Math.max(0,Number(ta.h)||0),mhp:Math.max(1,Number(ta.m)||1),
+        damageType:skill?String(m.damageType||'physical').slice(0,16):'physical',
+        killed:!(Number(ta.h)>0),ts:now
+      };
+      wsJson(ws,payload);wsJson(targetWs,payload);
+      return;
+    }
+
+    if (m.type === 'player-pk-control') {
+      const room=cleanRoom(a.room),targetPid=String(m.target||''),kind=String(m.kind||'');
+      const reject=(reason)=>wsJson(ws,{type:'player-pk-reject',reason:String(reason||'эффект отклонён'),target:targetPid,ts:now});
+      if(!a.pkEnabled||!playerPkRoomAllowed(room)||a.arenaMatchId)return;
+      if(kind!=='slow'&&kind!=='root')return;
+      let targetWs=null,ta=null;
+      for(const peer of this.roomSockets(room)){
+        const pa=attOf(peer);
+        if(String(pa.pid||'')===targetPid){targetWs=peer;ta=pa;break}
+      }
+      if(!targetWs||!ta||!(Number(ta.h)>0)){reject('цель недоступна');return}
+      const ax=Number(a.x),ay=Number(a.y),tx=Number(ta.x),ty=Number(ta.y);
+      const range=arenaSkillRangeCapFor(a,finite(m.range,80,700,180));
+      if(![ax,ay,tx,ty].every(Number.isFinite)||Math.hypot(tx-ax,ty-ay)>range+42){reject('игрок вне радиуса навыка');return}
+      if(now-Number(a.lastPkControl||0)<120)return;
+      a.lastPkControl=now;ws.serializeAttachment(a);
+      const duration=Math.max(100,Math.min(4500,Math.round(finite(m.duration,100,4500,1000))));
+      const mul=kind==='slow'?Math.max(.25,Math.min(.95,finite(m.mul,.25,.95,.55))):0;
+      wsJson(targetWs,{type:'player-pk-control',room,attacker:String(a.pid||''),target:targetPid,kind,mul,duration,ts:now});
+      return;
+    }
 
     if (m.type === 'arena-queue-join') {
       const mode = String(m.mode || '1x1').toLowerCase().replace('×','x');
@@ -1965,9 +2068,14 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.y = Number.isFinite(Number(m.y)) ? Math.round(Number(m.y) * 10) / 10 : Number(a.y) || 0;
       {
         const incomingH=Math.max(0,Math.round(Number(m.h)||0));
-        if(!a.arenaMatchId)a.h=incomingH;
-        // During a confirmed arena match HP is server-authoritative.
-        // Movement packets must never heal/overwrite PvP damage.
+        if(!a.arenaMatchId){
+          if(now<Number(a.pkHpLockUntil||0)&&incomingH>Number(a.h||0)){
+            // Keep recent server-authoritative PK damage until the client catches up.
+          }else{
+            a.h=incomingH;
+          }
+        }
+        // Arena HP stays fully server-authoritative for the confirmed match.
       }
       a.m = Math.max(1, Math.round(Number(m.m) || 1));
       a.atk = finite(m.at, 1, 2500, Number(a.atk)||1);
@@ -1990,6 +2098,9 @@ export class RealtimeHub extends BaseRealtimeHub {
       }
       a.q = (Number(a.q) || 0) + 1;
       a.room = currentRoom;
+      if(!playerPkRoomAllowed(currentRoom)||a.arenaMatchId){
+        a.pkEnabled=false;a.lastPkAttack=0;a.lastPkSkill=0;a.lastPkControl=0;
+      }
 
       const pushSnapshot = now - (Number(a.lastSnapshotPush) || 0) >= 1200;
       if (pushSnapshot) a.lastSnapshotPush = now;
