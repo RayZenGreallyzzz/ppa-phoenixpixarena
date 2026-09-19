@@ -566,39 +566,54 @@
       if(Math.abs(dx)>.1)P.face=dx<0?-1:1;
     }catch(_){}
   }
-  function arenaAutoApproachStep(){
+  function arenaAutoMoveVector(){
     try{
-      if(!RT.arenaAutoTarget||!RT.arenaMatchId||!arenaCombatReady())return;
-      if(arenaJoystickActive())return;
-      var r=arenaRemoteById(RT.arenaOpponentId);if(!r)return;
+      if(!RT.arenaAutoTarget||!RT.arenaMatchId||!arenaCombatReady())return null;
+
+      // Any real joystick movement CANCELS the whole attack order.
+      // It does not pause and resume after release.
+      if(arenaJoystickActive()){
+        RT.arenaAutoTarget=false;
+        try{if(typeof P!=='undefined'&&P){P.tid=null}}catch(_){}
+        return null;
+      }
+
+      var r=arenaRemoteById(RT.arenaOpponentId);
+      if(!r)return null;
+      if(Number(r.hiddenUntil)>Date.now()){
+        RT.arenaAutoTarget=false;
+        return null;
+      }
+
       var rp=arenaRemotePos(r),sx=Number(P.x)||0,sy=Number(P.y)||0;
-      if(!Number.isFinite(rp.x)||!Number.isFinite(rp.y))return;
+      if(!Number.isFinite(rp.x)||!Number.isFinite(rp.y))return null;
+
       var range=arenaBasicRangeClient();
       var cls=String(selfClass()||'').toLowerCase();
       var stopPad=cls==='assassin'?4:(arenaClientIsMelee()?8:34);
-      var dx=rp.x-sx,dy=rp.y-sy,dist=Math.hypot(dx,dy);
-      if(dist<=range+stopPad){
-        RT.arenaAutoTarget=false;
-        try{P.vx=0;P.vy=0}catch(_){}
-        arenaSetFacingTo(rp.x,rp.y);
-        try{if(typeof showPickup==='function')showPickup('АРЕНА · цель в радиусе','#9dff9f')}catch(_){}
-        return;
-      }
-      if(dist<1)return;
-      var speed=Math.max(2.2,Math.min(7.5,Number(P.spd)||4.5));
-      var step=Math.min(speed*1.15,Math.max(1,dist-(range+stopPad)));
-      var mx=dx/dist*step,my=dy/dist*step,nx=sx+mx,ny=sy+my;
-      try{
-        if(typeof pvpSlide==='function'){
-          var mv=pvpSlide(P.scene,sx,sy,mx,my,Math.max(10,(Number(P.sz)||60)*.24));
-          nx=mv.x;ny=mv.y;
-        }
-      }catch(_){}
-      P.x=nx;P.y=ny;
-      P.vx=mx;P.vy=my;
-      P.anim='run';
+      var dx=rp.x-sx,dy=rp.y-sy,dist=Math.max(.001,Math.hypot(dx,dy));
+
       arenaSetFacingTo(rp.x,rp.y);
-    }catch(e){console.warn('Arena auto approach',e)}
+
+      if(dist<=range+stopPad){
+        // Same behavior as the game's normal smart attack:
+        // once in range, attack once when cooldown is ready.
+        if(Number(P.shootCD||0)<=0){
+          RT.arenaAutoTarget=false;
+          setTimeout(function(){try{arenaTryBasicDirect()}catch(_){}},0);
+        }
+        return {x:0,y:0};
+      }
+
+      // Important: do NOT mutate P.x/P.y here.
+      // The normal game update consumes this vector, applies P.sp,
+      // pvpSlide collision and proper run animation.
+      return {x:dx/dist,y:dy/dist};
+    }catch(e){
+      console.warn('Arena auto move vector',e);
+      RT.arenaAutoTarget=false;
+      return null;
+    }
   }
   function arenaCombatReady(){
     try{
@@ -679,10 +694,23 @@
     }catch(e){console.warn('Arena direct basic',e);return false}
   }
 
-  setInterval(function(){
-    if(!RT.arenaAutoTarget)return;
-    arenaAutoApproachStep();
-  },33);
+  function bindArenaSmartMovement(){
+    if(window.__PPA_ARENA_SMART_MOVE_BOUND)return;
+    window.__PPA_ARENA_SMART_MOVE_BOUND=true;
+    try{
+      var base=window.updateSmartAttackInput;
+      if(typeof base!=='function')return;
+      window.updateSmartAttackInput=function(){
+        if(RT.arenaAutoTarget&&RT.arenaMatchId){
+          var mv=arenaAutoMoveVector();
+          if(mv)return mv;
+          // If joystick cancelled the order, manual jX/jY takes over this frame.
+          if(arenaJoystickActive())return null;
+        }
+        return base();
+      };
+    }catch(e){console.warn('Arena smart movement bind',e)}
+  }
 
   function bindArenaAttackCapture(){
     if(window.__PPA_ARENA_ATTACK_CAPTURE)return;
@@ -792,7 +820,7 @@
   window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,selfPid:RT.selfPid,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady()}};
 
   function boot(){
-    if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();bindArenaAttackCapture();
+    if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();bindArenaSmartMovement();bindArenaAttackCapture();
     setTimeout(ensureFullsize,300);setTimeout(fixOnlineBadge,350);setTimeout(connect,250);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
