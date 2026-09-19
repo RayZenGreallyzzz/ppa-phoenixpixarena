@@ -9,7 +9,7 @@
     onlineCount:0,started:false,pingSent:0,pingMs:null,
     lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null,
     assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40,
-    arenaRoom:'',arenaLeavingUntil:0,
+    arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,
     arenaQueuePromise:null,arenaQueueResolve:null,arenaQueueTimer:0,arenaQueueMode:''
   };
 
@@ -355,6 +355,10 @@
       }
       if(m.type==='arena-match'&&m.room){
         RT.arenaRoom=canonicalRoom(m.room);
+        RT.arenaMatchId=String(m.matchId||'');
+        RT.arenaSide=String(m.side||'blue');
+        RT.arenaOpponentId=String(m.opponentId||'');
+        RT.arenaOpponentName=String(m.opponentName||'Игрок');
         RT.arenaLeavingUntil=0;
         commitRoom(RT.arenaRoom);
         RT.serverRoom=RT.arenaRoom;
@@ -453,6 +457,120 @@
     if(!RT.pingSent){RT.pingSent=now;send({type:'ping',room:RT.lastRoom||room(),clientTs:now})}
   },5000);
 
+  function arenaRemoteById(id){
+    try{
+      id=String(id||'');if(!id||typeof PPA_ONLINE==='undefined'||!PPA_ONLINE.remotes)return null;
+      return PPA_ONLINE.remotes.get(id)||null;
+    }catch(_){return null}
+  }
+  function arenaRemotePos(r){
+    return{
+      x:Number.isFinite(Number(r&&r.tx))?Number(r.tx):Number(r&&r.x),
+      y:Number.isFinite(Number(r&&r.ty))?Number(r.ty):Number(r&&r.y)
+    };
+  }
+  function arenaCombatReady(){
+    try{
+      if(!RT.arenaMatchId||!RT.arenaRoom||!RT.arenaOpponentId)return false;
+      if(typeof P==='undefined'||!P||(P.scene!=='pvp1'&&P.scene!=='pvpteam'))return false;
+      if(window.PPA_PVP_CAN_DAMAGE&&!window.PPA_PVP_CAN_DAMAGE())return false;
+      return !P.dead&&Number(P.hp)>0;
+    }catch(_){return false}
+  }
+  function arenaTryBasicDirect(){
+    try{
+      if(!RT.arenaMatchId||!RT.arenaOpponentId)return false;
+      if(typeof P==='undefined'||!P||(P.scene!=='pvp1'&&P.scene!=='pvpteam'))return false;
+      if(!arenaCombatReady()){
+        try{if(typeof showPickup==='function')showPickup('АРЕНА · подготовка к раунду','#d9ba82')}catch(_){}
+        return true;
+      }
+      var r=arenaRemoteById(RT.arenaOpponentId);
+      if(!r||!r.hasPos){
+        try{if(typeof showPickup==='function')showPickup('АРЕНА · синхронизация соперника…','#ffd36d')}catch(_){}
+        return true;
+      }
+      if(Number(r.hiddenUntil)>Date.now()){
+        try{if(typeof showPickup==='function')showPickup('АРЕНА · соперник скрыт','#a9a0c9')}catch(_){}
+        return true;
+      }
+      var rp=arenaRemotePos(r),sx=Number(P.x)||0,sy=Number(P.y)||0;
+      if(!Number.isFinite(rp.x)||!Number.isFinite(rp.y))return true;
+      var range=Math.max(60,Math.min(480,Number(P.attackRange)||60));
+      var dist=Math.hypot(rp.x-sx,rp.y-sy);
+      if(dist>range+46){
+        try{if(typeof showPickup==='function')showPickup('АРЕНА · соперник слишком далеко','#ffbd76')}catch(_){}
+        return true;
+      }
+      var now=Date.now(),rate=Math.max(.35,Math.min(4.5,Number(P.atkSpd)||1));
+      var minMs=Math.max(180,Math.round(1000/rate*.82));
+      if(now-RT.arenaLastAttack<minMs)return true;
+      RT.arenaLastAttack=now;
+
+      var atk=Math.max(1,Number(P.atk)||1),def=Math.max(0,Number(r.def)||0);
+      var critChance=Math.max(0,Math.min(95,Number(P.crit)||0));
+      var crit=Math.random()*100<critChance;
+      var critMul=crit?Math.max(1,(Number(P.critDmg)||180)/100):1;
+      var penPct=0;
+      try{
+        var ck=typeof classBaseKey==='function'?String(classBaseKey()||''):'';
+        penPct=((ck==='mage'||ck==='priest')?Number(P.magicPen)||0:Number(P.armorPen)||0)/100;
+      }catch(_){}
+      penPct=Math.max(0,Math.min(.60,penPct));
+      var raw=(10+atk)*critMul,effDef=def*(1-penPct);
+      var damage=Math.max(1,Math.floor(raw-effDef));
+
+      if(!send({type:'arena-hit',matchId:RT.arenaMatchId,target:RT.arenaOpponentId,amount:damage,crit:crit,range:range})){
+        try{if(typeof showPickup==='function')showPickup('АРЕНА · ONLINE переподключается','#ff987a')}catch(_){}
+        return true;
+      }
+      try{
+        P.attacking=true;P.anim='attack';P.animFrame=0;P.animTimer=0;
+        if(Math.abs(rp.x-sx)>.1)P.face=rp.x<sx?-1:1;
+        P.shootCD=Math.max(1,Math.round(60/rate));
+      }catch(_){}
+      try{
+        var cls='';
+        try{cls=String(typeof classBaseKey==='function'?classBaseKey():'').toLowerCase()}catch(_){}
+        var kind=cls==='gnome'?'gnome-cannon':(cls==='archer'?'archer-arrow':'melee');
+        if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX({kind:kind,x:sx,y:sy,tx:rp.x,ty:rp.y,ang:Math.atan2(rp.y-sy,rp.x-sx),animMs:420});
+      }catch(_){}
+      if(Number(P.smokeUntil)>now){
+        P.smokeUntil=0;P.smokeDodgeBonus=0;
+        try{send({type:'player-stealth',duration:0})}catch(_){}
+      }
+      return true;
+    }catch(e){console.warn('Arena direct basic',e);return false}
+  }
+
+  function bindArenaAttackCapture(){
+    if(window.__PPA_ARENA_ATTACK_CAPTURE)return;
+    window.__PPA_ARENA_ATTACK_CAPTURE=true;
+    var blockUntil=0;
+    function isAttackTarget(ev){
+      try{
+        var t=ev&&ev.target;
+        return !!(t&&((t.id==='bAtk')||(t.closest&&t.closest('#bAtk'))));
+      }catch(_){return false}
+    }
+    function stop(ev){
+      try{ev.preventDefault()}catch(_){}
+      try{ev.stopPropagation()}catch(_){}
+      try{ev.stopImmediatePropagation()}catch(_){}
+    }
+    document.addEventListener('pointerdown',function(ev){
+      if(!isAttackTarget(ev)||!RT.arenaMatchId)return;
+      stop(ev);blockUntil=Date.now()+550;arenaTryBasicDirect();
+    },true);
+    ['touchstart','touchend','click'].forEach(function(type){
+      document.addEventListener(type,function(ev){
+        if(!isAttackTarget(ev)||!RT.arenaMatchId)return;
+        if(Date.now()<=blockUntil||type!=='click')stop(ev);
+        if(type==='click'&&Date.now()>blockUntil){stop(ev);blockUntil=Date.now()+550;arenaTryBasicDirect()}
+      },true);
+    });
+  }
+
   window.PPA_RT_SEND=send;
   window.PPA_PVP_QUEUE_HANDLER=function(info){
     info=info||{};
@@ -513,7 +631,7 @@
   };
   window.PPA_RT_ARENA_CLEAR=function(){
     arenaQueueStatus('',false);
-    RT.arenaRoom='';
+    RT.arenaRoom='';RT.arenaMatchId='';RT.arenaSide='';RT.arenaOpponentId='';RT.arenaOpponentName='';RT.arenaLastAttack=0;
     RT.arenaLeavingUntil=Date.now()+1400;
     commitRoom('safe');
     RT.lastRoomSync=0;
@@ -522,10 +640,10 @@
   };
   window.PPA_REALTIME_RESYNC=resyncRoom;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
-  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null}};
+  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady()}};
 
   function boot(){
-    if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();
+    if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();bindArenaAttackCapture();
     setTimeout(ensureFullsize,300);setTimeout(fixOnlineBadge,350);setTimeout(connect,250);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
