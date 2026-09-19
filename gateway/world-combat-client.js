@@ -47,12 +47,27 @@
     try{if(typeof showPickup==='function')showPickup(String(t||''),c||'#ffd16b')}catch(_){}
   }
 
+  function bindPress(el,fn){
+    if(!el||typeof fn!=='function')return;
+    var last=0;
+    var fire=function(e){
+      var now=Date.now();
+      if(now-last<260)return;
+      last=now;
+      try{if(e){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation()}}catch(_){}
+      fn(e);
+    };
+    el.addEventListener('pointerup',fire,{passive:false});
+    el.addEventListener('touchend',fire,{passive:false});
+    el.addEventListener('click',fire,{passive:false});
+  }
+
   function ensureHud(){
     var box=document.getElementById('ppaWorldCombatToggles');
     if(box)return box;
     var st=document.createElement('style');
     st.textContent=
-      '#ppaWorldCombatToggles{position:fixed;right:24px;bottom:263px;z-index:34;display:none;gap:6px;align-items:center;justify-content:flex-end;pointer-events:auto}'+
+      '#ppaWorldCombatToggles{position:fixed;right:24px;bottom:263px;z-index:9998;display:none;gap:6px;align-items:center;justify-content:flex-end;pointer-events:auto}'+
       '#ppaWorldCombatToggles button{height:27px;min-width:48px;padding:0 7px;border-radius:7px;border:1px solid rgba(220,170,80,.55);background:rgba(8,10,13,.88);color:#d8c7a0;font:700 8px/1 monospace;letter-spacing:.05em;box-shadow:0 2px 7px rgba(0,0,0,.55);touch-action:manipulation}'+
       '#ppaWorldCombatToggles button.on{border-color:#ff765f;color:#ffd4ca;background:rgba(82,18,12,.88);box-shadow:0 0 9px rgba(255,82,56,.35)}'+
       '#ppaWorldCombatToggles button.autoOn{border-color:#75d89d;color:#caffdc;background:rgba(12,62,35,.88)}'+
@@ -64,8 +79,7 @@
     var a=document.createElement('button');a.id='ppaWorldAutoBtn';a.textContent='АВТО';
     box.appendChild(p);box.appendChild(a);document.body.appendChild(box);
 
-    p.addEventListener('pointerdown',function(e){
-      e.preventDefault();e.stopPropagation();
+    bindPress(p,function(){
       if(!pvpScene()){popup('ПК здесь недоступен','#ffb36b');return}
       var next=!window.PPA_WORLD_PVP_ON;
       if(typeof window.PPA_WORLD_PVP_SET!=='function'||!window.PPA_WORLD_PVP_SET(next)){
@@ -74,18 +88,19 @@
       // Server ack is authoritative; optimistic UI makes the tap feel immediate.
       window.PPA_WORLD_PVP_ON=next;refresh();
       popup(next?'ПК включён · можно атаковать других игроков':'ПК выключен',next?'#ff9d80':'#b9c0c7');
-    },{passive:false});
+    });
 
-    a.addEventListener('pointerdown',function(e){
-      e.preventDefault();e.stopPropagation();
+    bindPress(a,function(){
       if(!worldCombatScene())return;
       if(!rememberUnlock()){
         popup('AUTO доступно после покупки от 5 Gram или любой Premium-подписки','#d9a7ff');
         refresh();return;
       }
-      autoOn=!autoOn;refresh();
+      autoOn=!autoOn;
+      if(!autoOn){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';}
+      refresh();
       popup(autoOn?'AUTO АТАКА · ВКЛ':'AUTO АТАКА · ВЫКЛ',autoOn?'#8dffad':'#c6b99f');
-    },{passive:false});
+    });
     return box;
   }
 
@@ -103,7 +118,7 @@
       ab.textContent=unlocked?(autoOn?'АВТО ВКЛ':'АВТО'):'АВТО';
       ab.classList.toggle('autoOn',!!autoOn&&unlocked);
       ab.classList.toggle('locked',!unlocked);
-      ab.title=unlocked?'Автоматическая обычная атака по мобам':'Покупка от 5 Gram или любая Premium-подписка';
+      ab.title=unlocked?(window.PPA_WORLD_PVP_ON?'Автоатака по мобам и ближайшим игрокам':'Автоматическая обычная атака по мобам'):'Покупка от 5 Gram или любая Premium-подписка';
     }
     try{
       var buffs=document.getElementById('timedBuffHud');
@@ -348,12 +363,59 @@
     return{pk:!!window.PPA_WORLD_PVP_ON,scene:scene(),selected:selectedPlayerId||'',target:!!r,distance:d,attackRange:Math.round(pvpAttackRange()),lastAttemptAt:lastPkAttemptAt,lastAckAt:lastPkAckAt,lastReject:lastPkReject};
   };
 
+  function nearestAutoPlayer(){
+    try{
+      if(!window.PPA_WORLD_PVP_ON||!pvpScene()||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
+      var best=null,bd=Infinity;
+      PPA_ONLINE.remotes.forEach(function(r){
+        if(!r||!r.hasPos||Number(r.hp)<=0)return;
+        if(Number(r.hiddenUntil)>Date.now())return;
+        if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return;
+        var rx=Number.isFinite(Number(r.tx))?Number(r.tx):Number(r.x);
+        var ry=Number.isFinite(Number(r.ty))?Number(r.ty):Number(r.y);
+        if(!Number.isFinite(rx)||!Number.isFinite(ry))return;
+        var d=Math.hypot(rx-Number(P.x),ry-Number(P.y));
+        if(d<bd){bd=d;best=r}
+      });
+      if(best){
+        best.__ppaRemotePlayer=true;best.__ppaRemoteId=remoteId(best);
+        best.__ppaCombatX=Number.isFinite(Number(best.tx))?Number(best.tx):Number(best.x);
+        best.__ppaCombatY=Number.isFinite(Number(best.ty))?Number(best.ty):Number(best.y);
+        best.__ppaAutoDistance=bd;
+      }
+      return best;
+    }catch(_){return null}
+  }
+
+  function nearestPveDistance(){
+    try{
+      if(typeof findNear!=='function')return Infinity;
+      var e=findNear();if(!e)return Infinity;
+      return Math.hypot(Number(e.x)-Number(P.x),Number(e.y)-Number(P.y));
+    }catch(_){return Infinity}
+  }
+
   function autoTick(){
     try{
       var now=Date.now();
       if(autoOn&&rememberUnlock()&&worldCombatScene()&&!P.dead&&!transitioning&&now-lastAutoAt>=180){
         lastAutoAt=now;
-        // АВТО — только PvE: ПК-цели оно никогда не выбирает автоматически.
+
+        // AUTO + PK = hostile auto-combat against both players and mobs.
+        // Players are never chased across the dungeon: they become an auto target
+        // only when already inside the normal basic-attack range. This keeps AUTO
+        // useful without turning it into a map-wide player hunter.
+        if(window.PPA_WORLD_PVP_ON&&pvpScene()){
+          var rp=nearestAutoPlayer();
+          var mobD=nearestPveDistance();
+          if(rp&&Number(rp.__ppaAutoDistance)<=pvpAttackRange()+18&&Number(rp.__ppaAutoDistance)<=mobD+24){
+            selectedPlayerId=remoteId(rp);window.PPA_WORLD_PVP_TARGET_ID=selectedPlayerId;
+            attackRemote(rp);
+            return;
+          }
+        }
+
+        // No nearby player (or PK off): keep the existing smart PvE target/chase.
         if(typeof queueAttack==='function')queueAttack();
       }
     }catch(_){}
