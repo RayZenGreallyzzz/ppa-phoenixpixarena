@@ -706,9 +706,17 @@
   }
   function pkChooseBasicKind(){
     var mob=pkNearestMob(),pl=pkNearestPlayerInfo();
-    if(!pl)return'mob';
-    if(!mob)return'player';
-    return pl.distance<mob.distance?'player':'mob';
+    if(!pl){RT.pkTargetId='';return'mob'}
+    if(!mob){
+      RT.pkTargetId=String(pl.target&&(pl.target.id||pl.target.i||pl.target.__ppaPid)||'');
+      return'player';
+    }
+    if(pl.distance<mob.distance){
+      RT.pkTargetId=String(pl.target&&(pl.target.id||pl.target.i||pl.target.__ppaPid)||'');
+      return'player';
+    }
+    RT.pkTargetId='';
+    return'mob';
   }
   function pkAttackMixed(){
     try{
