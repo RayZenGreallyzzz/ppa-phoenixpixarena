@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v392-remote-gnome-projectile-20260919';
+const CLIENT_BUILD = 'v393-server-elite-sync-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1153,6 +1153,19 @@ if (!output.includes("PPA_REMOTE_COMBAT_FX_DRAW)window.PPA_REMOTE_COMBAT_FX_DRAW
 
 /* ======================================================================== */
 
+/* === SERVER-OWNED ELITE MOB ============================================== */
+ppaPatchRegex(
+  'disable local elite selection in realtime',
+  /function\s+v232EnsureElite\(\)\s*\{\s*if\(P\.scene!==['"]dungeon['"]\|\|P\.dead\)return null;/,
+  "function v232EnsureElite(){if(P.scene!=='dungeon'||P.dead||window.PPA_REALTIME_V2_ACTIVE)return null;"
+);
+
+if (!output.includes("P.scene!=='dungeon'||P.dead||window.PPA_REALTIME_V2_ACTIVE")) {
+  throw new Error('Realtime local elite disable patch did not apply');
+}
+
+/* ======================================================================== */
+
 /* === RUNTIME BUILD AUDIT ================================================= */
 {
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
@@ -1160,6 +1173,7 @@ if (!output.includes("PPA_REMOTE_COMBAT_FX_DRAW)window.PPA_REMOTE_COMBAT_FX_DRAW
   const realtimeClient=fs.readFileSync(path.join(ROOT,'gateway/realtime-client.js'),'utf8');
   const realtimeServer=fs.readFileSync(path.join(ROOT,'src/realtime-stable.js'),'utf8');
   const arenaPvp=fs.readFileSync(path.join(ROOT,'gateway/arena-pvp-client.js'),'utf8');
+  const dungeonMobEvents=fs.readFileSync(path.join(ROOT,'gateway/dungeon-mob-events.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
 
@@ -1193,6 +1207,12 @@ if (!output.includes("PPA_REMOTE_COMBAT_FX_DRAW)window.PPA_REMOTE_COMBAT_FX_DRAW
       !arenaPvp.includes('PPA_ARENA_SKILL_HIT') ||
       arenaPvp.includes('window.PPA_ARENA_MATCH_END=function')) {
     throw new Error('Online arena client bridge is incomplete');
+  }
+  if (!dungeonMobEvents.includes('applyServerEliteState') ||
+      !realtimeServer.includes('syncServerElite') ||
+      !realtimeServer.includes('eliteKilledKey') ||
+      !realtimeServer.includes('eliteWindowKey')) {
+    throw new Error('Server elite mob bridge is incomplete');
   }
   if (remoteSprite.includes('forcedAttack') || remoteSprite.includes('__ppaAttackDir')) {
     throw new Error('Remote attack FX is overriding movement facing again');
