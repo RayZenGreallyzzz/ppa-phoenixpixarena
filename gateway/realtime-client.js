@@ -9,7 +9,7 @@
     onlineCount:0,started:false,pingSent:0,pingMs:null,
     lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null,
     assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40,
-    arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,arenaLastRoundToken:'',
+    selfPid:'',arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,arenaLastRoundToken:'',
     arenaQueuePromise:null,arenaQueueResolve:null,arenaQueueTimer:0,arenaQueueMode:''
   };
 
@@ -310,7 +310,8 @@
     if(!m||typeof m!=='object')return;
     RT.lastServerAt=Date.now();
     if(m.type==='hello'){
-      try{if(typeof PPA_ONLINE!=='undefined'){PPA_ONLINE.selfId=String(m.pid||PPA_ONLINE.selfId||'');PPA_ONLINE.selfName=String(m.name||selfName())}}catch(_){}
+      RT.selfPid=String(m.pid||RT.selfPid||'');
+      try{if(typeof PPA_ONLINE!=='undefined'){PPA_ONLINE.selfId=RT.selfPid||String(PPA_ONLINE.selfId||'');PPA_ONLINE.selfName=String(m.name||selfName())}}catch(_){}
       sendRoom(true);sendMove(true);return;
     }
     if(m.type==='room-assigned'){
@@ -376,7 +377,7 @@
 
       if(m.type==='arena-hit'||m.type==='arena-skill-hit'){
         try{
-          var selfId=String((window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
+          var selfId=String(RT.selfPid||(window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
           var targetId=String(m.target||''),attackerId=String(m.attacker||'');
           if(targetId===selfId&&typeof P!=='undefined'&&P){
             P.hp=Math.max(0,Number(m.hp)||0);
@@ -414,7 +415,7 @@
 
       if(m.type==='arena-control'){
         try{
-          var mine=String((window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
+          var mine=String(RT.selfPid||(window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
           if(String(m.target||'')===mine&&typeof P!=='undefined'&&P){
             var an=Date.now(),dur=Math.max(100,Number(m.duration)||0);
             if(String(m.kind)==='root')P.aiRootUntil=Math.max(Number(P.aiRootUntil)||0,an+dur);
@@ -706,9 +707,17 @@
     setTimeout(function(){if(RT.arenaLeavingUntil<=Date.now())RT.arenaLeavingUntil=0},1500);
     return true;
   };
+  window.PPA_ARENA_MATCH_END=function(){
+    try{
+      var mid=RT.arenaMatchId;
+      if(mid||RT.arenaRoom)send({type:'arena-leave',matchId:mid||''});
+    }catch(_){}
+    try{if(window.PPA_ARENA_COMBAT_CLEAR)window.PPA_ARENA_COMBAT_CLEAR()}catch(_){}
+    return window.PPA_RT_ARENA_CLEAR();
+  };
   window.PPA_REALTIME_RESYNC=resyncRoom;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
-  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady()}};
+  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,selfPid:RT.selfPid,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady()}};
 
   function boot(){
     if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();bindArenaAttackCapture();
