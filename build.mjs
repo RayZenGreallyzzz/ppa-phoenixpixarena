@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v350-dungeon-slot-drop-display-20260919-0940';
+const CLIENT_BUILD = 'v351-dungeon-slot-drop-display-20260919-0946';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -675,7 +675,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'dragon60 dungeon subtitle',
   /Уровни 41–60 · те же типы мобов · HP \/ DEF \/ ATK ×3 от 21–40 · БОССА НЕТ/g,
-  "Уровни 41–60 · мобы ×3 · Дракон Пепла · 27 000 HP · урон 130",
+  "Уровни 41–60 · мобы ×3 · Дракон Пепла · 27 000 HP · урон 180",
   true
 );
 
