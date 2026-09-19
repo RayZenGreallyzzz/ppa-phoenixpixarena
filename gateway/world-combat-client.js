@@ -1,7 +1,7 @@
 (function(){
   'use strict';
 
-  var autoOn=false,lastAutoAt=0,lastPvpAttackAt=0,lastRangeNoteAt=0,selectedPlayerId='';
+  var autoOn=false,lastAutoAt=0,lastPvpAttackAt=0,lastRangeNoteAt=0,selectedPlayerId='',lastPkAttemptAt=0,lastPkAckAt=0,lastPkReject='';
   window.PPA_WORLD_PVP_ON=!!window.PPA_WORLD_PVP_ON;
 
   function scene(){
@@ -119,6 +119,11 @@
     }
   }
   window.PPA_WORLD_COMBAT_REFRESH=refresh;
+  window.PPA_WORLD_COMBAT_ACK=function(){lastPkAckAt=Date.now();lastPkReject=''};
+  window.PPA_WORLD_COMBAT_REJECT=function(reason){
+    lastPkReject=String(reason||'unknown');
+    popup('ПК · '+lastPkReject,'#ff8b72');
+  };
 
   function remoteId(r){return String((r&&(r.id||r.i||r.__ppaPid))||'')}
   function sameParty(r){
@@ -241,6 +246,10 @@
     var rr={def:Math.max(0,Number(r.def)||0),isAiFighter:false,clanId:r.clanId||'',partyId:r.partyId||''};
     var hit=null;
     try{hit=typeof basicAttackRoll==='function'?basicAttackRoll(rr):{damage:Math.max(1,Math.floor(10+(Number(P.atk)||12))),crit:false}}catch(_){hit={damage:Math.max(1,Math.floor(10+(Number(P.atk)||12))),crit:false}}
+    // Reassert PK immediately before the hit. WebSocket ordering guarantees
+    // the server sees the hostile toggle before this attack even after a room switch.
+    if(typeof window.PPA_WORLD_PVP_SET==='function')window.PPA_WORLD_PVP_SET(true);
+    lastPkAttemptAt=now;lastPkReject='';
     if(!window.PPA_WORLD_PVP_HIT(remoteId(r),hit.damage,hit.crit))return false;
     lastPvpAttackAt=now;
     P.shootCD=Math.max(1,Math.round(60/((Number(P.atkSpd)||1)*(typeof shopAtkSpeedMul==='function'?shopAtkSpeedMul():1))));
@@ -281,6 +290,31 @@
     b.addEventListener('click',interceptAttack,true);
   }
 
+  function installGlobalAttackCapture(){
+    if(window.__PPA_WORLD_PK_GLOBAL_ATTACK)return;
+    window.__PPA_WORLD_PK_GLOBAL_ATTACK=true;
+    var handler=function(e){
+      try{
+        var t=e&&e.target;
+        if(!t||!window.PPA_WORLD_PVP_ON||!pvpScene())return;
+        var b=t.closest?t.closest('#bAtk,#bA'):null;
+        if(!b)return;
+        var r=selectedRemote();if(!r)return;
+        if(!remoteInRange(r)){
+          e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+          var now=Date.now();
+          if(now-lastRangeNoteAt>900){lastRangeNoteAt=now;popup('ПК · подойди ближе к цели','#ffb36b')}
+          return;
+        }
+        if(attackRemote(r)){
+          e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+        }
+      }catch(_){}
+    };
+    window.addEventListener('pointerdown',handler,{capture:true,passive:false});
+    window.addEventListener('touchstart',handler,{capture:true,passive:false});
+  }
+
   function installQueueAttackBridge(){
     try{
       if(window.__PPA_WORLD_PK_QUEUE_BRIDGE)return;
@@ -311,7 +345,7 @@
   window.PPA_WORLD_COMBAT_DIAG=function(){
     var r=selectedRemote(),d=null;
     try{if(r)d=Math.round(Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y)))}catch(_){}
-    return{pk:!!window.PPA_WORLD_PVP_ON,scene:scene(),selected:selectedPlayerId||'',target:!!r,distance:d,attackRange:Math.round(pvpAttackRange())};
+    return{pk:!!window.PPA_WORLD_PVP_ON,scene:scene(),selected:selectedPlayerId||'',target:!!r,distance:d,attackRange:Math.round(pvpAttackRange()),lastAttemptAt:lastPkAttemptAt,lastAckAt:lastPkAckAt,lastReject:lastPkReject};
   };
 
   function autoTick(){
@@ -326,8 +360,8 @@
   }
 
   function boot(){
-    ensureHud();bindAttack();installQueueAttackBridge();refresh();
-    setInterval(function(){refresh();bindAttack();installQueueAttackBridge()},500);
+    ensureHud();bindAttack();installGlobalAttackCapture();installQueueAttackBridge();refresh();
+    setInterval(function(){refresh();bindAttack();installGlobalAttackCapture();installQueueAttackBridge()},500);
     setInterval(autoTick,90);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
