@@ -1186,7 +1186,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       pid, telegramId, name, clanId, classKey,
       room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
       lastSeenAt: Date.now(), lastSnapshotPush: 0, hiddenUntil: 0, worldPvp: false,
-      atk: 1, def: 0, attackRange: 60, crit: 0, critDmg: 180, atkSpd: 1, magicResist: 0, damageReduction: 0, lastWorldPvpAttack: 0,
+      atk: 1, def: 0, attackRange: 60, crit: 0, critDmg: 180, atkSpd: 1, magicResist: 0, damageReduction: 0, lastWorldPvpAttack: 0, pvpHpLockUntil: 0,
       q: 0, l: 1, b: 0,
     });
     this.indexAdd(server, 'safe');
@@ -1256,6 +1256,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       const crit = !!m.crit;
 
       ta.h = Math.max(0, Math.round(Number(ta.h) - damage));
+      ta.pvpHpLockUntil = now + 450;
       ta.lastSeenAt = now;
       targetWs.serializeAttachment(ta);
 
@@ -1793,7 +1794,12 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.lastSeenAt = now;
       a.x = Number.isFinite(Number(m.x)) ? Math.round(Number(m.x) * 10) / 10 : Number(a.x) || 0;
       a.y = Number.isFinite(Number(m.y)) ? Math.round(Number(m.y) * 10) / 10 : Number(a.y) || 0;
-      a.h = Math.max(0, Math.round(Number(m.h) || 0));
+      {
+        const incomingH = Math.max(0, Math.round(Number(m.h) || 0));
+        a.h = (now < Number(a.pvpHpLockUntil || 0) && incomingH > Number(a.h || 0))
+          ? Math.max(0, Number(a.h) || 0)
+          : incomingH;
+      }
       a.m = Math.max(1, Math.round(Number(m.m) || 1));
       {
         const face = Number(m.f);
