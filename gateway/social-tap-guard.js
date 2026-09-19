@@ -72,6 +72,10 @@
 
   function handlePoint(x,y,e){
     if(interactiveTarget(e&&e.target))return false;
+    // The canvas has its own remote-player gesture handler:
+    // short tap = select PK target, long press = party invite.
+    // Do not consume pointerdown at window-capture level before that handler runs.
+    try{if(e&&e.target&&e.target.id==='c')return false}catch(_){}
     var r=findRemoteAt(Number(x),Number(y));
     return r?openRemote(r,e):false;
   }
