@@ -122,6 +122,7 @@
   }
 
   window.PPA_WORLD_PLAYER_SELECT=function(r){return selectRemote(r,false)};
+  window.PPA_WORLD_PK_ACTIVE=function(){return !!(window.PPA_WORLD_PVP_ON&&combatScene())};
   window.PPA_WORLD_PLAYER_CLEAR=function(){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID=''};
   window.PPA_WORLD_SELECTED_REMOTE=selectedRemote;
 
