@@ -328,11 +328,16 @@
           if(typeof showPickup==='function')showPickup((skillHit?'НАВЫК PK · −':'PK · −')+Math.max(1,Math.round(Number(m.damage)||1)),skillHit?'#d9a7ff':'#ff8b72');
         }
         if(String(m.attacker||'')===mine){
+          try{if(window.PPA_WORLD_COMBAT_ACK)window.PPA_WORLD_COMBAT_ACK(m)}catch(_){}
           var rr=(window.PPA_ONLINE&&PPA_ONLINE.remotes)?PPA_ONLINE.remotes.get(String(m.target||'')):null;
           if(rr&&Number.isFinite(Number(m.hp)))rr.hp=Math.max(0,Number(m.hp));
           if(typeof showPickup==='function')showPickup((m.crit?'КРИТ ':'')+(skillHit?'НАВЫК PK · −':'PK · −')+Math.max(1,Math.round(Number(m.damage)||1)),m.crit?'#ffd36a':(skillHit?'#d9a7ff':'#ffb07a'));
         }
       }catch(_){}
+      return
+    }
+    if(m.type==='world-pvp-reject'){
+      try{if(window.PPA_WORLD_COMBAT_REJECT)window.PPA_WORLD_COMBAT_REJECT(String(m.reason||'атака отклонена'))}catch(_){}
       return
     }
     if(m.type==='world-pvp-control'){
