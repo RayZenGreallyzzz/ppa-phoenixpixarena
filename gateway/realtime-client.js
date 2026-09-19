@@ -325,18 +325,39 @@
       try{if(window.PPA_WORLD_COMBAT_REFRESH)window.PPA_WORLD_COMBAT_REFRESH()}catch(_){}
       return
     }
-    if(m.type==='world-pvp-hit'){
+    if(m.type==='world-pvp-hit'||m.type==='world-pvp-skill-hit'){
       try{
         var mine=String((window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
+        var skillHit=m.type==='world-pvp-skill-hit';
         if(String(m.target||'')===mine&&typeof P!=='undefined'&&P){
           P.hp=Math.max(0,Number(m.hp)||0);
-          if(typeof showPickup==='function')showPickup('ПК · −'+Math.max(1,Math.round(Number(m.damage)||1)),'#ff8b72');
+          if(typeof showPickup==='function')showPickup((skillHit?'НАВЫК ПК · −':'ПК · −')+Math.max(1,Math.round(Number(m.damage)||1)),skillHit?'#d9a7ff':'#ff8b72');
         }
         if(String(m.attacker||'')===mine){
           var rr=(window.PPA_ONLINE&&PPA_ONLINE.remotes)?PPA_ONLINE.remotes.get(String(m.target||'')):null;
           if(rr&&Number.isFinite(Number(m.hp)))rr.hp=Math.max(0,Number(m.hp));
-          if(typeof showPickup==='function')showPickup((m.crit?'КРИТ ПК · −':'ПК · −')+Math.max(1,Math.round(Number(m.damage)||1)),m.crit?'#ffd36a':'#ffb07a');
+          if(typeof showPickup==='function')showPickup((m.crit?'КРИТ ':'')+(skillHit?'НАВЫК ПК · −':'ПК · −')+Math.max(1,Math.round(Number(m.damage)||1)),m.crit?'#ffd36a':(skillHit?'#d9a7ff':'#ffb07a'));
           try{if(window.PPA_WORLD_COMBAT_ACK)window.PPA_WORLD_COMBAT_ACK(m)}catch(_){}
+        }
+      }catch(_){}
+      return
+    }
+    if(m.type==='world-pvp-control'){
+      try{
+        var mine=String((window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
+        if(String(m.target||'')===mine&&typeof P!=='undefined'&&P){
+          var now=Date.now(),k=String(m.kind||''),dur=Math.max(100,Number(m.duration)||0);
+          if(k==='root'){
+            var resist=Math.max(0,Math.min(80,Number(P.controlResist)||0));
+            dur=Math.max(120,dur*(1-resist/100));
+            P.aiRootUntil=Math.max(Number(P.aiRootUntil)||0,now+dur);
+          }else if(k==='slow'){
+            var sr=Math.max(0,Math.min(80,Number(P.slowResist)||0));
+            var mul=Math.max(.30,Math.min(.95,Number(m.mul)||.55));
+            var strength=(1-mul)*(1-sr/100);
+            P.aiSlowMul=Math.max(.30,1-strength);
+            P.aiSlowUntil=Math.max(Number(P.aiSlowUntil)||0,now+Math.max(150,dur*(1-sr/200)));
+          }
         }
       }catch(_){}
       return
