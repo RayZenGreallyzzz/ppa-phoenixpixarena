@@ -92,6 +92,7 @@ function packetFromAtt(a) {
     b: Math.max(0, Math.round(Number(a.b) || 0)),
     p: String(a.partyId || ''),
     pt: cleanPet(a.pet || ''),
+    hu: Math.max(0, Number(a.hiddenUntil) || 0),
     q: Number(a.q) || 0,
     t: Date.now(),
   };
@@ -525,6 +526,8 @@ export class RealtimeHub extends BaseRealtimeHub {
         rootUntil: Math.max(0, Number(row.rootUntil) || 0),
         slowUntil: Math.max(0, Number(row.slowUntil) || 0),
         slowMul: Math.max(.25, Math.min(.95, Number(row.slowMul) || 1)),
+        tauntUntil: Math.max(0, Number(row.tauntUntil) || 0),
+        tauntPid: String(row.tauntPid || ''),
         positioned: !!row.positioned && row.x != null && row.y != null && row.hx != null && row.hy != null,
       });
       if (deadUntil > now) {
@@ -575,6 +578,8 @@ export class RealtimeHub extends BaseRealtimeHub {
         rootUntil: Math.max(0, Number(rec.rootUntil) || 0),
         slowUntil: Math.max(0, Number(rec.slowUntil) || 0),
         slowMul: Math.max(.25, Math.min(.95, Number(rec.slowMul) || 1)),
+        tauntUntil: Math.max(0, Number(rec.tauntUntil) || 0),
+        tauntPid: String(rec.tauntPid || ''),
         positioned: !!rec.positioned,
       };
     }
@@ -615,6 +620,8 @@ export class RealtimeHub extends BaseRealtimeHub {
       rec.rootUntil = 0;
       rec.slowUntil = 0;
       rec.slowMul = 1;
+      rec.tauntUntil = 0;
+      rec.tauntPid = '';
       rec.nextAttackAt = 0;
       rec.nextSpecialAt = 0;
       rec.nextProjectileAt = 0;
@@ -865,6 +872,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       const p = attOf(ws);
       if (!p.pid || !(Number(p.h) > 0)) continue;
       if (!Number.isFinite(Number(p.x)) || !Number.isFinite(Number(p.y))) continue;
+      if (Number(p.hiddenUntil) > now) continue;
       players.push({ pid: String(p.pid), x: Number(p.x), y: Number(p.y) });
     }
 
@@ -916,6 +924,22 @@ export class RealtimeHub extends BaseRealtimeHub {
       });
       const leash = boss60 ? 420 : (stationaryBoss ? 0 : (hasRoomBounds ? Infinity : 260));
       let target = rec.target ? byPid.get(String(rec.target)) : null;
+
+      if (!isAuthorityBoss && Number(rec.tauntUntil) > 0) {
+        if (now < Number(rec.tauntUntil)) {
+          const forced = byPid.get(String(rec.tauntPid || ''));
+          if (forced) {
+            rec.aggro = true;
+            rec.target = forced.pid;
+            target = forced;
+          }
+        } else {
+          rec.tauntUntil = 0;
+          rec.tauntPid = '';
+          rec.target = '';
+          target = null;
+        }
+      }
 
       // Original dungeon behaviour: ordinary mobs aggro when a player passes
       // close to them. The radius is level-scaled (90/115/140/170/200), so only
@@ -1107,7 +1131,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     server.serializeAttachment({
       pid, telegramId, name, clanId, classKey,
       room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
-      lastSeenAt: Date.now(), lastSnapshotPush: 0,
+      lastSeenAt: Date.now(), lastSnapshotPush: 0, hiddenUntil: 0,
       q: 0, l: 1, b: 0,
     });
     this.indexAdd(server, 'safe');
@@ -1130,6 +1154,102 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     const a = attOf(ws);
     const now = Date.now();
+
+    if (m.type === 'player-stealth') {
+      const duration = Math.max(0, Math.min(3000, Math.round(finite(m.duration, 0, 3000, 0))));
+      const liveClass = String(a.classKey || '').toLowerCase();
+      if (liveClass !== 'assassin') return;
+      a.hiddenUntil = duration > 0 ? now + duration : 0;
+      a.lastSeenAt = now;
+      ws.serializeAttachment(a);
+
+      // Smoke immediately breaks directed aggro. Ground effects already placed
+      // before smoke are not cancelled; only new targeting is blocked.
+      const room = cleanRoom(a.room);
+      if (mobAuthorityRoom(room)) {
+        await this.ensureMobRoomLoaded(room);
+        const { health } = this.mobStores();
+        const prefix = room + '|';
+        for (const [ck, rec] of health.entries()) {
+          if (!String(ck).startsWith(prefix) || !rec) continue;
+          if (String(rec.target || '') === String(a.pid || '')) {
+            rec.aggro = false;
+            rec.target = '';
+            rec.moving = false;
+            rec.nextAttackAt = 0;
+            rec.tauntUntil = 0;
+            rec.tauntPid = '';
+            rec.updatedAt = now;
+          }
+        }
+        await this.persistMobRoom(room);
+      }
+      this.roomBroadcast(room, { type: 'move', player: packetFromAtt(a), room, ts: now }, ws);
+      return;
+    }
+
+    if (m.type === 'group-skill') {
+      const skill = String(m.skill || '');
+      if (String(a.classKey || '').toLowerCase() !== 'priest') return;
+      const partyId = String(a.partyId || '');
+      if (!partyId || !['priest_healing_light','priest_holy_barrier','priest_divine_rebirth'].includes(skill)) return;
+      const room = cleanRoom(a.room);
+      const rank = Math.max(1, Math.min(3, Math.round(finite(m.rank, 1, 3, 1))));
+      const pct = Math.max(0, Math.min(55, finite(m.pct, 0, 55, 0)));
+      const reduction = Math.max(0, Math.min(45, finite(m.reduction, 0, 45, 0)));
+      const durationMs = Math.max(0, Math.min(6500, Math.round(finite(m.durationMs, 0, 6500, 0))));
+      const target = String(m.target || '');
+
+      if (skill === 'priest_divine_rebirth') {
+        if (!target) return;
+        for (const peer of this.roomSockets(room)) {
+          const pa = attOf(peer);
+          if (String(pa.pid || '') !== target || String(pa.partyId || '') !== partyId) continue;
+          if (Number(pa.h) > 0) return;
+          wsJson(peer, { type:'group-skill', skill, rank, pct:Math.max(1,pct), from:String(a.pid||''), ts:now });
+          return;
+        }
+        return;
+      }
+
+      for (const peer of this.roomSockets(room)) {
+        if (peer === ws) continue;
+        const pa = attOf(peer);
+        if (String(pa.partyId || '') !== partyId || !(Number(pa.h) > 0)) continue;
+        wsJson(peer, {
+          type:'group-skill', skill, rank, pct,
+          reduction, durationMs, from:String(a.pid||''), ts:now
+        });
+      }
+      return;
+    }
+
+    if (m.type === 'mob-taunt-event') {
+      const room = cleanRoom(a.room);
+      const key = cleanMobKey(m.key);
+      const event = String(m.event || '').slice(0, 96);
+      const duration = Math.max(500, Math.min(4000, Math.round(finite(m.duration, 500, 4000, 3000))));
+      if (!mobAuthorityRoom(room) || cleanRoom(m.room || room) !== room) return;
+      // Taunt affects ordinary dungeon mobs only; bosses keep their boss AI.
+      if (!/^s\d{1,4}$/.test(key)) return;
+
+      await this.ensureMobRoomLoaded(room);
+      const { health, dead, events } = this.mobStores();
+      if (event && events.has(event)) return;
+      if (event) events.set(event, now);
+      const ck = this.mobCompound(room, key);
+      const rec = health.get(ck), tomb = dead.get(ck);
+      if (!rec || !(Number(rec.hp) > 0) || (tomb && Number(tomb.at) > now)) return;
+
+      rec.aggro = true;
+      rec.target = String(a.pid || '');
+      rec.tauntPid = String(a.pid || '');
+      rec.tauntUntil = now + duration;
+      rec.updatedAt = now;
+      health.set(ck, rec);
+      this.ensureMobAiLoop(room);
+      return;
+    }
 
     if (m.type === 'mob-catalog') {
       const room = cleanRoom(a.room);
@@ -1174,7 +1294,7 @@ export class RealtimeHub extends BaseRealtimeHub {
             roomMinX: hasRoomBounds ? roomMinX : null, roomMinY: hasRoomBounds ? roomMinY : null,
             roomMaxX: hasRoomBounds ? roomMaxX : null, roomMaxY: hasRoomBounds ? roomMaxY : null,
             aggro: false, target: '', dir: 1, moving: false,
-            rootUntil: 0, slowUntil: 0, slowMul: 1, positioned: true,
+            rootUntil: 0, slowUntil: 0, slowMul: 1, tauntUntil: 0, tauntPid: '', positioned: true,
           };
           health.set(ck, rec);
         } else {
