@@ -125,6 +125,73 @@
   window.PPA_WORLD_PLAYER_CLEAR=function(){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID=''};
   window.PPA_WORLD_SELECTED_REMOTE=selectedRemote;
 
+  function preparePkSkillTarget(r){
+    try{
+      if(!remoteTargetable(r))return null;
+      var p=coords(r),id=remoteId(r);
+      if(!id||!Number.isFinite(p.x)||!Number.isFinite(p.y))return null;
+      r.__ppaRemotePlayer=true;
+      r.__ppaRemoteId=id;
+      r.__ppaCombatX=p.x;
+      r.__ppaCombatY=p.y;
+      // Skill formulas expect a normal combat target shape.
+      r.x=p.x;r.y=p.y;
+      r.hp=Math.max(0,Number(r.hp)||0);
+      r.mhp=Math.max(1,Number(r.mhp)||1);
+      r.def=Math.max(0,Number(r.def)||0);
+      return r;
+    }catch(_){return null}
+  }
+
+  window.PPA_WORLD_SKILL_TARGET=function(maxRange){
+    try{
+      if(!window.PPA_WORLD_PVP_ON||!combatScene())return null;
+      var r=preparePkSkillTarget(selectedRemote());if(!r)return null;
+      var d=Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y));
+      var lim=Math.max(0,Number(maxRange)||0);
+      if(lim>0&&d>lim+46)return null;
+      return r;
+    }catch(_){return null}
+  };
+
+  window.PPA_WORLD_AROUND_TARGET=function(x,y,rad,out){
+    try{
+      if(!window.PPA_WORLD_PVP_ON||!combatScene())return out;
+      var r=preparePkSkillTarget(selectedRemote());if(!r)return out;
+      if(Math.hypot(Number(r.x)-Number(x),Number(r.y)-Number(y))<=Math.max(0,Number(rad)||0)+36){
+        if(Array.isArray(out)&&out.indexOf(r)<0)out.push(r);
+      }
+    }catch(_){}
+    return out;
+  };
+
+  window.PPA_WORLD_SKILL_HIT=function(r,amount,crit,maxRange,damageType){
+    try{
+      r=preparePkSkillTarget(r);
+      if(!r||!window.PPA_WORLD_PVP_ON||!combatScene()||!window.PPA_RT_SEND)return false;
+      return !!window.PPA_RT_SEND({
+        type:'world-pvp-skill-hit',target:remoteId(r),
+        amount:Math.max(1,Math.min(99999,Math.round(Number(amount)||1))),
+        crit:!!crit,range:Math.max(80,Math.min(700,Number(maxRange)||650)),
+        damageType:String(damageType||'physical')
+      });
+    }catch(_){return false}
+  };
+
+  window.PPA_WORLD_PLAYER_CONTROL=function(r,kind,mul,ms,range){
+    try{
+      r=preparePkSkillTarget(r);
+      var k=String(kind||'');
+      if(!r||!window.PPA_WORLD_PVP_ON||!combatScene()||!window.PPA_RT_SEND||(k!=='slow'&&k!=='root'))return false;
+      return !!window.PPA_RT_SEND({
+        type:'world-pvp-control',target:remoteId(r),kind:k,
+        mul:k==='slow'?Math.max(.25,Math.min(.95,Number(mul)||.55)):0,
+        duration:Math.max(100,Math.min(4500,Math.round(Number(ms)||0))),
+        range:Math.max(80,Math.min(700,Number(range)||650))
+      });
+    }catch(_){return false}
+  };
+
   function sendPkState(enabled){
     if(typeof window.PPA_WORLD_PVP_SET!=='function')return false;
     return !!window.PPA_WORLD_PVP_SET(!!enabled);
@@ -237,6 +304,8 @@
       au.classList.toggle('locked',!unlocked);
     }
 
+    syncPkAttackButton();
+
     if(!show){
       autoOn=false;fartMineId='';fartReturning=false;
       selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';
@@ -321,6 +390,37 @@
   // Called from the game's real queueAttack() before the normal PvE path.
   // AUTO sets __PPA_AUTO_PVE_ONLY, so Premium AUTO never attacks players.
   window.PPA_WORLD_PK_TRY_BASIC_ATTACK=tryPkBasicAttack;
+
+  function pkAttackButtonTargetAvailable(){
+    try{return !!(window.PPA_WORLD_PVP_ON&&combatScene()&&(selectedRemote()||nearestRemote(520)))}catch(_){return false}
+  }
+
+  function syncPkAttackButton(){
+    try{
+      var btn=(typeof bA!=='undefined'&&bA)||document.getElementById('bAtk');
+      if(!btn||!pkAttackButtonTargetAvailable())return;
+      // The base PvE HUD disables attack when P.tid is empty. In PK mode a
+      // remote player is a valid target, so don't let that stale PvE state eat taps.
+      if(btn.disabled)btn.disabled=false;
+      if(btn.hasAttribute&&btn.hasAttribute('disabled'))btn.removeAttribute('disabled');
+      if(btn.getAttribute&&btn.getAttribute('aria-disabled')==='true')btn.setAttribute('aria-disabled','false');
+      btn.style.pointerEvents='auto';
+    }catch(_){}
+  }
+
+  function installPkAttackButtonState(){
+    if(window.__PPA_PK_ATTACK_BUTTON_STATE)return;
+    var btn=null;
+    try{btn=(typeof bA!=='undefined'&&bA)||document.getElementById('bAtk')}catch(_){btn=document.getElementById('bAtk')}
+    if(!btn){setTimeout(installPkAttackButtonState,250);return}
+    window.__PPA_PK_ATTACK_BUTTON_STATE=true;
+    try{
+      var mo=new MutationObserver(function(){syncPkAttackButton()});
+      mo.observe(btn,{attributes:true,attributeFilter:['disabled','aria-disabled','class','style']});
+      window.__PPA_PK_ATTACK_BUTTON_OBSERVER=mo;
+    }catch(_){}
+    syncPkAttackButton();
+  }
 
   // Mobile fallback: bind once, in capture phase, directly to the actual red
   // attack button. This is intentionally tiny and event-driven (no frame scan).
@@ -517,8 +617,10 @@
   function boot(){
     ensureHud();
     installCanvasTargeting();
+    installPkAttackButtonState();
     installAttackButtonFallback();
     refresh();
+    syncPkAttackButton();
     setInterval(refresh,850);
     setInterval(autoTick,120);
   }
