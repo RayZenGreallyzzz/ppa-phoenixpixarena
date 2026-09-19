@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v351-dungeon-slot-drop-display-20260919-0946';
+const CLIENT_BUILD = 'v352-no-gray-11plus-book-names-20260919-1053';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -482,6 +482,31 @@ ppaPatchRegex(
 
 if (!output.includes("function dungeonTeleportDisplayLabel(i)")) {
   throw new Error('Dungeon teleport label patch did not apply');
+}
+
+/* ======================================================================== */
+
+/* === DUNGEON DROP CLEANUP ============================================== */
+// From level 11 upward gray equipment is removed from the actual drop logic.
+ppaPatchRegex(
+  'remove gray normal gear from levels 11-15',
+  /if\s*\(lvl<=15\)return\s*\{common:0\.001,uncommon:0\.006,rare:0,epic:0\};/,
+  "if(lvl<=15)return {common:0,uncommon:0.006,rare:0,epic:0};"
+);
+
+// Mini-bosses 11-20 previously still had a gray gear entry in their weighted
+// 1-10 item pool. Keep it only for levels 1-10.
+ppaPatchRegex(
+  'remove gray mini-boss gear from level 11 onward',
+  /\{w:18,drop:\(\)=>v232PushGear\(e,'common'\)\},\s*\{w:12,drop:\(\)=>v232PushGear\(e,'uncommon'\)\},/,
+  "...(lv<=10?[{w:18,drop:()=>v232PushGear(e,'common')}]:[]),\n      {w:12,drop:()=>v232PushGear(e,'uncommon')},"
+);
+
+if (!output.includes("if(lvl<=15)return {common:0,uncommon:0.006,rare:0,epic:0};")) {
+  throw new Error('Gray gear 11+ normal-mob patch did not apply');
+}
+if (!output.includes("...(lv<=10?[{w:18,drop:()=>v232PushGear(e,'common')}]:[]),")) {
+  throw new Error('Gray gear 11+ mini-boss patch did not apply');
 }
 
 /* ======================================================================== */
