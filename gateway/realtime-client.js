@@ -116,6 +116,7 @@
           if(Number.isFinite(face))r.face=face;
           if(p.c!==undefined&&String(p.c||''))r.cls=String(p.c||'');
           if(p.p!==undefined)r.partyId=String(p.p||'');
+          if(p.hu!==undefined)r.hiddenUntil=Math.max(0,Number(p.hu)||0);
           if(presence&&Number.isFinite(seq))r.lastSeq=Math.max(0,seq);
           r.lastNetAt=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
           r.id=id;r.i=id;r.__ppaPid=id;r.__ppaRtAt=Date.now();r.__ppaRoom=RT.lastRoom;
@@ -325,6 +326,27 @@
       return;
     }
     if(m.type==='party-state'){syncPartyAllies(m);return}
+    if(m.type==='group-skill'){
+      try{
+        var kind=String(m.skill||''),pct=Math.max(0,Number(m.pct)||0),now=Date.now();
+        if(kind==='priest_healing_light'&&pct>0&&typeof P!=='undefined'&&P&&!P.dead&&Number(P.hp)>0){
+          P.hp=Math.min(Math.max(1,Number(P.mhp)||1),Number(P.hp||0)+Math.max(1,Math.round(Math.max(1,Number(P.mhp)||1)*pct/100)));
+          if(typeof showPickup==='function')showPickup('ИСЦЕЛЯЮЩИЙ СВЕТ · союзник','#fff2b2');
+        }else if(kind==='priest_holy_barrier'&&typeof P!=='undefined'&&P){
+          var red=Math.max(0,Math.min(45,Number(m.reduction)||0)),dur=Math.max(500,Math.min(6500,Number(m.durationMs)||6000));
+          if(!P.v189Buffs)P.v189Buffs={};
+          P.v189Buffs.dr={v:red,until:now+dur};
+          if(typeof showPickup==='function')showPickup('СВЯЩЕННЫЙ БАРЬЕР · '+Math.round(red)+'%','#fff1aa');
+        }else if(kind==='priest_divine_rebirth'&&typeof P!=='undefined'&&P&&(P.dead||Number(P.hp)<=0)){
+          var rp=Math.max(1,Math.min(55,Number(m.pct)||35));
+          P.hp=Math.max(1,Math.round(Math.max(1,Number(P.mhp)||1)*rp/100));
+          P.dead=false;P.aiRootUntil=0;P.aiSlowUntil=0;P.aiDotUntil=0;
+          try{var over=document.getElementById('over');if(over)over.style.display='none'}catch(_){}
+          if(typeof showPickup==='function')showPickup('БОЖЕСТВЕННОЕ ВОЗРОЖДЕНИЕ · '+rp+'% HP','#fff4bb');
+        }
+      }catch(_){}
+      return
+    }
     if(m.type==='party-notice'){partyNotice(m.message,m.ok);return}
     if(m.type==='chat'){try{if(window.PPA_CHAT_RECEIVE)window.PPA_CHAT_RECEIVE(m.channel,m.from,m.text,{target:m.target||''})}catch(_){}return}
     if(m.type==='chat-error'){try{if(window.PPA_CHAT_RECEIVE)window.PPA_CHAT_RECEIVE(m.channel||'general','Система',m.message||'Ошибка чата',{system:true})}catch(_){}return}
@@ -369,6 +391,28 @@
   },5000);
 
   window.PPA_RT_SEND=send;
+  window.PPA_PLAYER_STEALTH=function(ms){
+    ms=Math.max(0,Math.min(3000,Math.round(Number(ms)||0)));
+    return send({type:'player-stealth',duration:ms});
+  };
+  window.PPA_REMOTE_PLAYER_TARGETABLE=function(r){
+    try{return !(r&&Number(r.hiddenUntil)>Date.now())}catch(_){return true}
+  };
+  window.PPA_GROUP_SKILL_HANDLER=function(d){
+    try{
+      d=d||{};
+      var skill=String(d.skill||'');
+      if(['priest_healing_light','priest_holy_barrier','priest_divine_rebirth'].indexOf(skill)<0)return false;
+      var target=d.target||null,targetId=String((target&&(target.id||target.i||target.__ppaPid))||'');
+      return send({
+        type:'group-skill',skill:skill,rank:Math.max(1,Math.min(3,Math.round(Number(d.rank)||1))),
+        pct:Math.max(0,Math.min(55,Number(d.pct)||0)),
+        reduction:Math.max(0,Math.min(45,Number(d.reduction)||0)),
+        durationMs:Math.max(0,Math.min(6500,Math.round(Number(d.durationMs)||0))),
+        target:targetId
+      });
+    }catch(_){return false}
+  };
   window.PPA_REALTIME_RESYNC=resyncRoom;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
   window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null}};
