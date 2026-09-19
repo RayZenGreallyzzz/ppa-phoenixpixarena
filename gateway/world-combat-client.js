@@ -131,19 +131,30 @@
 
   function preparePkSkillTarget(r){
     try{
-      if(!remoteTargetable(r))return null;
-      var p=coords(r),id=remoteId(r);
+      // Keep renderer interpolation state untouched. Skills receive one cached
+      // lightweight proxy whose combat coordinates/stats are refreshed on demand.
+      var src=(r&&r.__ppaRemoteSource)||r;
+      if(!remoteTargetable(src))return null;
+      var p=coords(src),id=remoteId(src);
       if(!id||!Number.isFinite(p.x)||!Number.isFinite(p.y))return null;
-      r.__ppaRemotePlayer=true;
-      r.__ppaRemoteId=id;
-      r.__ppaCombatX=p.x;
-      r.__ppaCombatY=p.y;
-      // Skill formulas expect a normal combat target shape.
-      r.x=p.x;r.y=p.y;
-      r.hp=Math.max(0,Number(r.hp)||0);
-      r.mhp=Math.max(1,Number(r.mhp)||1);
-      r.def=Math.max(0,Number(r.def)||0);
-      return r;
+
+      var q=src.__ppaPkCombatProxy;
+      if(!q){
+        q={__ppaRemotePlayer:true,__ppaRemoteSource:src,isAiFighter:false,isBoss:false,hasPos:true};
+        src.__ppaPkCombatProxy=q;
+      }
+      q.__ppaRemotePlayer=true;
+      q.__ppaRemoteSource=src;
+      q.__ppaRemoteId=id;
+      q.id=id;q.i=id;q.__ppaPid=id;
+      q.x=p.x;q.y=p.y;q.tx=p.x;q.ty=p.y;
+      q.hp=Math.max(0,Number(src.hp)||0);
+      q.mhp=Math.max(1,Number(src.mhp)||1);
+      q.def=Math.max(0,Number(src.def)||0);
+      q.hiddenUntil=Math.max(0,Number(src.hiddenUntil)||0);
+      q.sz=Math.max(0,Number(src.sz)||Number(src.__ppaHitBody)||0);
+      q.hasPos=true;
+      return q;
     }catch(_){return null}
   }
 
