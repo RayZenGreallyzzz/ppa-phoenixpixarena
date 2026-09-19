@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v369-pk-clean-combat-core-20260919';
+const CLIENT_BUILD = 'v370-pk-clean-single-path-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1035,7 +1035,8 @@ ppaPatchRegex(
 
   if (!worldCombat.includes('PPA_WORLD_PK_TRY_BASIC_ATTACK') ||
       !worldCombat.includes('PPA_WORLD_SKILL_TARGET') ||
-      !worldCombat.includes('PPA_WORLD_PK_ACTIVE')) {
+      !worldCombat.includes('PPA_WORLD_PK_ACTIVE') ||
+      !worldCombat.includes('__ppaPkCombatProxy')) {
     throw new Error('Clean PK runtime exports are incomplete');
   }
   if (worldCombat.includes('MutationObserver') ||
