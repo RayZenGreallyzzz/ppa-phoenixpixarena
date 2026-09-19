@@ -622,6 +622,35 @@ if (!output.includes("function dungeonTeleportDisplayLabel(i)")) {
 
 /* ======================================================================== */
 
+/* === PREMIUM AUTO-ATTACK ENTITLEMENT =================================== */
+// AUTO is a permanent account convenience once the player buys any Premium
+// subscription, or makes a single Premium-shop purchase costing at least 5 Gram.
+ppaPatchRegex(
+  'auto attack unlock from premium bundle 5 gram',
+  /if\(typeof recordGramSpend===['"]function['"]\)recordGramSpend\(cfg\.price\);\s*INV\.bag\.push\.apply\(INV\.bag,items\);/,
+  "if(typeof recordGramSpend==='function')recordGramSpend(cfg.price);if(cfg.price>=5){INV.premiumShop.autoAttackUnlocked=true;}\n  INV.bag.push.apply(INV.bag,items);"
+);
+
+ppaPatchRegex(
+  'auto attack unlock from premium good 5 gram',
+  /if\(typeof recordGramSpend===['"]function['"]\)recordGramSpend\(g\.price\);\s*saveGame\(\);/,
+  "if(typeof recordGramSpend==='function')recordGramSpend(g.price);if(g.price>=5){if(!INV.premiumShop)INV.premiumShop={purchasedBundles:{}};INV.premiumShop.autoAttackUnlocked=true;}\n\n  saveGame();"
+);
+
+ppaPatchRegex(
+  'auto attack unlock from any premium subscription',
+  /INV\.premiumShop\.lastPremiumPlan=id;\s*saveGame\(\);/,
+  "INV.premiumShop.lastPremiumPlan=id;\n  INV.premiumShop.autoAttackUnlocked=true;\n\n  saveGame();"
+);
+
+ppaPatchRegex(
+  'auto attack unlock from paid class change',
+  /if\(typeof recordGramSpend===['"]function['"]\)recordGramSpend\(PREMIUM_CLASS_CHANGE_PRICE\);/,
+  "if(typeof recordGramSpend==='function')recordGramSpend(PREMIUM_CLASS_CHANGE_PRICE);if(PREMIUM_CLASS_CHANGE_PRICE>=5){if(!INV.premiumShop)INV.premiumShop={purchasedBundles:{}};INV.premiumShop.autoAttackUnlocked=true;}"
+);
+
+/* ======================================================================== */
+
 /* === DUNGEON DROP CLEANUP ============================================== */
 // From level 11 upward gray equipment is removed from the actual drop logic.
 ppaPatchRegex(
