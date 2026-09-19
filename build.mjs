@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v370-pk-clean-single-path-20260919';
+const CLIENT_BUILD = 'v371-remote-facing-restore-pk-trace-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1032,6 +1032,8 @@ ppaPatchRegex(
 {
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
   const socialUi=fs.readFileSync(path.join(ROOT,'gateway/social-ui.js'),'utf8');
+  const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
+  const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
 
   if (!worldCombat.includes('PPA_WORLD_PK_TRY_BASIC_ATTACK') ||
       !worldCombat.includes('PPA_WORLD_SKILL_TARGET') ||
@@ -1047,6 +1049,12 @@ ppaPatchRegex(
   if (!socialUi.includes('PPA_WORLD_PK_ACTIVE') ||
       !socialUi.includes('PPA_WORLD_PLAYER_SELECT')) {
     throw new Error('Social UI is not routing PK taps to combat targeting');
+  }
+  if (remoteSprite.includes('forcedAttack') || remoteSprite.includes('__ppaAttackDir')) {
+    throw new Error('Remote attack FX is overriding movement facing again');
+  }
+  if (remoteFx.includes("__ppaAttackUntil") || remoteFx.includes("r.anim='attack'") || remoteFx.includes("r.face=")) {
+    throw new Error('Remote combat FX must stay visual-only');
   }
 }
 
