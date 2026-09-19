@@ -90,6 +90,7 @@
         var dw=dh;
         var bob=String(anim)==='run'?Math.sin(now*.012+(r.id||'').length)*1.6:Math.sin(now*.004+(r.id||'').length)*.7;
         var dir=remoteDir(r,mdx,mdy),row=cfg.rowMap&&cfg.rowMap[dir]!=null?cfg.rowMap[dir]:0;
+        var flip=(key==='gnome'&&typeof GNOME_FLIP_BY_DIR!=='undefined')?!!GNOME_FLIP_BY_DIR[dir]:false;
         var a=cfg.anim,frame=Math.floor(now/(1000/Math.max(1,a.fps)))%Math.max(1,a.frames);
         var drawY=sy+body*.40-cfg.foot*dh+bob;
 
@@ -113,7 +114,13 @@
         }
         cx.imageSmoothingEnabled=false;
         cx.fillStyle='rgba(0,0,0,.40)';cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.38,body*.14,0,0,Math.PI*2);cx.fill();
-        cx.drawImage(a.img,frame*a.fw,row*a.fh,a.fw,a.fh,Math.round(sx-dw/2),Math.round(drawY),Math.round(dw),Math.round(dh));
+        if(flip){
+          cx.save();cx.translate(Math.round(sx),0);cx.scale(-1,1);
+          cx.drawImage(a.img,frame*a.fw,row*a.fh,a.fw,a.fh,Math.round(-dw/2),Math.round(drawY),Math.round(dw),Math.round(dh));
+          cx.restore();
+        }else{
+          cx.drawImage(a.img,frame*a.fw,row*a.fh,a.fw,a.fh,Math.round(sx-dw/2),Math.round(drawY),Math.round(dw),Math.round(dh));
+        }
 
         var dist=Math.hypot(r.x-P.x,r.y-P.y),topY=drawY-4;
         if(r.mhp>0&&dist<650){
