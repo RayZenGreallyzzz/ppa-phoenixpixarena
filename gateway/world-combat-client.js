@@ -283,6 +283,12 @@
   }
 
   window.PPA_PK_ACTIVE=function(){return !!pkOn&&pkZone()};
+  window.PPA_PK_SERVER_STATE=function(v){
+    pkOn=!!v&&pkZone();
+    if(!pkOn)try{if(window.PPA_PK_CLEAR_TARGET)window.PPA_PK_CLEAR_TARGET()}catch(_){}
+    refresh();
+    return pkOn;
+  };
   window.PPA_PK_SET=function(v){return setPk(!!v,false)};
   window.PPA_PK_ZONE=function(){return pkZone()};
   window.PPA_WORLD_COMBAT_REFRESH=refresh;
