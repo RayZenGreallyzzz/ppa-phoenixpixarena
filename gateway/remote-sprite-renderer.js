@@ -44,7 +44,9 @@
       var kx=rect.width/Math.max(1,cv.width),ky=rect.height/Math.max(1,cv.height);
       r.__ppaClientX=rect.left+sx*z*kx;
       r.__ppaClientY=rect.top+sy*z*ky;
-      r.__ppaClientRadius=Math.max(42,Math.min(82,Math.max(28,body*.78)*z*Math.max(kx,ky)*2.15));
+      var hidden=Number(r&&r.hiddenUntil)>Date.now();
+      r.__ppaClientRadius=hidden?0:Math.max(42,Math.min(82,Math.max(28,body*.78)*z*Math.max(kx,ky)*2.15));
+      r.__ppaUntargetable=hidden;
       r.__ppaClientAt=Date.now();
     }catch(_){}
   }
@@ -97,6 +99,9 @@
         stampClientHit(r,sx,sy,body);
 
         cx.save();
+        var hidden=Number(r.hiddenUntil)>Date.now();
+        r.__ppaUntargetable=hidden;
+        if(hidden)cx.globalAlpha=.38;
         cx.imageSmoothingEnabled=false;
         cx.fillStyle='rgba(0,0,0,.40)';cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.38,body*.14,0,0,Math.PI*2);cx.fill();
         cx.drawImage(a.img,frame*a.fw,row*a.fh,a.fw,a.fh,Math.round(sx-dw/2),Math.round(drawY),Math.round(dw),Math.round(dh));
