@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v368-pk-real-target-skills-20260919';
+const CLIENT_BUILD = 'v369-pk-clean-combat-core-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -783,8 +783,8 @@ ppaPatchRegex(
 // interception and no per-frame player target scan, avoiding the laggy old attempt.
 ppaPatchRegex(
   'world pk basic attack core hook',
-  /function\s+queueAttack\(e\)\s*\{/,
-  "function queueAttack(e){\n  if(window.PPA_WORLD_PK_TRY_BASIC_ATTACK&&window.PPA_WORLD_PK_TRY_BASIC_ATTACK(e))return;"
+  /function\s+queueAttack\(e\)\s*\{\s*if\(e\)\{e\.preventDefault\(\);e\.stopPropagation\(\)\}/,
+  "function queueAttack(e){\n  if(e){e.preventDefault();e.stopPropagation()}\n  if(window.PPA_WORLD_PK_TRY_BASIC_ATTACK&&window.PPA_WORLD_PK_TRY_BASIC_ATTACK(e))return;"
 );
 
 if (!output.includes("PPA_WORLD_PK_TRY_BASIC_ATTACK(e)")) {
@@ -1032,7 +1032,7 @@ const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
   ['gateway/online-client.js','online-client.js','Online client bridge missing'],
   ['gateway/realtime-client.js','realtime-client.js','Realtime client bridge missing'],
-  ['gateway/world-combat-client.js','world-combat-client.js','Auto attack client missing'],
+  ['gateway/world-combat-client.js','world-combat-client.js','World combat client missing'],
   ['gateway/dungeon60-dragon.js','dungeon60-dragon.js','Dungeon 60 dragon runtime missing'],
   ['gateway/dungeon-mob-events.js','dungeon-mob-events.js','Dungeon mob event bridge missing'],
   ['gateway/dungeon-drop-slots.js','dungeon-drop-slots.js','Dungeon drop slot helper missing'],
@@ -1066,7 +1066,7 @@ console.log('Telegram safe UI: /game/telegram-safe-ui.js');
 console.log('Mobile HUD tweaks: /game/mobile-hud-tweaks.js');
 console.log('Online bridge: /game/online-client.js');
 console.log('Realtime bridge: /game/realtime-client.js');
-console.log('Premium auto attack: /game/world-combat-client.js');
+console.log('World combat: /game/world-combat-client.js');
 console.log('Dungeon 60 dragon: /game/dungeon60-dragon.js');
 console.log('Dungeon mob events: /game/dungeon-mob-events.js');
 console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
