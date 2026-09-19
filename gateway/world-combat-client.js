@@ -281,6 +281,33 @@
     b.addEventListener('click',interceptAttack,true);
   }
 
+  function installQueueAttackBridge(){
+    try{
+      if(window.__PPA_WORLD_PK_QUEUE_BRIDGE)return;
+      var base=window.queueAttack;
+      if(typeof base!=='function'&&typeof queueAttack==='function')base=queueAttack;
+      if(typeof base!=='function')return;
+      var wrapped=function(e){
+        if(window.PPA_WORLD_PVP_ON&&pvpScene()){
+          var r=selectedRemote();
+          if(r){
+            if(remoteInRange(r)){
+              if(attackRemote(r))return;
+            }else{
+              var now=Date.now();
+              if(now-lastRangeNoteAt>900){lastRangeNoteAt=now;popup('ПК · цель вне радиуса атаки','#ffb36b')}
+              return;
+            }
+          }
+        }
+        return base.apply(this,arguments);
+      };
+      window.queueAttack=wrapped;
+      try{queueAttack=wrapped}catch(_){}
+      window.__PPA_WORLD_PK_QUEUE_BRIDGE=true;
+    }catch(_){}
+  }
+
   window.PPA_WORLD_COMBAT_DIAG=function(){
     var r=selectedRemote(),d=null;
     try{if(r)d=Math.round(Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y)))}catch(_){}
@@ -299,8 +326,8 @@
   }
 
   function boot(){
-    ensureHud();bindAttack();refresh();
-    setInterval(function(){refresh();bindAttack()},500);
+    ensureHud();bindAttack();installQueueAttackBridge();refresh();
+    setInterval(function(){refresh();bindAttack();installQueueAttackBridge()},500);
     setInterval(autoTick,90);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
