@@ -17,6 +17,9 @@
   }
 
   function remoteDir(r,dx,dy){
+    if(r&&Number(r.__ppaAttackUntil)>Date.now()&&Number.isFinite(Number(r.__ppaAttackDir))){
+      return Math.max(0,Math.min(7,Math.round(Number(r.__ppaAttackDir))));
+    }
     var d=Math.hypot(dx,dy),face=Number(r&&r.face);
     if(d>.35){
       var oct=Math.round(Math.atan2(dy,dx)/(Math.PI/4));
@@ -69,7 +72,8 @@
 
         var mdx=(Number(r.tx)||0)-(Number(r.x)||0),mdy=(Number(r.ty)||0)-(Number(r.y)||0);
         var moving=Math.hypot(mdx,mdy)>.55||String(r.anim||'')==='run';
-        var anim=String(r.anim||'').toLowerCase();
+        var forcedAttack=Number(r.__ppaAttackUntil)>Date.now();
+        var anim=forcedAttack?'attack':String(r.anim||'').toLowerCase();
         if(!['idle','run','attack'].includes(anim))anim=moving?'run':'idle';
         var cfg=v174AiSpriteCfg({aiClass:key,aiAnim:anim});
         if(!cfg||!cfg.anim||!cfg.anim.img||!cfg.anim.img.complete||!cfg.anim.img.naturalWidth)return fallback(r,now,nearCount);
