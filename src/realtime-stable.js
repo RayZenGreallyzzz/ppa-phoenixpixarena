@@ -1159,9 +1159,17 @@ export class RealtimeHub extends BaseRealtimeHub {
           };
           health.set(ck, rec);
         } else {
+          const prevMhp = Math.max(1, Number(rec.mhp) || mhp);
+          const prevHp = Number.isFinite(Number(rec.hp)) ? Number(rec.hp) : prevMhp;
           rec.mhp = mhp;
-          if (!Number.isFinite(Number(rec.hp))) rec.hp = mhp;
-          rec.hp = Math.max(0, Math.min(Number(rec.hp) || 0, mhp));
+          // When a balance patch raises max HP, carry the added max HP into current HP.
+          // This preserves the amount of damage already taken instead of making every
+          // untouched mob look half-dead after the server receives the new catalog.
+          if (mhp > prevMhp && prevHp > 0) {
+            rec.hp = Math.min(mhp, prevHp + (mhp - prevMhp));
+          } else {
+            rec.hp = Math.max(0, Math.min(prevHp, mhp));
+          }
           if (Number.isFinite(x) && Number.isFinite(y)) {
             rec.hx = x; rec.hy = y;
             if (!rec.positioned || !Number.isFinite(Number(rec.x)) || !Number.isFinite(Number(rec.y))) {
