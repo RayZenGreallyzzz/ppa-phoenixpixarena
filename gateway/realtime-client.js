@@ -9,7 +9,7 @@
     onlineCount:0,started:false,pingSent:0,pingMs:null,
     lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null,
     assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40,
-    arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,
+    arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,arenaLastRoundToken:'',
     arenaQueuePromise:null,arenaQueueResolve:null,arenaQueueTimer:0,arenaQueueMode:''
   };
 
@@ -353,6 +353,7 @@
         if(m.state==='waiting'){arenaQueueNotice(m.message||'1×1 · ждём соперника…');arenaQueueStatus('ПОДБОР СОПЕРНИКА 1×1 · ОЖИДАНИЕ…',true)}
         else if(m.state==='cancelled'){arenaQueueStatus('',false);arenaQueueResolve({matched:false,message:m.message||'Поиск отменён'})}
       }
+
       if(m.type==='arena-match'&&m.room){
         RT.arenaRoom=canonicalRoom(m.room);
         RT.arenaMatchId=String(m.matchId||'');
@@ -363,14 +364,81 @@
         commitRoom(RT.arenaRoom);
         RT.serverRoom=RT.arenaRoom;
         RT.lastRoomSync=Date.now();
-        arenaQueueStatus('СОПЕРНИК НАЙДЕН · ВХОД НА АРЕНУ',true);arenaQueueNotice('СОПЕРНИК НАЙДЕН · вход на арену');setTimeout(function(){arenaQueueStatus('',false)},1400);
+        arenaQueueStatus('СОПЕРНИК НАЙДЕН · ВХОД НА АРЕНУ',true);
+        arenaQueueNotice('СОПЕРНИК НАЙДЕН · вход на арену');
+        setTimeout(function(){arenaQueueStatus('',false)},1400);
         arenaQueueResolve({
           matched:true,mode:String(m.mode||'1x1'),matchId:String(m.matchId||''),
           side:String(m.side||'blue'),room:RT.arenaRoom,
           opponentId:String(m.opponentId||''),opponentName:String(m.opponentName||'Игрок')
         });
       }
-      try{if(window.PPA_ARENA_NET_RECEIVE)window.PPA_ARENA_NET_RECEIVE(m)}catch(_){}
+
+      if(m.type==='arena-hit'||m.type==='arena-skill-hit'){
+        try{
+          var selfId=String((window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
+          var targetId=String(m.target||''),attackerId=String(m.attacker||'');
+          if(targetId===selfId&&typeof P!=='undefined'&&P){
+            P.hp=Math.max(0,Number(m.hp)||0);
+            if(P.hp<=0){P.dead=true;P.attacking=false}
+          }
+          if(attackerId===selfId&&typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes){
+            var rr=PPA_ONLINE.remotes.get(targetId);
+            if(rr&&Number.isFinite(Number(m.hp)))rr.hp=Math.max(0,Number(m.hp));
+          }
+          try{
+            if(typeof showPickup==='function'){
+              var dmg=Math.max(1,Math.round(Number(m.damage)||1));
+              if(attackerId===selfId)showPickup((m.crit?'КРИТ · ':'')+(m.type==='arena-skill-hit'?'НАВЫК · −':'УДАР · −')+dmg,m.crit?'#ffd36a':'#ffb07a');
+              else if(targetId===selfId)showPickup((m.type==='arena-skill-hit'?'НАВЫК СОПЕРНИКА · −':'СОПЕРНИК · −')+dmg,'#ff8f78');
+            }
+          }catch(_){}
+          if(m.roundOver){
+            var token=String(m.roundToken||m.ts||'');
+            if(token&&RT.arenaLastRoundToken!==token){
+              RT.arenaLastRoundToken=token;
+              setTimeout(function(){
+                try{
+                  if(typeof P!=='undefined'&&P){
+                    P.dead=false;P.hp=Math.max(1,Number(P.mhp)||1);P.mp=Math.max(0,Number(P.mmp)||0);
+                    P.tid=null;P.attacking=false;P.shootCD=0;
+                    var ov=document.getElementById('over');if(ov)ov.style.display='none';
+                  }
+                  if(window.PPA_PVP_ROUND_RESULT)window.PPA_PVP_ROUND_RESULT(String(m.winner||''));
+                }catch(_){}
+              },40);
+            }
+          }
+        }catch(e){console.warn('Arena core hit receive',e)}
+      }
+
+      if(m.type==='arena-control'){
+        try{
+          var mine=String((window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
+          if(String(m.target||'')===mine&&typeof P!=='undefined'&&P){
+            var an=Date.now(),dur=Math.max(100,Number(m.duration)||0);
+            if(String(m.kind)==='root')P.aiRootUntil=Math.max(Number(P.aiRootUntil)||0,an+dur);
+            else if(String(m.kind)==='slow'){
+              P.aiSlowMul=Math.max(.3,Math.min(.95,Number(m.mul)||.55));
+              P.aiSlowUntil=Math.max(Number(P.aiSlowUntil)||0,an+dur);
+            }
+          }
+        }catch(_){}
+      }
+
+      if(m.type==='arena-opponent-left'){
+        arenaQueueNotice('АРЕНА · соперник вышел');
+        try{if(window.PPA_PVP_MATCH_CANCELLED)window.PPA_PVP_MATCH_CANCELLED({refund:false})}catch(_){}
+        try{if(window.PPA_RT_ARENA_CLEAR)window.PPA_RT_ARENA_CLEAR()}catch(_){}
+        try{if(typeof changeScene==='function')changeScene('safe')}catch(_){}
+      }
+
+      // Combat-only module still receives the match packet so skill targeting knows
+      // the confirmed opponent, but core realtime owns hit/control/result application.
+      try{
+        if(window.PPA_ARENA_NET_RECEIVE &&
+           (m.type==='arena-match'||m.type==='arena-reject'))window.PPA_ARENA_NET_RECEIVE(m);
+      }catch(_){}
       return;
     }
     if(m.type==='move'){if(m.player)applyPlayer(m.player,false);return}
@@ -631,7 +699,7 @@
   };
   window.PPA_RT_ARENA_CLEAR=function(){
     arenaQueueStatus('',false);
-    RT.arenaRoom='';RT.arenaMatchId='';RT.arenaSide='';RT.arenaOpponentId='';RT.arenaOpponentName='';RT.arenaLastAttack=0;
+    RT.arenaRoom='';RT.arenaMatchId='';RT.arenaSide='';RT.arenaOpponentId='';RT.arenaOpponentName='';RT.arenaLastAttack=0;RT.arenaLastRoundToken='';
     RT.arenaLeavingUntil=Date.now()+1400;
     commitRoom('safe');
     RT.lastRoomSync=0;
