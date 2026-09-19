@@ -1,7 +1,7 @@
 (function(){
   'use strict';
 
-  var autoOn=false,lastAutoAt=0,lastPvpAttackAt=0;
+  var autoOn=false,lastAutoAt=0,lastPvpAttackAt=0,lastRangeNoteAt=0,selectedPlayerId='';
   window.PPA_WORLD_PVP_ON=!!window.PPA_WORLD_PVP_ON;
 
   function scene(){
@@ -111,8 +111,11 @@
     }catch(_){}
     if(!show){
       autoOn=false;
+      selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';
       if(window.PPA_WORLD_PVP_ON&&typeof window.PPA_WORLD_PVP_SET==='function')window.PPA_WORLD_PVP_SET(false);
       window.PPA_WORLD_PVP_ON=false;
+    }else if(selectedPlayerId){
+      selectedRemote();
     }
   }
   window.PPA_WORLD_COMBAT_REFRESH=refresh;
@@ -124,20 +127,41 @@
       return !!my&&String(r&&r.partyId||'')===my;
     }catch(_){return false}
   }
-  function nearestPvpRemote(){
+  function selectedRemote(){
     try{
-      if(!window.PPA_WORLD_PVP_ON||!pvpScene()||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
-      var best=null,bd=Infinity,range=Math.max(60,Number(typeof playerBasicRange==='function'?playerBasicRange():P.attackRange)||60)+34;
-      PPA_ONLINE.remotes.forEach(function(r){
-        if(!r||!r.hasPos||Number(r.hp)<=0)return;
-        if(Number(r.hiddenUntil)>Date.now())return;
-        if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return;
-        var d=Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y));
-        if(d<=range&&d<bd){bd=d;best=r}
-      });
-      return best;
+      if(!selectedPlayerId||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
+      var r=PPA_ONLINE.remotes.get(String(selectedPlayerId))||null;
+      if(!r||!r.hasPos||Number(r.hp)<=0){
+        selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';return null;
+      }
+      if(Number(r.hiddenUntil)>Date.now())return null;
+      if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return null;
+      return r;
     }catch(_){return null}
   }
+
+  function pvpAttackRange(){
+    try{return Math.max(60,Number(typeof playerBasicRange==='function'?playerBasicRange():P.attackRange)||60)+38}
+    catch(_){return 98}
+  }
+
+  function remoteInRange(r){
+    try{return !!r&&Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y))<=pvpAttackRange()}
+    catch(_){return false}
+  }
+
+  window.PPA_WORLD_PLAYER_SELECT=function(r){
+    try{
+      var id=remoteId(r);if(!id)return false;
+      selectedPlayerId=id;window.PPA_WORLD_PVP_TARGET_ID=id;
+      var name=String(r.name||r.n||'Игрок');
+      popup('ЦЕЛЬ · '+name,window.PPA_WORLD_PVP_ON?'#ff9d80':'#e8d08f');
+      return true;
+    }catch(_){return false}
+  };
+  window.PPA_WORLD_PLAYER_CLEAR=function(){
+    selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';
+  };
 
   function attackRemote(r){
     if(!r||typeof window.PPA_WORLD_PVP_HIT!=='function')return false;
@@ -163,7 +187,16 @@
 
   function interceptAttack(e){
     if(!window.PPA_WORLD_PVP_ON||!pvpScene())return;
-    var r=nearestPvpRemote();if(!r)return;
+    var r=selectedRemote();
+    // With PK enabled, a player is attacked only after an explicit tap-target.
+    // If no player is selected the normal PvE attack continues unchanged.
+    if(!r)return;
+    if(!remoteInRange(r)){
+      try{e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation()}catch(_){}
+      var now=Date.now();
+      if(now-lastRangeNoteAt>900){lastRangeNoteAt=now;popup('ПК · цель вне радиуса атаки','#ffb36b')}
+      return;
+    }
     if(attackRemote(r)){
       try{e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation()}catch(_){}
     }
