@@ -136,6 +136,10 @@
       }
       if(Number(r.hiddenUntil)>Date.now())return null;
       if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return null;
+      r.__ppaRemotePlayer=true;
+      r.__ppaRemoteId=remoteId(r);
+      if(Number.isFinite(Number(r.tx)))r.__ppaCombatX=Number(r.tx);else r.__ppaCombatX=Number(r.x)||0;
+      if(Number.isFinite(Number(r.ty)))r.__ppaCombatY=Number(r.ty);else r.__ppaCombatY=Number(r.y)||0;
       return r;
     }catch(_){return null}
   }
@@ -146,8 +150,12 @@
   }
 
   function remoteInRange(r){
-    try{return !!r&&Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y))<=pvpAttackRange()}
-    catch(_){return false}
+    try{
+      if(!r)return false;
+      var x=Number.isFinite(Number(r.__ppaCombatX))?Number(r.__ppaCombatX):Number(r.x);
+      var y=Number.isFinite(Number(r.__ppaCombatY))?Number(r.__ppaCombatY):Number(r.y);
+      return Math.hypot(x-Number(P.x),y-Number(P.y))<=pvpAttackRange()+18;
+    }catch(_){return false}
   }
 
   window.PPA_WORLD_PLAYER_SELECT=function(r){
@@ -161,6 +169,68 @@
   };
   window.PPA_WORLD_PLAYER_CLEAR=function(){
     selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';
+  };
+
+  window.PPA_WORLD_SELECTED_REMOTE=function(){
+    return selectedRemote();
+  };
+
+  window.PPA_WORLD_SKILL_TARGET=function(maxRange){
+    try{
+      if(!window.PPA_WORLD_PVP_ON||!pvpScene())return null;
+      var r=selectedRemote();if(!r)return null;
+      var x=Number.isFinite(Number(r.__ppaCombatX))?Number(r.__ppaCombatX):Number(r.x);
+      var y=Number.isFinite(Number(r.__ppaCombatY))?Number(r.__ppaCombatY):Number(r.y);
+      var d=Math.hypot(x-Number(P.x),y-Number(P.y));
+      var lim=Math.max(0,Number(maxRange)||0);
+      if(lim>0&&d>lim+46)return null;
+      r.x=x;r.y=y;
+      r.hp=Math.max(0,Number(r.hp)||0);
+      r.mhp=Math.max(1,Number(r.mhp)||1);
+      r.def=Math.max(0,Number(r.def)||0);
+      r.__ppaRemotePlayer=true;
+      r.__ppaRemoteId=remoteId(r);
+      return r;
+    }catch(_){return null}
+  };
+
+  window.PPA_WORLD_AROUND_TARGET=function(x,y,rad,out){
+    try{
+      if(!window.PPA_WORLD_PVP_ON||!pvpScene())return out;
+      var r=selectedRemote();if(!r)return out;
+      var rx=Number.isFinite(Number(r.__ppaCombatX))?Number(r.__ppaCombatX):Number(r.x);
+      var ry=Number.isFinite(Number(r.__ppaCombatY))?Number(r.__ppaCombatY):Number(r.y);
+      if(Math.hypot(rx-Number(x),ry-Number(y))<=Math.max(0,Number(rad)||0)+36){
+        r.x=rx;r.y=ry;r.__ppaRemotePlayer=true;r.__ppaRemoteId=remoteId(r);
+        if(Array.isArray(out)&&out.indexOf(r)<0)out.push(r);
+      }
+    }catch(_){}
+    return out;
+  };
+
+  window.PPA_WORLD_SKILL_HIT=function(r,amount,crit,maxRange,damageType){
+    try{
+      if(!r||!r.__ppaRemotePlayer||!window.PPA_WORLD_PVP_ON||!pvpScene()||!window.PPA_RT_SEND)return false;
+      var id=remoteId(r);if(!id)return false;
+      var range=Math.max(80,Math.min(700,Number(maxRange)||650));
+      return !!window.PPA_RT_SEND({
+        type:'world-pvp-skill-hit',target:id,amount:Math.max(1,Math.min(99999,Number(amount)||1)),
+        crit:!!crit,range:range,damageType:String(damageType||'physical')
+      });
+    }catch(_){return false}
+  };
+
+  window.PPA_WORLD_PLAYER_CONTROL=function(r,kind,mul,ms,range){
+    try{
+      if(!r||!r.__ppaRemotePlayer||!window.PPA_WORLD_PVP_ON||!pvpScene()||!window.PPA_RT_SEND)return false;
+      var id=remoteId(r),k=String(kind||'');if(!id||(k!=='slow'&&k!=='root'))return false;
+      return !!window.PPA_RT_SEND({
+        type:'world-pvp-control',target:id,kind:k,
+        mul:k==='slow'?Math.max(.25,Math.min(.95,Number(mul)||.55)):0,
+        duration:Math.max(100,Math.min(4500,Math.round(Number(ms)||0))),
+        range:Math.max(80,Math.min(700,Number(range)||650))
+      });
+    }catch(_){return false}
   };
 
   function attackRemote(r){
@@ -203,11 +273,19 @@
   }
 
   function bindAttack(){
-    var b=document.getElementById('bAtk');if(!b||b.dataset.ppaWorldPvp==='1')return;
+    var b=document.getElementById('bAtk')||document.getElementById('bA');
+    if(!b||b.dataset.ppaWorldPvp==='1')return;
     b.dataset.ppaWorldPvp='1';
     b.addEventListener('pointerdown',interceptAttack,true);
     b.addEventListener('touchstart',interceptAttack,{capture:true,passive:false});
+    b.addEventListener('click',interceptAttack,true);
   }
+
+  window.PPA_WORLD_COMBAT_DIAG=function(){
+    var r=selectedRemote(),d=null;
+    try{if(r)d=Math.round(Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y)))}catch(_){}
+    return{pk:!!window.PPA_WORLD_PVP_ON,scene:scene(),selected:selectedPlayerId||'',target:!!r,distance:d,attackRange:Math.round(pvpAttackRange())};
+  };
 
   function autoTick(){
     try{
