@@ -4,12 +4,12 @@
 
   var RT={
     ws:null,connecting:false,retry:0,retryTimer:0,lastMove:0,lastRoom:'',lastRoomSync:0,
-    pendingRoom:'',pendingSince:0,lastX:null,lastY:null,lastHp:null,lastMhp:null,lastFace:null,
+    pendingRoom:'',pendingSince:0,lastX:null,lastY:null,lastHp:null,lastMhp:null,lastDead:null,lastFace:null,
     lastAnim:'',lastLevel:null,lastBm:null,lastAtk:null,lastDef:null,lastRange:null,lastCrit:null,lastCritDmg:null,lastAtkSpd:null,
     onlineCount:0,started:false,pingSent:0,pingMs:null,
     lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null,
     assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40,
-    selfPid:'',pkTargetId:'',pkAutoTarget:false,pkLastAttack:0,arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,arenaLastRoundToken:'',arenaAutoTarget:false,arenaAutoTick:0,
+    selfPid:'',serverDeadLocked:false,pkTargetId:'',pkAutoTarget:false,pkLastAttack:0,arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,arenaLastRoundToken:'',arenaAutoTarget:false,arenaAutoTick:0,
     arenaQueuePromise:null,arenaQueueResolve:null,arenaQueueTimer:0,arenaQueueMode:''
   };
 
@@ -281,12 +281,12 @@
     if(wantD&&!(curD&&curD.instance&&curD.base===wantD.base))return;
     var now=Date.now();if(!force&&now-RT.lastMove<220)return;
     try{
-      var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),f=Number(P.face)||1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm(),c=selfClass();
+      var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),dead=(P.dead||h<=0)?1:0,f=Number(P.face)||1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm(),c=selfClass();
       var atk=Math.max(1,Number(P.atk)||1),df=Math.max(0,Number(P.def)||0),ar=Math.max(60,Number(P.attackRange)||60),cr=Math.max(0,Number(P.crit)||0),cd=Math.max(100,Number(P.critDmg)||180),as=Math.max(.35,Number(P.atkSpd)||1);
-      var changed=RT.lastX===null||Math.abs(x-RT.lastX)>.35||Math.abs(y-RT.lastY)>.35||h!==RT.lastHp||m!==RT.lastMhp||f!==RT.lastFace||a!==RT.lastAnim||l!==RT.lastLevel||b!==RT.lastBm||atk!==RT.lastAtk||df!==RT.lastDef||ar!==RT.lastRange||cr!==RT.lastCrit||cd!==RT.lastCritDmg||as!==RT.lastAtkSpd;
+      var changed=RT.lastX===null||Math.abs(x-RT.lastX)>.35||Math.abs(y-RT.lastY)>.35||h!==RT.lastHp||m!==RT.lastMhp||dead!==RT.lastDead||f!==RT.lastFace||a!==RT.lastAnim||l!==RT.lastLevel||b!==RT.lastBm||atk!==RT.lastAtk||df!==RT.lastDef||ar!==RT.lastRange||cr!==RT.lastCrit||cd!==RT.lastCritDmg||as!==RT.lastAtkSpd;
       if(!force&&!changed&&now-RT.lastMove<900)return;
-      RT.lastMove=now;RT.lastX=x;RT.lastY=y;RT.lastHp=h;RT.lastMhp=m;RT.lastFace=f;RT.lastAnim=a;RT.lastLevel=l;RT.lastBm=b;RT.lastAtk=atk;RT.lastDef=df;RT.lastRange=ar;RT.lastCrit=cr;RT.lastCritDmg=cd;RT.lastAtkSpd=as;
-      send({type:'move',room:RT.lastRoom||room(),x:x,y:y,h:h,m:m,f:f,a:a,l:l,b:b,c:c,at:atk,df:df,ar:ar,cr:cr,cd:cd,as:as});
+      RT.lastMove=now;RT.lastX=x;RT.lastY=y;RT.lastHp=h;RT.lastMhp=m;RT.lastDead=dead;RT.lastFace=f;RT.lastAnim=a;RT.lastLevel=l;RT.lastBm=b;RT.lastAtk=atk;RT.lastDef=df;RT.lastRange=ar;RT.lastCrit=cr;RT.lastCritDmg=cd;RT.lastAtkSpd=as;
+      send({type:'move',room:RT.lastRoom||room(),x:x,y:y,h:h,m:m,dead:dead,f:f,a:a,l:l,b:b,c:c,at:atk,df:df,ar:ar,cr:cr,cd:cd,as:as});
     }catch(_){}
   }
 
@@ -349,6 +349,28 @@
       try{if(window.PPA_REMOTE_COMBAT_FX_RECEIVE)window.PPA_REMOTE_COMBAT_FX_RECEIVE(m)}catch(_){}
       return;
     }
+    if(m.type==='player-death-state'){
+      RT.serverDeadLocked=!!m.locked;
+      if(RT.serverDeadLocked&&typeof P!=='undefined'&&P){
+        P.hp=0;P.attacking=false;
+      }
+      return;
+    }
+    if(m.type==='player-respawn-state'){
+      RT.serverDeadLocked=false;
+      if(m.room){
+        commitRoom(canonicalRoom(m.room));
+        RT.serverRoom=canonicalRoom(m.room);
+      }
+      try{
+        if(typeof P!=='undefined'&&P){
+          if(Number.isFinite(Number(m.h)))P.hp=Math.max(1,Number(m.h));
+          if(Number.isFinite(Number(m.m)))P.mhp=Math.max(1,Number(m.m));
+        }
+      }catch(_){}
+      sendMove(true);
+      return;
+    }
     if(String(m.type||'').indexOf('player-pk-')===0){
       try{
         var self=String(RT.selfPid||(window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
@@ -356,16 +378,7 @@
           var tid=String(m.target||''),aid=String(m.attacker||'');
           if(tid===self&&typeof P!=='undefined'&&P){
             P.hp=Math.max(0,Number(m.hp)||0);
-            if(P.hp<=0){
-              P.attacking=false;
-              if(m.killed){
-                window.PPA_PK_DEATH_TO_CITY=true;
-                try{
-                  var rb=document.getElementById('respawnBtn');
-                  if(rb)rb.textContent='ВОЗРОДИТЬСЯ В ГОРОДЕ';
-                }catch(_){}
-              }
-            }
+            if(P.hp<=0){P.attacking=false;RT.serverDeadLocked=true}
           }
           if(aid===self&&typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE.remotes){
             var pr=PPA_ONLINE.remotes.get(tid);
@@ -929,21 +942,31 @@
     });
   }
 
-  function bindPkTownRespawn(){
-    if(window.__PPA_PK_TOWN_RESPAWN_BOUND)return;
+  function bindServerRespawnConfirm(){
+    if(window.__PPA_SERVER_RESPAWN_CONFIRM_BOUND)return;
     var base=window.respawnAfterDeath;
     if(typeof base!=='function')return;
-    window.__PPA_PK_TOWN_RESPAWN_BOUND=true;
+    window.__PPA_SERVER_RESPAWN_CONFIRM_BOUND=true;
     window.respawnAfterDeath=function(){
-      try{
-        if(window.PPA_PK_DEATH_TO_CITY===true&&typeof P!=='undefined'&&P){
-          window.PPA_PK_DEATH_TO_CITY=false;
-          P.scene='safe';
-          try{if(window.PPA_PK_SET)window.PPA_PK_SET(false)}catch(_){}
-          RT.pkTargetId='';RT.pkAutoTarget=false;
-        }
-      }catch(_){}
-      return base.apply(this,arguments);
+      var wasDead=false;
+      try{wasDead=!!(P&&(P.dead||Number(P.hp)<=0))}catch(_){}
+      var result=base.apply(this,arguments);
+      if(wasDead){
+        RT.serverDeadLocked=false;
+        RT.pkTargetId='';RT.pkAutoTarget=false;
+        try{if(window.PPA_PK_SET)window.PPA_PK_SET(false)}catch(_){}
+        try{
+          send({
+            type:'player-respawn-confirm',
+            room:room(),
+            scene:String(P&&P.scene||'safe'),
+            x:Number(P&&P.x)||0,y:Number(P&&P.y)||0,
+            h:Math.max(1,Math.round(Number(P&&P.hp)||1)),
+            m:Math.max(1,Math.round(Number(P&&P.mhp)||1))
+          });
+        }catch(_){}
+      }
+      return result;
     };
   }
 
@@ -1026,10 +1049,10 @@
   };
   window.PPA_REALTIME_RESYNC=resyncRoom;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
-  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,selfPid:RT.selfPid,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady(),pkActive:pkActive(),pkTargetId:RT.pkTargetId}};
+  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,selfPid:RT.selfPid,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady(),pkActive:pkActive(),pkTargetId:RT.pkTargetId,serverDeadLocked:RT.serverDeadLocked}};
 
   function boot(){
-    if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();bindPkTownRespawn();bindArenaSmartMovement();bindArenaAttackCapture();
+    if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();bindServerRespawnConfirm();bindArenaSmartMovement();bindArenaAttackCapture();
     setTimeout(ensureFullsize,300);setTimeout(fixOnlineBadge,350);setTimeout(connect,250);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
