@@ -292,9 +292,7 @@
     }catch(_){return false}
   }
 
-  // Called from the game's real queueAttack() before the normal PvE path.
-  // AUTO sets __PPA_AUTO_PVE_ONLY, so Premium AUTO never attacks players.
-  window.PPA_WORLD_PK_TRY_BASIC_ATTACK=function(){
+  function tryPkBasicAttack(){
     try{
       if(window.__PPA_AUTO_PVE_ONLY)return false;
       if(!window.PPA_WORLD_PVP_ON||!combatScene())return false;
@@ -302,12 +300,56 @@
       var r=selectedRemote();
       if(r)return attackRemote(r);
 
-      r=nearestRemote(basicRange()+26);
-      if(!r)return false;
+      // Do not depend on a successful canvas tap: the attack button itself
+      // may acquire the nearest visible player, exactly like normal PvE attack.
+      r=nearestRemote(basicRange()+74);
+      if(!r){
+        var near=nearestRemote(520);
+        if(near){
+          selectRemote(near,true);
+          var now=Date.now();
+          if(now-lastPkNoticeAt>900){lastPkNoticeAt=now;popup('ПК · цель вне радиуса атаки','#ffb36b')}
+          return true;
+        }
+        return false;
+      }
       selectRemote(r,true);
       return attackRemote(r);
     }catch(_){return false}
-  };
+  }
+
+  // Called from the game's real queueAttack() before the normal PvE path.
+  // AUTO sets __PPA_AUTO_PVE_ONLY, so Premium AUTO never attacks players.
+  window.PPA_WORLD_PK_TRY_BASIC_ATTACK=tryPkBasicAttack;
+
+  // Mobile fallback: bind once, in capture phase, directly to the actual red
+  // attack button. This is intentionally tiny and event-driven (no frame scan).
+  // It protects PK from any later touch/pointer wrappers around queueAttack().
+  function installAttackButtonFallback(){
+    if(window.__PPA_PK_ATTACK_BUTTON_FALLBACK)return;
+    var btn=null;
+    try{btn=(typeof bA!=='undefined'&&bA)||document.getElementById('bAtk')}catch(_){btn=document.getElementById('bAtk')}
+    if(!btn){setTimeout(installAttackButtonFallback,250);return}
+    window.__PPA_PK_ATTACK_BUTTON_FALLBACK=true;
+    var lastEventAt=0;
+    var fire=function(e){
+      try{
+        if(!window.PPA_WORLD_PVP_ON||!combatScene()||window.__PPA_AUTO_PVE_ONLY)return;
+        var now=Date.now();
+        if(now-lastEventAt<150)return;
+        if(!tryPkBasicAttack())return;
+        lastEventAt=now;
+        if(e){
+          e.preventDefault();
+          e.stopPropagation();
+          if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+        }
+      }catch(_){}
+    };
+    btn.addEventListener('pointerdown',fire,{capture:true,passive:false});
+    btn.addEventListener('touchstart',fire,{capture:true,passive:false});
+    btn.addEventListener('click',fire,{capture:true,passive:false});
+  }
 
   // Tap a visible player to lock the PK target. This listener exists only once
   // and performs work only while PK is enabled.
@@ -454,8 +496,8 @@
   }
 
   window.PPA_WORLD_COMBAT_REFRESH=refresh;
-  window.PPA_WORLD_COMBAT_ACK=function(){lastPkNoticeAt=0};
-  window.PPA_WORLD_COMBAT_REJECT=function(reason){popup('ПК · '+String(reason||'атака отклонена'),'#ff8b72')};
+  window.PPA_WORLD_COMBAT_ACK=function(){lastPkNoticeAt=0;window.__PPA_PK_LAST_ACK_AT=Date.now()};
+  window.PPA_WORLD_COMBAT_REJECT=function(reason){window.__PPA_PK_LAST_REJECT=String(reason||'атака отклонена');window.__PPA_PK_LAST_REJECT_AT=Date.now();popup('ПК · '+window.__PPA_PK_LAST_REJECT,'#ff8b72')};
   window.PPA_WORLD_COMBAT_DIAG=function(){
     var r=selectedRemote();
     return{
@@ -475,6 +517,7 @@
   function boot(){
     ensureHud();
     installCanvasTargeting();
+    installAttackButtonFallback();
     refresh();
     setInterval(refresh,850);
     setInterval(autoTick,120);
