@@ -1,17 +1,32 @@
 (function(){
   'use strict';
 
-  var autoOn=false,lastAutoAt=0,lastPvpAttackAt=0,lastRangeNoteAt=0,selectedPlayerId='',lastPkAttemptAt=0,lastPkAckAt=0,lastPkReject='';
+  // Clean PK runtime. One source of truth:
+  // - the normal game's queueAttack() calls PPA_WORLD_PK_TRY_BASIC_ATTACK first;
+  // - this module never captures/steals pointer/touch/click events from the attack button;
+  // - the server remains authoritative for player HP and legal combat zones.
+  var autoOn=false;
+  var selectedPlayerId='';
+  var lastAttackAt=0;
+  var lastAutoAt=0;
+  var lastRangeNoteAt=0;
+  var lastAckAt=0;
+  var lastReject='';
+
   window.PPA_WORLD_PVP_ON=!!window.PPA_WORLD_PVP_ON;
 
   function scene(){
     try{return String(P&&P.scene||'safe')}catch(_){return'safe'}
   }
-  function worldCombatScene(){
+
+  function combatScene(){
     var s=scene();
     return s==='fartzone'||s==='dungeon'||s==='worldboss';
   }
-  function pvpScene(){return worldCombatScene()}
+
+  function popup(text,col){
+    try{if(typeof showPickup==='function')showPickup(String(text||''),col||'#ffd16b')}catch(_){}
+  }
 
   function premiumRoot(){
     try{
@@ -24,204 +39,234 @@
   function autoUnlocked(){
     try{
       var ps=premiumRoot(),b=ps.purchasedBundles||{};
+      // New purchases/subscriptions write this permanent entitlement directly.
       if(ps.autoAttackUnlocked)return true;
-      if(Number(ps.lastPremiumPurchaseAt)>0)return true; // any Premium subscription ever purchased
-      if(Number(b.adventurer)>0||Number(b.unique)>0||Number(b.epic)>0)return true; // 5/10/30 Gram bundles
-    }catch(_){}
-    return false;
+      // Backward compatibility for the three historical 5/10/30 Gram bundles.
+      return Number(b.adventurer)>0||Number(b.unique)>0||Number(b.epic)>0;
+    }catch(_){return false}
   }
 
   function rememberUnlock(){
+    if(!autoUnlocked())return false;
     try{
-      if(!autoUnlocked())return false;
       var ps=premiumRoot();
       if(!ps.autoAttackUnlocked){
         ps.autoAttackUnlocked=true;
-        try{if(typeof saveGame==='function')saveGame()}catch(_){}
+        if(typeof saveGame==='function')saveGame();
       }
-      return true;
-    }catch(_){return false}
-  }
-
-  function popup(t,c){
-    try{if(typeof showPickup==='function')showPickup(String(t||''),c||'#ffd16b')}catch(_){}
-  }
-
-  function bindPress(el,fn){
-    if(!el||typeof fn!=='function')return;
-    var last=0;
-    var fire=function(e){
-      var now=Date.now();
-      if(now-last<260)return;
-      last=now;
-      try{if(e){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation()}}catch(_){}
-      fn(e);
-    };
-    el.addEventListener('pointerup',fire,{passive:false});
-    el.addEventListener('touchend',fire,{passive:false});
-    el.addEventListener('click',fire,{passive:false});
-  }
-
-  function ensureHud(){
-    var box=document.getElementById('ppaWorldCombatToggles');
-    if(box)return box;
-    var st=document.createElement('style');
-    st.textContent=
-      '#ppaWorldCombatToggles{position:fixed;right:24px;bottom:263px;z-index:9998;display:none;gap:6px;align-items:center;justify-content:flex-end;pointer-events:auto}'+
-      '#ppaWorldCombatToggles button{height:27px;min-width:48px;padding:0 7px;border-radius:7px;border:1px solid rgba(220,170,80,.55);background:rgba(8,10,13,.88);color:#d8c7a0;font:700 8px/1 monospace;letter-spacing:.05em;box-shadow:0 2px 7px rgba(0,0,0,.55);touch-action:manipulation}'+
-      '#ppaWorldCombatToggles button.on{border-color:#ff765f;color:#ffd4ca;background:rgba(82,18,12,.88);box-shadow:0 0 9px rgba(255,82,56,.35)}'+
-      '#ppaWorldCombatToggles button.autoOn{border-color:#75d89d;color:#caffdc;background:rgba(12,62,35,.88)}'+
-      '#ppaWorldCombatToggles button.locked{opacity:.52;border-style:dashed}'+
-      '@media(max-width:700px){#ppaWorldCombatToggles{right:19px}}';
-    document.head.appendChild(st);
-    box=document.createElement('div');box.id='ppaWorldCombatToggles';
-    var p=document.createElement('button');p.id='ppaWorldPvpBtn';p.textContent='ПК ВЫКЛ';
-    var a=document.createElement('button');a.id='ppaWorldAutoBtn';a.textContent='АВТО';
-    box.appendChild(p);box.appendChild(a);document.body.appendChild(box);
-
-    bindPress(p,function(){
-      if(!pvpScene()){popup('ПК здесь недоступен','#ffb36b');return}
-      var next=!window.PPA_WORLD_PVP_ON;
-      if(typeof window.PPA_WORLD_PVP_SET!=='function'||!window.PPA_WORLD_PVP_SET(next)){
-        popup('ПК · сервер переподключается','#ffb36b');return;
-      }
-      // Server ack is authoritative; optimistic UI makes the tap feel immediate.
-      window.PPA_WORLD_PVP_ON=next;refresh();
-      popup(next?'ПК включён · можно атаковать других игроков':'ПК выключен',next?'#ff9d80':'#b9c0c7');
-    });
-
-    bindPress(a,function(){
-      if(!worldCombatScene())return;
-      if(!rememberUnlock()){
-        popup('AUTO доступно после покупки от 5 Gram или любой Premium-подписки','#d9a7ff');
-        refresh();return;
-      }
-      autoOn=!autoOn;
-      if(!autoOn){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';}
-      refresh();
-      popup(autoOn?'AUTO АТАКА · ВКЛ':'AUTO АТАКА · ВЫКЛ',autoOn?'#8dffad':'#c6b99f');
-    });
-    return box;
-  }
-
-  function refresh(){
-    var box=ensureHud(),s=scene(),show=worldCombatScene()&&!((typeof transitioning!=='undefined')&&transitioning);
-    box.style.display=show?'flex':'none';
-    var pb=document.getElementById('ppaWorldPvpBtn'),ab=document.getElementById('ppaWorldAutoBtn');
-    if(pb){
-      pb.style.display=pvpScene()?'':'none';
-      pb.textContent=window.PPA_WORLD_PVP_ON?'ПК ВКЛ':'ПК ВЫКЛ';
-      pb.classList.toggle('on',!!window.PPA_WORLD_PVP_ON);
-    }
-    if(ab){
-      var unlocked=rememberUnlock();
-      ab.textContent=unlocked?(autoOn?'АВТО ВКЛ':'АВТО'):'АВТО';
-      ab.classList.toggle('autoOn',!!autoOn&&unlocked);
-      ab.classList.toggle('locked',!unlocked);
-      ab.title=unlocked?(window.PPA_WORLD_PVP_ON?'Автоатака по мобам и ближайшим игрокам':'Автоматическая обычная атака по мобам'):'Покупка от 5 Gram или любая Premium-подписка';
-    }
-    try{
-      var buffs=document.getElementById('timedBuffHud');
-      if(buffs)buffs.style.bottom=show?'298px':'263px';
     }catch(_){}
-    if(!show){
-      autoOn=false;
-      selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';
-      if(window.PPA_WORLD_PVP_ON&&typeof window.PPA_WORLD_PVP_SET==='function')window.PPA_WORLD_PVP_SET(false);
-      window.PPA_WORLD_PVP_ON=false;
-    }else if(selectedPlayerId){
-      selectedRemote();
-    }
+    return true;
   }
-  window.PPA_WORLD_COMBAT_REFRESH=refresh;
-  window.PPA_WORLD_COMBAT_ACK=function(){lastPkAckAt=Date.now();lastPkReject=''};
-  window.PPA_WORLD_COMBAT_REJECT=function(reason){
-    lastPkReject=String(reason||'unknown');
-    popup('ПК · '+lastPkReject,'#ff8b72');
-  };
 
-  function remoteId(r){return String((r&&(r.id||r.i||r.__ppaPid))||'')}
-  function sameParty(r){
-    try{
-      var my=String((window.PPA_PARTY_STATE&&PPA_PARTY_STATE.partyId)||'');
-      return !!my&&String(r&&r.partyId||'')===my;
-    }catch(_){return false}
+  function remoteId(r){
+    return String((r&&(r.id||r.i||r.__ppaPid))||'');
   }
+
+  function coords(r){
+    if(!r)return{x:NaN,y:NaN};
+    var x=Number.isFinite(Number(r.tx))?Number(r.tx):Number(r.x);
+    var y=Number.isFinite(Number(r.ty))?Number(r.ty):Number(r.y);
+    return{x:x,y:y};
+  }
+
+  function targetable(r){
+    if(!r||!r.hasPos||Number(r.hp)<=0)return false;
+    if(Number(r.hiddenUntil)>Date.now())return false;
+    try{if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return false}catch(_){}
+    var p=coords(r);
+    return Number.isFinite(p.x)&&Number.isFinite(p.y)&&!!remoteId(r);
+  }
+
+  function decorate(r){
+    if(!r)return null;
+    var p=coords(r);
+    r.__ppaRemotePlayer=true;
+    r.__ppaRemoteId=remoteId(r);
+    r.__ppaCombatX=p.x;
+    r.__ppaCombatY=p.y;
+    return r;
+  }
+
   function selectedRemote(){
     try{
       if(!selectedPlayerId||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
       var r=PPA_ONLINE.remotes.get(String(selectedPlayerId))||null;
-      if(!r||!r.hasPos||Number(r.hp)<=0){
-        selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';return null;
+      if(!targetable(r)){
+        if(!r||Number(r.hp)<=0){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID=''}
+        return null;
       }
-      if(Number(r.hiddenUntil)>Date.now())return null;
-      if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return null;
-      r.__ppaRemotePlayer=true;
-      r.__ppaRemoteId=remoteId(r);
-      if(Number.isFinite(Number(r.tx)))r.__ppaCombatX=Number(r.tx);else r.__ppaCombatX=Number(r.x)||0;
-      if(Number.isFinite(Number(r.ty)))r.__ppaCombatY=Number(r.ty);else r.__ppaCombatY=Number(r.y)||0;
-      return r;
+      return decorate(r);
     }catch(_){return null}
   }
 
-  function pvpAttackRange(){
-    try{return Math.max(60,Number(typeof playerBasicRange==='function'?playerBasicRange():P.attackRange)||60)+38}
-    catch(_){return 98}
+  function basicRange(){
+    try{
+      var v=typeof playerBasicRange==='function'?Number(playerBasicRange()):Number(P&&P.attackRange);
+      return Math.max(60,Number.isFinite(v)?v:60)+38;
+    }catch(_){return 98}
   }
 
-  function remoteInRange(r){
+  function distanceTo(r){
     try{
-      if(!r)return false;
-      var x=Number.isFinite(Number(r.__ppaCombatX))?Number(r.__ppaCombatX):Number(r.x);
-      var y=Number.isFinite(Number(r.__ppaCombatY))?Number(r.__ppaCombatY):Number(r.y);
-      return Math.hypot(x-Number(P.x),y-Number(P.y))<=pvpAttackRange()+18;
-    }catch(_){return false}
+      var p=coords(r);
+      return Math.hypot(p.x-Number(P.x),p.y-Number(P.y));
+    }catch(_){return Infinity}
   }
 
-  window.PPA_WORLD_PLAYER_SELECT=function(r){
+  function nearestPlayer(maxDistance){
     try{
-      var id=remoteId(r);if(!id)return false;
-      selectedPlayerId=id;window.PPA_WORLD_PVP_TARGET_ID=id;
-      var name=String(r.name||r.n||'Игрок');
-      popup('ЦЕЛЬ · '+name,window.PPA_WORLD_PVP_ON?'#ff9d80':'#e8d08f');
+      if(!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
+      var best=null,bd=Infinity;
+      PPA_ONLINE.remotes.forEach(function(r){
+        if(!targetable(r))return;
+        var d=distanceTo(r);
+        if(d<bd){bd=d;best=r}
+      });
+      if(!best)return null;
+      if(Number.isFinite(Number(maxDistance))&&bd>Number(maxDistance))return null;
+      best=decorate(best);
+      best.__ppaAutoDistance=bd;
+      return best;
+    }catch(_){return null}
+  }
+
+  function setSelection(r,quiet){
+    if(!r)return false;
+    var id=remoteId(r);if(!id)return false;
+    selectedPlayerId=id;
+    window.PPA_WORLD_PVP_TARGET_ID=id;
+    decorate(r);
+    if(!quiet)popup('ЦЕЛЬ · '+String(r.name||r.n||'Игрок'),window.PPA_WORLD_PVP_ON?'#ff9d80':'#e8d08f');
+    return true;
+  }
+
+  window.PPA_WORLD_PLAYER_SELECT=function(r){return setSelection(r,false)};
+  window.PPA_WORLD_PLAYER_CLEAR=function(){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID=''};
+  window.PPA_WORLD_SELECTED_REMOTE=selectedRemote;
+
+  function canAttackNow(){
+    try{return typeof P!=='undefined'&&P&&!P.dead&&Number(P.shootCD||0)<=0}catch(_){return false}
+  }
+
+  function hitPacket(r){
+    if(!r||!window.PPA_RT_SEND)return false;
+    var id=remoteId(r);if(!id)return false;
+
+    var rr={def:Math.max(0,Number(r.def)||0),isAiFighter:false,clanId:r.clanId||'',partyId:r.partyId||''};
+    var hit;
+    try{
+      hit=typeof basicAttackRoll==='function'
+        ?basicAttackRoll(rr)
+        :{damage:Math.max(1,Math.floor(10+(Number(P.atk)||12))),crit:false};
+    }catch(_){
+      hit={damage:Math.max(1,Math.floor(10+(Number(P.atk)||12))),crit:false};
+    }
+
+    // A hit packet itself is an explicit hostile action. The server will also
+    // mark the attacker PK, so there is no toggle/hit race after room changes.
+    return !!window.PPA_RT_SEND({
+      type:'world-pvp-hit',
+      target:id,
+      amount:Math.max(1,Math.min(99999,Number(hit.damage)||1)),
+      crit:!!hit.crit,
+      range:Math.max(60,Math.min(480,basicRange())),
+      pk:true
+    });
+  }
+
+  function animateAttack(r){
+    try{
+      var rate=Math.max(.35,Number(P.atkSpd)||1);
+      P.shootCD=Math.max(1,Math.round(60/(rate*(typeof shopAtkSpeedMul==='function'?shopAtkSpeedMul():1))));
+      P.attacking=true;P.anim='attack';P.animFrame=0;P.animTimer=0;
+      var p=coords(r),dx=p.x-Number(P.x);
+      if(Math.abs(dx)>.1)P.face=dx<0?-1:1;
+      if(Number(P.smokeUntil)>Date.now()){
+        P.smokeUntil=0;P.smokeDodgeBonus=0;
+        if(window.PPA_PLAYER_STEALTH)window.PPA_PLAYER_STEALTH(0);
+      }
+      if(typeof PT!=='undefined'&&Array.isArray(PT)){
+        for(var i=0;i<4;i++)PT.push({
+          x:p.x,y:p.y-8,vx:(Math.random()-.5)*5,vy:(Math.random()-.5)*5,
+          life:10,ml:10,sz:2+Math.random()*2,col:'#ff765f'
+        });
+      }
+    }catch(_){}
+  }
+
+  function attackRemote(r){
+    if(!r||!targetable(r))return false;
+    if(!canAttackNow())return true; // consume this PK press while attack is cooling down
+
+    var now=Date.now();
+    var rate=Math.max(.35,Number(P.atkSpd)||1);
+    var minMs=Math.max(180,Math.round(1000/rate*.82));
+    if(now-lastAttackAt<minMs)return true;
+
+    if(!hitPacket(r)){
+      popup('ПК · ONLINE переподключается','#ffb36b');
       return true;
-    }catch(_){return false}
-  };
-  window.PPA_WORLD_PLAYER_CLEAR=function(){
-    selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';
-  };
+    }
 
-  window.PPA_WORLD_SELECTED_REMOTE=function(){
-    return selectedRemote();
+    lastAttackAt=now;
+    animateAttack(r);
+    return true;
+  }
+
+  // This is called directly at the very beginning of the base queueAttack().
+  // true = PK consumed the press; false = continue original PvE attack logic.
+  window.PPA_WORLD_PK_TRY_BASIC_ATTACK=function(){
+    try{
+      if(!window.PPA_WORLD_PVP_ON||!combatScene())return false;
+
+      var r=selectedRemote();
+      if(r){
+        var d=distanceTo(r);
+        if(d>basicRange()+18){
+          var now=Date.now();
+          if(now-lastRangeNoteAt>900){lastRangeNoteAt=now;popup('ПК · цель вне радиуса атаки','#ffb36b')}
+          return true;
+        }
+        return attackRemote(r);
+      }
+
+      // No explicit target: a player already standing in normal attack range
+      // has priority. Otherwise the original PvE queueAttack continues.
+      r=nearestPlayer(basicRange()+18);
+      if(!r)return false;
+      setSelection(r,true);
+      return attackRemote(r);
+    }catch(_){return false}
   };
 
   window.PPA_WORLD_SKILL_TARGET=function(maxRange){
     try{
-      if(!window.PPA_WORLD_PVP_ON||!pvpScene())return null;
-      var r=selectedRemote();if(!r)return null;
-      var x=Number.isFinite(Number(r.__ppaCombatX))?Number(r.__ppaCombatX):Number(r.x);
-      var y=Number.isFinite(Number(r.__ppaCombatY))?Number(r.__ppaCombatY):Number(r.y);
-      var d=Math.hypot(x-Number(P.x),y-Number(P.y));
-      var lim=Math.max(0,Number(maxRange)||0);
-      if(lim>0&&d>lim+46)return null;
-      r.x=x;r.y=y;
+      if(!window.PPA_WORLD_PVP_ON||!combatScene())return null;
+      var r=selectedRemote();
+      if(!r){
+        var lim=Math.max(80,Number(maxRange)||700)+46;
+        r=nearestPlayer(lim);
+        if(r)setSelection(r,true);
+      }
+      if(!r)return null;
+      var d=distanceTo(r),lim2=Math.max(0,Number(maxRange)||0);
+      if(lim2>0&&d>lim2+46)return null;
+      var p=coords(r);
+      r.x=p.x;r.y=p.y;
       r.hp=Math.max(0,Number(r.hp)||0);
       r.mhp=Math.max(1,Number(r.mhp)||1);
       r.def=Math.max(0,Number(r.def)||0);
-      r.__ppaRemotePlayer=true;
-      r.__ppaRemoteId=remoteId(r);
-      return r;
+      return decorate(r);
     }catch(_){return null}
   };
 
   window.PPA_WORLD_AROUND_TARGET=function(x,y,rad,out){
     try{
-      if(!window.PPA_WORLD_PVP_ON||!pvpScene())return out;
+      if(!window.PPA_WORLD_PVP_ON||!combatScene())return out;
       var r=selectedRemote();if(!r)return out;
-      var rx=Number.isFinite(Number(r.__ppaCombatX))?Number(r.__ppaCombatX):Number(r.x);
-      var ry=Number.isFinite(Number(r.__ppaCombatY))?Number(r.__ppaCombatY):Number(r.y);
-      if(Math.hypot(rx-Number(x),ry-Number(y))<=Math.max(0,Number(rad)||0)+36){
-        r.x=rx;r.y=ry;r.__ppaRemotePlayer=true;r.__ppaRemoteId=remoteId(r);
+      var p=coords(r);
+      if(Math.hypot(p.x-Number(x),p.y-Number(y))<=Math.max(0,Number(rad)||0)+36){
+        r.x=p.x;r.y=p.y;decorate(r);
         if(Array.isArray(out)&&out.indexOf(r)<0)out.push(r);
       }
     }catch(_){}
@@ -230,228 +275,148 @@
 
   window.PPA_WORLD_SKILL_HIT=function(r,amount,crit,maxRange,damageType){
     try{
-      if(!r||!r.__ppaRemotePlayer||!window.PPA_WORLD_PVP_ON||!pvpScene()||!window.PPA_RT_SEND)return false;
+      if(!r||!r.__ppaRemotePlayer||!window.PPA_WORLD_PVP_ON||!combatScene()||!window.PPA_RT_SEND)return false;
       var id=remoteId(r);if(!id)return false;
-      var range=Math.max(80,Math.min(700,Number(maxRange)||650));
       return !!window.PPA_RT_SEND({
-        type:'world-pvp-skill-hit',target:id,amount:Math.max(1,Math.min(99999,Number(amount)||1)),
-        crit:!!crit,range:range,damageType:String(damageType||'physical')
+        type:'world-pvp-skill-hit',target:id,
+        amount:Math.max(1,Math.min(99999,Number(amount)||1)),
+        crit:!!crit,range:Math.max(80,Math.min(700,Number(maxRange)||650)),
+        damageType:String(damageType||'physical'),pk:true
       });
     }catch(_){return false}
   };
 
   window.PPA_WORLD_PLAYER_CONTROL=function(r,kind,mul,ms,range){
     try{
-      if(!r||!r.__ppaRemotePlayer||!window.PPA_WORLD_PVP_ON||!pvpScene()||!window.PPA_RT_SEND)return false;
-      var id=remoteId(r),k=String(kind||'');if(!id||(k!=='slow'&&k!=='root'))return false;
+      if(!r||!r.__ppaRemotePlayer||!window.PPA_WORLD_PVP_ON||!combatScene()||!window.PPA_RT_SEND)return false;
+      var id=remoteId(r),k=String(kind||'');
+      if(!id||(k!=='slow'&&k!=='root'))return false;
       return !!window.PPA_RT_SEND({
         type:'world-pvp-control',target:id,kind:k,
         mul:k==='slow'?Math.max(.25,Math.min(.95,Number(mul)||.55)):0,
         duration:Math.max(100,Math.min(4500,Math.round(Number(ms)||0))),
-        range:Math.max(80,Math.min(700,Number(range)||650))
+        range:Math.max(80,Math.min(700,Number(range)||650)),pk:true
       });
     }catch(_){return false}
   };
 
-  function attackRemote(r){
-    if(!r||typeof window.PPA_WORLD_PVP_HIT!=='function')return false;
-    if(typeof P==='undefined'||P.dead||P.shootCD>0)return false;
-    var now=Date.now(),rate=Math.max(.35,Number(P.atkSpd)||1),minMs=Math.max(180,Math.round(1000/rate*.82));
-    if(now-lastPvpAttackAt<minMs)return false;
-    var rr={def:Math.max(0,Number(r.def)||0),isAiFighter:false,clanId:r.clanId||'',partyId:r.partyId||''};
-    var hit=null;
-    try{hit=typeof basicAttackRoll==='function'?basicAttackRoll(rr):{damage:Math.max(1,Math.floor(10+(Number(P.atk)||12))),crit:false}}catch(_){hit={damage:Math.max(1,Math.floor(10+(Number(P.atk)||12))),crit:false}}
-    // Reassert PK immediately before the hit. WebSocket ordering guarantees
-    // the server sees the hostile toggle before this attack even after a room switch.
-    if(typeof window.PPA_WORLD_PVP_SET==='function')window.PPA_WORLD_PVP_SET(true);
-    lastPkAttemptAt=now;lastPkReject='';
-    if(!window.PPA_WORLD_PVP_HIT(remoteId(r),hit.damage,hit.crit))return false;
-    lastPvpAttackAt=now;
-    P.shootCD=Math.max(1,Math.round(60/((Number(P.atkSpd)||1)*(typeof shopAtkSpeedMul==='function'?shopAtkSpeedMul():1))));
-    P.attacking=true;P.anim='attack';P.animFrame=0;P.animTimer=0;
-    var dx=Number(r.x)-Number(P.x),dy=Number(r.y)-Number(P.y);if(Math.abs(dx)>.1)P.face=dx<0?-1:1;
-    try{
-      if(Number(P.smokeUntil)>now){P.smokeUntil=0;P.smokeDodgeBonus=0;if(window.PPA_PLAYER_STEALTH)window.PPA_PLAYER_STEALTH(0)}
-      if(typeof PT!=='undefined'&&Array.isArray(PT)){
-        for(var i=0;i<5;i++)PT.push({x:Number(r.x),y:Number(r.y)-8,vx:(Math.random()-.5)*5,vy:(Math.random()-.5)*5,life:10,ml:10,sz:2+Math.random()*2,col:hit.crit?'#ffd36a':'#ff765f'});
+  function ensureHud(){
+    var box=document.getElementById('ppaWorldCombatToggles');
+    if(box)return box;
+
+    var st=document.createElement('style');
+    st.textContent=
+      '#ppaWorldCombatToggles{position:fixed;right:24px;bottom:263px;z-index:9998;display:none;gap:6px;align-items:center;justify-content:flex-end;pointer-events:auto}'+
+      '#ppaWorldCombatToggles button{height:27px;min-width:48px;padding:0 7px;border-radius:7px;border:1px solid rgba(220,170,80,.55);background:rgba(8,10,13,.88);color:#d8c7a0;font:700 8px/1 monospace;letter-spacing:.05em;box-shadow:0 2px 7px rgba(0,0,0,.55);touch-action:manipulation}'+
+      '#ppaWorldCombatToggles button.on{border-color:#ff765f;color:#ffd4ca;background:rgba(82,18,12,.88)}'+
+      '#ppaWorldCombatToggles button.autoOn{border-color:#75d89d;color:#caffdc;background:rgba(12,62,35,.88)}'+
+      '#ppaWorldCombatToggles button.locked{opacity:.52;border-style:dashed}'+
+      '@media(max-width:700px){#ppaWorldCombatToggles{right:19px}}';
+    document.head.appendChild(st);
+
+    box=document.createElement('div');box.id='ppaWorldCombatToggles';
+    var pk=document.createElement('button');pk.id='ppaWorldPvpBtn';pk.type='button';
+    var au=document.createElement('button');au.id='ppaWorldAutoBtn';au.type='button';
+    box.appendChild(pk);box.appendChild(au);document.body.appendChild(box);
+
+    pk.onclick=function(e){
+      try{e.preventDefault();e.stopPropagation()}catch(_){}
+      if(!combatScene())return;
+      var next=!window.PPA_WORLD_PVP_ON;
+      if(!window.PPA_RT_SEND||!window.PPA_RT_SEND({type:'world-pvp-toggle',enabled:next})){
+        popup('ПК · ONLINE переподключается','#ffb36b');return;
       }
-    }catch(_){}
-    return true;
-  }
-
-  function interceptAttack(e){
-    if(!window.PPA_WORLD_PVP_ON||!pvpScene())return;
-    var r=selectedRemote();
-    if(!r){
-      r=nearestAttackablePlayer();
-      if(r){
-        selectedPlayerId=remoteId(r);
-        window.PPA_WORLD_PVP_TARGET_ID=selectedPlayerId;
-      }
-    }
-    // PK ON prioritizes a nearby player already inside the normal attack range.
-    // If no player is close enough, the ordinary PvE attack continues unchanged.
-    if(!r)return;
-    if(!remoteInRange(r)){
-      try{e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation()}catch(_){}
-      var now=Date.now();
-      if(now-lastRangeNoteAt>900){lastRangeNoteAt=now;popup('ПК · цель вне радиуса атаки','#ffb36b')}
-      return;
-    }
-    if(attackRemote(r)){
-      try{e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation()}catch(_){}
-    }
-  }
-
-  function bindAttack(){
-    var b=document.getElementById('bAtk')||document.getElementById('bA');
-    if(!b||b.dataset.ppaWorldPvp==='1')return;
-    b.dataset.ppaWorldPvp='1';
-    b.addEventListener('pointerdown',interceptAttack,true);
-    b.addEventListener('touchstart',interceptAttack,{capture:true,passive:false});
-    b.addEventListener('click',interceptAttack,true);
-  }
-
-  function installGlobalAttackCapture(){
-    if(window.__PPA_WORLD_PK_GLOBAL_ATTACK)return;
-    window.__PPA_WORLD_PK_GLOBAL_ATTACK=true;
-    var handler=function(e){
-      try{
-        var t=e&&e.target;
-        if(!t||!window.PPA_WORLD_PVP_ON||!pvpScene())return;
-        var b=t.closest?t.closest('#bAtk,#bA'):null;
-        if(!b)return;
-        var r=selectedRemote();
-        if(!r){
-          r=nearestAttackablePlayer();
-          if(r){selectedPlayerId=remoteId(r);window.PPA_WORLD_PVP_TARGET_ID=selectedPlayerId;}
-        }
-        if(!r)return;
-        if(!remoteInRange(r)){
-          e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
-          var now=Date.now();
-          if(now-lastRangeNoteAt>900){lastRangeNoteAt=now;popup('ПК · подойди ближе к цели','#ffb36b')}
-          return;
-        }
-        if(attackRemote(r)){
-          e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
-        }
-      }catch(_){}
+      window.PPA_WORLD_PVP_ON=next;
+      if(!next){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID=''}
+      refresh();
+      popup(next?'ПК включён':'ПК выключен',next?'#ff9d80':'#b9c0c7');
     };
-    window.addEventListener('pointerdown',handler,{capture:true,passive:false});
-    window.addEventListener('touchstart',handler,{capture:true,passive:false});
-  }
 
-  function installQueueAttackBridge(){
-    try{
-      if(window.__PPA_WORLD_PK_QUEUE_BRIDGE)return;
-      var base=window.queueAttack;
-      if(typeof base!=='function'&&typeof queueAttack==='function')base=queueAttack;
-      if(typeof base!=='function')return;
-      var wrapped=function(e){
-        if(window.PPA_WORLD_PVP_ON&&pvpScene()){
-          var r=selectedRemote();
-          if(!r){
-            r=nearestAttackablePlayer();
-            if(r){selectedPlayerId=remoteId(r);window.PPA_WORLD_PVP_TARGET_ID=selectedPlayerId;}
-          }
-          if(r){
-            if(remoteInRange(r)){
-              if(attackRemote(r))return;
-            }else{
-              var now=Date.now();
-              if(now-lastRangeNoteAt>900){lastRangeNoteAt=now;popup('ПК · цель вне радиуса атаки','#ffb36b')}
-              return;
-            }
-          }
-        }
-        return base.apply(this,arguments);
-      };
-      window.queueAttack=wrapped;
-      try{queueAttack=wrapped}catch(_){}
-      window.__PPA_WORLD_PK_QUEUE_BRIDGE=true;
-    }catch(_){}
-  }
-
-  window.PPA_WORLD_COMBAT_DIAG=function(){
-    var r=selectedRemote(),d=null;
-    try{if(r)d=Math.round(Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y)))}catch(_){}
-    var near=null;try{var nr=nearestAttackablePlayer();near=nr?remoteId(nr):''}catch(_){}
-    return{pk:!!window.PPA_WORLD_PVP_ON,scene:scene(),selected:selectedPlayerId||'',nearestAttackable:near||'',target:!!r,distance:d,attackRange:Math.round(pvpAttackRange()),lastAttemptAt:lastPkAttemptAt,lastAckAt:lastPkAckAt,lastReject:lastPkReject};
-  };
-
-  function nearestAttackablePlayer(){
-    var r=nearestAutoPlayer();
-    if(!r)return null;
-    return Number(r.__ppaAutoDistance)<=pvpAttackRange()+18?r:null;
-  }
-
-  function nearestAutoPlayer(){
-    try{
-      if(!window.PPA_WORLD_PVP_ON||!pvpScene()||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
-      var best=null,bd=Infinity;
-      PPA_ONLINE.remotes.forEach(function(r){
-        if(!r||!r.hasPos||Number(r.hp)<=0)return;
-        if(Number(r.hiddenUntil)>Date.now())return;
-        if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return;
-        var rx=Number.isFinite(Number(r.tx))?Number(r.tx):Number(r.x);
-        var ry=Number.isFinite(Number(r.ty))?Number(r.ty):Number(r.y);
-        if(!Number.isFinite(rx)||!Number.isFinite(ry))return;
-        var d=Math.hypot(rx-Number(P.x),ry-Number(P.y));
-        if(d<bd){bd=d;best=r}
-      });
-      if(best){
-        best.__ppaRemotePlayer=true;best.__ppaRemoteId=remoteId(best);
-        best.__ppaCombatX=Number.isFinite(Number(best.tx))?Number(best.tx):Number(best.x);
-        best.__ppaCombatY=Number.isFinite(Number(best.ty))?Number(best.ty):Number(best.y);
-        best.__ppaAutoDistance=bd;
+    au.onclick=function(e){
+      try{e.preventDefault();e.stopPropagation()}catch(_){}
+      if(!combatScene())return;
+      if(!rememberUnlock()){
+        popup('AUTO доступно после покупки от 5 Gram или любой Premium-подписки','#d9a7ff');
+        refresh();return;
       }
-      return best;
-    }catch(_){return null}
+      autoOn=!autoOn;
+      refresh();
+      popup(autoOn?'AUTO АТАКА · ВКЛ':'AUTO АТАКА · ВЫКЛ',autoOn?'#8dffad':'#c6b99f');
+    };
+    return box;
   }
 
-  function nearestPveDistance(){
-    try{
-      if(typeof findNear!=='function')return Infinity;
-      var e=findNear();if(!e)return Infinity;
-      return Math.hypot(Number(e.x)-Number(P.x),Number(e.y)-Number(P.y));
-    }catch(_){return Infinity}
+  function refresh(){
+    var box=ensureHud(),show=combatScene()&&!((typeof transitioning!=='undefined')&&transitioning);
+    box.style.display=show?'flex':'none';
+    var pk=document.getElementById('ppaWorldPvpBtn'),au=document.getElementById('ppaWorldAutoBtn');
+    if(pk){
+      pk.textContent=window.PPA_WORLD_PVP_ON?'ПК ВКЛ':'ПК ВЫКЛ';
+      pk.classList.toggle('on',!!window.PPA_WORLD_PVP_ON);
+    }
+    if(au){
+      var unlocked=rememberUnlock();
+      au.textContent=unlocked?(autoOn?'АВТО ВКЛ':'АВТО'):'АВТО';
+      au.classList.toggle('autoOn',!!autoOn&&unlocked);
+      au.classList.toggle('locked',!unlocked);
+    }
+    if(!show){
+      autoOn=false;
+      selectedPlayerId='';
+      window.PPA_WORLD_PVP_TARGET_ID='';
+      window.PPA_WORLD_PVP_ON=false;
+    }
   }
+
+  window.PPA_WORLD_COMBAT_REFRESH=refresh;
+  window.PPA_WORLD_COMBAT_ACK=function(){lastAckAt=Date.now();lastReject=''};
+  window.PPA_WORLD_COMBAT_REJECT=function(reason){
+    lastReject=String(reason||'атака отклонена');
+    popup('ПК · '+lastReject,'#ff8b72');
+  };
 
   function autoTick(){
     try{
       var now=Date.now();
-      if(autoOn&&rememberUnlock()&&worldCombatScene()&&!P.dead&&!transitioning&&now-lastAutoAt>=180){
-        lastAutoAt=now;
+      if(!autoOn||!rememberUnlock()||!combatScene()||P.dead||transitioning||now-lastAutoAt<180)return;
+      lastAutoAt=now;
 
-        // AUTO + PK = hostile auto-combat against both players and mobs.
-        // Players are never chased across the dungeon: they become an auto target
-        // only when already inside the normal basic-attack range. This keeps AUTO
-        // useful without turning it into a map-wide player hunter.
-        if(window.PPA_WORLD_PVP_ON&&pvpScene()){
-          var rp=nearestAttackablePlayer();
-          if(rp){
-            selectedPlayerId=remoteId(rp);window.PPA_WORLD_PVP_TARGET_ID=selectedPlayerId;
-            attackRemote(rp);
-            return;
-          }
+      if(window.PPA_WORLD_PVP_ON){
+        var r=nearestPlayer(basicRange()+18);
+        if(r){
+          setSelection(r,true);
+          attackRemote(r);
+          return;
         }
-
-        // No nearby attackable player (or PK off): keep the existing smart PvE target/chase.
-        // Clear an AUTO-created/stale player selection first so the manual PK
-        // bridge cannot block the normal PvE smart attack.
-        if(autoOn&&selectedPlayerId){
-          selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';
-        }
-        if(typeof queueAttack==='function')queueAttack();
       }
+
+      // Core queueAttack() will do the original smart PvE approach/attack.
+      if(typeof queueAttack==='function')queueAttack();
     }catch(_){}
   }
 
+  window.PPA_WORLD_COMBAT_DIAG=function(){
+    var r=selectedRemote();
+    return{
+      pk:!!window.PPA_WORLD_PVP_ON,
+      auto:!!autoOn,
+      scene:scene(),
+      selected:selectedPlayerId||'',
+      target:!!r,
+      distance:r?Math.round(distanceTo(r)):null,
+      attackRange:Math.round(basicRange()),
+      nearest:remoteId(nearestPlayer(Infinity))||'',
+      lastAckAt:lastAckAt,
+      lastReject:lastReject
+    };
+  };
+
   function boot(){
-    ensureHud();bindAttack();installGlobalAttackCapture();installQueueAttackBridge();refresh();
-    setInterval(function(){refresh();bindAttack();installGlobalAttackCapture();installQueueAttackBridge()},500);
+    ensureHud();refresh();
+    setInterval(refresh,500);
     setInterval(autoTick,90);
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
+  else boot();
 })();
