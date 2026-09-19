@@ -5,6 +5,8 @@
   var lastAutoAt=0;
   var lastPkAttackAt=0;
   var lastPkNoticeAt=0;
+  var lastPkSendAt=0;
+  var lastPkResolvedAt=0;
   var selectedPlayerId='';
   var fartMineId='';
   var fartReturning=false;
@@ -64,7 +66,9 @@
   }
 
   function remoteTargetable(r){
-    if(!r||!r.hasPos||Number(r.hp)<=0)return false;
+    // The realtime server is authoritative for death. A transient stale hp=0 on
+    // the observer must not make a visibly alive remote player impossible to target.
+    if(!r||!r.hasPos)return false;
     if(Number(r.hiddenUntil)>Date.now())return false;
     try{if(window.PPA_REMOTE_PLAYER_TARGETABLE&&!window.PPA_REMOTE_PLAYER_TARGETABLE(r))return false}catch(_){}
     var p=coords(r);
@@ -76,7 +80,7 @@
       if(!selectedPlayerId||!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
       var r=PPA_ONLINE.remotes.get(String(selectedPlayerId))||null;
       if(!remoteTargetable(r)){
-        if(!r||Number(r.hp)<=0){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID=''}
+        if(!r){selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID=''}
         return null;
       }
       return r;
@@ -360,6 +364,16 @@
       }
 
       lastPkAttackAt=now2;
+      lastPkSendAt=now2;
+      window.__PPA_PK_LAST_SEND_AT=now2;
+      // Event-driven diagnostic only: no polling, no frame work. If neither ACK
+      // nor REJECT comes back, surface it once so the next test tells us whether
+      // the packet reached the realtime server.
+      setTimeout(function(){
+        if(lastPkSendAt===now2&&lastPkResolvedAt<now2){
+          popup('ПК · нет ответа сервера','#ff8b72');
+        }
+      },1100);
       P.shootCD=Math.max(1,Math.round(60/(rate*(typeof shopAtkSpeedMul==='function'?shopAtkSpeedMul():1))));
       P.attacking=true;P.anim='attack';P.animFrame=0;P.animTimer=0;
 
@@ -395,7 +409,7 @@
         }
         return false;
       }
-      selectRemote(r,true);
+      selectRemote(r,false);
       return attackRemote(r);
     }catch(_){return false}
   }
@@ -523,8 +537,8 @@
   }
 
   window.PPA_WORLD_COMBAT_REFRESH=refresh;
-  window.PPA_WORLD_COMBAT_ACK=function(){lastPkNoticeAt=0;window.__PPA_PK_LAST_ACK_AT=Date.now()};
-  window.PPA_WORLD_COMBAT_REJECT=function(reason){window.__PPA_PK_LAST_REJECT=String(reason||'атака отклонена');window.__PPA_PK_LAST_REJECT_AT=Date.now();popup('ПК · '+window.__PPA_PK_LAST_REJECT,'#ff8b72')};
+  window.PPA_WORLD_COMBAT_ACK=function(){lastPkNoticeAt=0;lastPkResolvedAt=Date.now();window.__PPA_PK_LAST_ACK_AT=lastPkResolvedAt};
+  window.PPA_WORLD_COMBAT_REJECT=function(reason){lastPkResolvedAt=Date.now();window.__PPA_PK_LAST_REJECT=String(reason||'атака отклонена');window.__PPA_PK_LAST_REJECT_AT=lastPkResolvedAt;popup('ПК · '+window.__PPA_PK_LAST_REJECT,'#ff8b72')};
   window.PPA_WORLD_COMBAT_DIAG=function(){
     var r=selectedRemote();
     return{
