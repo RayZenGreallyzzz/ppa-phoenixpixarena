@@ -375,6 +375,8 @@
             if(String(m.kind)==='root')P.aiRootUntil=Math.max(Number(P.aiRootUntil)||0,pn+pdu);
             else if(String(m.kind)==='slow'){P.aiSlowMul=Math.max(.3,Math.min(.95,Number(m.mul)||.55));P.aiSlowUntil=Math.max(Number(P.aiSlowUntil)||0,pn+pdu)}
           }
+        }else if(m.type==='player-pk-state'){
+          try{if(window.PPA_PK_SERVER_STATE)window.PPA_PK_SERVER_STATE(!!m.enabled)}catch(_){}
         }else if(m.type==='player-pk-reject'){
           try{if(typeof showPickup==='function')showPickup('ПК · '+String(m.reason||'атака отклонена'),'#ff8b72')}catch(_){}
         }
