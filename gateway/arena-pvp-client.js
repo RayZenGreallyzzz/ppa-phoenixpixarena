@@ -14,10 +14,18 @@
   function scene(){
     try{return String(P&&P.scene||'safe')}catch(_){return 'safe'}
   }
+  function pkReady(){
+    try{
+      var s=scene();
+      return !!(window.PPA_PK_ACTIVE&&window.PPA_PK_ACTIVE()&&
+        s!=='safe'&&s!=='pvp1'&&s!=='pvpteam'&&s!=='clansiege');
+    }catch(_){return false}
+  }
   function combatReady(){
     try{
-      return !!(match.active&&(scene()==='pvp1'||scene()==='pvpteam')&&
+      var arena=!!(match.active&&(scene()==='pvp1'||scene()==='pvpteam')&&
         (!window.PPA_PVP_CAN_DAMAGE||window.PPA_PVP_CAN_DAMAGE()));
+      return arena||pkReady();
     }catch(_){return false}
   }
   function remoteId(r){return String((r&&(r.id||r.i||r.__ppaPid))||'')}
@@ -38,6 +46,15 @@
   function nearestEnemy(maxRange){
     try{
       if(!window.PPA_ONLINE||!PPA_ONLINE.remotes)return null;
+      var preferred='';
+      try{if(pkReady()&&window.PPA_PK_TARGET_ID)preferred=String(window.PPA_PK_TARGET_ID()||'')}catch(_){}
+      if(preferred){
+        var pr=PPA_ONLINE.remotes.get(preferred);
+        if(enemyRemote(pr)){
+          var pp=coords(pr),pd=Math.hypot(pp.x-Number(P.x),pp.y-Number(P.y));
+          if(!Number.isFinite(Number(maxRange))||pd<=Number(maxRange))return pr;
+        }
+      }
       var best=null,bd=Infinity;
       PPA_ONLINE.remotes.forEach(function(r){
         if(!enemyRemote(r))return;
@@ -150,12 +167,15 @@
     try{
       if(!combatReady()||!window.PPA_RT_SEND)return false;
       r=proxyFor((r&&r.__ppaRemoteSource)||r);if(!r)return false;
-      return !!window.PPA_RT_SEND({
-        type:'arena-skill-hit',matchId:match.matchId,target:remoteId(r),
+      var packet={
+        type:match.active?'arena-skill-hit':'player-pk-skill-hit',
+        target:remoteId(r),
         amount:Math.max(1,Math.min(99999,Math.round(Number(amount)||1))),
         crit:!!crit,range:Math.max(80,Math.min(700,Number(maxRange)||650)),
         damageType:String(damageType||'physical').slice(0,16)
-      });
+      };
+      if(match.active)packet.matchId=match.matchId;
+      return !!window.PPA_RT_SEND(packet);
     }catch(_){return false}
   };
   window.PPA_ARENA_PLAYER_CONTROL=function(r,kind,mul,ms,range){
@@ -163,12 +183,15 @@
       if(!combatReady()||!window.PPA_RT_SEND)return false;
       r=proxyFor((r&&r.__ppaRemoteSource)||r);if(!r)return false;
       var k=String(kind||'');if(k!=='slow'&&k!=='root')return false;
-      return !!window.PPA_RT_SEND({
-        type:'arena-control',matchId:match.matchId,target:remoteId(r),kind:k,
+      var packet={
+        type:match.active?'arena-control':'player-pk-control',
+        target:remoteId(r),kind:k,
         mul:k==='slow'?Math.max(.25,Math.min(.95,Number(mul)||.55)):0,
         duration:Math.max(100,Math.min(4500,Math.round(Number(ms)||0))),
         range:Math.max(80,Math.min(700,Number(range)||650))
-      });
+      };
+      if(match.active)packet.matchId=match.matchId;
+      return !!window.PPA_RT_SEND(packet);
     }catch(_){return false}
   };
 
