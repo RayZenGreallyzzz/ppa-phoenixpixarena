@@ -404,7 +404,7 @@
       if(btn.disabled)btn.disabled=false;
       if(btn.hasAttribute&&btn.hasAttribute('disabled'))btn.removeAttribute('disabled');
       if(btn.getAttribute&&btn.getAttribute('aria-disabled')==='true')btn.setAttribute('aria-disabled','false');
-      btn.style.pointerEvents='auto';
+      try{if(getComputedStyle(btn).pointerEvents==='none')btn.style.pointerEvents='auto'}catch(_){}
     }catch(_){}
   }
 
@@ -416,7 +416,7 @@
     window.__PPA_PK_ATTACK_BUTTON_STATE=true;
     try{
       var mo=new MutationObserver(function(){syncPkAttackButton()});
-      mo.observe(btn,{attributes:true,attributeFilter:['disabled','aria-disabled','class','style']});
+      mo.observe(btn,{attributes:true,attributeFilter:['disabled','aria-disabled']});
       window.__PPA_PK_ATTACK_BUTTON_OBSERVER=mo;
     }catch(_){}
     syncPkAttackButton();
