@@ -8,7 +8,8 @@
     lastAnim:'',lastLevel:null,lastBm:null,lastAtk:null,lastDef:null,lastRange:null,lastCrit:null,lastCritDmg:null,lastAtkSpd:null,
     onlineCount:0,started:false,pingSent:0,pingMs:null,
     lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null,
-    assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40
+    assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40,
+    arenaRoom:'',arenaLeavingUntil:0
   };
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
@@ -27,6 +28,8 @@
   }
   function rawRoom(){
     try{
+      if(RT.arenaRoom)return canonicalRoom(RT.arenaRoom);
+      if(RT.arenaLeavingUntil>Date.now())return 'safe';
       // 41-60 must use a dungeon-* room or server-authoritative mobs/bosses never activate.
       if(typeof P!=='undefined'&&P&&P.scene==='dungeon'&&typeof DUNGEON_MODE!=='undefined'){
         if(DUNGEON_MODE==='41-60')return 'dungeon-41-60';
@@ -117,6 +120,8 @@
           if(Number.isFinite(face))r.face=face;
           if(p.c!==undefined&&String(p.c||''))r.cls=String(p.c||'');
           if(p.p!==undefined)r.partyId=String(p.p||'');
+          if(p.av!==undefined)r.arenaSide=String(p.av||'');
+          if(p.am!==undefined)r.arenaMatchId=String(p.am||'');
           if(p.hu!==undefined)r.hiddenUntil=Math.max(0,Number(p.hu)||0);
           if(Number.isFinite(Number(p.df)))r.def=Math.max(0,Number(p.df)||0);
           if(Number.isFinite(Number(p.at)))r.atk=Math.max(1,Number(p.at)||1);
@@ -318,6 +323,17 @@
       try{if(window.PPA_REMOTE_COMBAT_FX_RECEIVE)window.PPA_REMOTE_COMBAT_FX_RECEIVE(m)}catch(_){}
       return;
     }
+    if(String(m.type||'').indexOf('arena-')===0){
+      if(m.type==='arena-match'&&m.room){
+        RT.arenaRoom=canonicalRoom(m.room);
+        RT.arenaLeavingUntil=0;
+        commitRoom(RT.arenaRoom);
+        RT.serverRoom=RT.arenaRoom;
+        RT.lastRoomSync=Date.now();
+      }
+      try{if(window.PPA_ARENA_NET_RECEIVE)window.PPA_ARENA_NET_RECEIVE(m)}catch(_){}
+      return;
+    }
     if(m.type==='move'){if(m.player)applyPlayer(m.player,false);return}
     if(m.type==='join'){if(m.player)applyPlayer(m.player,true);return}
     if(m.type==='leave'){deleteRemote(m.id);return}
@@ -437,6 +453,14 @@
         target:targetId
       });
     }catch(_){return false}
+  };
+  window.PPA_RT_ARENA_CLEAR=function(){
+    RT.arenaRoom='';
+    RT.arenaLeavingUntil=Date.now()+1400;
+    commitRoom('safe');
+    RT.lastRoomSync=0;
+    setTimeout(function(){if(RT.arenaLeavingUntil<=Date.now())RT.arenaLeavingUntil=0},1500);
+    return true;
   };
   window.PPA_REALTIME_RESYNC=resyncRoom;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
