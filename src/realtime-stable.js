@@ -91,6 +91,8 @@ function packetFromAtt(a) {
     l: Math.max(1, Math.min(999, Math.round(Number(a.l) || 1))),
     b: Math.max(0, Math.round(Number(a.b) || 0)),
     p: String(a.partyId || ''),
+    av: String(a.arenaSide || ''),
+    am: String(a.arenaMatchId || ''),
     pt: cleanPet(a.pet || ''),
     hu: Math.max(0, Number(a.hiddenUntil) || 0),
     at: Math.max(1, Number(a.atk) || 1),
@@ -1179,6 +1181,8 @@ export class RealtimeHub extends BaseRealtimeHub {
       room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
       lastSeenAt: Date.now(), lastSnapshotPush: 0, lastMobSnapshotAt: 0, hiddenUntil: 0,
       atk: 1, def: 0, attackRange: 60, crit: 0, critDmg: 180, atkSpd: 1,
+      arenaQueueMode:'',arenaQueuedAt:0,arenaMatchId:'',arenaMode:'',arenaSide:'',arenaHpLockUntil:0,
+      lastArenaAttack:0,lastArenaSkill:0,lastArenaControl:0,
       q: 0, l: 1, b: 0,
     });
     this.indexAdd(server, 'safe');
@@ -1201,6 +1205,147 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     const a = attOf(ws);
     const now = Date.now();
+
+    if (m.type === 'arena-queue-join') {
+      const mode = String(m.mode || '1x1').toLowerCase().replace('×','x');
+      if (mode !== '1x1') {
+        wsJson(ws,{type:'arena-queue-state',state:'cancelled',mode,message:'Сейчас доступен живой 1×1',ts:now});
+        return;
+      }
+      if (a.arenaMatchId) {
+        wsJson(ws,{type:'arena-queue-state',state:'cancelled',mode,message:'Матч уже активен',ts:now});
+        return;
+      }
+      a.arenaQueueMode=mode;a.arenaQueuedAt=now;ws.serializeAttachment(a);
+
+      let otherWs=null,otherA=null;
+      for (const peer of this.sockets()) {
+        if (peer===ws) continue;
+        const pa=attOf(peer);
+        if (String(pa.pid||'')===String(a.pid||'')) continue;
+        if (String(pa.arenaQueueMode||'')!==mode || pa.arenaMatchId) continue;
+        if (!otherA || Number(pa.arenaQueuedAt||0)<Number(otherA.arenaQueuedAt||0)){otherWs=peer;otherA=pa}
+      }
+      if (!otherWs||!otherA) {
+        wsJson(ws,{type:'arena-queue-state',state:'waiting',mode,message:'1×1 · ждём второго игрока…',ts:now});
+        return;
+      }
+
+      const matchId=(now.toString(36)+'-'+crypto.randomUUID().replace(/-/g,'').slice(0,8)).toLowerCase();
+      const room=cleanRoom('pvp1-'+matchId);
+
+      otherA.arenaQueueMode='';otherA.arenaQueuedAt=0;otherA.arenaMatchId=matchId;otherA.arenaMode=mode;otherA.arenaSide='blue';
+      otherA.arenaHpLockUntil=0;otherA.lastArenaAttack=0;otherA.lastArenaSkill=0;otherA.lastArenaControl=0;
+      otherA.h=Math.max(1,Number(otherA.m)||Number(otherA.h)||1);
+
+      a.arenaQueueMode='';a.arenaQueuedAt=0;a.arenaMatchId=matchId;a.arenaMode=mode;a.arenaSide='red';
+      a.arenaHpLockUntil=0;a.lastArenaAttack=0;a.lastArenaSkill=0;a.lastArenaControl=0;
+      a.h=Math.max(1,Number(a.m)||Number(a.h)||1);
+
+      this.moveSocketRoom(otherWs,otherA,room,now);
+      this.moveSocketRoom(ws,a,room,now);
+
+      wsJson(otherWs,{type:'arena-match',matched:true,mode,matchId,room,side:'blue',opponentId:String(a.pid||''),opponentName:cleanName(a.name||'Игрок'),ts:now});
+      wsJson(ws,{type:'arena-match',matched:true,mode,matchId,room,side:'red',opponentId:String(otherA.pid||''),opponentName:cleanName(otherA.name||'Игрок'),ts:now});
+      this.sendRoomSnapshot(otherWs,room);this.sendRoomSnapshot(ws,room);this.sendOnlineCount();
+      return;
+    }
+
+    if (m.type === 'arena-queue-cancel') {
+      if (!a.arenaMatchId) {
+        a.arenaQueueMode='';a.arenaQueuedAt=0;ws.serializeAttachment(a);
+        wsJson(ws,{type:'arena-queue-state',state:'cancelled',mode:String(m.mode||'1x1'),message:'Поиск отменён',ts:now});
+      }
+      return;
+    }
+
+    if (m.type === 'arena-leave') {
+      a.arenaQueueMode='';a.arenaQueuedAt=0;a.arenaMatchId='';a.arenaMode='';a.arenaSide='';
+      a.arenaHpLockUntil=0;a.lastArenaAttack=0;a.lastArenaSkill=0;a.lastArenaControl=0;
+      this.moveSocketRoom(ws,a,'safe',now);this.sendRoomSnapshot(ws,'safe');this.sendOnlineCount();
+      return;
+    }
+
+    if (m.type === 'arena-hit' || m.type === 'arena-skill-hit') {
+      const skill=m.type==='arena-skill-hit';
+      const matchId=String(m.matchId||''),room=cleanRoom(a.room),targetPid=String(m.target||'');
+      const reject=(reason)=>wsJson(ws,{type:'arena-reject',reason:String(reason||'атака отклонена'),target:targetPid,ts:now});
+      if (!matchId || matchId!==String(a.arenaMatchId||'')) {reject('матч уже не активен');return}
+      if (!(room.startsWith('pvp1-')||room.startsWith('pvpteam-'))) {reject('неверная комната арены');return}
+      if (!(Number(a.h)>0) || !targetPid || targetPid===String(a.pid||'')) {reject('цель недоступна');return}
+
+      let targetWs=null,ta=null;
+      for (const peer of this.roomSockets(room)) {
+        const pa=attOf(peer);
+        if (String(pa.pid||'')===targetPid && String(pa.arenaMatchId||'')===matchId) {targetWs=peer;ta=pa;break}
+      }
+      if (!targetWs||!ta) {reject('соперник вышел из матча');return}
+      if (String(ta.arenaSide||'')===String(a.arenaSide||'')) {reject('союзника атаковать нельзя');return}
+      if (!(Number(ta.h)>0)) return;
+      if (Number(ta.hiddenUntil)>now) {reject('соперник скрыт');return}
+
+      const ax=Number(a.x),ay=Number(a.y),tx=Number(ta.x),ty=Number(ta.y);
+      if (![ax,ay,tx,ty].every(Number.isFinite)) {reject('позиция синхронизируется');return}
+      const range=skill?Math.max(80,Math.min(700,finite(m.range,80,700,180))):Math.max(60,Math.min(480,Number(a.attackRange)||Number(m.range)||60));
+      if (Math.hypot(tx-ax,ty-ay)>range+74) {reject(skill?'соперник вне радиуса навыка':'соперник вне радиуса атаки');return}
+
+      if (skill) {
+        if (now-Number(a.lastArenaSkill||0)<80)return;
+        a.lastArenaSkill=now;
+      } else {
+        const atkSpd=Math.max(.35,Math.min(4.5,Number(a.atkSpd)||1));
+        const minDelay=Math.max(180,Math.round(1000/atkSpd*.82));
+        if (now-Number(a.lastArenaAttack||0)<minDelay)return;
+        a.lastArenaAttack=now;
+      }
+
+      const atk=Math.max(1,Math.min(2500,Number(a.atk)||1));
+      const maxClient=skill?Math.max(12,Math.round((10+atk)*8)):Math.max(8,Math.round((10+atk)*3.25));
+      let damage=Math.max(1,Math.min(maxClient,Math.round(Number(m.amount)||1)));
+      if (!skill) {
+        const targetDef=Math.max(0,Math.min(2500,Number(ta.def)||0));
+        const softCap=Math.max(1,Math.round((10+atk)*(1-targetDef/(targetDef+170))*2.2));
+        damage=Math.max(1,Math.min(damage,softCap));
+      }
+
+      ta.h=Math.max(0,Math.round(Number(ta.h)-damage));ta.arenaHpLockUntil=now+650;ta.lastSeenAt=now;targetWs.serializeAttachment(ta);
+      if (Number(a.hiddenUntil)>now)a.hiddenUntil=0;
+      a.lastSeenAt=now;ws.serializeAttachment(a);
+
+      const roundOver=!(Number(ta.h)>0),roundToken=roundOver?(matchId+':'+now):'';
+      const payload={type:skill?'arena-skill-hit':'arena-hit',matchId,room,attacker:String(a.pid||''),target:targetPid,damage,crit:!!m.crit,
+        hp:Math.max(0,Number(ta.h)||0),mhp:Math.max(1,Number(ta.m)||1),damageType:skill?String(m.damageType||'physical').slice(0,16):'physical',
+        roundOver,winner:roundOver?String(a.arenaSide||''):'',roundToken,ts:now};
+      wsJson(ws,payload);wsJson(targetWs,payload);
+
+      if (roundOver) {
+        for (const peer of this.roomSockets(room)) {
+          const pa=attOf(peer);if (String(pa.arenaMatchId||'')!==matchId)continue;
+          pa.h=Math.max(1,Number(pa.m)||1);pa.arenaHpLockUntil=0;pa.lastArenaAttack=0;pa.lastArenaSkill=0;pa.lastArenaControl=0;peer.serializeAttachment(pa);
+        }
+      }
+      return;
+    }
+
+    if (m.type === 'arena-control') {
+      const matchId=String(m.matchId||''),room=cleanRoom(a.room),targetPid=String(m.target||''),kind=String(m.kind||'');
+      const reject=(reason)=>wsJson(ws,{type:'arena-reject',reason:String(reason||'эффект отклонён'),target:targetPid,ts:now});
+      if (!matchId||matchId!==String(a.arenaMatchId||'')||(kind!=='slow'&&kind!=='root'))return;
+      let targetWs=null,ta=null;
+      for (const peer of this.roomSockets(room)) {
+        const pa=attOf(peer);
+        if (String(pa.pid||'')===targetPid&&String(pa.arenaMatchId||'')===matchId){targetWs=peer;ta=pa;break}
+      }
+      if (!targetWs||!ta||String(ta.arenaSide||'')===String(a.arenaSide||'')){reject('цель недоступна');return}
+      const ax=Number(a.x),ay=Number(a.y),tx=Number(ta.x),ty=Number(ta.y),range=Math.max(80,Math.min(700,finite(m.range,80,700,180)));
+      if (![ax,ay,tx,ty].every(Number.isFinite)||Math.hypot(tx-ax,ty-ay)>range+74){reject('соперник вне радиуса навыка');return}
+      if (now-Number(a.lastArenaControl||0)<120)return;
+      a.lastArenaControl=now;ws.serializeAttachment(a);
+      const duration=Math.max(100,Math.min(4500,Math.round(finite(m.duration,100,4500,1000))));
+      const mul=kind==='slow'?Math.max(.25,Math.min(.95,finite(m.mul,.25,.95,.55))):0;
+      wsJson(targetWs,{type:'arena-control',matchId,room,attacker:String(a.pid||''),target:targetPid,kind,mul,duration,ts:now});
+      return;
+    }
 
     if (m.type === 'player-combat-fx') {
       const room = cleanRoom(a.room);
@@ -1757,7 +1902,10 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.lastSeenAt = now;
       a.x = Number.isFinite(Number(m.x)) ? Math.round(Number(m.x) * 10) / 10 : Number(a.x) || 0;
       a.y = Number.isFinite(Number(m.y)) ? Math.round(Number(m.y) * 10) / 10 : Number(a.y) || 0;
-      a.h = Math.max(0, Math.round(Number(m.h) || 0));
+      {
+        const incomingH=Math.max(0,Math.round(Number(m.h)||0));
+        a.h=(a.arenaMatchId&&now<Number(a.arenaHpLockUntil||0)&&incomingH>Number(a.h||0))?Math.max(0,Number(a.h)||0):incomingH;
+      }
       a.m = Math.max(1, Math.round(Number(m.m) || 1));
       a.atk = finite(m.at, 1, 2500, Number(a.atk)||1);
       a.def = finite(m.df, 0, 2500, Number(a.def)||0);
@@ -1816,6 +1964,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         return;
       }
       this.roomBroadcast(room, { type: 'leave', id: pid, room, ts: Date.now() }, ws);
+      if (a.arenaMatchId) this.roomBroadcast(room,{type:'arena-opponent-left',matchId:String(a.arenaMatchId||''),id:pid,ts:Date.now()},ws);
       if (partyId) this.sendPartyState(partyId);
       this.pruneDungeonReservations(Date.now());
       this.maybeCleanupDungeon(room, Date.now());
