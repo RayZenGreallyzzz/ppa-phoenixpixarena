@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v360-pk-tap-target-longpress-party-20260919-1346';
+const CLIENT_BUILD = 'v361-pk-attack-skills-fix-20260919-1408';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -427,15 +427,40 @@ if (!output.includes("P.smokeUntil=Date.now()+3000;P.smokeDodgeBonus=rv([35,45,5
 }
 
 ppaPatchRegex(
+  'pk selected player skill target',
+  /function\s+skillTarget\(maxRange\)\{\s*if\(P\.scene===['"]clanboss1['"]\)\{/,
+  "function skillTarget(maxRange){\n  if(window.PPA_WORLD_SKILL_TARGET){var _ppaPkSkillTarget=window.PPA_WORLD_SKILL_TARGET(maxRange);if(_ppaPkSkillTarget)return _ppaPkSkillTarget;}\n  if(P.scene==='clanboss1'){"
+);
+
+ppaPatchRegex(
+  'pk selected player aoe target',
+  /function\s+around\(x,y,r\)\{([\s\S]*?)\n\s*return out;\n\s*\}/,
+  "function around(x,y,r){$1\n    if(window.PPA_WORLD_AROUND_TARGET)window.PPA_WORLD_AROUND_TARGET(x,y,r,out);\n    return out;\n  }"
+);
+
+ppaPatchRegex(
+  'pk v189 deal damage',
+  /e\.hp-=dmg;e\.flash=8;e\.aggro=true;P\.lastCombatAt=Date\.now\(\);/,
+  "const _ppaPkDeal=e.__ppaRemotePlayer&&window.PPA_WORLD_SKILL_HIT&&window.PPA_WORLD_SKILL_HIT(e,dmg,crit,700,type||'physical');\n    const _ppaMobDeal=!_ppaPkDeal&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);\n    if(!_ppaPkDeal&&!_ppaMobDeal)e.hp-=dmg;e.flash=8;e.aggro=true;P.lastCombatAt=Date.now();"
+);
+
+if (!output.includes("window.PPA_WORLD_SKILL_TARGET(maxRange)")) {
+  throw new Error('PK selected-player skill target patch did not apply');
+}
+if (!output.includes("const _ppaPkDeal=e.__ppaRemotePlayer")) {
+  throw new Error('PK V189 skill damage patch did not apply');
+}
+
+ppaPatchRegex(
   'server authoritative root effect',
   /function\s+root\(e,ms\)\{if\(e&&!e\.isBoss\)e\.v189RootUntil=Math\.max\(e\.v189RootUntil\|\|0,Date\.now\(\)\+ms\)\}/,
-  "function root(e,ms){if(e&&!e.isBoss){e.v189RootUntil=Math.max(e.v189RootUntil||0,Date.now()+ms);if(window.PPA_MOB_EVENT_CONTROL)window.PPA_MOB_EVENT_CONTROL(e,'root',0,ms)}}"
+  "function root(e,ms){if(e&&!e.isBoss){e.v189RootUntil=Math.max(e.v189RootUntil||0,Date.now()+ms);if(e.__ppaRemotePlayer){if(window.PPA_WORLD_PLAYER_CONTROL)window.PPA_WORLD_PLAYER_CONTROL(e,'root',0,ms,700)}else if(window.PPA_MOB_EVENT_CONTROL)window.PPA_MOB_EVENT_CONTROL(e,'root',0,ms)}}"
 );
 
 ppaPatchRegex(
   'server authoritative slow effect',
   /function\s+slow\(e,mul,ms\)\{if\(e&&!e\.isBoss\)\{e\.v189SlowMul=Math\.max\(\.25,Math\.min\(\.95,mul\)\);e\.v189SlowUntil=Math\.max\(e\.v189SlowUntil\|\|0,Date\.now\(\)\+ms\)\}\}/,
-  "function slow(e,mul,ms){if(e&&!e.isBoss){e.v189SlowMul=Math.max(.25,Math.min(.95,mul));e.v189SlowUntil=Math.max(e.v189SlowUntil||0,Date.now()+ms);if(window.PPA_MOB_EVENT_CONTROL)window.PPA_MOB_EVENT_CONTROL(e,'slow',mul,ms)}}"
+  "function slow(e,mul,ms){if(e&&!e.isBoss){e.v189SlowMul=Math.max(.25,Math.min(.95,mul));e.v189SlowUntil=Math.max(e.v189SlowUntil||0,Date.now()+ms);if(e.__ppaRemotePlayer){if(window.PPA_WORLD_PLAYER_CONTROL)window.PPA_WORLD_PLAYER_CONTROL(e,'slow',mul,ms,700)}else if(window.PPA_MOB_EVENT_CONTROL)window.PPA_MOB_EVENT_CONTROL(e,'slow',mul,ms)}}"
 );
 
 if (!output.includes("window.PPA_MOB_EVENT_CONTROL(e,'slow',mul,ms)")) {
@@ -467,8 +492,9 @@ ppaPatchRegex(
   'legacy skill helper shared mob hit',
   /if\(e\.isAiFighter&&typeof v225AiIncomingDamageMul===['"]function['"]\)dmg=Math\.max\(1,Math\.round\(dmg\*v225AiIncomingDamageMul\(e\)\)\);\s*e\.hp-=dmg;\s*applyPlayerVampirism\(dmg,\.6\);/,
   `if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
-  const _ppaServerLegacySkillHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
-  if(!_ppaServerLegacySkillHit)e.hp-=dmg;
+  const _ppaPkLegacySkillHit=e.__ppaRemotePlayer&&window.PPA_WORLD_SKILL_HIT&&window.PPA_WORLD_SKILL_HIT(e,dmg,false,700,'physical');
+  const _ppaServerLegacySkillHit=!_ppaPkLegacySkillHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
+  if(!_ppaPkLegacySkillHit&&!_ppaServerLegacySkillHit)e.hp-=dmg;
   applyPlayerVampirism(dmg,.6);`
 );
 
@@ -476,8 +502,9 @@ ppaPatchRegex(
   'skill dot shared mob hit',
   /if\(e\.isAiFighter&&typeof v225AiIncomingDamageMul===['"]function['"]\)d=Math\.max\(1,Math\.round\(d\*v225AiIncomingDamageMul\(e\)\)\);\s*e\.hp-=d;e\.flash=4;e\.aggro=true;e\.v189DotNext=now\+1000;/,
   `if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')d=Math.max(1,Math.round(d*v225AiIncomingDamageMul(e)));
-        const _ppaServerDotHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,d);
-        if(!_ppaServerDotHit)e.hp-=d;
+        const _ppaPkDotHit=e.__ppaRemotePlayer&&window.PPA_WORLD_SKILL_HIT&&window.PPA_WORLD_SKILL_HIT(e,d,false,700,'dot');
+        const _ppaServerDotHit=!_ppaPkDotHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,d);
+        if(!_ppaPkDotHit&&!_ppaServerDotHit)e.hp-=d;
         e.flash=4;e.aggro=true;e.v189DotNext=now+1000;`
 );
 
@@ -490,13 +517,20 @@ if (!output.includes("const _ppaServerLegacySkillHit=window.PPA_MOB_EVENT_DAMAGE
 if (!output.includes("const _ppaServerDotHit=window.PPA_MOB_EVENT_DAMAGE")) {
   throw new Error('DoT authoritative damage patch did not apply');
 }
+if (!output.includes("PPA_WORLD_PLAYER_CONTROL(e,'slow',mul,ms,700)")) {
+  throw new Error('PK slow control patch did not apply');
+}
+if (!output.includes("const _ppaPkDotHit=e.__ppaRemotePlayer")) {
+  throw new Error('PK DoT patch did not apply');
+}
 
 ppaPatchRegex(
   'skill shared mob hit',
   /if\s*\(e\.isAiFighter&&typeof\s+v225AiIncomingDamageMul===['"]function['"]\)\s*dmg\s*=\s*Math\.max\(1,Math\.round\(dmg\*v225AiIncomingDamageMul\(e\)\)\)\s*;\s*e\.hp\s*-=\s*dmg\s*;\s*applyPlayerVampirism\(dmg,\s*\.6\)\s*;/,
   `if(e.isAiFighter&&typeof v225AiIncomingDamageMul==='function')dmg=Math.max(1,Math.round(dmg*v225AiIncomingDamageMul(e)));
-  const _ppaServerSkillHit=window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
-  if(!_ppaServerSkillHit)e.hp-=dmg;
+  const _ppaPkSkillHit=e.__ppaRemotePlayer&&window.PPA_WORLD_SKILL_HIT&&window.PPA_WORLD_SKILL_HIT(e,dmg,false,700,'physical');
+  const _ppaServerSkillHit=!_ppaPkSkillHit&&window.PPA_MOB_EVENT_DAMAGE&&window.PPA_MOB_EVENT_DAMAGE(e,dmg);
+  if(!_ppaPkSkillHit&&!_ppaServerSkillHit)e.hp-=dmg;
   applyPlayerVampirism(dmg,.6);`
 );
 
