@@ -958,6 +958,7 @@
         try{
           send({
             type:'player-respawn-confirm',
+            wasDead:1,
             room:room(),
             scene:String(P&&P.scene||'safe'),
             x:Number(P&&P.x)||0,y:Number(P&&P.y)||0,
