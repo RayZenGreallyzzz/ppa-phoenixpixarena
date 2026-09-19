@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v388-pk-zones-native-death-20260919';
+const CLIENT_BUILD = 'v389-pk-hybrid-mobs-players-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1120,6 +1120,15 @@ ppaPatchRegex(
 
 /* ======================================================================== */
 
+/* === PK DEATH -> TOWN LABEL ============================================ */
+ppaPatchRegex(
+  'PK death town respawn label',
+  /if\(rb\)rb\.textContent=\(P\.scene===['"]dungeon['"]\|\|P\.scene===['"]clanboss1['"]\)\?['"]ВОЗРОДИТЬСЯ В РЕСП-ЗОНЕ['"]:['"]ВОЗРОДИТЬСЯ В ГОРОДЕ['"];/,
+  "if(rb)rb.textContent=(window.PPA_PK_DEATH_TO_CITY===true)?'ВОЗРОДИТЬСЯ В ГОРОДЕ':((P.scene==='dungeon'||P.scene==='clanboss1')?'ВОЗРОДИТЬСЯ В РЕСП-ЗОНЕ':'ВОЗРОДИТЬСЯ В ГОРОДЕ');"
+);
+
+/* ======================================================================== */
+
 /* === RUNTIME BUILD AUDIT ================================================= */
 {
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
@@ -1140,7 +1149,10 @@ ppaPatchRegex(
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
       !worldCombat.includes('PPA_PK_ACTIVE') ||
       !realtimeClient.includes("type:'player-pk-hit'") ||
+      !realtimeClient.includes('pkAttackMixed') ||
+      !realtimeClient.includes('PPA_PK_DEATH_TO_CITY') ||
       !arenaPvp.includes("player-pk-skill-hit") ||
+      !arenaPvp.includes('nearestMobInfo') ||
       !realtimeServer.includes("m.type === 'player-pk-hit'") ||
       !realtimeServer.includes('playerPkRoomAllowed')) {
     throw new Error('New server-authoritative PK zone bridge is incomplete');
