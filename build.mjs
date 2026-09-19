@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v354-all-class-mob-damage-authority-20260919-1115';
+const CLIENT_BUILD = 'v355-skill-system-realtime-audit-20260919-1142';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -384,6 +384,49 @@ ppaPatchRegex(
 );
 
 ppaPatchRegex(
+  'tank taunt authoritative target',
+  /around\(P\.x,P\.y,240\)\.forEach\(e=>\{e\.aggro=true\}\);/,
+  "around(P.x,P.y,240).forEach(e=>{e.aggro=true;if(window.PPA_MOB_EVENT_TAUNT)window.PPA_MOB_EVENT_TAUNT(e,3000)});"
+);
+
+ppaPatchRegex(
+  'assassin smoke v189 fixed 3 seconds',
+  /P\.smokeUntil=Date\.now\(\)\+rv\(\[4,5,6\],rank\)\*1000;P\.smokeDodgeBonus=rv\(\[35,45,55\],rank\);/,
+  "P.smokeUntil=Date.now()+3000;P.smokeDodgeBonus=rv([35,45,55],rank);if(window.PPA_PLAYER_STEALTH)window.PPA_PLAYER_STEALTH(3000);"
+);
+
+ppaPatchRegex(
+  'assassin smoke legacy fixed 3 seconds',
+  /var\s+dur=\[0,4,5,6\]\[rank\];\s*var\s+dodge=\[0,35,45,55\]\[rank\];/,
+  "var dur=3;\n    var dodge=[0,35,45,55][rank];"
+);
+
+ppaPatchRegex(
+  'assassin smoke legacy realtime sync',
+  /P\.smokeUntil=Date\.now\(\)\+dur\*1000;\s*P\.smokeDodgeBonus=dodge;/,
+  "P.smokeUntil=Date.now()+dur*1000;\n    P.smokeDodgeBonus=dodge;\n    if(window.PPA_PLAYER_STEALTH)window.PPA_PLAYER_STEALTH(3000);"
+);
+
+ppaPatchRegex(
+  'assassin smoke active meta 3 seconds',
+  /assa_smoke_screen:\{mp:12,cd:\[22,20,18\],p:\['Дым 4с · обычные мобы и ИИ теряют цель · уворот \+35% · боссы видят дым · мана 12%','Дым 5с · обычные мобы и ИИ теряют цель · уворот \+45% · боссы видят дым · мана 12%','Дым 6с · обычные мобы и ИИ теряют цель · уворот \+55% · боссы видят дым · мана 12%'\]\}/,
+  "assa_smoke_screen:{mp:12,cd:[22,20,18],p:['Дым 3с · враги теряют цель · уворот +35% · мана 12%','Дым 3с · враги теряют цель · уворот +45% · мана 12%','Дым 3с · враги теряют цель · уворот +55% · мана 12%']}"
+);
+
+ppaPatchRegex(
+  'assassin old preview 3 seconds',
+  /'Дымовая завеса на 4с · уклонение \+35% · сбрасывает агро обычных мобов · мана 6 · откат 22с\.',\s*'Дымовая завеса на 5с · уклонение \+45% · сбрасывает агро обычных мобов · мана 6 · откат 20с\.',\s*'Дымовая завеса на 6с · уклонение \+55% · сбрасывает агро обычных мобов · мана 6 · откат 18с\.'/,
+  "'Дымовая завеса на 3с · уклонение +35% · враги теряют цель · мана 6 · откат 22с.',\n    'Дымовая завеса на 3с · уклонение +45% · враги теряют цель · мана 6 · откат 20с.',\n    'Дымовая завеса на 3с · уклонение +55% · враги теряют цель · мана 6 · откат 18с.'"
+);
+
+if (!output.includes("window.PPA_MOB_EVENT_TAUNT(e,3000)")) {
+  throw new Error('Authoritative taunt skill patch did not apply');
+}
+if (!output.includes("P.smokeUntil=Date.now()+3000;P.smokeDodgeBonus=rv([35,45,55],rank);if(window.PPA_PLAYER_STEALTH)window.PPA_PLAYER_STEALTH(3000);")) {
+  throw new Error('Assassin smoke realtime patch did not apply');
+}
+
+ppaPatchRegex(
   'server authoritative root effect',
   /function\s+root\(e,ms\)\{if\(e&&!e\.isBoss\)e\.v189RootUntil=Math\.max\(e\.v189RootUntil\|\|0,Date\.now\(\)\+ms\)\}/,
   "function root(e,ms){if(e&&!e.isBoss){e.v189RootUntil=Math.max(e.v189RootUntil||0,Date.now()+ms);if(window.PPA_MOB_EVENT_CONTROL)window.PPA_MOB_EVENT_CONTROL(e,'root',0,ms)}}"
@@ -547,6 +590,34 @@ ppaPatchRegex(
 
 if (!output.includes("function dungeonTeleportDisplayLabel(i)")) {
   throw new Error('Dungeon teleport label patch did not apply');
+}
+
+/* ======================================================================== */
+
+/* === CLASS SKILL BUILD AUDIT ============================================ */
+{
+  const activeIds=[
+    'tank_shield_bash','tank_taunt','tank_iron_wall','tank_crushing_strike',
+    'barb_blood_split','barb_furious_charge','barb_battle_frenzy','barb_death_whirl',
+    'pal_righteous_strike','pal_holy_shield','pal_light_cleanse','pal_smite_wicked',
+    'gnome_explosive_shot','gnome_buckshot','gnome_powder_barrel','gnome_aimed_volley',
+    'arch_piercing_shot','arch_arrow_rain','arch_hunter_net','arch_aimed_shot',
+    'mage_fireball','mage_frost_flash','mage_chain_lightning','mage_teleport',
+    'assa_shadow_dash','assa_death_cross','assa_smoke_screen','assa_shadow_sentence',
+    'priest_healing_light','priest_holy_barrier','priest_heaven_smite','priest_divine_rebirth'
+  ];
+  const passiveIds=[
+    'tank_steel_will','tank_tough_armor','tank_unwavering','tank_defensive_reflex','tank_battlefield_leader',
+    'barb_relentless_rage','barb_blood_thirst','barb_axe_master','barb_battle_hardened','barb_unstoppable',
+    'pal_unbreakable_faith','pal_fortitude','pal_blessing_light','pal_ally_defender','pal_death_darkness',
+    'gnome_engineering','gnome_big_stock','gnome_sturdy_build','gnome_blast_wave','gnome_sharpshooter',
+    'arch_steady_hand','arch_hunter_eye','arch_forest_step','arch_big_quiver','arch_camouflage',
+    'mage_deep_knowledge','mage_mana_regen','mage_element_balance','mage_magic_focus','mage_sage_defense',
+    'assa_predator','assa_deadly_accuracy','assa_shadow_dance','assa_shadow_poison','assa_last_shadow',
+    'priest_inner_light','priest_blessing','priest_divine_fortitude','priest_prayer','priest_banish_darkness'
+  ];
+  const missingSkills=activeIds.concat(passiveIds).filter((id)=>!output.includes(id));
+  if(missingSkills.length)throw new Error('Class skill audit failed: '+missingSkills.join(', '));
 }
 
 /* ======================================================================== */
