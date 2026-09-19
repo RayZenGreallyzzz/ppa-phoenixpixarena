@@ -667,6 +667,9 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (!d || d.room !== room || Number(d.at) > now) continue;
       const rec = health.get(ck);
       if (!rec) { dead.delete(ck); changed = true; continue; }
+      if(rec.elite&&(rec.eliteKilledKey===rec.eliteWindowKey||Number(rec.eliteExpiresAt||0)<=now)){
+        this.demoteServerElite(rec,false);
+      }
       rec.hp = Math.max(1, Number(rec.mhp) || 1);
       rec.updatedAt = now;
       rec.killer = '';
@@ -695,7 +698,9 @@ export class RealtimeHub extends BaseRealtimeHub {
         hp: rec.hp, mhp: rec.mhp, respawnAt: 0,
         killer: '', party: '',
         x: rec.x, y: rec.y, aggro: false, dir: rec.dir, moving: false,
-        sz: rec.sz, ts: now,
+        sz: rec.sz,elite:!!rec.elite,eliteWindowKey:String(rec.eliteWindowKey||''),
+        eliteExpiresAt:Math.max(0,Number(rec.eliteExpiresAt)||0),eliteMode:String(rec.eliteMode||''),
+        eliteDefBonus:Math.max(0,Number(rec.eliteDefBonus)||0),ts: now,
       }, null);
     }
     return changed;
@@ -726,6 +731,11 @@ export class RealtimeHub extends BaseRealtimeHub {
         rec.moving ? 1 : 0,
         String(rec.target || ''),
         Math.max(8, Number(rec.sz) || 30),
+        rec.elite?1:0,
+        String(rec.eliteWindowKey||''),
+        Math.max(0,Number(rec.eliteExpiresAt)||0),
+        String(rec.eliteMode||''),
+        Math.max(0,Number(rec.eliteDefBonus)||0),
       ]);
     }
 
@@ -1842,7 +1852,10 @@ export class RealtimeHub extends BaseRealtimeHub {
             hp: mhp, mhp, updatedAt: now, killer: '', party: '',
             x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0,
             hx: Number.isFinite(x) ? x : 0, hy: Number.isFinite(y) ? y : 0,
-            sp, sz, dmg, nextAttackAt: 0,
+            sp, sz, dmg,
+            baseMhp:mhp,baseDmg:dmg,baseSz:sz,
+            elite:false,eliteWindowKey:'',eliteExpiresAt:0,eliteMode:'',eliteDefBonus:0,eliteKilledKey:'',
+            nextAttackAt: 0,
             nextSpecialAt: 0, nextProjectileAt: 0, nextAoeAt: 0, specialImpactAt: 0, specialKind: '',
             resetAt: clientResetAt > now ? clientResetAt : 0,
             lvl: mobLevel,
@@ -1856,14 +1869,15 @@ export class RealtimeHub extends BaseRealtimeHub {
         } else {
           const prevMhp = Math.max(1, Number(rec.mhp) || mhp);
           const prevHp = Number.isFinite(Number(rec.hp)) ? Number(rec.hp) : prevMhp;
-          rec.mhp = mhp;
-          // When a balance patch raises max HP, carry the added max HP into current HP.
-          // This preserves the amount of damage already taken instead of making every
-          // untouched mob look half-dead after the server receives the new catalog.
-          if (mhp > prevMhp && prevHp > 0) {
-            rec.hp = Math.min(mhp, prevHp + (mhp - prevMhp));
-          } else {
-            rec.hp = Math.max(0, Math.min(prevHp, mhp));
+          rec.baseMhp=mhp;rec.baseDmg=dmg;rec.baseSz=sz;
+          if(!rec.elite){
+            rec.mhp = mhp;
+            // When a balance patch raises max HP, carry the added max HP into current HP.
+            if (mhp > prevMhp && prevHp > 0) {
+              rec.hp = Math.min(mhp, prevHp + (mhp - prevMhp));
+            } else {
+              rec.hp = Math.max(0, Math.min(prevHp, mhp));
+            }
           }
           if (Number.isFinite(x) && Number.isFinite(y)) {
             rec.hx = x; rec.hy = y;
@@ -1872,7 +1886,7 @@ export class RealtimeHub extends BaseRealtimeHub {
             }
             rec.positioned = true;
           }
-          rec.sp = sp; rec.sz = sz; rec.dmg = dmg; rec.lvl = mobLevel;
+          rec.sp = sp;if(!rec.elite){rec.sz=sz;rec.dmg=dmg}rec.lvl = mobLevel;
           if (hasRoomBounds) {
             rec.roomIndex = mobRoomIndex;
             rec.roomMinX = roomMinX; rec.roomMinY = roomMinY;
@@ -1885,6 +1899,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       }
 
       if (m.done !== true) return;
+      this.syncServerElite(room,now,true);
       await this.persistMobRoom(room);
       this.sendMobAuthoritySnapshot(ws, room, now);
       return;
@@ -1943,6 +1958,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       let respawnAt = 0, killer = rec.killer, party = rec.party;
       if (rec.hp <= 0) {
+        if(rec.elite&&rec.eliteWindowKey)rec.eliteKilledKey=String(rec.eliteWindowKey);
         rec.aggro = false;
         rec.target = '';
         rec.moving = false;
@@ -1972,7 +1988,9 @@ export class RealtimeHub extends BaseRealtimeHub {
         mhp: Math.round(rec.mhp * 100) / 100,
         respawnAt, killer, party, event,
         x: rec.x, y: rec.y, aggro: !!rec.aggro, dir: rec.dir, moving: !!rec.moving,
-        target: String(rec.target || ''), sz: rec.sz, ts: now,
+        target: String(rec.target || ''), sz: rec.sz,elite:!!rec.elite,
+        eliteWindowKey:String(rec.eliteWindowKey||''),eliteExpiresAt:Math.max(0,Number(rec.eliteExpiresAt)||0),
+        eliteMode:String(rec.eliteMode||''),eliteDefBonus:Math.max(0,Number(rec.eliteDefBonus)||0),ts: now,
       }, null);
       return;
     }
@@ -2310,6 +2328,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       if (mobAuthorityRoom(currentRoom)) {
         await this.ensureMobRoomLoaded(currentRoom);
+        if(this.maybeSyncServerElite(currentRoom,now))await this.persistMobRoom(currentRoom);
         this.tickMobAI(currentRoom, now);
         if (this.roomHasAggroMob(currentRoom)) this.ensureMobAiLoop(currentRoom);
         await this.maybePersistMobMovement(currentRoom, now);
