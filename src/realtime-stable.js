@@ -1213,6 +1213,31 @@ export class RealtimeHub extends BaseRealtimeHub {
     const a = attOf(ws);
     const now = Date.now();
 
+    if (m.type === 'player-combat-fx') {
+      const room = cleanRoom(a.room);
+      const kind = String(m.kind || '');
+      if (!['gnome-cannon','archer-arrow','melee'].includes(kind)) return;
+      if (!(Number(a.h) > 0)) return;
+      if (now - Number(a.lastCombatFx || 0) < 70) return;
+      a.lastCombatFx = now;
+      ws.serializeAttachment(a);
+
+      let x = finite(m.x, -100000, 100000, Number(a.x) || 0);
+      let y = finite(m.y, -100000, 100000, Number(a.y) || 0);
+      let tx = finite(m.tx, -100000, 100000, x);
+      let ty = finite(m.ty, -100000, 100000, y);
+      let ang = finite(m.ang, -Math.PI * 4, Math.PI * 4, Math.atan2(ty - y, tx - x));
+      const animMs = Math.max(240, Math.min(700, Math.round(finite(m.animMs, 240, 700, 480))));
+
+      this.roomBroadcast(room, {
+        type:'player-combat-fx', room, from:String(a.pid || ''), kind,
+        x:Math.round(x * 10) / 10, y:Math.round(y * 10) / 10,
+        tx:Math.round(tx * 10) / 10, ty:Math.round(ty * 10) / 10,
+        ang, animMs, ts:now
+      }, ws);
+      return;
+    }
+
     if (m.type === 'world-pvp-toggle') {
       const room = cleanRoom(a.room);
       const enabled = !!m.enabled && worldPvpRoom(room) && Number(a.h) > 0;
