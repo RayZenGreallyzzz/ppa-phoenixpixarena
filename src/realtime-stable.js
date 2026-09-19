@@ -1620,7 +1620,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         return;
       }
 
-      if (hitKind === 'basic') {
+      if (hitKind === 'basic' && arenaIsMeleeClass(a)) {
         const ax=Number(a.x),ay=Number(a.y),mx=Number(rec.x),my=Number(rec.y);
         if (![ax,ay,mx,my].every(Number.isFinite)) {
           this.sendMobAuthoritySnapshot(ws, room, now);
@@ -1628,10 +1628,8 @@ export class RealtimeHub extends BaseRealtimeHub {
         }
         const basicRange=arenaBasicRangeFor(a);
         const mobSz=Math.max(8,Number(rec.sz)||30);
-        const bodyEdge=arenaIsMeleeClass(a)
-          ?Math.min(8,Math.max(0,(mobSz-30)*.15))
-          :Math.max(0,(mobSz-30)*.4);
-        const netSlack=arenaIsMeleeClass(a)?6:24;
+        const bodyEdge=Math.min(8,Math.max(0,(mobSz-30)*.15));
+        const netSlack=6;
         if (Math.hypot(mx-ax,my-ay)>basicRange+bodyEdge+netSlack) {
           this.sendMobAuthoritySnapshot(ws, room, now);
           return;
