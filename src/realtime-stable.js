@@ -1276,6 +1276,85 @@ export class RealtimeHub extends BaseRealtimeHub {
       return;
     }
 
+    if (m.type === 'world-pvp-skill-hit') {
+      const room = cleanRoom(a.room);
+      const targetPid = String(m.target || '');
+      if (!worldPvpRoom(room) || !a.worldPvp || !(Number(a.h) > 0) || !targetPid || targetPid === String(a.pid || '')) return;
+
+      let targetWs = null, ta = null;
+      for (const peer of this.roomSockets(room)) {
+        const pa = attOf(peer);
+        if (String(pa.pid || '') === targetPid) { targetWs = peer; ta = pa; break; }
+      }
+      if (!targetWs || !ta || !(Number(ta.h) > 0) || Number(ta.hiddenUntil) > now) return;
+
+      const ax = Number(a.x), ay = Number(a.y), tx = Number(ta.x), ty = Number(ta.y);
+      if (![ax,ay,tx,ty].every(Number.isFinite)) return;
+      const range = Math.max(80, Math.min(700, finite(m.range, 80, 700, 180)));
+      if (Math.hypot(tx - ax, ty - ay) > range + 55) return;
+
+      if (now - Number(a.lastWorldPvpSkillAt || 0) < 80) return;
+      a.lastWorldPvpSkillAt = now;
+
+      const atk = Math.max(1, Math.min(2500, Number(a.atk) || 1));
+      const maxClient = Math.max(12, Math.round((10 + atk) * 8));
+      let damage = Math.max(1, Math.min(maxClient, Math.round(Number(m.amount) || 1)));
+
+      // Client skill formulas already apply the target's displayed DEF. Keep
+      // server-side mitigation limited to universal player damage reduction
+      // so we don't double-apply armor while still respecting defensive gear.
+      const dr = Math.max(0, Math.min(50, Number(ta.damageReduction) || 0));
+      damage = Math.max(1, Math.round(damage * (1 - dr / 100)));
+      const crit = !!m.crit;
+
+      ta.h = Math.max(0, Math.round(Number(ta.h) - damage));
+      ta.pvpHpLockUntil = now + 450;
+      ta.lastSeenAt = now;
+      targetWs.serializeAttachment(ta);
+
+      // Any hostile skill breaks smoke on the attacker.
+      if (Number(a.hiddenUntil) > now) a.hiddenUntil = 0;
+      ws.serializeAttachment(a);
+
+      const payload = {
+        type:'world-pvp-skill-hit', room, attacker:String(a.pid||''), target:targetPid,
+        damage, crit, hp:Math.max(0,Number(ta.h)||0), mhp:Math.max(1,Number(ta.m)||1), ts:now
+      };
+      wsJson(ws, payload);
+      wsJson(targetWs, payload);
+      this.roomBroadcast(room, { type:'move', player:packetFromAtt(ta), room, ts:now }, targetWs);
+      this.roomBroadcast(room, { type:'move', player:packetFromAtt(a), room, ts:now }, ws);
+      return;
+    }
+
+    if (m.type === 'world-pvp-control') {
+      const room = cleanRoom(a.room);
+      const targetPid = String(m.target || '');
+      const kind = String(m.kind || '');
+      if (!worldPvpRoom(room) || !a.worldPvp || !(Number(a.h) > 0) ||
+          !targetPid || targetPid === String(a.pid || '') || (kind !== 'slow' && kind !== 'root')) return;
+
+      let targetWs = null, ta = null;
+      for (const peer of this.roomSockets(room)) {
+        const pa = attOf(peer);
+        if (String(pa.pid || '') === targetPid) { targetWs = peer; ta = pa; break; }
+      }
+      if (!targetWs || !ta || !(Number(ta.h) > 0) || Number(ta.hiddenUntil) > now) return;
+
+      const ax = Number(a.x), ay = Number(a.y), tx = Number(ta.x), ty = Number(ta.y);
+      if (![ax,ay,tx,ty].every(Number.isFinite)) return;
+      const range = Math.max(80, Math.min(700, finite(m.range, 80, 700, 180)));
+      if (Math.hypot(tx - ax, ty - ay) > range + 55) return;
+
+      const duration = Math.max(100, Math.min(4500, Math.round(finite(m.duration, 100, 4500, 1000))));
+      const mul = kind === 'slow' ? Math.max(.25, Math.min(.95, finite(m.mul, .25, .95, .55))) : 0;
+      wsJson(targetWs, {
+        type:'world-pvp-control', room, attacker:String(a.pid||''), target:targetPid,
+        kind, mul, duration, ts:now
+      });
+      return;
+    }
+
     if (m.type === 'player-stealth') {
       const duration = Math.max(0, Math.min(3000, Math.round(finite(m.duration, 0, 3000, 0))));
       const liveClass = String(a.classKey || '').toLowerCase();
