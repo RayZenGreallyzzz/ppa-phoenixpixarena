@@ -105,13 +105,21 @@
         cx.imageSmoothingEnabled=false;
         cx.fillStyle='rgba(0,0,0,.40)';cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.38,body*.14,0,0,Math.PI*2);cx.fill();
         var selected=String(window.PPA_WORLD_PVP_TARGET_ID||'')===String(r.id||r.i||r.__ppaPid||'');
-        if(selected){
-          var tp=.5+.5*Math.sin(now*.012);
-          cx.strokeStyle='rgba(255,202,76,'+(.82+.18*tp)+')';cx.lineWidth=3;
-          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.57,body*.24,0,0,Math.PI*2);cx.stroke();
+        var localPk=!!window.PPA_WORLD_PVP_ON;
+        var attackable=localPk&&!hidden&&Number(r.hp)>0&&(!window.PPA_REMOTE_PLAYER_TARGETABLE||window.PPA_REMOTE_PLAYER_TARGETABLE(r));
+        if(selected&&attackable){
+          var tp=.5+.5*Math.sin(now*.014);
+          cx.strokeStyle='rgba(255,54,42,'+(.88+.12*tp)+')';cx.lineWidth=4;
+          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.62,body*.27,0,0,Math.PI*2);cx.stroke();
+          cx.strokeStyle='rgba(255,176,120,'+(.55+.25*tp)+')';cx.lineWidth=1.5;
+          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.76,body*.33,0,0,Math.PI*2);cx.stroke();
+        }else if(attackable){
+          cx.strokeStyle='rgba(255,62,48,.82)';cx.lineWidth=2.3;
+          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.50,body*.21,0,0,Math.PI*2);cx.stroke();
         }else if(r.worldPvp){
-          cx.strokeStyle='rgba(255,85,62,.92)';cx.lineWidth=2;
-          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.48,body*.20,0,0,Math.PI*2);cx.stroke();
+          // Another player's own PK flag is still visible even when my PK mode is off.
+          cx.strokeStyle='rgba(255,105,78,.62)';cx.lineWidth=1.5;
+          cx.beginPath();cx.ellipse(sx,sy+body*.45,body*.46,body*.19,0,0,Math.PI*2);cx.stroke();
         }
         cx.drawImage(a.img,frame*a.fw,row*a.fh,a.fw,a.fh,Math.round(sx-dw/2),Math.round(drawY),Math.round(dw),Math.round(dh));
 
