@@ -35,7 +35,7 @@ function finite(v, min, max, fallback = 0) {
 
 const DUNGEON_CAPACITY = 40;
 const DUNGEON_RESERVE_MS = 90_000;
-const DUNGEON_MOB_RESPAWN_MS = 10_000;
+const DUNGEON_MOB_RESPAWN_MS = 14_000;
 const DUNGEON_PHOENIX_RESPAWN_MS = 2 * 60 * 60 * 1000;
 const DUNGEON_LORD40_RESPAWN_MS = 6 * 60 * 60 * 1000;
 const DUNGEON_BOSS60_RESPAWN_MS = 6 * 60 * 60 * 1000;
