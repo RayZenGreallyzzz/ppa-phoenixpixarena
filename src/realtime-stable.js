@@ -1600,6 +1600,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       const amount = finite(m.amount, 0, 10000000, 0);
       const mhp = Math.max(1, finite(m.mhp, 1, 10000000, 1));
       const event = String(m.event || '').slice(0, 96);
+      const hitKind = String(m.kind || '').slice(0,16);
       if (!mobAuthorityRoom(room) || cleanRoom(m.room || room) !== room) return;
       if (!key || !(amount > 0)) return;
 
@@ -1617,6 +1618,24 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (existingDead && Number(existingDead.at) > now) {
         this.sendMobAuthoritySnapshot(ws, room, now);
         return;
+      }
+
+      if (hitKind === 'basic') {
+        const ax=Number(a.x),ay=Number(a.y),mx=Number(rec.x),my=Number(rec.y);
+        if (![ax,ay,mx,my].every(Number.isFinite)) {
+          this.sendMobAuthoritySnapshot(ws, room, now);
+          return;
+        }
+        const basicRange=arenaBasicRangeFor(a);
+        const mobSz=Math.max(8,Number(rec.sz)||30);
+        const bodyEdge=arenaIsMeleeClass(a)
+          ?Math.min(8,Math.max(0,(mobSz-30)*.15))
+          :Math.max(0,(mobSz-30)*.4);
+        const netSlack=arenaIsMeleeClass(a)?6:24;
+        if (Math.hypot(mx-ax,my-ay)>basicRange+bodyEdge+netSlack) {
+          this.sendMobAuthoritySnapshot(ws, room, now);
+          return;
+        }
       }
 
       rec.hp = Math.max(0, Math.min(rec.mhp, Number(rec.hp) || rec.mhp) - amount);
