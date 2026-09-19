@@ -77,6 +77,30 @@
     return Math.round(d);
   }
 
+  window.PPA_DRAGON60_DRAW_BODY=function(e){
+    try{
+      if(!e||!e.isDungeon60Boss||typeof cx==='undefined'||typeof cam==='undefined')return false;
+      var sx=e.x-cam.x,sy=e.y-cam.y,im=image(),state=e.dragonState||'idle',dir=facing(e);
+      var atk=state==='attack',walk=state==='walk';
+      var pulse=atk?1.065:(walk?1+Math.sin((e.bob||0)*1.7)*.018:1+Math.sin((e.bob||0)*.55)*.012);
+      var w=270*pulse,h=270*pulse;
+      cx.save();
+      if(im&&im.complete&&im.naturalWidth>0){
+        cx.translate(sx,sy);
+        if(dir===2)cx.scale(-1,1);
+        var tilt=atk?(dir===0?-.025:dir===1?.025:0):0;
+        if(tilt)cx.rotate(tilt);
+        cx.imageSmoothingEnabled=false;
+        cx.drawImage(im,-w/2,-h+74,w,h);
+      }else{
+        cx.fillStyle=e.flash>0?'#fff':'#8f2b24';
+        cx.beginPath();cx.arc(sx,sy,70,0,Math.PI*2);cx.fill();
+      }
+      cx.restore();
+      return true;
+    }catch(err){console.warn('PPA dragon60 body draw',err);return false}
+  };
+
   window.PPA_DRAGON60_DRAW=function(e){
     try{
       if(!e||!e.isDungeon60Boss||typeof cx==='undefined'||typeof cam==='undefined')return false;
