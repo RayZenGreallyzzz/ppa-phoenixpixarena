@@ -755,6 +755,9 @@
         try{if(typeof showPickup==='function')showPickup('ПК · игроков рядом нет','#c6b99f')}catch(_){}
         return true;
       }
+      // Switching the mixed PK attack to a player must cancel any previous
+      // native smart-attack order against a mob, otherwise it resumes later.
+      try{if(typeof cancelSmartAttack==='function')cancelSmartAttack()}catch(_){};
       var id=String(r.id||r.i||r.__ppaPid||'');
       var rp=arenaRemotePos(r),sx=Number(P.x)||0,sy=Number(P.y)||0;
       if(!Number.isFinite(rp.x)||!Number.isFinite(rp.y))return true;
