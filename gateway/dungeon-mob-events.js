@@ -369,16 +369,19 @@
     return diagCache;
   };
 
-  window.PPA_MOB_EVENT_DAMAGE=function(e,amount){
+  window.PPA_MOB_EVENT_DAMAGE=function(e,amount,meta){
     try{
       if(applying||!active())return false;
+      meta=(meta&&typeof meta==='object')?meta:{};
       var key=keyOf(e),dmg=Number(amount),mhp=Math.max(1,Number(e&&e.mhp)||Number(e&&e.hp)||1);
+      var kind=String(meta.kind||'').slice(0,16);
+      var range=Math.max(0,Math.min(700,Number(meta.range)||0));
       if(!key||!Number.isFinite(dmg)||dmg<=0)return false;
       register(false);
       var id=(selfId()||'self')+':'+Date.now().toString(36)+':'+(++seq);
       return !!window.PPA_RT_SEND({
         type:'mob-hit-event',room:room(),key:key,amount:Math.round(dmg*100)/100,
-        mhp:Math.round(mhp*100)/100,event:id
+        mhp:Math.round(mhp*100)/100,event:id,kind:kind,range:range
       });
     }catch(_){return false}
   };
