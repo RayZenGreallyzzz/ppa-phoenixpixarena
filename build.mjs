@@ -1028,6 +1028,29 @@ ppaPatchRegex(
 
 /* ======================================================================== */
 
+/* === CLEAN PK RUNTIME BUILD AUDIT ======================================== */
+{
+  const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
+  const socialUi=fs.readFileSync(path.join(ROOT,'gateway/social-ui.js'),'utf8');
+
+  if (!worldCombat.includes('PPA_WORLD_PK_TRY_BASIC_ATTACK') ||
+      !worldCombat.includes('PPA_WORLD_SKILL_TARGET') ||
+      !worldCombat.includes('PPA_WORLD_PK_ACTIVE')) {
+    throw new Error('Clean PK runtime exports are incomplete');
+  }
+  if (worldCombat.includes('MutationObserver') ||
+      worldCombat.includes('installAttackButtonFallback') ||
+      worldCombat.includes('installCanvasTargeting')) {
+    throw new Error('Legacy duplicate PK input hooks returned');
+  }
+  if (!socialUi.includes('PPA_WORLD_PK_ACTIVE') ||
+      !socialUi.includes('PPA_WORLD_PLAYER_SELECT')) {
+    throw new Error('Social UI is not routing PK taps to combat targeting');
+  }
+}
+
+/* ======================================================================== */
+
 const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
   ['gateway/online-client.js','online-client.js','Online client bridge missing'],
