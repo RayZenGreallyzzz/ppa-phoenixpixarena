@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v380-tight-melee-ranges-20260919';
+const CLIENT_BUILD = 'v381-melee-range-authority-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -184,8 +184,11 @@ ppaPatchRegex(
 );
 
 if (!output.includes("assassin:64") ||
+    !output.includes("tank:72") ||
     !output.includes("barbarian:78") ||
-    !output.includes("function playerBasicTargetEdge(target)")) {
+    !output.includes("paladin:74") ||
+    !output.includes("function playerBasicTargetEdge(target)") ||
+    !output.includes("PPA_MOB_EVENT_DAMAGE(target,r.damage,{kind:'basic',range:playerBasicRange()})")) {
   throw new Error('Tight melee range patch did not apply');
 }
 
