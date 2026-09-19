@@ -68,9 +68,18 @@
   }
   function baseRange(){
     try{
+      var cls=String(typeof classBaseKey==='function'?classBaseKey():'').toLowerCase();
+      var fixed={tank:72,barbarian:78,paladin:74,assassin:64};
+      if(fixed[cls])return fixed[cls];
       var n=(typeof playerBasicRange==='function')?Number(playerBasicRange()):Number(P&&P.attackRange);
       return Math.max(60,Number.isFinite(n)?n:60);
     }catch(_){return 60}
+  }
+  function basicSlack(){
+    try{
+      var cls=String(typeof classBaseKey==='function'?classBaseKey():'').toLowerCase();
+      return (cls==='tank'||cls==='barbarian'||cls==='paladin'||cls==='assassin')?12:46;
+    }catch(_){return 12}
   }
   function selfAttackFx(r){
     try{
@@ -85,7 +94,7 @@
   function tryBasicAttack(){
     try{
       if(!combatReady())return false;
-      var range=baseRange(),r=nearestEnemy(range+46);
+      var range=baseRange(),r=nearestEnemy(range+basicSlack());
       if(!r){
         if(nearestEnemy(650))popup('АРЕНА · соперник вне радиуса','#ffbd76');
         return true;
