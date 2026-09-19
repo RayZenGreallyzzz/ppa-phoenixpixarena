@@ -1214,7 +1214,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
       lastSeenAt: Date.now(), lastSnapshotPush: 0, lastMobSnapshotAt: 0, hiddenUntil: 0,
       atk: 1, def: 0, attackRange: 60, crit: 0, critDmg: 180, atkSpd: 1,
-      pkEnabled:false,pkHpLockUntil:0,lastPkAttack:0,lastPkSkill:0,lastPkControl:0,
+      deadLocked:false,deadAt:0,pkEnabled:false,pkHpLockUntil:0,lastPkAttack:0,lastPkSkill:0,lastPkControl:0,
       arenaQueueMode:'',arenaQueuedAt:0,arenaMatchId:'',arenaMode:'',arenaSide:'',arenaHpLockUntil:0,
       arenaBlueWins:0,arenaRedWins:0,lastArenaAttack:0,lastArenaSkill:0,lastArenaControl:0,
       q: 0, l: 1, b: 0,
@@ -1240,9 +1240,40 @@ export class RealtimeHub extends BaseRealtimeHub {
     const a = attOf(ws);
     const now = Date.now();
 
+    if (m.type === 'player-respawn-confirm') {
+      if(a.arenaMatchId)return;
+      if(!a.deadLocked&&Number(a.h)>0){
+        wsJson(ws,{type:'player-respawn-state',ok:true,room:cleanRoom(a.room),h:Math.max(1,Number(a.h)||1),m:Math.max(1,Number(a.m)||1),ts:now});
+        return;
+      }
+
+      const oldRoom=cleanRoom(a.room);
+      let wanted=cleanRoom(m.room||oldRoom);
+      // Native respawn may either stay in the current respawn-enabled map
+      // (dungeon/siege/clan boss) or return to the peaceful city.
+      if(wanted!==oldRoom&&wanted!=='safe')wanted='safe';
+
+      if(wanted!==oldRoom)this.moveSocketRoom(ws,a,wanted,now);
+      a.deadLocked=false;a.deadAt=0;a.pkEnabled=false;a.pkHpLockUntil=0;
+      a.lastPkAttack=0;a.lastPkSkill=0;a.lastPkControl=0;a.hiddenUntil=0;
+      a.m=Math.max(1,Math.round(Number(m.m)||Number(a.m)||1));
+      a.h=Math.max(1,Math.min(a.m,Math.round(Number(m.h)||a.m)));
+      if(Number.isFinite(Number(m.x)))a.x=Math.round(Number(m.x)*10)/10;
+      if(Number.isFinite(Number(m.y)))a.y=Math.round(Number(m.y)*10)/10;
+      a.lastSeenAt=now;
+      ws.serializeAttachment(a);
+
+      const room=cleanRoom(a.room);
+      wsJson(ws,{type:'player-respawn-state',ok:true,room,h:a.h,m:a.m,x:a.x,y:a.y,ts:now});
+      this.roomBroadcast(room,{type:'move',player:packetFromAtt(a),room,ts:now},ws);
+      this.sendRoomSnapshot(ws,room);
+      this.sendOnlineCount();
+      return;
+    }
+
     if (m.type === 'player-pk-toggle') {
       const room=cleanRoom(a.room);
-      const enabled=!!m.enabled&&playerPkRoomAllowed(room)&&!a.arenaMatchId;
+      const enabled=!!m.enabled&&playerPkRoomAllowed(room)&&!a.arenaMatchId&&!a.deadLocked&&Number(a.h)>0;
       a.pkEnabled=enabled;
       if(!enabled){a.lastPkAttack=0;a.lastPkSkill=0;a.lastPkControl=0}
       ws.serializeAttachment(a);
@@ -1256,7 +1287,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       const reject=(reason)=>wsJson(ws,{type:'player-pk-reject',reason:String(reason||'атака отклонена'),target:targetPid,ts:now});
       if(!a.pkEnabled){reject('режим ПК выключен');return}
       if(!playerPkRoomAllowed(room)||a.arenaMatchId){reject('в этой зоне ПК запрещён');return}
-      if(!(Number(a.h)>0)||!targetPid||targetPid===String(a.pid||'')){reject('цель недоступна');return}
+      if(a.deadLocked||!(Number(a.h)>0)||!targetPid||targetPid===String(a.pid||'')){reject('цель недоступна');return}
 
       let targetWs=null,ta=null;
       for(const peer of this.roomSockets(room)){
@@ -1264,7 +1295,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         if(String(pa.pid||'')===targetPid){targetWs=peer;ta=pa;break}
       }
       if(!targetWs||!ta){reject('игрок уже не в этой зоне');return}
-      if(!(Number(ta.h)>0)){reject('игрок уже повержен');return}
+      if(ta.deadLocked||!(Number(ta.h)>0)){reject('игрок уже повержен');return}
       if(Number(ta.hiddenUntil)>now){reject('игрок скрыт');return}
 
       const ax=Number(a.x),ay=Number(a.y),tx=Number(ta.x),ty=Number(ta.y);
@@ -1295,6 +1326,9 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       ta.h=Math.max(0,Math.round(Number(ta.h)-damage));
       ta.pkHpLockUntil=now+900;
+      if(!(Number(ta.h)>0)){
+        ta.h=0;ta.deadLocked=true;ta.deadAt=now;ta.pkEnabled=false;
+      }
       ta.lastSeenAt=now;
       targetWs.serializeAttachment(ta);
       if(Number(a.hiddenUntil)>now)a.hiddenUntil=0;
@@ -1569,8 +1603,12 @@ export class RealtimeHub extends BaseRealtimeHub {
         for (const peer of this.roomSockets(room)) {
           const pa = attOf(peer);
           if (String(pa.pid || '') !== target || String(pa.partyId || '') !== partyId) continue;
-          if (Number(pa.h) > 0) return;
-          wsJson(peer, { type:'group-skill', skill, rank, pct:Math.max(1,pct), from:String(a.pid||''), ts:now });
+          if (Number(pa.h) > 0&&!pa.deadLocked) return;
+          const revivePct=Math.max(1,pct);
+          pa.deadLocked=false;pa.deadAt=0;pa.pkHpLockUntil=0;
+          pa.h=Math.max(1,Math.round(Math.max(1,Number(pa.m)||1)*revivePct/100));
+          pa.lastSeenAt=now;peer.serializeAttachment(pa);
+          wsJson(peer, { type:'group-skill', skill, rank, pct:revivePct, hp:pa.h, from:String(a.pid||''), ts:now });
           return;
         }
         return;
@@ -2069,13 +2107,20 @@ export class RealtimeHub extends BaseRealtimeHub {
       {
         const incomingH=Math.max(0,Math.round(Number(m.h)||0));
         if(!a.arenaMatchId){
-          if(now<Number(a.pkHpLockUntil||0)&&incomingH>Number(a.h||0)){
+          if(a.deadLocked){
+            // Zero HP is sticky. Normal movement/regen packets can NEVER revive.
+            a.h=0;
+          }else if(incomingH<=0){
+            a.h=0;a.deadLocked=true;a.deadAt=now;a.pkEnabled=false;
+            a.pkHpLockUntil=0;a.lastPkAttack=0;a.lastPkSkill=0;a.lastPkControl=0;
+            wsJson(ws,{type:'player-death-state',locked:true,h:0,room:currentRoom,ts:now});
+          }else if(now<Number(a.pkHpLockUntil||0)&&incomingH>Number(a.h||0)){
             // Keep recent server-authoritative PK damage until the client catches up.
           }else{
             a.h=incomingH;
           }
         }
-        // Arena HP stays fully server-authoritative for the confirmed match.
+        // Arena round HP remains governed by the arena state machine.
       }
       a.m = Math.max(1, Math.round(Number(m.m) || 1));
       a.atk = finite(m.at, 1, 2500, Number(a.atk)||1);
