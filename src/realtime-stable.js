@@ -1224,22 +1224,29 @@ export class RealtimeHub extends BaseRealtimeHub {
     if (m.type === 'world-pvp-hit') {
       const room = cleanRoom(a.room);
       const targetPid = String(m.target || '');
-      if (!worldPvpRoom(room) || !a.worldPvp || !(Number(a.h) > 0) || !targetPid || targetPid === String(a.pid || '')) return;
+      const reject = (reason) => wsJson(ws, { type:'world-pvp-reject', reason:String(reason||'атака отклонена'), room, target:targetPid, ts:now });
+      if (!worldPvpRoom(room)) { reject('в этой зоне ПК недоступен'); return; }
+      if (!a.worldPvp) { reject('режим ПК не подтверждён сервером'); return; }
+      if (!(Number(a.h) > 0)) { reject('персонаж не может атаковать'); return; }
+      if (!targetPid || targetPid === String(a.pid || '')) { reject('цель не выбрана'); return; }
 
       let targetWs = null, ta = null;
       for (const peer of this.roomSockets(room)) {
         const pa = attOf(peer);
         if (String(pa.pid || '') === targetPid) { targetWs = peer; ta = pa; break; }
       }
-      if (!targetWs || !ta || !(Number(ta.h) > 0)) return;
+      if (!targetWs || !ta) { reject('цель уже не в этой локации'); return; }
+      if (!(Number(ta.h) > 0)) { reject('цель уже побеждена'); return; }
       // PK mode is an explicit hostile toggle: party membership does not grant
       // protection in open-world combat. Safe town remains the hard no-PK zone.
-      if (Number(ta.hiddenUntil) > now) return;
+      if (Number(ta.hiddenUntil) > now) { reject('цель скрыта дымовой завесой'); return; }
 
       const ax = Number(a.x), ay = Number(a.y), tx = Number(ta.x), ty = Number(ta.y);
-      if (![ax,ay,tx,ty].every(Number.isFinite)) return;
+      if (![ax,ay,tx,ty].every(Number.isFinite)) { reject('позиция цели ещё синхронизируется'); return; }
       const range = Math.max(60, Math.min(480, Number(a.attackRange) || 60));
-      if (Math.hypot(tx - ax, ty - ay) > range + 38) return;
+      // Small latency/body allowance: the visible sprite can be ahead of its
+      // last authoritative position by several frames on mobile.
+      if (Math.hypot(tx - ax, ty - ay) > range + 72) { reject('цель вне радиуса атаки'); return; }
 
       const atkSpd = Math.max(.35, Math.min(4.5, Number(a.atkSpd) || 1));
       const minDelay = Math.max(180, Math.round(1000 / atkSpd * .82));
