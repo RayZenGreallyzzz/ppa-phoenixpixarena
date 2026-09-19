@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v376-visible-arena-matchmaking-20260919';
+const CLIENT_BUILD = 'v377-real-player-pvp-core-20260919';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -767,12 +767,6 @@ if (!output.includes('autoAttackUnlocked')) {
 
 /* === ONLINE ARENA COMBAT BRIDGE ======================================== */
 ppaPatchRegex(
-  'online arena basic attack hook',
-  /function\s+queueAttack\(e\)\s*\{\s*if\(e\)\{e\.preventDefault\(\);e\.stopPropagation\(\)\}/,
-  "function queueAttack(e){\n  if(e){e.preventDefault();e.stopPropagation()}\n  if(window.PPA_ARENA_TRY_BASIC_ATTACK&&window.PPA_ARENA_TRY_BASIC_ATTACK(e))return;"
-);
-
-ppaPatchRegex(
   'online arena selected skill target',
   /function\s+skillTarget\(maxRange\)\{\s*if\(P\.scene===['"]clanboss1['"]\)\{/,
   "function skillTarget(maxRange){\n  if(window.PPA_ARENA_SKILL_TARGET){var _ppaArenaSkillTarget=window.PPA_ARENA_SKILL_TARGET(maxRange);if(_ppaArenaSkillTarget)return _ppaArenaSkillTarget;}\n  if(P.scene==='clanboss1'){"
@@ -802,10 +796,9 @@ ppaPatchRegex(
   "if((P.scene==='worldboss'||P.scene==='pvp1'||P.scene==='pvpteam')&&!transitioning){if((P.scene==='pvp1'||P.scene==='pvpteam')&&window.PPA_ARENA_MATCH_END)window.PPA_ARENA_MATCH_END();changeScene('safe');}"
 );
 
-if (!output.includes("PPA_ARENA_TRY_BASIC_ATTACK(e)") ||
-    !output.includes("PPA_ARENA_SKILL_TARGET(maxRange)") ||
+if (!output.includes("PPA_ARENA_SKILL_TARGET(maxRange)") ||
     !output.includes("PPA_ARENA_AROUND_TARGET")) {
-  throw new Error('Online arena combat target bridge did not apply');
+  throw new Error('Online arena skill target bridge did not apply');
 }
 
 /* ======================================================================== */
@@ -1060,8 +1053,8 @@ ppaPatchRegex(
   }
   if (!realtimeClient.includes('PPA_PVP_QUEUE_HANDLER') ||
       !realtimeClient.includes("type:'arena-queue-join'") ||
-      !realtimeClient.includes('PPA_ARENA_NET_RECEIVE') ||
-      !arenaPvp.includes('PPA_ARENA_TRY_BASIC_ATTACK') ||
+      !realtimeClient.includes('arenaTryBasicDirect') ||
+      !realtimeClient.includes("type:'arena-hit'") ||
       !arenaPvp.includes('PPA_ARENA_SKILL_HIT')) {
     throw new Error('Online arena client bridge is incomplete');
   }
