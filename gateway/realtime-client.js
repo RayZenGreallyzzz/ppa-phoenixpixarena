@@ -554,7 +554,7 @@
         return true;
       }
       var r=arenaRemoteById(RT.arenaOpponentId);
-      if(!r||!r.hasPos){
+      if(!r){
         try{if(typeof showPickup==='function')showPickup('АРЕНА · синхронизация соперника…','#ffd36d')}catch(_){}
         return true;
       }
