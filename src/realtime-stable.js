@@ -1182,7 +1182,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       lastSeenAt: Date.now(), lastSnapshotPush: 0, lastMobSnapshotAt: 0, hiddenUntil: 0,
       atk: 1, def: 0, attackRange: 60, crit: 0, critDmg: 180, atkSpd: 1,
       arenaQueueMode:'',arenaQueuedAt:0,arenaMatchId:'',arenaMode:'',arenaSide:'',arenaHpLockUntil:0,
-      lastArenaAttack:0,lastArenaSkill:0,lastArenaControl:0,
+      arenaBlueWins:0,arenaRedWins:0,lastArenaAttack:0,lastArenaSkill:0,lastArenaControl:0,
       q: 0, l: 1, b: 0,
     });
     this.indexAdd(server, 'safe');
@@ -1235,11 +1235,11 @@ export class RealtimeHub extends BaseRealtimeHub {
       const room=cleanRoom('pvp1-'+matchId);
 
       otherA.arenaQueueMode='';otherA.arenaQueuedAt=0;otherA.arenaMatchId=matchId;otherA.arenaMode=mode;otherA.arenaSide='blue';
-      otherA.arenaHpLockUntil=0;otherA.lastArenaAttack=0;otherA.lastArenaSkill=0;otherA.lastArenaControl=0;
+      otherA.arenaHpLockUntil=0;otherA.arenaBlueWins=0;otherA.arenaRedWins=0;otherA.lastArenaAttack=0;otherA.lastArenaSkill=0;otherA.lastArenaControl=0;
       otherA.h=Math.max(1,Number(otherA.m)||Number(otherA.h)||1);
 
       a.arenaQueueMode='';a.arenaQueuedAt=0;a.arenaMatchId=matchId;a.arenaMode=mode;a.arenaSide='red';
-      a.arenaHpLockUntil=0;a.lastArenaAttack=0;a.lastArenaSkill=0;a.lastArenaControl=0;
+      a.arenaHpLockUntil=0;a.arenaBlueWins=0;a.arenaRedWins=0;a.lastArenaAttack=0;a.lastArenaSkill=0;a.lastArenaControl=0;
       a.h=Math.max(1,Number(a.m)||Number(a.h)||1);
 
       this.moveSocketRoom(otherWs,otherA,room,now);
@@ -1261,7 +1261,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     if (m.type === 'arena-leave') {
       a.arenaQueueMode='';a.arenaQueuedAt=0;a.arenaMatchId='';a.arenaMode='';a.arenaSide='';
-      a.arenaHpLockUntil=0;a.lastArenaAttack=0;a.lastArenaSkill=0;a.lastArenaControl=0;
+      a.arenaHpLockUntil=0;a.arenaBlueWins=0;a.arenaRedWins=0;a.lastArenaAttack=0;a.lastArenaSkill=0;a.lastArenaControl=0;
       this.moveSocketRoom(ws,a,'safe',now);this.sendRoomSnapshot(ws,'safe');this.sendOnlineCount();
       return;
     }
@@ -1312,16 +1312,32 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (Number(a.hiddenUntil)>now)a.hiddenUntil=0;
       a.lastSeenAt=now;ws.serializeAttachment(a);
 
-      const roundOver=!(Number(ta.h)>0),roundToken=roundOver?(matchId+':'+now):'';
+      const targetHp=Math.max(0,Number(ta.h)||0);
+      const roundOver=!(targetHp>0),winnerSide=roundOver?String(a.arenaSide||''):'';
+      let blueWins=Math.max(0,Number(a.arenaBlueWins)||Number(ta.arenaBlueWins)||0);
+      let redWins=Math.max(0,Number(a.arenaRedWins)||Number(ta.arenaRedWins)||0);
+      if(roundOver){
+        if(winnerSide==='blue')blueWins++;
+        else if(winnerSide==='red')redWins++;
+      }
+      const matchOver=roundOver&&(blueWins>=2||redWins>=2);
+      const roundToken=roundOver?(matchId+':'+now):'';
       const payload={type:skill?'arena-skill-hit':'arena-hit',matchId,room,attacker:String(a.pid||''),target:targetPid,damage,crit:!!m.crit,
-        hp:Math.max(0,Number(ta.h)||0),mhp:Math.max(1,Number(ta.m)||1),damageType:skill?String(m.damageType||'physical').slice(0,16):'physical',
-        roundOver,winner:roundOver?String(a.arenaSide||''):'',roundToken,ts:now};
+        hp:targetHp,mhp:Math.max(1,Number(ta.m)||1),damageType:skill?String(m.damageType||'physical').slice(0,16):'physical',
+        roundOver,winner:winnerSide,roundToken,scoreBlue:blueWins,scoreRed:redWins,matchOver,ts:now};
       wsJson(ws,payload);wsJson(targetWs,payload);
 
       if (roundOver) {
         for (const peer of this.roomSockets(room)) {
           const pa=attOf(peer);if (String(pa.arenaMatchId||'')!==matchId)continue;
-          pa.h=Math.max(1,Number(pa.m)||1);pa.arenaHpLockUntil=0;pa.lastArenaAttack=0;pa.lastArenaSkill=0;pa.lastArenaControl=0;peer.serializeAttachment(pa);
+          pa.arenaBlueWins=blueWins;pa.arenaRedWins=redWins;
+          pa.h=Math.max(1,Number(pa.m)||1);pa.arenaHpLockUntil=0;
+          pa.lastArenaAttack=0;pa.lastArenaSkill=0;pa.lastArenaControl=0;
+          if(matchOver){
+            pa.arenaMatchId='';pa.arenaMode='';pa.arenaSide='';
+            pa.arenaQueueMode='';pa.arenaQueuedAt=0;
+          }
+          peer.serializeAttachment(pa);
         }
       }
       return;
@@ -1904,7 +1920,9 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.y = Number.isFinite(Number(m.y)) ? Math.round(Number(m.y) * 10) / 10 : Number(a.y) || 0;
       {
         const incomingH=Math.max(0,Math.round(Number(m.h)||0));
-        a.h=(a.arenaMatchId&&now<Number(a.arenaHpLockUntil||0)&&incomingH>Number(a.h||0))?Math.max(0,Number(a.h)||0):incomingH;
+        if(!a.arenaMatchId)a.h=incomingH;
+        // During a confirmed arena match HP is server-authoritative.
+        // Movement packets must never heal/overwrite PvP damage.
       }
       a.m = Math.max(1, Math.round(Number(m.m) || 1));
       a.atk = finite(m.at, 1, 2500, Number(a.atk)||1);
