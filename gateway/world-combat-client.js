@@ -416,6 +416,11 @@
         }
 
         // No nearby player (or PK off): keep the existing smart PvE target/chase.
+        // Clear an AUTO-created/stale player selection first so the manual PK
+        // bridge cannot block the normal PvE smart attack.
+        if(autoOn&&selectedPlayerId){
+          selectedPlayerId='';window.PPA_WORLD_PVP_TARGET_ID='';
+        }
         if(typeof queueAttack==='function')queueAttack();
       }
     }catch(_){}
