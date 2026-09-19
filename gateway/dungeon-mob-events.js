@@ -422,12 +422,13 @@
     if(hp<=0&&respawnAt>now){
       deadUntil.set(key,respawnAt);
       tomb=respawnAt;
-    }else if(hp>0&&respawnAt===0&&tomb&&now>=tomb){
+    }else if(hp>0&&respawnAt===0){
+      // A positive state with respawnAt=0 is the server's authoritative revive.
+      // Clear the local tombstone immediately; never let device-clock skew or a
+      // previously missed packet keep a respawned mob invisible for hours.
       deadUntil.delete(key);
       tomb=0;
     }
-    // WebSocket order should already protect this, but this guard also covers
-    // reconnect/snapshot races: positive state cannot revive a still-dead mob.
     if(hp>0&&tomb>now){
       hp=0;
       respawnAt=tomb;
