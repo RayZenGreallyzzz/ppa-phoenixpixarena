@@ -118,7 +118,6 @@
           if(p.c!==undefined&&String(p.c||''))r.cls=String(p.c||'');
           if(p.p!==undefined)r.partyId=String(p.p||'');
           if(p.hu!==undefined)r.hiddenUntil=Math.max(0,Number(p.hu)||0);
-          if(p.pv!==undefined)r.worldPvp=!!p.pv;
           if(Number.isFinite(Number(p.df)))r.def=Math.max(0,Number(p.df)||0);
           if(Number.isFinite(Number(p.at)))r.atk=Math.max(1,Number(p.at)||1);
           if(Number.isFinite(Number(p.ar)))r.attackRange=Math.max(60,Number(p.ar)||60);
@@ -320,52 +319,6 @@
       return;
     }
     if(m.type==='move'){if(m.player)applyPlayer(m.player,false);return}
-    if(m.type==='world-pvp-state'){
-      window.PPA_WORLD_PVP_ON=!!m.enabled;
-      try{if(window.PPA_WORLD_COMBAT_REFRESH)window.PPA_WORLD_COMBAT_REFRESH()}catch(_){}
-      return
-    }
-    if(m.type==='world-pvp-hit'||m.type==='world-pvp-skill-hit'){
-      try{
-        var mine=String((window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
-        var skillHit=m.type==='world-pvp-skill-hit';
-        if(String(m.target||'')===mine&&typeof P!=='undefined'&&P){
-          P.hp=Math.max(0,Number(m.hp)||0);
-          if(typeof showPickup==='function')showPickup((skillHit?'НАВЫК ПК · −':'ПК · −')+Math.max(1,Math.round(Number(m.damage)||1)),skillHit?'#d9a7ff':'#ff8b72');
-        }
-        if(String(m.attacker||'')===mine){
-          var rr=(window.PPA_ONLINE&&PPA_ONLINE.remotes)?PPA_ONLINE.remotes.get(String(m.target||'')):null;
-          if(rr&&Number.isFinite(Number(m.hp)))rr.hp=Math.max(0,Number(m.hp));
-          if(typeof showPickup==='function')showPickup((m.crit?'КРИТ ':'')+(skillHit?'НАВЫК ПК · −':'ПК · −')+Math.max(1,Math.round(Number(m.damage)||1)),m.crit?'#ffd36a':(skillHit?'#d9a7ff':'#ffb07a'));
-          try{if(window.PPA_WORLD_COMBAT_ACK)window.PPA_WORLD_COMBAT_ACK(m)}catch(_){}
-        }
-      }catch(_){}
-      return
-    }
-    if(m.type==='world-pvp-control'){
-      try{
-        var mine=String((window.PPA_ONLINE&&PPA_ONLINE.selfId)||'');
-        if(String(m.target||'')===mine&&typeof P!=='undefined'&&P){
-          var now=Date.now(),k=String(m.kind||''),dur=Math.max(100,Number(m.duration)||0);
-          if(k==='root'){
-            var resist=Math.max(0,Math.min(80,Number(P.controlResist)||0));
-            dur=Math.max(120,dur*(1-resist/100));
-            P.aiRootUntil=Math.max(Number(P.aiRootUntil)||0,now+dur);
-          }else if(k==='slow'){
-            var sr=Math.max(0,Math.min(80,Number(P.slowResist)||0));
-            var mul=Math.max(.30,Math.min(.95,Number(m.mul)||.55));
-            var strength=(1-mul)*(1-sr/100);
-            P.aiSlowMul=Math.max(.30,1-strength);
-            P.aiSlowUntil=Math.max(Number(P.aiSlowUntil)||0,now+Math.max(150,dur*(1-sr/200)));
-          }
-        }
-      }catch(_){}
-      return
-    }
-    if(m.type==='world-pvp-reject'){
-      try{if(window.PPA_WORLD_COMBAT_REJECT)window.PPA_WORLD_COMBAT_REJECT(m.reason||'атака отклонена')}catch(_){}
-      return
-    }
     if(m.type==='join'){if(m.player)applyPlayer(m.player,true);return}
     if(m.type==='leave'){deleteRemote(m.id);return}
     if(m.type==='mob-hit-event'||m.type==='mob-authority'||m.type==='mob-authority-snapshot'||m.type==='mob-position'||m.type==='mob-attack'||m.type==='boss-special'){
@@ -462,9 +415,6 @@
         animMs:Math.max(240,Math.min(700,Math.round(Number(d.animMs)||480)))
       });
     }catch(_){return false}
-  };
-  window.PPA_WORLD_PVP_SET=function(enabled){
-    return send({type:'world-pvp-toggle',enabled:!!enabled,room:RT.lastRoom||room()});
   };
   window.PPA_PLAYER_STEALTH=function(ms){
     ms=Math.max(0,Math.min(3000,Math.round(Number(ms)||0)));
