@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v444-blacksmith-ring-cleanup-20260921';
+const CLIENT_BUILD = 'v445-blacksmith-srcdoc-repair-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3305,7 +3305,7 @@ if(!output.includes("id=\"ppaRuneFusionRuntime\"") ||
 ppaPatchRegex(
   'blacksmith direct rune fusion tab',
   /function\s+inspectSmithItem\(it,context\)\s*\{/,
-  `function ppaInstallRuneFusionTab(){
+  ppaEscapeSrcdocCode(`function ppaInstallRuneFusionTab(){
   if(document.getElementById('ppaRuneFusionTab'))return;
   var buttons=Array.prototype.slice.call(document.querySelectorAll('button'));
   var pets=buttons.find(function(b){return String(b.textContent||'').trim().toUpperCase()==='ПЕТЫ'});
@@ -3430,22 +3430,25 @@ try{
 setTimeout(ppaRingCraftVisibility,0);
 setTimeout(ppaRingCraftVisibility,350);
 
-function inspectSmithItem(it,context){`
+function inspectSmithItem(it,context){`)
 );
 
 if(!output.includes("function ppaInstallRuneFusionTab()") ||
-   !output.includes("id='ppaRuneFusionTab'") && !output.includes("tab.id='ppaRuneFusionTab'") ||
+   !output.includes("ppaRuneFusionTab") ||
    !output.includes("function openRuneFusionPanel()") ||
    !output.includes("СЛИЯНИЕ РУН")) {
   throw new Error('Direct blacksmith rune fusion tab did not apply');
 }
 if(!output.includes("function ppaRingCraftVisibility()") ||
-   !output.includes("t==='КОЛЬЦО'") ||
-   !output.includes("data-ppa-ring-craft")) {
+   !output.includes("data-ppa-ring-craft") ||
+   !output.includes("КОЛЬЦО")) {
   throw new Error('Blacksmith low-rarity ring cleanup did not apply');
 }
 /* ======================================================================== */
 
+if(output.includes("shade.innerHTML='<div id=\"ppaRuneFusionPanel\"")) {
+  throw new Error('Rune fusion srcdoc contains unsafe raw quotes');
+}
 /* === CHARACTER INVENTORY NATIVE-MENU REMOVAL + HOLD PREVIEW ============= */
 // The character iframe used real <img> elements for every item. Telegram WebView
 // can invoke a native image/link menu before JS cancellation. Render item art
