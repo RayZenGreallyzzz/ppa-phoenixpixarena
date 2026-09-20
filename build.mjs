@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v396-book-drop-brackets-20260920';
+const CLIENT_BUILD = 'v397-book-rank-caps-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1244,6 +1244,26 @@ if (!output.includes("if(lv<=20)return .00004; // 0.004%") ||
     !output.includes("function v232BookRankForLevel(lv)")) {
   throw new Error('Book bracket rules did not apply');
 }
+
+/* ======================================================================== */
+
+/* === BOOK RANK CAPS FOR ELITES =========================================== */
+ppaPatchRegex(
+  'elite book ranks obey dungeon bracket',
+  /function\s+v232EliteBookRank\(lv\)\s*\{[\s\S]*?\}/,
+  `function v232EliteBookRank(lv){
+  lv=Math.max(1,Math.min(60,Math.floor(Number(lv)||1)));
+  if(lv<=30)return 1;
+  if(lv<=40)return Math.random()<.5?1:2;
+  return 1+Math.floor(Math.random()*3);
+}`
+);
+
+ppaPatchRegex(
+  'elite book inspect rank caps',
+  /\['Ранг книги',lv<=30\?'I 70% \/ II 30%':'I 55% \/ II 35% \/ III 10%'\]/,
+  "['Ранг книги',lv<=30?'I':'I / II · случайно']"
+);
 
 /* ======================================================================== */
 
