@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v440-fart-left-attack-slag-icon-20260920';
+const CLIENT_BUILD = 'v441-rune-image-menu-fix-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2814,6 +2814,108 @@ ppaPatchRegex(
 if(!output.includes("pointer-events:none!important") ||
    !output.includes("img.style.pointerEvents='none'")) {
   throw new Error('Hard WebView image-menu guard did not apply');
+}
+/* ======================================================================== */
+
+/* === SAME-ORIGIN IFRAME IMAGE LONGPRESS GUARD =========================== */
+// Rune/character/etc. panels live in srcdoc iframes. Root-document CSS does not
+// propagate into iframe documents, so Android WebView could still expose the
+// native "Open / Download / Copy link" menu for rune icons.
+ppaPatchRegex(
+  'iframe image longpress guard',
+  /<\/body>/,
+  `<script id="ppaIframeImageLongPressGuard">
+(function(){
+  function guardDoc(doc){
+    if(!doc||doc.__ppaImageGuard)return;
+    doc.__ppaImageGuard=true;
+    try{
+      var st=doc.createElement('style');
+      st.id='ppaIframeImageGuardStyle';
+      st.textContent='img{-webkit-touch-callout:none!important;-webkit-user-select:none!important;user-select:none!important;pointer-events:none!important}';
+      (doc.head||doc.documentElement).appendChild(st);
+    }catch(_){}
+    function lock(img){
+      if(!img||img.nodeType!==1||img.tagName!=='IMG')return;
+      try{
+        img.draggable=false;
+        img.setAttribute('draggable','false');
+        img.style.pointerEvents='none';
+        img.style.webkitTouchCallout='none';
+        img.style.webkitUserSelect='none';
+        img.setAttribute('oncontextmenu','return false');
+      }catch(_){}
+    }
+    try{doc.querySelectorAll('img').forEach(lock)}catch(_){}
+    try{
+      doc.addEventListener('contextmenu',function(e){
+        var t=e&&e.target;
+        if(t&&(t.tagName==='IMG'||(t.closest&&t.closest('img')))){
+          e.preventDefault();e.stopImmediatePropagation();
+        }
+      },true);
+      doc.addEventListener('dragstart',function(e){
+        var t=e&&e.target;
+        if(t&&(t.tagName==='IMG'||(t.closest&&t.closest('img')))){
+          e.preventDefault();e.stopImmediatePropagation();
+        }
+      },true);
+      doc.addEventListener('selectstart',function(e){
+        var t=e&&e.target;
+        if(t&&(t.tagName==='IMG'||(t.closest&&t.closest('img'))))e.preventDefault();
+      },true);
+    }catch(_){}
+    try{
+      new MutationObserver(function(ms){
+        ms.forEach(function(m){
+          (m.addedNodes||[]).forEach(function(n){
+            if(!n||n.nodeType!==1)return;
+            if(n.tagName==='IMG')lock(n);
+            if(n.querySelectorAll)n.querySelectorAll('img').forEach(lock);
+          });
+        });
+      }).observe(doc.documentElement,{childList:true,subtree:true});
+    }catch(_){}
+  }
+  function guardFrame(fr){
+    if(!fr)return;
+    function apply(){
+      try{
+        var d=fr.contentDocument||fr.contentWindow&&fr.contentWindow.document;
+        if(d)guardDoc(d);
+      }catch(_){}
+    }
+    try{fr.addEventListener('load',function(){apply();setTimeout(apply,0);setTimeout(apply,150)},true)}catch(_){}
+    apply();setTimeout(apply,0);
+  }
+  function scan(root){
+    try{
+      (root&&root.querySelectorAll?root:document).querySelectorAll('iframe').forEach(guardFrame);
+    }catch(_){}
+  }
+  scan(document);
+  try{
+    new MutationObserver(function(ms){
+      ms.forEach(function(m){
+        (m.addedNodes||[]).forEach(function(n){
+          if(!n||n.nodeType!==1)return;
+          if(n.tagName==='IFRAME')guardFrame(n);
+          scan(n);
+        });
+      });
+    }).observe(document.documentElement,{childList:true,subtree:true});
+  }catch(_){}
+  window.addEventListener('load',function(){scan(document);setTimeout(function(){scan(document)},250)},true);
+})();
+</script>
+</body>`
+);
+
+if(!output.includes("ppaIframeImageLongPressGuard") ||
+   !output.includes("ppaIframeImageGuardStyle") ||
+   !output.includes("fr.contentDocument") ||
+   !output.includes("pointer-events:none!important")) {
+  throw new Error('Iframe image longpress guard did not apply');
 }
 /* ======================================================================== */
 
