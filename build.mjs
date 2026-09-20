@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v426-clean-item-descriptions-20260920';
+const CLIENT_BUILD = 'v427-fart-native-labels-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2255,7 +2255,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'fart guard main render hook',
   /if\(e\.isDungeon60Boss\)\{if\(window\.PPA_DRAGON60_DRAW\)window\.PPA_DRAGON60_DRAW\(e\);continue;\}if\(e\.isDungeon21Boss\)\{drawDungeon21Boss\(e\);continue;\}/,
-  "window.__PPA_FART_DRAW_ENTITY=(e&&e.isFartGuard)?e:null;if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW)window.PPA_DRAGON60_DRAW(e);continue;}if(e.isDungeon21Boss){drawDungeon21Boss(e);continue;}"
+  "window.__PPA_FART_LABEL_ENTITY=(e&&e.isFartGuard)?e:null;window.__PPA_FART_DRAW_ENTITY=(e&&e.isFartGuard)?e:null;if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW)window.PPA_DRAGON60_DRAW(e);continue;}if(e.isDungeon21Boss){drawDungeon21Boss(e);continue;}"
 );
 
 const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
@@ -2334,6 +2334,19 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "    }\n"+
 "    return original.apply(this,arguments);\n"+
 "  };\n"+
+"  function fartLabelText(txt){\n"+
+"    var e=window.__PPA_FART_LABEL_ENTITY;if(!e||!e.isFartGuard)return {skip:false,text:String(txt)};\n"+
+"    var name='Страж Фарт-зоны';try{name=window.PPA_FART_GUARD_NAME?window.PPA_FART_GUARD_NAME(e):(e.__ppaFartName||name)}catch(_){}\n"+
+"    var t=String(txt==null?'':txt);\n"+
+"    if(/ЭЛИТА(?:\\s+ПОДЗЕМЕЛЬЯ)?/i.test(t))return {skip:true,text:''};\n"+
+"    var m=t.match(/^(\\s*\\[\\d+\\]\\s*).+$/);if(m)return {skip:false,text:m[1]+name};\n"+
+"    return {skip:false,text:t};\n"+
+"  }\n"+
+"  ['fillText','strokeText'].forEach(function(k){\n"+
+"    var base=proto[k];if(typeof base!=='function'||base.__ppaFartLabel)return;\n"+
+"    var wrap=function(txt){var r=fartLabelText(txt);if(r.skip)return;var a=Array.prototype.slice.call(arguments);a[0]=r.text;return base.apply(this,a)};\n"+
+"    wrap.__ppaFartLabel=true;proto[k]=wrap;\n"+
+"  });\n"+
 "})();\n"+
 "</script>";
 
@@ -2344,8 +2357,11 @@ ppaPatchRegex(
 );
 
 if(!output.includes("id='ppaFartGuardVisuals'") ||
+   !output.includes("window.__PPA_FART_LABEL_ENTITY=(e&&e.isFartGuard)?e:null") ||
    !output.includes("window.__PPA_FART_DRAW_ENTITY=(e&&e.isFartGuard)?e:null") ||
    !output.includes("if(e.isFartGuard)window.__PPA_FART_DRAW_ENTITY=e") ||
+   !output.includes("function fartLabelText(txt)") ||
+   !output.includes("/ЭЛИТА(?:\\s+ПОДЗЕМЕЛЬЯ)?/i.test(t)") ||
    !output.includes("proto.__ppaFartGuardNative=true") ||
    !output.includes("original.call(this,sheet") ||
    !output.includes("./assets/fart-tentacle.webp") ||
