@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v411-pickaxe-upgrade-button-20260920';
+const CLIENT_BUILD = 'v412-global-image-longpress-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2172,6 +2172,67 @@ ppaPatchRegex(
 if(!output.includes("🔥 УЛУЧШИТЬ ДО ЛЕГЕНДАРНОЙ · 2120 PPA") ||
    !output.includes("&& !(_hasCurrent&&_currentTier==='common')") && !output.includes("&&!(_hasCurrent&&_currentTier==='common')")) {
   throw new Error('Pickaxe upgrade button state did not apply');
+}
+/* ======================================================================== */
+
+/* === GLOBAL IMAGE LONGPRESS GUARD ======================================= */
+ppaPatchRegex(
+  'global game image longpress guard css',
+  /<\/head>/,
+  `<style id="ppaGlobalImageLongPressGuard">
+img{-webkit-touch-callout:none!important;-webkit-user-select:none!important;user-select:none!important}
+</style>
+</head>`
+);
+
+ppaPatchRegex(
+  'global game image longpress guard script',
+  /<\/body>/,
+  `<script id="ppaGlobalImageLongPressGuardScript">
+(function(){
+  function isGameImageTarget(t){
+    if(!t)return false;
+    if(t.tagName==='IMG')return true;
+    if(t.closest&&t.closest('img'))return true;
+    return false;
+  }
+  document.addEventListener('contextmenu',function(e){
+    if(isGameImageTarget(e.target)){e.preventDefault();e.stopPropagation();}
+  },true);
+  document.addEventListener('dragstart',function(e){
+    if(isGameImageTarget(e.target)){e.preventDefault();e.stopPropagation();}
+  },true);
+  document.addEventListener('selectstart',function(e){
+    if(isGameImageTarget(e.target)){e.preventDefault();}
+  },true);
+  document.querySelectorAll('img').forEach(function(img){
+    img.draggable=false;
+    img.setAttribute('draggable','false');
+  });
+  try{
+    new MutationObserver(function(list){
+      list.forEach(function(m){
+        m.addedNodes&&m.addedNodes.forEach(function(n){
+          if(!n||n.nodeType!==1)return;
+          if(n.tagName==='IMG'){
+            n.draggable=false;n.setAttribute('draggable','false');
+          }
+          if(n.querySelectorAll)n.querySelectorAll('img').forEach(function(img){
+            img.draggable=false;img.setAttribute('draggable','false');
+          });
+        });
+      });
+    }).observe(document.documentElement,{childList:true,subtree:true});
+  }catch(_){}
+})();
+</script>
+</body>`
+);
+
+if(!output.includes("ppaGlobalImageLongPressGuard") ||
+   !output.includes("document.addEventListener('contextmenu'") ||
+   !output.includes("new MutationObserver(function(list)")) {
+  throw new Error('Global image longpress guard did not apply');
 }
 /* ======================================================================== */
 
