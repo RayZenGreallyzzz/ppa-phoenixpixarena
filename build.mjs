@@ -1957,7 +1957,7 @@ try{
   }).observe(document.documentElement,{childList:true,subtree:true});
   requestAnimationFrame(function(){ppaSmithCanvasize(document)});
 }catch(_){}
-function inspectSmithItem(it,context){
+function inspectSmithItem(it,context){`
 );
 
 ppaPatchRegex(
