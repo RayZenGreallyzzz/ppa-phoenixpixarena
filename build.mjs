@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v397-book-rank-caps-20260920';
+const CLIENT_BUILD = 'v398-blue-resource-curve-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1264,6 +1264,38 @@ ppaPatchRegex(
   /\['Ранг книги',lv<=30\?'I 70% \/ II 30%':'I 55% \/ II 35% \/ III 10%'\]/,
   "['Ранг книги',lv<=30?'I':'I / II · случайно']"
 );
+
+/* ======================================================================== */
+
+/* === BLUE RESOURCE CURVE 21-60 ========================================== */
+ppaPatchRegex(
+  'blue resource chance unified 21-60',
+  /function\s+v232BlueRes2130\(lv\)\{[^}]*\}\s*function\s+v232BlueRes3140\(lv\)\{[^}]*\}/,
+  `function v232BlueResourceChance(lv){
+  lv=Math.max(21,Math.min(60,Math.floor(Number(lv)||21)));
+  return .007+(lv-21)*(.015/39); // 0.7% at 21 -> 2.2% at 60
+}
+function v232BlueRes2130(lv){return v232BlueResourceChance(lv)}
+function v232BlueRes3140(lv){return v232BlueResourceChance(lv)}`
+);
+
+ppaPatchRegex(
+  'blue resource chance 41-60 uses unified curve',
+  /if\(v232Roll\(\.10,mul\*luckCoinRareDropMul\(\)\*clanCastleResourceMul\(\)\)\)pushMaterialDrop\(e,'rare',1\);/,
+  "if(v232Roll(v232BlueResourceChance(Number(e&&e.lvl)||41),mul*luckCoinRareDropMul()*clanCastleResourceMul()))pushMaterialDrop(e,'rare',1);"
+);
+
+ppaPatchRegex(
+  'blue resource inspect 41-60',
+  /\['Синий ресурс','10%'\]/g,
+  "['Синий ресурс',v232Pct(v232BlueResourceChance(Number(e&&e.lvl)||41))]",
+  true
+);
+
+if (!output.includes("return .007+(lv-21)*(.015/39); // 0.7% at 21 -> 2.2% at 60") ||
+    !output.includes("v232BlueResourceChance(Number(e&&e.lvl)||41)")) {
+  throw new Error('Blue resource 21-60 curve did not apply');
+}
 
 /* ======================================================================== */
 
