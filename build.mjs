@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v443-rune-fusion-tab-fix-20260921';
+const CLIENT_BUILD = 'v444-blacksmith-ring-cleanup-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3386,6 +3386,50 @@ function openRuneFusionPanel(){
 setTimeout(ppaInstallRuneFusionTab,0);
 setTimeout(ppaInstallRuneFusionTab,300);
 setTimeout(ppaInstallRuneFusionTab,900);
+
+// Common / uncommon / rare rings have no recipes. Keep the ring selector only
+// for epic/legendary accessory tiers so the smith UI does not advertise
+// impossible crafts.
+var ppaAccessoryRarity='low';
+function ppaRingCraftVisibility(){
+  try{
+    var buttons=Array.prototype.slice.call(document.querySelectorAll('button'));
+    buttons.forEach(function(b){
+      var t=String(b.textContent||'').trim().toUpperCase();
+      if(t==='ОБЫЧНЫЙ'||t==='НЕОБЫЧНЫЙ'||t==='РЕДКИЙ'){
+        if(b.getAttribute('aria-pressed')==='true'||/active|selected|current|on/i.test(String(b.className||'')))ppaAccessoryRarity='low';
+      }else if(t==='ЭПИЧЕСКИЙ'||t==='ЛЕГЕНДАРНЫЙ'){
+        if(b.getAttribute('aria-pressed')==='true'||/active|selected|current|on/i.test(String(b.className||'')))ppaAccessoryRarity='high';
+      }
+    });
+    buttons.forEach(function(b){
+      var t=String(b.textContent||'').trim().toUpperCase();
+      if(t==='КОЛЬЦО'){
+        b.style.display=ppaAccessoryRarity==='low'?'none':'';
+        b.setAttribute('data-ppa-ring-craft',ppaAccessoryRarity==='low'?'hidden':'available');
+      }
+    });
+  }catch(_){}
+}
+document.addEventListener('click',function(e){
+  var b=e&&e.target&&e.target.closest?e.target.closest('button'):null;
+  if(!b)return;
+  var t=String(b.textContent||'').trim().toUpperCase();
+  if(t==='ОБЫЧНЫЙ'||t==='НЕОБЫЧНЫЙ'||t==='РЕДКИЙ'){
+    ppaAccessoryRarity='low';setTimeout(ppaRingCraftVisibility,0);
+  }else if(t==='ЭПИЧЕСКИЙ'||t==='ЛЕГЕНДАРНЫЙ'){
+    ppaAccessoryRarity='high';setTimeout(ppaRingCraftVisibility,0);
+  }else if(t==='АКСЕССУАРЫ'){
+    setTimeout(ppaRingCraftVisibility,0);setTimeout(ppaRingCraftVisibility,120);
+  }
+},true);
+try{
+  new MutationObserver(function(){ppaRingCraftVisibility()})
+    .observe(document.documentElement,{childList:true,subtree:true});
+}catch(_){}
+setTimeout(ppaRingCraftVisibility,0);
+setTimeout(ppaRingCraftVisibility,350);
+
 function inspectSmithItem(it,context){`
 );
 
@@ -3394,6 +3438,11 @@ if(!output.includes("function ppaInstallRuneFusionTab()") ||
    !output.includes("function openRuneFusionPanel()") ||
    !output.includes("СЛИЯНИЕ РУН")) {
   throw new Error('Direct blacksmith rune fusion tab did not apply');
+}
+if(!output.includes("function ppaRingCraftVisibility()") ||
+   !output.includes("t==='КОЛЬЦО'") ||
+   !output.includes("data-ppa-ring-craft")) {
+  throw new Error('Blacksmith low-rarity ring cleanup did not apply');
 }
 /* ======================================================================== */
 
