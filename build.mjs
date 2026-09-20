@@ -1600,6 +1600,7 @@ ppaPatchRegex(
     const b=document.getElementById('fartAutoMineBtn');
     if(b)b.style.display='none';
     FART_ZONE_STATE.activeMineId=null;
+    FART_ZONE_STATE.slagSince=0;
     return;
   }
   if(!FART_ZONE_STATE.ready)fartInitZone();
@@ -1614,8 +1615,7 @@ ppaPatchRegex(
     if(!Number(FART_ZONE_STATE.slagSince))FART_ZONE_STATE.slagSince=now;
     const _slagElapsed=now-Number(FART_ZONE_STATE.slagSince||now);
     if(_slagElapsed>=FART_SLAG_INTERVAL_MS){
-      const _slagTicks=Math.max(1,Math.floor(_slagElapsed/FART_SLAG_INTERVAL_MS));
-      const _slagGot=fartGiveSlag(_slagTicks);
+      const _slagGot=fartGiveSlag(1);
       FART_ZONE_STATE.slagSince=now;
       if(_slagGot>0)showPickup('Шлак +'+_slagGot,'#ff8b38');
     }
