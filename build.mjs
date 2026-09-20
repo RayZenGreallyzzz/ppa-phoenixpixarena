@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v402-passive-fart-mining-20260920';
+const CLIENT_BUILD = 'v403-fart-pickaxe-tiers-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1589,6 +1589,148 @@ if(output.includes('id="fartAutoMineBtn" type="button" onclick="fartToggleAutoMi
    !output.includes("if(d<=FART_MINE_RADIUS&&!fartMineHasLivingGuard(mine))") ||
    !output.includes("FART_ZONE_STATE.autoMineId=near.id")) {
   throw new Error('Passive Fart mining patch did not apply');
+}
+/* ======================================================================== */
+
+/* === TWO FART PICKAXE TIERS ============================================== */
+ppaPatchRegex(
+  'fart pickaxe tier durations',
+  /const FART_PICKAXE_DURATION_MS=4\*60\*60\*1000;/,
+  "const FART_PICKAXE_COMMON_DURATION_MS=4*60*60*1000;\nconst FART_PICKAXE_LEGENDARY_DURATION_MS=14*60*60*1000;\nconst FART_PICKAXE_DURATION_MS=FART_PICKAXE_COMMON_DURATION_MS;"
+);
+
+ppaPatchRegex(
+  'fart pickaxe item supports common and legendary',
+  /function fartMakePickaxeItem\(expiresAt\)\{[\s\S]*?\n\s*\};\n\}/,
+  `function fartMakePickaxeItem(expiresAt,tier){
+  tier=tier==='legendary'?'legendary':'common';
+  const legendary=tier==='legendary';
+  return {
+    uid:'fart_pickaxe_'+tier+'_'+Date.now().toString(36),
+    name:legendary?'Легендарная шахтёрская кирка':'Обычная шахтёрская кирка',
+    slot:'tool',
+    rarity:legendary?'legendary':'common',
+    icon:'⛏',
+    ic:'⛏',
+    img:'',
+    classKey:'all',
+    className:'Все классы',
+    enh:0,level:0,sell:0,
+    stats:{},
+    bonusText:legendary
+      ?'Фарт Зона · 14 часов · добыча +50% · редкие +30% · синие +20%'
+      :'Фарт Зона · 4 часа · добыча +10% · редкие +5% · синие +3%',
+    bound:true,tradeLocked:true,blackMarket:false,
+    fartPickaxe:true,
+    fartPickaxeTier:tier,
+    expiresAt:Math.max(0,Number(expiresAt)||0)
+  };
+}`
+);
+
+ppaPatchRegex(
+  'fart pickaxe tier helper',
+  /function fartHasPickaxe\(\)\{return fartNormalizePickaxe\(\)\}/,
+  `function fartHasPickaxe(){return fartNormalizePickaxe()}
+function fartPickaxeTier(){
+  const it=fartPickaxeBagItem();
+  return it&&it.fartPickaxeTier==='legendary'?'legendary':'common';
+}`
+);
+
+ppaPatchRegex(
+  'migrate old pickaxe item tier',
+  /\}else item\.expiresAt=until;/,
+  "}else{item.expiresAt=until;if(!item.fartPickaxeTier)item.fartPickaxeTier='common';}"
+);
+
+ppaPatchRegex(
+  'common pickaxe grant tier',
+  /INV\.bag\.push\(fartMakePickaxeItem\(INV\.fartPickaxeUntil\)\);/,
+  "INV.bag.push(fartMakePickaxeItem(INV.fartPickaxeUntil,'common'));"
+);
+
+ppaPatchRegex(
+  'tiered fart mining bonuses',
+  /const _pickaxeBonus=\(typeof fartHasPickaxe==='function'&&fartHasPickaxe\(\)\);[\s\S]*?else if\(Math\.random\(\)<\(0\.70\*\(_pickaxeBonus\?1\.10:1\)\)\)rarity='common';/,
+  `const _pickaxeBonus=(typeof fartHasPickaxe==='function'&&fartHasPickaxe());
+  const _pickaxeTier=_pickaxeBonus&&typeof fartPickaxeTier==='function'?fartPickaxeTier():'common';
+  const _blueMul=_pickaxeBonus?(_pickaxeTier==='legendary'?1.20:1.03):1;
+  const _rareMul=_pickaxeBonus?(_pickaxeTier==='legendary'?1.30:1.05):1;
+  const _resourceMul=_pickaxeBonus?(_pickaxeTier==='legendary'?1.50:1.10):1;
+  if(Math.random()<(0.25*_blueMul))rarity='rare';
+  else if(Math.random()<(0.55*_rareMul))rarity='uncommon';
+  else if(Math.random()<(0.70*_resourceMul))rarity='common';`
+);
+
+ppaPatchRegex(
+  'add legendary pickaxe shop button',
+  /('<button id="fartGuidePickaxe"[\s\S]*?<\/button>'\+)/,
+  "$1\n      '<button id=\"fartGuideLegendPickaxe\" style=\"width:100%;height:42px;margin-bottom:8px;border:1px solid #d27a18;border-radius:8px;background:#3a1e08;color:#ffbd58;font-weight:bold\">🔥 ЛЕГЕНДАРНАЯ КИРКА · 2120 PPA · 14 Ч</button>'+"
+);
+
+ppaPatchRegex(
+  'legendary pickaxe purchase handler',
+  /(shade\.querySelector\('#fartGuideSell'\)\.onclick=function\(\)\{)/,
+  `shade.querySelector('#fartGuideLegendPickaxe').onclick=function(){
+      if(fartHasPickaxe()){
+        showPickup('Кирка уже в сумке · осталось '+fartPickaxeRemainingText(),'#9dff91');
+        return;
+      }
+      const price=2120;
+      if((Number(INV.ppa)||0)<price){
+        showPickup('Не хватает PPA · легендарная кирка стоит 2120','#ff8c78');
+        return;
+      }
+      if((INV.bag||[]).length>=100){
+        showPickup('Сумка полна · освободи 1 слот для кирки','#ff8c78');
+        return;
+      }
+      INV.ppa=(Number(INV.ppa)||0)-price;
+      fartRemovePickaxeItem();
+      INV.fartPickaxeUntil=Date.now()+FART_PICKAXE_LEGENDARY_DURATION_MS;
+      INV.fartPickaxe=true;
+      INV.bag.push(fartMakePickaxeItem(INV.fartPickaxeUntil,'legendary'));
+      saveGame();
+      try{sendInvState();sendBlacksmithState();updateUI()}catch(_){}
+      showPickup('🔥 Легендарная кирка · 14 часов · −2120 PPA','#ffae45');
+      const ps=shade.querySelector('#fartGuidePickaxeStatus');
+      const pb=shade.querySelector('#fartGuidePickaxe');
+      const lb=shade.querySelector('#fartGuideLegendPickaxe');
+      if(ps)ps.textContent='Легендарная кирка: в сумке · осталось '+fartPickaxeRemainingText();
+      if(pb){pb.disabled=true;pb.style.opacity='.55'}
+      if(lb){lb.textContent='✓ ЛЕГЕНДАРНАЯ КИРКА · '+fartPickaxeRemainingText();lb.disabled=true;lb.style.opacity='.65'}
+    };
+    $1`
+);
+
+ppaPatchRegex(
+  'pickaxe shop status both tiers',
+  /const pb=shade\.querySelector\('#fartGuidePickaxe'\);\s*const _hasPickaxe=fartHasPickaxe\(\);if\(ps\)ps\.textContent=_hasPickaxe\?\('Кирка: в сумке · осталось '\+fartPickaxeRemainingText\(\)\):'Кирка: нет · без неё добыча не работает';\s*if\(pb\)\{[\s\S]*?\n\s*\}/,
+  `const pb=shade.querySelector('#fartGuidePickaxe');
+  const lb=shade.querySelector('#fartGuideLegendPickaxe');
+  const _hasPickaxe=fartHasPickaxe();
+  const _pickTier=_hasPickaxe?fartPickaxeTier():'';
+  if(ps)ps.textContent=_hasPickaxe
+    ?((_pickTier==='legendary'?'Легендарная':'Обычная')+' кирка: в сумке · осталось '+fartPickaxeRemainingText())
+    :'Кирка: нет · без неё добыча не работает';
+  if(pb){
+    pb.disabled=_hasPickaxe;
+    pb.textContent=_hasPickaxe&&_pickTier==='common'?('✓ ОБЫЧНАЯ КИРКА · '+fartPickaxeRemainingText()):'⛏ ОБЫЧНАЯ КИРКА · 200 PPA · 4 Ч';
+    pb.style.opacity=_hasPickaxe?'.55':'1';
+  }
+  if(lb){
+    lb.disabled=_hasPickaxe;
+    lb.textContent=_hasPickaxe&&_pickTier==='legendary'?('✓ ЛЕГЕНДАРНАЯ КИРКА · '+fartPickaxeRemainingText()):'🔥 ЛЕГЕНДАРНАЯ КИРКА · 2120 PPA · 14 Ч';
+    lb.style.opacity=_hasPickaxe?'.55':'1';
+  }`
+);
+
+if(!output.includes("FART_PICKAXE_LEGENDARY_DURATION_MS=14*60*60*1000") ||
+   !output.includes("fartPickaxeTier:tier") ||
+   !output.includes("2120 PPA · 14 Ч") ||
+   !output.includes("const _blueMul=_pickaxeBonus?(_pickaxeTier==='legendary'?1.20:1.03):1")) {
+  throw new Error('Two-tier Fart pickaxe patch did not apply');
 }
 /* ======================================================================== */
 
