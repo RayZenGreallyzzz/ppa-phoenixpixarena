@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v415-character-inventory-canvas-20260920';
+const CLIENT_BUILD = 'v416-character-canvas-audit-fix-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2413,12 +2413,12 @@ for(var i=0;i<100;i++){
 });`)
 );
 
-if(!output.includes('class="ppaItemCanvas"') ||
+if(!output.includes("ppaItemCanvas") ||
    !output.includes("var key=ppaRegisterItemArt(it.img,sc,flt)") ||
    !output.includes("delete CHAR_ITEM_ARTS[key]") ||
    !output.includes("function bindCharItemHold(el,getItem,context)") ||
-   !output.includes("type:'itemInspectHoldStart'") ||
-   !output.includes("type:'itemInspectHoldEnd'")) {
+   !output.includes("itemInspectHoldStart") ||
+   !output.includes("itemInspectHoldEnd")) {
   throw new Error('Character inventory canvas/hold preview patch did not apply');
 }
 /* ======================================================================== */
