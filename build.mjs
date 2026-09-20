@@ -2283,7 +2283,26 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "  }\n"+
 "  window.PPA_FART_GUARD_NAME=function(e){var s=skinOf(e);return GUARD_NAMES[s]||'Страж Фарт-зоны';};\n"+
 "  window.PPA_FART_GUARD_SKIN=function(e){return skinOf(e);};\n"+
-"  function dirOf(e,v){\n"+
+"  function assignGuardIdentity(e){\n"+
+"    if(!e||!e.isFartGuard)return e;var skin=skinOf(e),n=GUARD_NAMES[skin]||'Страж Фарт-зоны';\n"+
+"    try{e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;e.__ppaFartNamed=true}catch(_){}\n"+
+"    return e;\n"+
+"  }\n"+
+"  function installSpawnNameHook(){\n"+
+"    try{\n"+
+"      var base=window.fartSpawnGuard;if(typeof base!=='function'||base.__ppaFartNamedHook)return;\n"+
+"      var wrapped=function(){\n"+
+"        var before=[];try{if(typeof EN!=='undefined'&&Array.isArray(EN))before=EN.slice()}catch(_){}\n"+
+"        var ret=base.apply(this,arguments);\n"+
+"        try{if(ret&&ret.isFartGuard)assignGuardIdentity(ret)}catch(_){}\n"+
+"        try{if(typeof EN!=='undefined'&&Array.isArray(EN))EN.forEach(function(e){if(e&&e.isFartGuard&&(before.indexOf(e)<0||!e.__ppaFartNamed))assignGuardIdentity(e)})}catch(_){}\n"+
+"        return ret;\n"+
+"      };\n"+
+"      wrapped.__ppaFartNamedHook=true;wrapped.__ppaBase=base;window.fartSpawnGuard=wrapped;try{fartSpawnGuard=wrapped}catch(_){}\n"+
+"    }catch(_){}\n"+
+"  }\n"+
+"  installSpawnNameHook();setTimeout(installSpawnNameHook,0);setTimeout(installSpawnNameHook,500);\n"+
+"  try{if(typeof EN!=='undefined'&&Array.isArray(EN))EN.forEach(function(e){if(e&&e.isFartGuard)assignGuardIdentity(e)})}catch(_){}\n"+"  function dirOf(e,v){\n"+
 "    var d=NaN;\n"+
 "    if(Number.isFinite(Number(e.__ppaServerDir)))d=Number(e.__ppaServerDir);\n"+
 "    else if(Number.isFinite(Number(e.dir)))d=Number(e.dir);\n"+
@@ -2373,14 +2392,15 @@ if(!output.includes("id='ppaFartGuardVisuals'") ||
    !output.includes("./assets/fart-reaper.webp") ||
    !output.includes("./assets/fart-golem.webp") ||
    !output.includes("./assets/fart-darkguard.webp") ||
+   !output.includes("function assignGuardIdentity(e)") ||
+   !output.includes("wrapped.__ppaFartNamedHook=true") ||
    !output.includes("GUARD_NAMES=['Тентаклевый монстр','Ядовитый паук','Жнец','Голем Раскалённого Ядра','Страж Бездны']") ||
    !output.includes("e.__ppaFartSkin=Math.abs(h)%5") ||
    !output.includes("skin===4")) {
   throw new Error('Fart guard visual test patch did not apply');
+}
 if(output.includes("window.__PPA_FART_LABEL_ENTITY=null")) {
   throw new Error('Fart label pointer must survive stroke/fill pair');
-}
-
 }
 /* ======================================================================== */
 
