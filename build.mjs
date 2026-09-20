@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v416-character-canvas-audit-fix-20260920';
+const CLIENT_BUILD = 'v417-fast-inventory-selection-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2460,6 +2460,51 @@ if(!output.includes("FART_PICKAXE_COMMON_IMG='data:image/webp;base64,") ||
    !output.includes("img:legendary?FART_PICKAXE_LEGENDARY_IMG:FART_PICKAXE_COMMON_IMG") ||
    !output.includes("item.img=_ppaLegendVisual?FART_PICKAXE_LEGENDARY_IMG:FART_PICKAXE_COMMON_IMG")) {
   throw new Error('Pickaxe real inventory icons did not apply');
+}
+/* ======================================================================== */
+
+/* === CHARACTER INVENTORY FAST SELECTION ================================= */
+// Selecting an item must not rebuild the whole 100-slot bag. Full renderBag()
+// recreates every image/canvas and caused visible blanking/jank on mobile.
+// Keep the action index in _sel, but update only the selection border on tap.
+ppaPatchRegex(
+  'character inventory tap avoids full bag redraw',
+  /function bagClick\(i\)\{[\s\S]*?\n\}\nfunction slotClick\(s\)\{/,
+  ppaEscapeSrcdocCode(`function ppaSetBagVisualSelection(i){
+  var prev=Number(bagGrid&&bagGrid.__ppaSelectedIndex);
+  if(Number.isFinite(prev)&&prev>=0&&bagSlots[prev])bagSlots[prev].classList.remove('sel');
+  if(Number.isFinite(i)&&i>=0&&bagSlots[i])bagSlots[i].classList.add('sel');
+  if(bagGrid)bagGrid.__ppaSelectedIndex=i;
+}
+
+function bagClick(i){
+  buildBagView();
+  var v=_bagView[i];if(!v||!v.it)return;
+  ppaSetBagVisualSelection(i);
+  if(v.kind==='gear'){
+    _sel=v.bagIndex;
+    openItemPopup(v.it,'bag',null);
+  }else if(v.kind==='grimoire'){
+    _sel=-1;
+    openGrimoirePopup(v.it);
+  }else{
+    _sel=-1;
+    openResourcePopup(v.it);
+  }
+}
+function slotClick(s){`)
+);
+
+ppaPatchRegex(
+  'character inventory full render syncs selected index',
+  /var bc=document\.querySelector\(&#x27;\.bagCount&#x27;\);/,
+  "if(bagGrid)bagGrid.__ppaSelectedIndex=(_sel>=0?_sel:-1);\n  var bc=document.querySelector(&#x27;.bagCount&#x27;);"
+);
+
+if(!output.includes("function ppaSetBagVisualSelection(i)") ||
+   !output.includes("ppaSetBagVisualSelection(i);") ||
+   output.includes("_sel=i;renderBag();")) {
+  throw new Error('Character inventory fast selection patch did not apply');
 }
 /* ======================================================================== */
 
