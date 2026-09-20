@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v449-rune-fusion-audit-order-fix-20260921';
+const CLIENT_BUILD = 'v450-rune-fusion-available-runes-path-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3005,6 +3005,35 @@ ppaPatchRegex(
     // Scan player save/state plus rune-named globals, while excluding equipped slots.
     try{if(P&&typeof P==='object')roots.push({v:P,path:'P'})}catch(_){}
     try{if(P&&P._saved&&typeof P._saved==='object')roots.push({v:P._saved,path:'P._saved'})}catch(_){}
+
+    // Exact character-menu source: "ДОСТУПНЫЕ РУНЫ" is a separate rune
+    // collection under the inventory/save state. Scan rune-named branches of
+    // INV, but explicitly never use the normal item bag INV.bag.
+    try{
+      if(INV&&typeof INV==='object'){
+        var _invSeen=new Set();
+        function addInvRuneBranches(o,path,depth){
+          if(!o||typeof o!=='object'||depth>4||_invSeen.has(o))return;
+          _invSeen.add(o);
+          var ks=[];try{ks=Object.keys(o)}catch(_){ks=[]}
+          for(var ii=0;ii<ks.length;ii++){
+            var kk=ks[ii],low=String(kk).toLowerCase();
+            if(low==='bag'||/gear|equip|slot|socket|resource|material|stone|potion|book|pet|wing|cloak|necklace|artifact|auction|storage/.test(low))continue;
+            var vv;try{vv=o[kk]}catch(_){continue}
+            var pp=path+'.'+kk;
+            if(/rune|runes|runa|runy|руна|руны/i.test(kk)){
+              if(!/slot|equip|active|installed|socket/i.test(low)&&vv&&typeof vv==='object'){
+                roots.push({v:vv,path:pp});
+              }
+              continue;
+            }
+            if(vv&&typeof vv==='object'&&!Array.isArray(vv))addInvRuneBranches(vv,pp,depth+1);
+          }
+        }
+        addInvRuneBranches(INV,'INV',0);
+      }
+    }catch(_){}
+
     try{
       Object.keys(window).forEach(function(k){
         if(!/(rune|runes|runa|runy)/i.test(k))return;
@@ -3088,12 +3117,15 @@ ppaPatchRegex(
     for(var r=0;r<roots.length;r++)walk(roots[r].v,roots[r].path,null,null,0);
 
     // Deduplicate aliases that point at the exact same storage cell.
-    var dedup=[],keysSeen={};
+    var dedup=[],keysSeen={},usedPaths={};
     out.forEach(function(e){
       var sig=e.path+'|'+String(e.key)+'|'+typeKey(e.item)+'|'+rarityIndex(e.item);
       if(keysSeen[sig])return;
       keysSeen[sig]=1;dedup.push(e);
+      var base=String(e.path||'').replace(/\[[0-9]+\].*$/,'').replace(/\.[^.]+$/,'');
+      if(base)usedPaths[base]=1;
     });
+    window.PPA_AVAILABLE_RUNES_PATHS=Object.keys(usedPaths);
     return dedup;
   }
   function sourceIdentifiers(){
@@ -3304,6 +3336,10 @@ ppaPatchRegex(
     try{showPickup(msg,color||'#e6c58b')}catch(_){}
   }
 
+  window.PPA_RUNE_FUSION_SOURCE=function(){
+    var p=window.PPA_AVAILABLE_RUNES_PATHS||[];
+    return p.length?p.join(' · '):'ДОСТУПНЫЕ РУНЫ';
+  };
   window.PPA_RUNE_FUSION_LIST=function(){
     return groupList().map(function(g){
       return {id:g.id,name:g.name,count:g.count,rarity:g.rarity,nextRarity:g.nextRarity,chance:g.chance,eligible:g.eligible,img:g.img||''};
@@ -3376,7 +3412,7 @@ ppaPatchRegex(
     function render(){
       var rows=[];try{rows=parent.PPA_RUNE_FUSION_LIST?parent.PPA_RUNE_FUSION_LIST():[]}catch(_){}
       list.innerHTML='';
-      if(!rows.length){list.innerHTML='<div style="padding:16px;text-align:center;color:#8f806f;font:10px monospace">Сумка рун пуста или нет подходящей пары.</div>';return}
+      if(!rows.length){list.innerHTML='<div style="padding:16px;text-align:center;color:#8f806f;font:10px monospace">В «ДОСТУПНЫЕ РУНЫ» нет подходящей пары.</div>';return}
       rows.forEach(function(x){
         var row=d.createElement('div');row.className='ppaRFrow';
         var pct=Math.round((Number(x.chance)||0)*100);
@@ -3413,6 +3449,9 @@ if(!output.includes("id=\"ppaRuneFusionRuntime\"") ||
    !output.includes("var CHANCE={0:.37,1:.30,2:.22}") ||
    !output.includes("var COST=5000") ||
    !output.includes("Rune ownership is stored with the character/rune menu, NOT in INV.bag") ||
+   !output.includes("addInvRuneBranches(INV,'INV',0)") ||
+   !output.includes("low==='bag'") ||
+   !output.includes("PPA_AVAILABLE_RUNES_PATHS") ||
    !output.includes("lexical.'+n") ||
    !output.includes("mode:'map-count'") ||
    !output.includes("mode:'count-map'") ||
@@ -3489,13 +3528,18 @@ function openRuneFusionPanel(){
   var rows=[];
   try{rows=parent.PPA_RUNE_FUSION_LIST?parent.PPA_RUNE_FUSION_LIST():[]}catch(_){}
   if(!rows.length){
-    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">Сумка рун пуста или нет рун серой / зелёной / синей редкости.</div>';
+    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">В «ДОСТУПНЫЕ РУНЫ» нет рун серой / зелёной / синей редкости.</div>';
   }else{
     var rarity=['Серая','Зелёная','Синяя','Фиолетовая','Легендарная'];
     var title=document.createElement('div');
-    title.textContent='СУМКА РУН';
+    title.textContent='ДОСТУПНЫЕ РУНЫ';
     title.style.cssText='margin:8px 0 7px;text-align:center;font:bold 12px Georgia,serif;color:#e8c778;letter-spacing:.08em';
     list.appendChild(title);
+    var source=document.createElement('div');
+    var sourceText='';try{sourceText=parent.PPA_RUNE_FUSION_SOURCE?parent.PPA_RUNE_FUSION_SOURCE():''}catch(_){}
+    source.textContent=sourceText&&sourceText!=='ДОСТУПНЫЕ РУНЫ'?('Источник: '+sourceText):'';
+    source.style.cssText='min-height:10px;margin:-3px 0 6px;text-align:center;font:7px monospace;color:#766b5d';
+    list.appendChild(source);
     var grid=document.createElement('div');
     grid.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';
     rows.forEach(function(x){
@@ -3582,7 +3626,7 @@ if(!output.includes("function ppaInstallRuneFusionTab()") ||
    !output.includes("ppaRuneFusionTab") ||
    !output.includes("function openRuneFusionPanel()") ||
    !output.includes("СЛИЯНИЕ РУН") ||
-   !output.includes("СУМКА РУН")) {
+   !output.includes("ДОСТУПНЫЕ РУНЫ")) {
   throw new Error('Direct blacksmith rune fusion tab did not apply');
 }
 if(!output.includes("function ppaRingCraftVisibility()") ||
