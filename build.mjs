@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v447-rune-fusion-rune-bag-20260921';
+const CLIENT_BUILD = 'v448-rune-fusion-character-rune-bag-ui-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3013,6 +3013,18 @@ ppaPatchRegex(
         if(v&&typeof v==='object')roots.push({v:v,path:'window.'+k});
       });
     }catch(_){}
+    // Character rune menu also uses lexical rune stores (const/let), which are
+    // not enumerable on window. Discover their identifiers from loaded scripts
+    // and resolve them through direct eval in the same global environment.
+    try{
+      sourceIdentifiers().forEach(function(n){
+        if(/catalog|defs|config|meta|icon|img|sprite|art|chance|drop|shop|black/i.test(n))return;
+        try{
+          var v=eval(n);
+          if(v&&typeof v==='object')roots.push({v:v,path:'lexical.'+n});
+        }catch(_){}
+      });
+    }catch(_){}
 
     function excluded(path){
       return /equip|equipped|slot|active|installed|socket|selected|preview|catalog|defs|config|meta|shop|drop|chance/i.test(path);
@@ -3032,8 +3044,24 @@ ppaPatchRegex(
       if(typeof v!=='object')return;
       if(seen.has(v))return;seen.add(v);
 
-      if(isRune(v)){
+      var runeContainer=/rune|руна|runy/i.test(path);
+      if(isRune(v)||(runeContainer&&(
+        v.rarity!=null||v.quality!=null||v.tier!=null||
+        v.runeType!=null||v.statKey!=null||v.effectKey!=null||
+        v.refId!=null||v.id!=null||v.key!=null
+      ))){
         out.push({item:v,parent:parent,key:key,path:path,count:countOf(v),mode:'object'});
+        return;
+      }
+
+      if(v instanceof Map){
+        v.forEach(function(x,k){
+          if(typeof x==='number'&&x>0){
+            out.push({item:pseudoFromKey(k,x),parent:v,key:k,path:path+'.'+String(k),count:Math.floor(x),mode:'map-count'});
+          }else{
+            walk(x,path+'.'+String(k),v,k,depth+1);
+          }
+        });
         return;
       }
 
@@ -3043,7 +3071,6 @@ ppaPatchRegex(
       }
 
       var ks=[];try{ks=Object.keys(v)}catch(_){ks=[]}
-      var runeContainer=/rune|руна|runy/i.test(path);
       for(var j=0;j<ks.length;j++){
         var k=ks[j],x;
         if(/^(img|image|sprite|html|srcdoc)$/i.test(k))continue;
@@ -3111,14 +3138,32 @@ ppaPatchRegex(
     for(var i=0;i<roots.length;i++)walk(roots[i],0);
     return out;
   }
+  function resolveOwnedRune(e,catalog){
+    var it=e.item,r=rarityIndex(it),k=typeKey(it);
+    if(r>=0&&k)return it;
+    var raw=String((it&&(it.refId||it.id||it.key||it.name))||'').toLowerCase();
+    for(var i=0;i<catalog.length;i++){
+      var c=catalog[i];
+      var cr=String(c&&(c.refId||c.id||c.key||c.name)||'').toLowerCase();
+      if(raw&&cr&&raw===cr)return c;
+    }
+    return it;
+  }
   function groupList(){
-    var entries=ownedEntries(),map={};
+    var entries=ownedEntries(),catalog=catalogRunes(),map={};
     entries.forEach(function(e){
-      var r=rarityIndex(e.item),k=typeKey(e.item);
+      var resolved=resolveOwnedRune(e,catalog);
+      var r=rarityIndex(resolved),k=typeKey(resolved);
       if(r<0||r>2||!k)return;
       var id=r+'|'+k;
-      if(!map[id])map[id]={id:id,rarity:r,key:k,name:runeText(e.item)||'Руна',count:0,entries:[],img:e.item.img||e.item.image||''};
+      if(!map[id])map[id]={
+        id:id,rarity:r,key:k,
+        name:runeText(resolved)||runeText(e.item)||'Руна',
+        count:0,entries:[],
+        img:(resolved&&(resolved.img||resolved.image||resolved.iconImg||resolved.src))||(e.item&&(e.item.img||e.item.image))||''
+      };
       map[id].count+=e.count;
+      e.resolvedItem=resolved;
       map[id].entries.push(e);
     });
     return Object.keys(map).map(function(k){
@@ -3153,7 +3198,7 @@ ppaPatchRegex(
   function makeResult(group){
     var t=findTemplate(group);
     if(!t){
-      var src=group.entries[0]&&group.entries[0].item;
+      var src=group.entries[0]&&(group.entries[0].resolvedItem||group.entries[0].item);
       t=safeClone(src);
       if(!t)return null;
       patchRarity(t,group.nextRarity);
@@ -3172,6 +3217,11 @@ ppaPatchRegex(
     });
     for(var i=0;i<arr.length&&need>0;i++){
       var e=arr[i];
+      if(e.mode==='map-count'&&e.parent instanceof Map){
+        var nm=Math.max(0,Math.floor(Number(e.parent.get(e.key))||0)),takem=Math.min(need,nm);
+        if(nm>takem)e.parent.set(e.key,nm-takem);else e.parent.delete(e.key);
+        need-=takem;continue;
+      }
       if(e.mode==='count-map'&&e.parent&&e.key!=null){
         var n0=Math.max(0,Math.floor(Number(e.parent[e.key])||0)),take0=Math.min(need,n0);
         if(n0>take0)e.parent[e.key]=n0-take0;else try{delete e.parent[e.key]}catch(_){}
@@ -3193,6 +3243,12 @@ ppaPatchRegex(
     if(!first||!target)return false;
     var key=typeKey(item),r=rarityIndex(item);
 
+    if(first.mode==='map-count'&&target instanceof Map){
+      var mapKey=item.refId||item.id||item.key;
+      if(mapKey==null)return false;
+      target.set(mapKey,Math.max(0,Math.floor(Number(target.get(mapKey))||0))+1);
+      return true;
+    }
     if(first.mode==='count-map'&&!Array.isArray(target)){
       var storageKey=String(item.refId||item.id||item.key||'');
       if(!storageKey)return false;
@@ -3320,7 +3376,7 @@ ppaPatchRegex(
     function render(){
       var rows=[];try{rows=parent.PPA_RUNE_FUSION_LIST?parent.PPA_RUNE_FUSION_LIST():[]}catch(_){}
       list.innerHTML='';
-      if(!rows.length){list.innerHTML='<div style="padding:16px;text-align:center;color:#8f806f;font:10px monospace">Подходящих рун пока нет.</div>';return}
+      if(!rows.length){list.innerHTML='<div style="padding:16px;text-align:center;color:#8f806f;font:10px monospace">Сумка рун пуста или нет подходящей пары.</div>';return}
       rows.forEach(function(x){
         var row=d.createElement('div');row.className='ppaRFrow';
         var pct=Math.round((Number(x.chance)||0)*100);
@@ -3357,8 +3413,11 @@ if(!output.includes("id=\"ppaRuneFusionRuntime\"") ||
    !output.includes("var CHANCE={0:.37,1:.30,2:.22}") ||
    !output.includes("var COST=5000") ||
    !output.includes("Rune ownership is stored with the character/rune menu, NOT in INV.bag") ||
+   !output.includes("lexical.'+n") ||
+   !output.includes("mode:'map-count'") ||
    !output.includes("mode:'count-map'") ||
    !output.includes("mode:'string-array'") ||
+   !output.includes("СУМКА РУН") ||
    !output.includes("Фиолетовые руны не сливаются в легендарные") ||
    !output.includes("PPA_RUNE_FUSION_TRY")) {
   throw new Error('Rune fusion patch did not apply');
@@ -3397,7 +3456,8 @@ ppaPatchRegex(
     '#ppaRuneFusionShade.on{display:flex}'+
     '#ppaRuneFusionPanel{width:min(580px,96vw);max-height:88vh;overflow:auto;border:1px solid #93602c;border-radius:10px;background:#120d09;color:#e6c58b;padding:12px;box-sizing:border-box;box-shadow:0 12px 38px #000}'+
     '.ppaRFrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 7px;margin:6px 0;border:1px solid #5a4027;border-radius:7px;background:#0c0a08}'+
-    '.ppaRFbtn{height:34px;border:1px solid #92612d;border-radius:6px;background:#35200e;color:#f0cb7c;font:bold 10px monospace;padding:0 10px}.ppaRFbtn:disabled{opacity:.4}';
+    '.ppaRFbtn{height:34px;border:1px solid #92612d;border-radius:6px;background:#35200e;color:#f0cb7c;font:bold 10px monospace;padding:0 10px}.ppaRFbtn:disabled{opacity:.4}'+
+    '@media(max-width:480px){#ppaRFList>div[style*="grid-template-columns"]{grid-template-columns:repeat(3,minmax(0,1fr))!important}}';
   (document.head||document.documentElement).appendChild(st);
 
   var shade=document.createElement('div');
@@ -3430,23 +3490,42 @@ function openRuneFusionPanel(){
   var rows=[];
   try{rows=parent.PPA_RUNE_FUSION_LIST?parent.PPA_RUNE_FUSION_LIST():[]}catch(_){}
   if(!rows.length){
-    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">В сумке рун нет подходящей пары для слияния.</div>';
+    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">Сумка рун пуста или нет рун серой / зелёной / синей редкости.</div>';
   }else{
     var rarity=['Серая','Зелёная','Синяя','Фиолетовая','Легендарная'];
+    var title=document.createElement('div');
+    title.textContent='СУМКА РУН';
+    title.style.cssText='margin:8px 0 7px;text-align:center;font:bold 12px Georgia,serif;color:#e8c778;letter-spacing:.08em';
+    list.appendChild(title);
+    var grid=document.createElement('div');
+    grid.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';
     rows.forEach(function(x){
-      var row=document.createElement('div');row.className='ppaRFrow';
       var pct=Math.round((Number(x.chance)||0)*100);
-      row.innerHTML='<div><div style="font:bold 11px Georgia,serif;color:#ead0a0">'+String(x.name||'Руна')+'</div>'+
-        '<div style="margin-top:3px;font:9px monospace;color:#a99478">'+rarity[x.rarity]+' · в наличии '+x.count+' · шанс '+pct+'%</div></div>';
-      var b=document.createElement('button');b.className='ppaRFbtn';b.textContent='СЛИТЬ · 5000';b.disabled=!x.eligible;
-      b.onclick=function(){
-        b.disabled=true;var r;
+      var card=document.createElement('button');
+      card.type='button';
+      card.disabled=!x.eligible;
+      card.style.cssText='position:relative;min-height:112px;padding:7px 5px;border:1px solid #76522a;border-radius:7px;background:#0c0b0a;color:#d9bd88;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;overflow:hidden';
+      var art=document.createElement('div');
+      art.style.cssText='width:54px;height:54px;background-position:center;background-repeat:no-repeat;background-size:contain;pointer-events:none';
+      if(x.img)art.style.backgroundImage='url("'+String(x.img).replace(/"/g,'%22')+'")';
+      else art.textContent='◈';
+      var name=document.createElement('div');
+      name.textContent=String(x.name||'Руна');
+      name.style.cssText='font:bold 9px Georgia,serif;text-align:center;line-height:1.15;pointer-events:none';
+      var info=document.createElement('div');
+      info.textContent='×'+x.count+' · '+rarity[x.rarity]+' · '+pct+'%';
+      info.style.cssText='font:8px monospace;color:'+(x.eligible?'#d9bd88':'#766b5d')+';text-align:center;pointer-events:none';
+      card.appendChild(art);card.appendChild(name);card.appendChild(info);
+      card.onclick=function(){
+        if(!x.eligible)return;
+        card.disabled=true;var r;
         try{r=parent.PPA_RUNE_FUSION_TRY(x.id)}catch(e){r={ok:false,message:'Ошибка слияния'}}
         msg.textContent=(r&&r.message)||'';
-        openRuneFusionPanel();
+        setTimeout(openRuneFusionPanel,0);
       };
-      row.appendChild(b);list.appendChild(row);
+      grid.appendChild(card);
     });
+    list.appendChild(grid);
   }
   shade.classList.add('on');
 }
