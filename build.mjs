@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v408-fart-gate-audit-fix-20260920';
+const CLIENT_BUILD = 'v409-hold-preview-release-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1989,6 +1989,100 @@ ppaPatchRegex(
 if(output.includes("inspectMarketItem&#x27;).forEach(el=&gt;el.onclick") ||
    output.includes("inspectOwnLot&#x27;).forEach(el=&gt;el.onclick")) {
   throw new Error('Auction hold-inspect completion did not apply');
+}
+/* ======================================================================== */
+
+/* === HOLD PREVIEW RELEASE + WEBVIEW LONGPRESS =========================== */
+// Hold preview lifecycle:
+//  - item card hold start -> parent marks preview mode
+//  - item details open while finger remains down
+//  - pointer release/cancel/leave -> parent closes details immediately
+// Also suppress Android/Telegram WebView image context menus on bound item cards.
+
+ppaPatchRegex(
+  'hold preview start message',
+  /timer=setTimeout\(function\(\)\{timer=0;el\.__ppaHeld=true;try\{fn\(\)\}catch\(_\)\{\}\},900\);/g,
+  "timer=setTimeout(function(){timer=0;el.__ppaHeld=true;try{parent.postMessage({type:'itemInspectHoldStart'},'*')}catch(_){};try{fn()}catch(_){}},900);",
+  true
+);
+
+ppaPatchRegex(
+  'hold preview release message',
+  /el\.addEventListener\('pointerup',cancel,\{passive:true\}\);\s*el\.addEventListener\('pointercancel',cancel,\{passive:true\}\);\s*el\.addEventListener\('pointerleave',cancel,\{passive:true\}\);/g,
+  `function releasePreview(){
+    if(el.__ppaHeld){try{parent.postMessage({type:'itemInspectHoldEnd'},'*')}catch(_){}}
+  }
+  el.addEventListener('pointerup',function(){cancel();releasePreview()},{passive:true});
+  el.addEventListener('pointercancel',function(){cancel();releasePreview()},{passive:true});
+  el.addEventListener('pointerleave',function(){cancel();releasePreview()},{passive:true});`,
+  true
+);
+
+ppaPatchRegex(
+  'disable webview image longpress on item cards',
+  /if\(!el\|\|typeof fn!==['"]function['"]\)return;/g,
+  `if(!el||typeof fn!=='function')return;
+  try{
+    el.style.webkitTouchCallout='none';
+    el.style.webkitUserSelect='none';
+    el.style.userSelect='none';
+    el.addEventListener('contextmenu',function(e){e.preventDefault()},false);
+    el.querySelectorAll('img').forEach(function(img){
+      img.draggable=false;
+      img.setAttribute('draggable','false');
+      img.style.webkitTouchCallout='none';
+      img.style.webkitUserSelect='none';
+      img.style.userSelect='none';
+    });
+  }catch(_){}`,
+  true
+);
+
+ppaPatchRegex(
+  'item inspect hold preview css',
+  /#ppaInspectOk\{width:100%;height:42px;margin-top:12px;border:1px solid #875d2a;border-radius:7px;background:linear-gradient\(#422714,#21140b\);color:#f2d28a;font:bold 12px Georgia,serif;letter-spacing:\.08em\}/,
+  `#ppaInspectOk{width:100%;height:42px;margin-top:12px;border:1px solid #875d2a;border-radius:7px;background:linear-gradient(#422714,#21140b);color:#f2d28a;font:bold 12px Georgia,serif;letter-spacing:.08em}
+#ppaItemInspectShade.holdPreview #ppaItemInspectClose,
+#ppaItemInspectShade.holdPreview #ppaInspectOk{display:none!important}
+#ppaItemInspectShade.holdPreview #ppaItemInspect{pointer-events:none}
+#ppaItemInspectShade.holdPreview{pointer-events:none}`
+);
+
+ppaPatchRegex(
+  'item inspect hold state variable',
+  /var shade=document\.getElementById\('ppaItemInspectShade'\);\s*if\(!shade\)return;/,
+  "var shade=document.getElementById('ppaItemInspectShade');\n  if(!shade)return;\n  var holdPreview=false;"
+);
+
+ppaPatchRegex(
+  'item inspect close clears hold mode',
+  /function close\(\)\{shade\.classList\.remove\('on'\);shade\.setAttribute\('aria-hidden','true'\)\}/,
+  "function close(){shade.classList.remove('on');shade.classList.remove('holdPreview');shade.setAttribute('aria-hidden','true');holdPreview=false}"
+);
+
+ppaPatchRegex(
+  'item inspect parent hold lifecycle',
+  /window\.addEventListener\('message',function\(e\)\{var d=e\.data\|\|\{\};if\(d\.type==='itemInspect'&&d\.item\)openItem\(d\.item,d\.context\|\|''\)\}\);/,
+  `window.addEventListener('message',function(e){
+    var d=e.data||{};
+    if(d.type==='itemInspectHoldStart'){holdPreview=true;return}
+    if(d.type==='itemInspect'&&d.item){
+      openItem(d.item,d.context||'');
+      if(holdPreview)shade.classList.add('holdPreview');
+      return;
+    }
+    if(d.type==='itemInspectHoldEnd'){
+      if(holdPreview||shade.classList.contains('holdPreview'))close();
+    }
+  });`
+);
+
+if(!output.includes("type:'itemInspectHoldStart'") ||
+   !output.includes("type:'itemInspectHoldEnd'") ||
+   !output.includes("#ppaItemInspectShade.holdPreview #ppaInspectOk") ||
+   !output.includes("img.setAttribute('draggable','false')") ||
+   !output.includes("if(d.type==='itemInspectHoldEnd')")) {
+  throw new Error('Hold-preview release lifecycle did not apply');
 }
 /* ======================================================================== */
 
