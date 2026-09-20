@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v422-fart-five-guards-20260920';
+const CLIENT_BUILD = 'v422-fart-drop-panel-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2309,6 +2309,53 @@ if(!output.includes("id='ppaFartGuardVisuals'") ||
    !output.includes("idx%5") ||
    !output.includes("skin===4")) {
   throw new Error('Fart guard visual test patch did not apply');
+}
+/* ======================================================================== */
+
+
+/* === FINAL FART GUARD DROP PANEL ======================================== */
+// The old Fart guard inspect table had static epic/legendary values.
+// Always show the chances that are actually active for the player's pickaxe tier.
+const fartDropPanelRuntime = "<script id='ppaFartDropPanelFix'>\n"+
+"(function(){\n"+
+"  var prev=window.mobDropInfo;\n"+
+"  function pctGear(){\n"+
+"    try{\n"+
+"      if(typeof fartGuardGearDropChances==='function')return fartGuardGearDropChances();\n"+
+"    }catch(_){}\n"+
+"    return {epic:0,legendary:0,tier:'none'};\n"+
+"  }\n"+
+"  window.mobDropInfo=function(e){\n"+
+"    if(e&&e.isFartGuard){\n"+
+"      var g=pctGear();\n"+
+"      var epic=g.epic===0.00001?'0.001%':(g.epic===0.000003?'0.0003%':'0%');\n"+
+"      var legendary=g.legendary===0.0000013?'0.00013%':'0%';\n"+
+"      return [\n"+
+"        ['Эпический шмот/оружие · случайный',epic],\n"+
+"        ['Легендарный шмот/оружие · случайный',legendary],\n"+
+"        ['Эпическая универсальная руна','0.00012%'],\n"+
+"        ['Обычная универсальная руна','10%'],\n"+
+"        ['Премиум руна заточки','6%'],\n"+
+"        ['Изумруд Вечности · легендарный ресурс','0.00020%'],\n"+
+"        ['Адская руда · легендарный ресурс','0.00017%'],\n"+
+"        ['Кристалл Бездны · легендарный ресурс','0.00012%']\n"+
+"      ];\n"+
+"    }\n"+
+"    return typeof prev==='function'?prev(e):[];\n"+
+"  };\n"+
+"})();\n"+
+"</script>";
+
+ppaPatchRegex(
+  'final fart guard drop panel',
+  /<\/body>/,
+  fartDropPanelRuntime+"\n</body>"
+);
+
+if(!output.includes("id='ppaFartDropPanelFix'") ||
+   !output.includes("var epic=g.epic===0.00001?'0.001%'") ||
+   !output.includes("var legendary=g.legendary===0.0000013?'0.00013%'")) {
+  throw new Error('Final Fart guard drop panel patch did not apply');
 }
 /* ======================================================================== */
 
