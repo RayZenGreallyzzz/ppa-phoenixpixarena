@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v442-rune-fusion-20260921';
+const CLIENT_BUILD = 'v443-rune-fusion-tab-fix-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3295,6 +3295,105 @@ if(!output.includes("id=\"ppaRuneFusionRuntime\"") ||
    !output.includes("Фиолетовые руны не сливаются в легендарные") ||
    !output.includes("PPA_RUNE_FUSION_TRY")) {
   throw new Error('Rune fusion patch did not apply');
+}
+/* ======================================================================== */
+
+/* === DIRECT BLACKSMITH RUNE FUSION TAB ================================== */
+// The blacksmith runs inside a sandboxed srcdoc iframe on Telegram/Android.
+// Parent-side iframe inspection is not reliable there, so install the tab from
+// inside the blacksmith document itself.
+ppaPatchRegex(
+  'blacksmith direct rune fusion tab',
+  /function\s+inspectSmithItem\(it,context\)\s*\{/,
+  `function ppaInstallRuneFusionTab(){
+  if(document.getElementById('ppaRuneFusionTab'))return;
+  var buttons=Array.prototype.slice.call(document.querySelectorAll('button'));
+  var pets=buttons.find(function(b){return String(b.textContent||'').trim().toUpperCase()==='ПЕТЫ'});
+  var sharpen=buttons.find(function(b){return String(b.textContent||'').trim().toUpperCase()==='ЗАТОЧКА'});
+  if(!pets||!sharpen){setTimeout(ppaInstallRuneFusionTab,250);return}
+
+  var bar=pets.parentElement||sharpen.parentElement;
+  if(!bar){setTimeout(ppaInstallRuneFusionTab,250);return}
+
+  var tab=pets.cloneNode(false);
+  tab.id='ppaRuneFusionTab';
+  tab.removeAttribute('disabled');
+  tab.textContent='СЛИЯНИЕ РУН';
+  tab.style.opacity='1';
+  tab.onclick=function(){openRuneFusionPanel()};
+  bar.appendChild(tab);
+
+  var st=document.createElement('style');
+  st.id='ppaRuneFusionDirectStyle';
+  st.textContent=
+    '#ppaRuneFusionShade{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.80);display:none;align-items:center;justify-content:center;padding:12px;box-sizing:border-box}'+
+    '#ppaRuneFusionShade.on{display:flex}'+
+    '#ppaRuneFusionPanel{width:min(580px,96vw);max-height:88vh;overflow:auto;border:1px solid #93602c;border-radius:10px;background:#120d09;color:#e6c58b;padding:12px;box-sizing:border-box;box-shadow:0 12px 38px #000}'+
+    '.ppaRFrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 7px;margin:6px 0;border:1px solid #5a4027;border-radius:7px;background:#0c0a08}'+
+    '.ppaRFbtn{height:34px;border:1px solid #92612d;border-radius:6px;background:#35200e;color:#f0cb7c;font:bold 10px monospace;padding:0 10px}.ppaRFbtn:disabled{opacity:.4}';
+  (document.head||document.documentElement).appendChild(st);
+
+  var shade=document.createElement('div');
+  shade.id='ppaRuneFusionShade';
+  shade.innerHTML='<div id="ppaRuneFusionPanel">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
+      '<b style="font:16px Georgia,serif;color:#f4cf80">СЛИЯНИЕ РУН</b>'+
+      '<button id="ppaRFClose" class="ppaRFbtn">✕</button>'+
+    '</div>'+
+    '<div style="font:10px monospace;color:#ad987a;margin:8px 0 10px;line-height:1.55">'+
+      '2 одинаковые руны · цена попытки 5000 золота<br>'+
+      'Серая → зелёная 37% · зелёная → синяя 30% · синяя → фиолетовая 22%<br>'+
+      'При неудаче обе руны сгорают. Легендарные руны остаются только в Чёрном рынке.'+
+    '</div>'+
+    '<div id="ppaRFList"></div>'+
+    '<div id="ppaRFMsg" style="min-height:18px;margin-top:8px;font:10px monospace;color:#d6b77d"></div>'+
+  '</div>';
+  document.body.appendChild(shade);
+
+  shade.querySelector('#ppaRFClose').onclick=function(){shade.classList.remove('on')};
+  shade.addEventListener('click',function(e){if(e.target===shade)shade.classList.remove('on')});
+}
+function openRuneFusionPanel(){
+  var shade=document.getElementById('ppaRuneFusionShade');
+  if(!shade){ppaInstallRuneFusionTab();shade=document.getElementById('ppaRuneFusionShade')}
+  if(!shade)return;
+  var list=shade.querySelector('#ppaRFList'),msg=shade.querySelector('#ppaRFMsg');
+  msg.textContent='';
+  list.innerHTML='';
+  var rows=[];
+  try{rows=parent.PPA_RUNE_FUSION_LIST?parent.PPA_RUNE_FUSION_LIST():[]}catch(_){}
+  if(!rows.length){
+    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">Нет подходящих рун для слияния.</div>';
+  }else{
+    var rarity=['Серая','Зелёная','Синяя','Фиолетовая','Легендарная'];
+    rows.forEach(function(x){
+      var row=document.createElement('div');row.className='ppaRFrow';
+      var pct=Math.round((Number(x.chance)||0)*100);
+      row.innerHTML='<div><div style="font:bold 11px Georgia,serif;color:#ead0a0">'+String(x.name||'Руна')+'</div>'+
+        '<div style="margin-top:3px;font:9px monospace;color:#a99478">'+rarity[x.rarity]+' · в наличии '+x.count+' · шанс '+pct+'%</div></div>';
+      var b=document.createElement('button');b.className='ppaRFbtn';b.textContent='СЛИТЬ · 5000';b.disabled=!x.eligible;
+      b.onclick=function(){
+        b.disabled=true;var r;
+        try{r=parent.PPA_RUNE_FUSION_TRY(x.id)}catch(e){r={ok:false,message:'Ошибка слияния'}}
+        msg.textContent=(r&&r.message)||'';
+        openRuneFusionPanel();
+      };
+      row.appendChild(b);list.appendChild(row);
+    });
+  }
+  shade.classList.add('on');
+}
+setTimeout(ppaInstallRuneFusionTab,0);
+setTimeout(ppaInstallRuneFusionTab,300);
+setTimeout(ppaInstallRuneFusionTab,900);
+function inspectSmithItem(it,context){`
+);
+
+if(!output.includes("function ppaInstallRuneFusionTab()") ||
+   !output.includes("id='ppaRuneFusionTab'") && !output.includes("tab.id='ppaRuneFusionTab'") ||
+   !output.includes("function openRuneFusionPanel()") ||
+   !output.includes("СЛИЯНИЕ РУН")) {
+  throw new Error('Direct blacksmith rune fusion tab did not apply');
 }
 /* ======================================================================== */
 
