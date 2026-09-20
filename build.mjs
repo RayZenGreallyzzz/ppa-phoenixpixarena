@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v395-mobile-hud-menu-layer-20260920';
+const CLIENT_BUILD = 'v396-book-drop-brackets-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1162,6 +1162,87 @@ ppaPatchRegex(
 
 if (!output.includes("P.scene!=='dungeon'||P.dead||window.PPA_REALTIME_V2_ACTIVE")) {
   throw new Error('Realtime local elite disable patch did not apply');
+}
+
+/* ======================================================================== */
+
+/* === BOOK DROP BRACKETS =================================================== */
+ppaPatchRegex(
+  'book chances fixed by dungeon bracket',
+  /function\s+v232ActiveBookChance\(lv\)\s*\{[\s\S]*?\}\s*function\s+v232PassiveBookChance\(lv\)\s*\{[\s\S]*?\}/,
+  `function v232ActiveBookChance(lv){
+  lv=Math.max(1,Math.min(60,Math.floor(Number(lv)||1)));
+  if(lv<=20)return .00004; // 0.004%
+  return .00006;           // 0.006% for 21-60
+}
+function v232PassiveBookChance(lv){
+  lv=Math.max(1,Math.min(60,Math.floor(Number(lv)||1)));
+  if(lv<=20)return .00003; // 0.003%
+  return .00007;           // 0.007% for 21-60
+}
+function v232BookRankForLevel(lv){
+  lv=Math.max(1,Math.min(60,Math.floor(Number(lv)||1)));
+  if(lv<=30)return 1;
+  if(lv<=40)return Math.random()<.5?1:2;
+  return 1+Math.floor(Math.random()*3);
+}`
+);
+
+ppaPatchRegex(
+  'books 1-20 exact active passive and rank I',
+  /v232RollTypedBook\(e,\.00003,\.00006,mul,null\);/,
+  "v232RollTypedBook(e,v232ActiveBookChance(lv),v232PassiveBookChance(lv),mul,function(){return v232BookRankForLevel(lv)});"
+);
+
+ppaPatchRegex(
+  'books 21-30 exact rank I',
+  /v232RollTypedBook\(e,v232ActiveBookChance\(lv\),v232PassiveBookChance\(lv\),mul,null\);/,
+  "v232RollTypedBook(e,v232ActiveBookChance(lv),v232PassiveBookChance(lv),mul,function(){return v232BookRankForLevel(lv)});"
+);
+
+ppaPatchRegex(
+  'books 31-40 random rank I-II',
+  /v232RollTypedBook\(e,v232ActiveBookChance\(lv\),v232PassiveBookChance\(lv\),mul,null\);/,
+  "v232RollTypedBook(e,v232ActiveBookChance(lv),v232PassiveBookChance(lv),mul,function(){return v232BookRankForLevel(lv)});"
+);
+
+ppaPatchRegex(
+  'books 41-60 exact active passive random rank I-III',
+  /if\(Math\.random\(\)<V271_D41_BOOK_II_III_CHANCE\)v271PushDungeon41Book\(e\);/,
+  "v232RollTypedBook(e,v232ActiveBookChance(Number(e&&e.lvl)||41),v232PassiveBookChance(Number(e&&e.lvl)||41),mul,function(){return v232BookRankForLevel(Number(e&&e.lvl)||41)});"
+);
+
+ppaPatchRegex(
+  'book inspect 1-20 exact chances and rank',
+  /rows\.push\(\['Активная книга','0\.003%'\],\['Пассивная книга','0\.006%'\]\);/,
+  "rows.push(['Активная книга','0.004%'],['Пассивная книга','0.003%'],['Ранг книги','I']);"
+);
+
+ppaPatchRegex(
+  'book inspect 21-30 rank I',
+  /(\['Активная книга',v232Pct\(v232ActiveBookChance\(lv\)\)\],\['Пассивная книга',v232Pct\(v232PassiveBookChance\(lv\)\)\])(\s*\]\s*;)/,
+  "$1,['Ранг книги','I']$2"
+);
+
+ppaPatchRegex(
+  'book inspect 31-40 rank I-II',
+  /(\['Активная книга',v232Pct\(v232ActiveBookChance\(lv\)\)\],\['Пассивная книга',v232Pct\(v232PassiveBookChance\(lv\)\)\])(\s*\]\s*;)/,
+  "$1,['Ранг книги','I / II · случайно']$2"
+);
+
+ppaPatchRegex(
+  'book inspect 41-60 normal',
+  /\['Книга навыка II–III','0\.016%'\],\s*\['Ранг книги','II \/ III · случайно'\]/g,
+  "['Активная книга','0.006%'],['Пассивная книга','0.007%'],['Ранг книги','I / II / III · случайно']",
+  true
+);
+
+if (!output.includes("if(lv<=20)return .00004; // 0.004%") ||
+    !output.includes("if(lv<=20)return .00003; // 0.003%") ||
+    !output.includes("return .00006;           // 0.006% for 21-60") ||
+    !output.includes("return .00007;           // 0.007% for 21-60") ||
+    !output.includes("function v232BookRankForLevel(lv)")) {
+  throw new Error('Book bracket rules did not apply');
 }
 
 /* ======================================================================== */
