@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v438-fart-slag-icon-collision-20260920';
+const CLIENT_BUILD = 'v439-monster-core-drop-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -499,12 +499,101 @@ ppaPatchRegex(
 if (!output.includes("kind:'gnome-cannon'")) throw new Error('Gnome realtime cannon visual patch did not apply');
 if (!output.includes("kind:'archer-arrow'")) throw new Error('Archer realtime arrow visual patch did not apply');
 
+/* === MONSTER CORE DUNGEON DROP ========================================= */
+ppaPatchRegex(
+  'monster core helper runtime',
+  /function\s+basicAttackRoll\(target\)\s*\{/,
+  `const PPA_MONSTER_CORE_CHANCE=0.06;
+const PPA_MONSTER_CORE_SELL_GOLD=180;
+const PPA_MONSTER_CORE_IMG='data:image/png;base64,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';
+window.PPA_MONSTER_CORE_IMG=PPA_MONSTER_CORE_IMG;
+function ppaMonsterCoreBagItem(){
+  return (INV.bag||[]).find(function(it){return it&&it.monsterCore===true})||null;
+}
+function ppaMakeMonsterCore(count){
+  const n=Math.max(1,Math.floor(Number(count)||1));
+  return {
+    uid:'monster_core',
+    name:'Ядро монстра',
+    kind:'resource',
+    rarity:'rare',
+    icon:'◉',ic:'◉',
+    img:PPA_MONSTER_CORE_IMG,
+    count:n,qty:n,amount:n,
+    stackable:true,
+    sell:PPA_MONSTER_CORE_SELL_GOLD,
+    sellPrice:PPA_MONSTER_CORE_SELL_GOLD,
+    vendorPrice:PPA_MONSTER_CORE_SELL_GOLD,
+    goldValue:PPA_MONSTER_CORE_SELL_GOLD,
+    refId:'monster_core',
+    stats:{},
+    bonusText:'Редкое ядро из монстров подземелий · продажа 180 золота.',
+    monsterCore:true
+  };
+}
+function ppaGiveMonsterCore(amount){
+  amount=Math.max(1,Math.floor(Number(amount)||1));
+  if(!Array.isArray(INV.bag))INV.bag=[];
+  let it=ppaMonsterCoreBagItem();
+  if(!it){
+    if(INV.bag.length>=100){
+      try{showPickup('Сумка полна · Ядро монстра не помещается','#b984ff')}catch(_){}
+      return 0;
+    }
+    it=ppaMakeMonsterCore(amount);
+    INV.bag.push(it);
+  }else{
+    const n=Math.max(0,Math.floor(Number(it.count||it.qty||it.amount)||0))+amount;
+    it.count=n;it.qty=n;it.amount=n;
+    it.img=PPA_MONSTER_CORE_IMG;
+    it.sell=PPA_MONSTER_CORE_SELL_GOLD;
+    it.sellPrice=PPA_MONSTER_CORE_SELL_GOLD;
+    it.vendorPrice=PPA_MONSTER_CORE_SELL_GOLD;
+    it.goldValue=PPA_MONSTER_CORE_SELL_GOLD;
+  }
+  try{saveGame();sendInvState();sendBlacksmithState();updateUI()}catch(_){}
+  try{showPickup('Ядро монстра +'+amount,'#b984ff')}catch(_){}
+  return amount;
+}
+function ppaTryMonsterCore(e){
+  if(!e||e.__ppaMonsterCoreRolled)return 0;
+  e.__ppaMonsterCoreRolled=true;
+  if(!P||P.scene!=='dungeon')return 0;
+  if(e.isFartGuard||e.isClanBoss||e.isWorldCrystalBoss||e.isClanSiegeCrystal||e.isAiFighter||e.__ppaArenaPlayer)return 0;
+  if(Math.random()>=PPA_MONSTER_CORE_CHANCE)return 0;
+  return ppaGiveMonsterCore(1);
+}
+function basicAttackRoll(target){`
+);
+
+ppaPatchRegex(
+  'monster core resource popup price',
+  /function\s+openResourcePopup\(it\)\s*\{/,
+  `function openResourcePopup(it){
+  if(it&&it.monsterCore===true){
+    it.img=it.img||PPA_MONSTER_CORE_IMG;
+    it.sell=PPA_MONSTER_CORE_SELL_GOLD;
+    it.sellPrice=PPA_MONSTER_CORE_SELL_GOLD;
+    it.vendorPrice=PPA_MONSTER_CORE_SELL_GOLD;
+    it.goldValue=PPA_MONSTER_CORE_SELL_GOLD;
+  }`
+);
+
 ppaPatchRegex(
   'shared mob reward',
   /P\.kil\s*\+\+\s*;\s*P\.xp\s*\+=\s*e\.xp\s*;/g,
-  "if(!window.PPA_MOB_REWARD_ELIGIBLE||window.PPA_MOB_REWARD_ELIGIBLE(e)){P.kil++;P.xp+=e.xp;}",
+  "if(!window.PPA_MOB_REWARD_ELIGIBLE||window.PPA_MOB_REWARD_ELIGIBLE(e)){P.kil++;P.xp+=e.xp;if(typeof ppaTryMonsterCore==='function')ppaTryMonsterCore(e);}",
   true
 );
+
+if(!output.includes("const PPA_MONSTER_CORE_CHANCE=0.06") ||
+   !output.includes("const PPA_MONSTER_CORE_SELL_GOLD=180") ||
+   !output.includes("function ppaTryMonsterCore(e)") ||
+   !output.includes("monsterCore:true") ||
+   !output.includes("ppaTryMonsterCore(e)")) {
+  throw new Error('Monster Core dungeon drop patch did not apply');
+}
+/* ======================================================================== */
 
 ppaPatchRegex(
   'basic shared mob hit',
@@ -2578,6 +2667,33 @@ ppaPatchRegex(
   fartDropPanelRuntime+"\n</body>"
 );
 
+const monsterCoreDropPanelRuntime = "<script id='ppaMonsterCoreDropPanel'>\n"+
+"(function(){\n"+
+"  var prev=window.mobDropInfo;\n"+
+"  window.mobDropInfo=function(e){\n"+
+"    var rows=typeof prev==='function'?prev.apply(this,arguments):[];\n"+
+"    try{\n"+
+"      if(e&&!e.isFartGuard&&typeof P!=='undefined'&&P&&P.scene==='dungeon'){\n"+
+"        rows=Array.isArray(rows)?rows.slice():[];\n"+
+"        var has=false;for(var i=0;i<rows.length;i++)if(rows[i]&&String(rows[i][0]||'')==='Ядро монстра')has=true;\n"+
+"        if(!has)rows.push(['Ядро монстра','6%']);\n"+
+"      }\n"+
+"    }catch(_){}\n"+
+"    return rows;\n"+
+"  };\n"+
+"})();\n"+
+"</script>";
+ppaPatchRegex(
+  'monster core drop panel row',
+  /<\/body>/,
+  monsterCoreDropPanelRuntime+"\n</body>"
+);
+
+if(!output.includes("id='ppaMonsterCoreDropPanel'") ||
+   !output.includes("rows.push(['Ядро монстра','6%'])")) {
+  throw new Error('Monster Core drop panel row did not apply');
+}
+
 if(!output.includes("id='ppaFartDropPanelFix'") ||
    !output.includes("var epic=g.epic===0.00001?'0.001%'") ||
    !output.includes("var legendary=g.legendary===0.0000013?'0.00013%'")) {
@@ -2913,6 +3029,12 @@ ppaPatchRegex(
     try{
       var _ppaSlagArt=parent.PPA_FART_SLAG_IMG;
       if(_ppaSlagArt)it.img=_ppaSlagArt;
+    }catch(_){}
+  }
+  if(it&&it.monsterCore===true){
+    try{
+      var _ppaCoreArt=parent.PPA_MONSTER_CORE_IMG;
+      if(_ppaCoreArt)it.img=_ppaCoreArt;
     }catch(_){}
   }
   if(it&&it.fartPickaxe===true&&!it.img){
