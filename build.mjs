@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v441-rune-image-menu-fix-20260921';
+const CLIENT_BUILD = 'v442-rune-fusion-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2916,6 +2916,385 @@ if(!output.includes("ppaIframeImageLongPressGuard") ||
    !output.includes("fr.contentDocument") ||
    !output.includes("pointer-events:none!important")) {
   throw new Error('Iframe image longpress guard did not apply');
+}
+/* ======================================================================== */
+
+/* === BLACKSMITH RUNE FUSION ============================================= */
+// Two identical runes -> one rune of the next rarity.
+// Cost: 5000 gold per attempt.
+// Chances: gray/common 37%, green 30%, blue 22%.
+// Purple/epic cannot be fused to legendary: legendary runes remain Black Market only.
+ppaPatchRegex(
+  'blacksmith rune fusion runtime',
+  /<\/body>/,
+  `<script id="ppaRuneFusionRuntime">
+(function(){
+  var COST=5000;
+  var CHANCE={0:.37,1:.30,2:.22};
+  var NEXT={0:1,1:2,2:3};
+  var RARITY_NAME=['Серая','Зелёная','Синяя','Фиолетовая','Легендарная'];
+
+  function safeClone(v){
+    try{return JSON.parse(JSON.stringify(v))}catch(_){}
+    try{return Object.assign({},v)}catch(_){}
+    return null;
+  }
+  function runeText(v){
+    if(!v)return '';
+    return String(v.name||v.title||v.label||v.runeName||v.id||v.refId||v.key||'');
+  }
+  function isRune(v){
+    if(!v||typeof v!=='object')return false;
+    if(v.rune===true||v.isRune===true||v.kind==='rune'||v.type==='rune'||v.category==='rune')return true;
+    var s=(runeText(v)+' '+String(v.kind||'')+' '+String(v.type||'')+' '+String(v.refId||'')+' '+String(v.id||'')).toLowerCase();
+    return s.indexOf('rune')>=0||s.indexOf('руна')>=0||s.indexOf('руны')>=0;
+  }
+  function rarityIndex(v){
+    var r=v&&(v.rarity!=null?v.rarity:(v.quality!=null?v.quality:v.tier));
+    if(typeof r==='number'&&isFinite(r)){
+      if(r>=0&&r<=4)return Math.floor(r);
+      if(r>=1&&r<=5)return Math.floor(r)-1;
+    }
+    var s=String(r==null?'':r).toLowerCase();
+    if(/legend|orange|gold|легенд|оранж/.test(s))return 4;
+    if(/epic|purple|violet|фиолет|эпич/.test(s))return 3;
+    if(/rare|blue|син/.test(s))return 2;
+    if(/uncommon|green|зел/.test(s))return 1;
+    if(/common|gray|grey|white|сер|обыч/.test(s))return 0;
+    var n=runeText(v).toLowerCase();
+    if(/легенд|оранж/.test(n))return 4;
+    if(/фиолет|эпич/.test(n))return 3;
+    if(/син/.test(n))return 2;
+    if(/зел/.test(n))return 1;
+    if(/сер|обыч/.test(n))return 0;
+    return -1;
+  }
+  function normalizeRuneKey(s){
+    return String(s||'').toLowerCase()
+      .replace(/легендарн\w*|legendary|фиолетов\w*|эпическ\w*|epic|син\w*|blue|rare|зелён\w*|зелен\w*|green|uncommon|сер\w*|gray|grey|common|обычн\w*/g,'')
+      .replace(/\b[ivx]+\b/g,'')
+      .replace(/[_\-–—]+/g,' ')
+      .replace(/\s+/g,' ').trim();
+  }
+  function typeKey(v){
+    if(!v)return '';
+    var keys=['runeType','runeKey','statKey','effectKey','bonusKey','effect','stat','subtype','typeKey'];
+    for(var i=0;i<keys.length;i++){
+      var x=v[keys[i]];
+      if(x!=null&&typeof x!=='object'&&String(x).trim())return normalizeRuneKey(x);
+    }
+    var id=v.refId||v.id||v.key||'';
+    if(id&&String(id).toLowerCase().indexOf('rune')>=0)return normalizeRuneKey(id);
+    return normalizeRuneKey(runeText(v));
+  }
+  function countOf(v){
+    if(!v||typeof v!=='object')return 1;
+    var n=Number(v.count!=null?v.count:(v.qty!=null?v.qty:(v.amount!=null?v.amount:1)));
+    return isFinite(n)&&n>0?Math.floor(n):1;
+  }
+  function setCount(v,n){
+    n=Math.max(0,Math.floor(Number(n)||0));
+    if('count' in v)v.count=n;
+    if('qty' in v)v.qty=n;
+    if('amount' in v)v.amount=n;
+    if(!('count' in v)&&!('qty' in v)&&!('amount' in v))v.count=n;
+  }
+  function ownedEntries(){
+    var out=[],seen=new Set(),root=null;
+    try{root=INV}catch(_){root=null}
+    if(!root)return out;
+    function walk(v,path,parent,key,depth){
+      if(!v||depth>5)return;
+      if(typeof v==='object'){
+        if(seen.has(v))return;seen.add(v);
+        if(isRune(v)&&!/equip|equipped|slot|active|installed|socket/i.test(path)){
+          out.push({item:v,parent:parent,key:key,path:path,count:countOf(v)});
+          return;
+        }
+        if(Array.isArray(v)){
+          for(var i=0;i<v.length;i++)walk(v[i],path+'['+i+']',v,i,depth+1);
+        }else{
+          var ks=[];try{ks=Object.keys(v)}catch(_){ks=[]}
+          for(var j=0;j<ks.length;j++){
+            var k=ks[j];
+            if(/^(img|image|sprite|html|srcdoc)$/i.test(k))continue;
+            walk(v[k],path+'.'+k,v,k,depth+1);
+          }
+        }
+      }
+    }
+    walk(root,'INV',null,null,0);
+    return out;
+  }
+  function sourceIdentifiers(){
+    var names={};
+    try{
+      document.querySelectorAll('script').forEach(function(sc){
+        var t=String(sc.textContent||'');
+        var re=/\b(?:const|let|var|function)\s+([A-Za-z_$][\w$]*(?:rune|Rune|RUNE)[\w$]*)/g,m;
+        while((m=re.exec(t)))names[m[1]]=1;
+      });
+    }catch(_){}
+    return Object.keys(names);
+  }
+  function catalogRunes(){
+    var out=[],seen=new Set(),roots=[];
+    try{
+      sourceIdentifiers().forEach(function(n){
+        try{var v=eval(n);if(v&&typeof v==='object')roots.push(v)}catch(_){}
+      });
+    }catch(_){}
+    try{
+      Object.keys(window).forEach(function(k){
+        if(!/rune/i.test(k))return;
+        var v;try{v=window[k]}catch(_){return}
+        if(v&&typeof v==='object')roots.push(v);
+      });
+    }catch(_){}
+    function walk(v,depth){
+      if(!v||depth>5||typeof v!=='object'||seen.has(v))return;
+      seen.add(v);
+      if(isRune(v)){out.push(v);return}
+      if(Array.isArray(v)){
+        for(var i=0;i<v.length&&i<500;i++)walk(v[i],depth+1);
+      }else{
+        var ks=[];try{ks=Object.keys(v)}catch(_){ks=[]}
+        for(var j=0;j<ks.length&&j<500;j++){
+          var x;try{x=v[ks[j]]}catch(_){continue}
+          if(x&&typeof x==='object')walk(x,depth+1);
+        }
+      }
+    }
+    for(var i=0;i<roots.length;i++)walk(roots[i],0);
+    return out;
+  }
+  function groupList(){
+    var entries=ownedEntries(),map={};
+    entries.forEach(function(e){
+      var r=rarityIndex(e.item),k=typeKey(e.item);
+      if(r<0||r>2||!k)return;
+      var id=r+'|'+k;
+      if(!map[id])map[id]={id:id,rarity:r,key:k,name:runeText(e.item)||'Руна',count:0,entries:[],img:e.item.img||e.item.image||''};
+      map[id].count+=e.count;
+      map[id].entries.push(e);
+    });
+    return Object.keys(map).map(function(k){
+      var g=map[k];
+      g.chance=CHANCE[g.rarity]||0;
+      g.nextRarity=NEXT[g.rarity];
+      g.eligible=g.count>=2;
+      return g;
+    }).filter(function(g){return g.count>0}).sort(function(a,b){return a.rarity-b.rarity||a.name.localeCompare(b.name)});
+  }
+  function findTemplate(group){
+    var next=group.nextRarity,key=group.key;
+    var all=catalogRunes().concat(ownedEntries().map(function(e){return e.item}));
+    for(var i=0;i<all.length;i++){
+      if(rarityIndex(all[i])===next&&typeKey(all[i])===key)return safeClone(all[i]);
+    }
+    return null;
+  }
+  function patchRarity(v,r){
+    var names=['common','uncommon','rare','epic','legendary'];
+    if(v.rarity!=null){
+      if(typeof v.rarity==='number')v.rarity=r;
+      else v.rarity=names[r];
+    }else v.rarity=names[r];
+    if(v.quality!=null){
+      if(typeof v.quality==='number')v.quality=r;
+      else v.quality=names[r];
+    }
+    if(v.tier!=null&&typeof v.tier==='number')v.tier=r;
+    return v;
+  }
+  function makeResult(group){
+    var t=findTemplate(group);
+    if(!t){
+      var src=group.entries[0]&&group.entries[0].item;
+      t=safeClone(src);
+      if(!t)return null;
+      patchRarity(t,group.nextRarity);
+      // Remove stale per-instance/equipment state; stat/effect fields remain intact.
+      delete t.equipped;delete t.slotIndex;delete t.socketIndex;delete t.installed;
+    }
+    if('uid' in t)t.uid='rune_fuse_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7);
+    setCount(t,1);
+    return t;
+  }
+  function consumeTwo(group){
+    var need=2;
+    // Process array indices from high to low so splices remain valid.
+    var arr=group.entries.slice().sort(function(a,b){
+      if(a.parent===b.parent&&Array.isArray(a.parent))return Number(b.key)-Number(a.key);
+      return 0;
+    });
+    for(var i=0;i<arr.length&&need>0;i++){
+      var e=arr[i],n=countOf(e.item),take=Math.min(need,n);
+      if(n>take){setCount(e.item,n-take)}
+      else if(Array.isArray(e.parent)){e.parent.splice(Number(e.key),1)}
+      else if(e.parent&&e.key!=null){try{delete e.parent[e.key]}catch(_){}}
+      need-=take;
+    }
+    return need===0;
+  }
+  function addResult(group,item){
+    var target=group.entries[0]&&group.entries[0].parent;
+    if(!target||!Array.isArray(target))return false;
+    var key=typeKey(item),r=rarityIndex(item);
+    for(var i=0;i<target.length;i++){
+      var x=target[i];
+      if(x&&isRune(x)&&typeKey(x)===key&&rarityIndex(x)===r&&('count' in x||'qty' in x||'amount' in x)){
+        setCount(x,countOf(x)+1);return true;
+      }
+    }
+    target.push(item);return true;
+  }
+  function goldRef(){
+    var roots=[];
+    try{roots.push(INV)}catch(_){}
+    try{roots.push(P)}catch(_){}
+    var exact=['gold','coins','money','coin','zoloto'];
+    for(var i=0;i<roots.length;i++){
+      var o=roots[i];if(!o||typeof o!=='object')continue;
+      for(var j=0;j<exact.length;j++){
+        var k=exact[j];
+        if(typeof o[k]==='number'&&isFinite(o[k]))return {obj:o,key:k};
+      }
+    }
+    // Read the game's sell function to discover the real currency field when possible.
+    try{
+      if(typeof sellFromBag==='function'){
+        var src=Function.prototype.toString.call(sellFromBag);
+        var m=src.match(/([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*(?:gold|coin|money)[\w$]*)\s*\+=/i);
+        if(m){
+          var o2=eval(m[1]);
+          if(o2&&typeof o2[m[2]]==='number')return {obj:o2,key:m[2]};
+        }
+      }
+    }catch(_){}
+    return null;
+  }
+  function persist(){
+    try{saveGame()}catch(_){}
+    try{sendInvState()}catch(_){}
+    try{sendBlacksmithState()}catch(_){}
+    try{updateUI()}catch(_){}
+  }
+  function flash(msg,color){
+    try{showPickup(msg,color||'#e6c58b')}catch(_){}
+  }
+
+  window.PPA_RUNE_FUSION_LIST=function(){
+    return groupList().map(function(g){
+      return {id:g.id,name:g.name,count:g.count,rarity:g.rarity,nextRarity:g.nextRarity,chance:g.chance,eligible:g.eligible,img:g.img||''};
+    });
+  };
+  window.PPA_RUNE_FUSION_TRY=function(id){
+    var groups=groupList(),g=null;
+    for(var i=0;i<groups.length;i++)if(groups[i].id===id){g=groups[i];break}
+    if(!g)return {ok:false,message:'Руны не найдены'};
+    if(g.count<2)return {ok:false,message:'Нужно 2 одинаковые руны'};
+    if(g.rarity>2)return {ok:false,message:'Фиолетовые руны не сливаются в легендарные'};
+    var money=goldRef();
+    if(!money)return {ok:false,message:'Не удалось определить запас золота'};
+    var gold=Math.max(0,Math.floor(Number(money.obj[money.key])||0));
+    if(gold<COST)return {ok:false,message:'Нужно 5000 золота'};
+    var result=makeResult(g);
+    if(!result)return {ok:false,message:'Не удалось создать руну следующей редкости'};
+
+    money.obj[money.key]=gold-COST;
+    if(!consumeTwo(g)){
+      money.obj[money.key]=gold;
+      return {ok:false,message:'Не удалось списать руны'};
+    }
+    var success=Math.random()<(CHANCE[g.rarity]||0);
+    if(success){
+      if(!addResult(g,result)){
+        // This should be rare; refund everything rather than deleting player items.
+        money.obj[money.key]=gold;
+        flash('Слияние отменено · не найдено хранилище результата','#ff8c78');
+        return {ok:false,message:'Слияние отменено'};
+      }
+      persist();
+      var msg='Успех! '+RARITY_NAME[g.nextRarity]+' руна получена';
+      flash('✨ '+msg,'#c987ff');
+      return {ok:true,success:true,message:msg};
+    }
+    persist();
+    var fail='Слияние не удалось · 2 руны и 5000 золота израсходованы';
+    flash(fail,'#ff8c78');
+    return {ok:true,success:false,message:fail};
+  };
+
+  function installFrame(fr){
+    var w,d;
+    try{w=fr.contentWindow;d=fr.contentDocument}catch(_){return}
+    if(!w||!d||!d.body||d.__ppaRuneFusionInstalled)return;
+    var isSmith=false;
+    try{isSmith=typeof w.inspectSmithItem==='function'||/КУЗНЕЦ|КУЗНИЦА|ЗАТОЧК/i.test(String(d.body.textContent||'').slice(0,3000))}catch(_){}
+    if(!isSmith)return;
+    d.__ppaRuneFusionInstalled=true;
+
+    var style=d.createElement('style');
+    style.textContent=
+      '#ppaRuneFusionBtn{width:100%;height:42px;margin:8px 0;border:1px solid #8f5b27;border-radius:8px;background:linear-gradient(#44270f,#21140b);color:#f4cf80;font:bold 12px Georgia,serif;letter-spacing:.07em}'+
+      '#ppaRuneFusionShade{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:12px;box-sizing:border-box}'+
+      '#ppaRuneFusionShade.on{display:flex}#ppaRuneFusionPanel{width:min(560px,96vw);max-height:88vh;overflow:auto;border:1px solid #93602c;border-radius:10px;background:#160f0b;color:#e6c58b;padding:12px;box-sizing:border-box;box-shadow:0 10px 35px #000}'+
+      '.ppaRFrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 7px;margin:6px 0;border:1px solid #5a4027;border-radius:7px;background:#0d0b0a}.ppaRFbtn{height:34px;border:1px solid #92612d;border-radius:6px;background:#35200e;color:#f0cb7c;font:bold 10px monospace;padding:0 10px}.ppaRFbtn:disabled{opacity:.4}';
+    (d.head||d.documentElement).appendChild(style);
+
+    var btn=d.createElement('button');
+    btn.id='ppaRuneFusionBtn';btn.type='button';btn.textContent='⚗ СЛИЯНИЕ РУН';
+    d.body.insertBefore(btn,d.body.firstChild);
+
+    var shade=d.createElement('div');
+    shade.id='ppaRuneFusionShade';
+    shade.innerHTML='<div id="ppaRuneFusionPanel"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font:16px Georgia,serif;color:#f4cf80">СЛИЯНИЕ РУН</b><button id="ppaRFClose" class="ppaRFbtn">✕</button></div><div style="font:10px monospace;color:#ad987a;margin:8px 0 10px">2 одинаковые руны · цена попытки 5000 золота<br>Серая → зелёная 37% · зелёная → синяя 30% · синяя → фиолетовая 22%<br>При неудаче обе руны сгорают. Легендарные руны остаются только в Чёрном рынке.</div><div id="ppaRFList"></div><div id="ppaRFMsg" style="min-height:18px;margin-top:8px;font:10px monospace;color:#d6b77d"></div></div>';
+    d.body.appendChild(shade);
+    var list=shade.querySelector('#ppaRFList'),msg=shade.querySelector('#ppaRFMsg');
+
+    function render(){
+      var rows=[];try{rows=parent.PPA_RUNE_FUSION_LIST?parent.PPA_RUNE_FUSION_LIST():[]}catch(_){}
+      list.innerHTML='';
+      if(!rows.length){list.innerHTML='<div style="padding:16px;text-align:center;color:#8f806f;font:10px monospace">Подходящих рун пока нет.</div>';return}
+      rows.forEach(function(x){
+        var row=d.createElement('div');row.className='ppaRFrow';
+        var pct=Math.round((Number(x.chance)||0)*100);
+        row.innerHTML='<div><div style="font:bold 11px Georgia,serif;color:#ead0a0">'+String(x.name||'Руна')+'</div><div style="margin-top:3px;font:9px monospace;color:#a99478">'+RARITY_NAME[x.rarity]+' · в наличии '+x.count+' · шанс '+pct+'%</div></div>';
+        var b=d.createElement('button');b.className='ppaRFbtn';b.textContent='СЛИТЬ · 5000';b.disabled=!x.eligible;
+        b.onclick=function(){
+          b.disabled=true;var r;
+          try{r=parent.PPA_RUNE_FUSION_TRY(x.id)}catch(e){r={ok:false,message:'Ошибка слияния'}}
+          msg.textContent=(r&&r.message)||'';
+          render();
+        };
+        row.appendChild(b);list.appendChild(row);
+      });
+    }
+    btn.onclick=function(){shade.classList.add('on');msg.textContent='';render()};
+    shade.querySelector('#ppaRFClose').onclick=function(){shade.classList.remove('on')};
+    shade.addEventListener('click',function(e){if(e.target===shade)shade.classList.remove('on')});
+  }
+
+  function scan(){
+    try{document.querySelectorAll('iframe').forEach(installFrame)}catch(_){}
+  }
+  scan();
+  try{
+    new MutationObserver(function(){scan()}).observe(document.documentElement,{childList:true,subtree:true});
+  }catch(_){}
+  setInterval(scan,1200);
+})();
+</script>
+</body>`
+);
+
+if(!output.includes("id=\"ppaRuneFusionRuntime\"") ||
+   !output.includes("var CHANCE={0:.37,1:.30,2:.22}") ||
+   !output.includes("var COST=5000") ||
+   !output.includes("Фиолетовые руны не сливаются в легендарные") ||
+   !output.includes("PPA_RUNE_FUSION_TRY")) {
+  throw new Error('Rune fusion patch did not apply');
 }
 /* ======================================================================== */
 
