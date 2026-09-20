@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v433-fart-clean-runtime-20260920';
+const CLIENT_BUILD = 'v434-fart-guard-menu-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2415,9 +2415,27 @@ const fartDropPanelRuntime = "<script id='ppaFartDropPanelFix'>\n"+
 "(function(){\n"+
 "  var prev=window.mobDropInfo;\n"+
 "  function pctGear(){try{if(typeof fartGuardGearDropChances==='function')return fartGuardGearDropChances()}catch(_){}return {epic:0,legendary:0,tier:'none'};}\n"+
+"  function fixGuardMenu(e){\n"+
+"    var name=e&&e.__ppaFartName?String(e.__ppaFartName):'Страж Фарт-зоны';\n"+
+"    try{if(window.PPA_FART_GUARD_NAME)name=window.PPA_FART_GUARD_NAME(e)||name}catch(_){}\n"+
+"    var lvl=Math.max(1,Math.floor(Number(e&&e.lvl)||40));\n"+
+"    requestAnimationFrame(function(){\n"+
+"      try{\n"+
+"        var oldNames=/^\\[\\s*\\d+\\s*\\]\\s*(?:Рудный берсерк|Пещерный воин|Горный хищник|Каменный громила|Дикий страж)$/i;\n"+
+"        var els=document.querySelectorAll('h1,h2,h3,h4,strong,b,div,span,p');\n"+
+"        for(var i=0;i<els.length;i++){\n"+
+"          var el=els[i];if(el.children&&el.children.length)continue;\n"+
+"          var t=String(el.textContent||'').trim();\n"+
+"          if(oldNames.test(t)){el.textContent='['+lvl+'] '+name;continue;}\n"+
+"          if(t==='Обитатель подземелья.')el.textContent='Страж рудника Фарт-зоны.';\n"+
+"        }\n"+
+"      }catch(_){}\n"+
+"    });\n"+
+"  }\n"+
 "  window.mobDropInfo=function(e){\n"+
 "    if(e&&e.isFartGuard){\n"+
 "      try{if(window.PPA_FART_GUARD_NAME)window.PPA_FART_GUARD_NAME(e)}catch(_){}\n"+
+"      fixGuardMenu(e);\n"+
 "      var g=pctGear();\n"+
 "      var epic=g.epic===0.00001?'0.001%':(g.epic===0.000003?'0.0003%':'0%');\n"+
 "      var legendary=g.legendary===0.0000013?'0.00013%':'0%';\n"+
@@ -2450,8 +2468,10 @@ if(!output.includes("id='ppaFartDropPanelFix'") ||
 }
 
 if(!output.includes("window.PPA_FART_GUARD_NAME=function(e)") ||
-   !output.includes("try{if(window.PPA_FART_GUARD_NAME)window.PPA_FART_GUARD_NAME(e)}catch(_){}")) {
-  throw new Error('Fart guard inspect identity patch did not apply');
+   !output.includes("function fixGuardMenu(e)") ||
+   !output.includes("requestAnimationFrame(function()") ||
+   !output.includes("Страж рудника Фарт-зоны.")) {
+  throw new Error('Fart guard menu patch did not apply');
 }
 if(output.includes("document.createTreeWalker(document.body") ||
    output.includes("setTimeout(applyFartInspectName") ||
