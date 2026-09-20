@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v409-hold-preview-release-20260920';
+const CLIENT_BUILD = 'v410-pickaxe-inventory-sale-fix-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2083,6 +2083,65 @@ if(!output.includes("type:'itemInspectHoldStart'") ||
    !output.includes("img.setAttribute('draggable','false')") ||
    !output.includes("if(d.type==='itemInspectHoldEnd')")) {
   throw new Error('Hold-preview release lifecycle did not apply');
+}
+/* ======================================================================== */
+
+/* === FART PICKAXE INVENTORY SELL + UPGRADE FIX ========================== */
+ppaPatchRegex(
+  'block fart pickaxe direct inventory sale',
+  /function sellFromBag\(idx\)\{var it=INV\.bag\[idx\];if\(!it\)return;/,
+  `function sellFromBag(idx){var it=INV.bag[idx];if(!it)return;
+  if(it.fartPickaxe===true){
+    showPickup('Кирку нельзя продать','#ffb36b');
+    return;
+  }`
+);
+
+ppaPatchRegex(
+  'pickaxe missing item clears stale timer',
+  /if\(until>Date\.now\(\)\)\{\s*INV\.fartPickaxe=true;\s*if\(!item\)\{\s*item=fartMakePickaxeItem\(until\);\s*INV\.bag\.push\(item\);\s*\}else\{item\.expiresAt=until;if\(!item\.fartPickaxeTier\)item\.fartPickaxeTier='common';\}\s*return true;\s*\}/,
+  `if(until>Date.now()){
+    if(!item){
+      // Old bug: the item was sold from inventory but its timer survived.
+      // Never resurrect a timed pickaxe from the timer alone.
+      INV.fartPickaxe=false;
+      INV.fartPickaxeUntil=0;
+      try{saveGame();sendInvState();sendBlacksmithState();updateUI()}catch(_){}
+      return false;
+    }
+    INV.fartPickaxe=true;
+    item.expiresAt=until;
+    if(!item.fartPickaxeTier)item.fartPickaxeTier='common';
+    return true;
+  }`
+);
+
+ppaPatchRegex(
+  'legendary pickaxe can replace common',
+  /if\(fartHasPickaxe\(\)\)\{\s*showPickup\('Кирка уже в сумке · осталось '\+fartPickaxeRemainingText\(\),'#9dff91'\);\s*return;\s*\}\s*const price=2120;/,
+  `const _hasCurrent=fartHasPickaxe();
+      const _currentTier=_hasCurrent?fartPickaxeTier():'';
+      if(_hasCurrent&&_currentTier==='legendary'){
+        showPickup('Легендарная кирка уже активна · осталось '+fartPickaxeRemainingText(),'#ffae45');
+        return;
+      }
+      const price=2120;`
+);
+
+ppaPatchRegex(
+  'legendary purchase replaces old pickaxe cleanly',
+  /INV\.ppa=\(Number\(INV\.ppa\)\|\|0\)-price;\s*fartRemovePickaxeItem\(\);\s*INV\.fartPickaxeUntil=Date\.now\(\)\+FART_PICKAXE_LEGENDARY_DURATION_MS;/,
+  `INV.ppa=(Number(INV.ppa)||0)-price;
+      fartRemovePickaxeItem();
+      INV.fartPickaxe=false;
+      INV.fartPickaxeUntil=0;
+      INV.fartPickaxeUntil=Date.now()+FART_PICKAXE_LEGENDARY_DURATION_MS;`
+);
+
+if(!output.includes("showPickup('Кирку нельзя продать'") ||
+   !output.includes("Never resurrect a timed pickaxe from the timer alone") ||
+   !output.includes("_currentTier==='legendary'")) {
+  throw new Error('Fart pickaxe direct-sale/upgrade fix did not apply');
 }
 /* ======================================================================== */
 
