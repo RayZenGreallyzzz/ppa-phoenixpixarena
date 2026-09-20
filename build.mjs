@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v410-pickaxe-inventory-sale-fix-20260920';
+const CLIENT_BUILD = 'v411-pickaxe-upgrade-button-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2142,6 +2142,36 @@ if(!output.includes("showPickup('Кирку нельзя продать'") ||
    !output.includes("Never resurrect a timed pickaxe from the timer alone") ||
    !output.includes("_currentTier==='legendary'")) {
   throw new Error('Fart pickaxe direct-sale/upgrade fix did not apply');
+}
+/* ======================================================================== */
+
+/* === PICKAXE UPGRADE BUTTON STATE ======================================= */
+ppaPatchRegex(
+  'legendary upgrade allowed with common pickaxe',
+  /if\(lb\)\{\s*lb\.disabled=_hasPickaxe;\s*lb\.textContent=_hasPickaxe&&_pickTier==='legendary'\?\('✓ ЛЕГЕНДАРНАЯ КИРКА · '\+fartPickaxeRemainingText\(\)\):'🔥 ЛЕГЕНДАРНАЯ КИРКА · 2120 PPA · 14 Ч';\s*lb\.style\.opacity=_hasPickaxe\?'\.55':'1';\s*\}/,
+  `if(lb){
+    const _legendActive=_hasPickaxe&&_pickTier==='legendary';
+    const _canUpgrade=_hasPickaxe&&_pickTier==='common';
+    lb.disabled=_legendActive;
+    lb.textContent=_legendActive
+      ?('✓ ЛЕГЕНДАРНАЯ КИРКА · '+fartPickaxeRemainingText())
+      :(_canUpgrade?'🔥 УЛУЧШИТЬ ДО ЛЕГЕНДАРНОЙ · 2120 PPA':'🔥 ЛЕГЕНДАРНАЯ КИРКА · 2120 PPA · 14 Ч');
+    lb.style.opacity=_legendActive?'.55':'1';
+  }`
+);
+
+ppaPatchRegex(
+  'legendary upgrade ignores full bag when replacing common',
+  /if\(\(INV\.bag\|\|\[\]\)\.length>=100\)\{\s*showPickup\('Сумка полна · освободи 1 слот для кирки','#ff8c78'\);\s*return;\s*\}/,
+  `if((INV.bag||[]).length>=100&&!(_hasCurrent&&_currentTier==='common')){
+        showPickup('Сумка полна · освободи 1 слот для кирки','#ff8c78');
+        return;
+      }`
+);
+
+if(!output.includes("🔥 УЛУЧШИТЬ ДО ЛЕГЕНДАРНОЙ · 2120 PPA") ||
+   !output.includes("&& !(_hasCurrent&&_currentTier==='common')") && !output.includes("&&!(_hasCurrent&&_currentTier==='common')")) {
+  throw new Error('Pickaxe upgrade button state did not apply');
 }
 /* ======================================================================== */
 
