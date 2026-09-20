@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v399-fart-pickaxe-legendary-20260920';
+const CLIENT_BUILD = 'v400-fart-pickaxe-lock-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1378,6 +1378,7 @@ function fartNormalizePickaxe(){
   if(until||INV.fartPickaxe||item){
     INV.fartPickaxe=false;INV.fartPickaxeUntil=0;
     fartRemovePickaxeItem();
+    try{saveGame();sendInvState();sendBlacksmithState();updateUI()}catch(_){}
   }
   return false;
 }
@@ -1483,8 +1484,8 @@ ppaPatchRegex(
 
 ppaPatchRegex(
   'exclude fart pickaxe from auction inventory',
-  /\(INV\.bag\|\|\[\]\)\.forEach\(function\(it,i\)\{if\(!it\)return;/,
-  "(INV.bag||[]).forEach(function(it,i){if(!it||it.fartPickaxe===true)return;"
+  /\(INV\.bag\|\|\[\]\)\.forEach\(function\(it,idx\)\{\s*if\(!it\)return;/,
+  "(INV.bag||[]).forEach(function(it,idx){if(!it||it.fartPickaxe===true)return;"
 );
 
 if(!output.includes("FART_GUARD_LEGENDARY_GEAR_CHANCE=0.0000013") ||
