@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v420-fart-guard-leash-20260920';
+const CLIENT_BUILD = 'v421-fart-guard-native-render-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1556,44 +1556,6 @@ ppaPatchRegex(
     FART_ZONE_STATE.respawns.splice(i,1);
   }
 
-  // Every guard belongs to the place where it spawned.
-  // It may fight around that point, but it must never migrate to another mine.
-  const _fartGuardLeash=150;
-  const _fartGuardReturnAt=118;
-  const _fartGuardReturnStep=Math.max(3,Math.min(10,dt*0.035));
-  if(typeof EN!=='undefined'&&Array.isArray(EN)){
-    EN.forEach(function(g){
-      if(!g||!g.isFartGuard||g.hp<=0)return;
-      if(!Number.isFinite(Number(g.__ppaFartHomeX))||!Number.isFinite(Number(g.__ppaFartHomeY))){
-        g.__ppaFartHomeX=Number(g.x)||0;
-        g.__ppaFartHomeY=Number(g.y)||0;
-      }
-      const hx=Number(g.__ppaFartHomeX)||0,hy=Number(g.__ppaFartHomeY)||0;
-      let dx=(Number(g.x)||0)-hx,dy=(Number(g.y)||0)-hy;
-      let dist=Math.hypot(dx,dy);
-
-      // Hard boundary: impossible to run from one ore node to the next.
-      if(dist>_fartGuardLeash&&dist>0.001){
-        g.x=hx+dx/dist*_fartGuardLeash;
-        g.y=hy+dy/dist*_fartGuardLeash;
-        dx=(Number(g.x)||0)-hx;dy=(Number(g.y)||0)-hy;dist=_fartGuardLeash;
-      }
-
-      // If the player has left this guard's home area, break aggro and walk home.
-      const pd=Math.hypot((Number(P.x)||0)-hx,(Number(P.y)||0)-hy);
-      if(dist>_fartGuardReturnAt&&pd>_fartGuardLeash){
-        try{g.aggro=false}catch(_){}
-        try{g.target=null}catch(_){}
-        try{g.targetId=null}catch(_){}
-        try{g.__ppaServerTarget=null}catch(_){}
-        const back=Math.hypot(hx-(Number(g.x)||0),hy-(Number(g.y)||0));
-        if(back>1){
-          g.x+=(hx-(Number(g.x)||0))/back*_fartGuardReturnStep;
-          g.y+=(hy-(Number(g.y)||0))/back*_fartGuardReturnStep;
-        }
-      }
-    });
-  }
 
   const oldBtn=document.getElementById('fartAutoMineBtn');
   if(oldBtn)oldBtn.style.display='none';
@@ -1635,9 +1597,7 @@ function drawFartZoneMines()`
 
 if(output.includes('id="fartAutoMineBtn" type="button" onclick="fartToggleAutoMining()"') ||
    !output.includes("if(d<=FART_MINE_RADIUS&&!fartMineHasLivingGuard(mine))") ||
-   !output.includes("FART_ZONE_STATE.autoMineId=near.id") ||
-   !output.includes("const _fartGuardLeash=150") ||
-   !output.includes("g.__ppaFartHomeX")) {
+   !output.includes("FART_ZONE_STATE.autoMineId=near.id")) {
   throw new Error('Passive Fart mining patch did not apply');
 }
 /* ======================================================================== */
@@ -2241,34 +2201,22 @@ ppaPatchRegex(
 ppaPatchRegex(
   'fart guard body-only repaint hook',
   /function\s+ppaDrawWorldBodyOnly\(e\)\s*\{\s*if\(!e\|\|e\.hp<=0\)return;\s*if\(e\.isDungeon60Boss\)\{if\(window\.PPA_DRAGON60_DRAW_BODY\)window\.PPA_DRAGON60_DRAW_BODY\(e\);return;\}/,
-  "function ppaDrawWorldBodyOnly(e){\n  if(!e||e.hp<=0)return;\n  if(e.isFartGuard){if(window.PPA_FART_GUARD_DRAW)window.PPA_FART_GUARD_DRAW(e);return;}\n  if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW_BODY)window.PPA_DRAGON60_DRAW_BODY(e);return;}"
+  "function ppaDrawWorldBodyOnly(e){\n  if(!e||e.hp<=0)return;\n  if(e.isFartGuard)window.__PPA_FART_DRAW_ENTITY=e;\n  if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW_BODY)window.PPA_DRAGON60_DRAW_BODY(e);return;}"
 );
 
 ppaPatchRegex(
   'fart guard main render hook',
   /if\(e\.isDungeon60Boss\)\{if\(window\.PPA_DRAGON60_DRAW\)window\.PPA_DRAGON60_DRAW\(e\);continue;\}if\(e\.isDungeon21Boss\)\{drawDungeon21Boss\(e\);continue;\}/,
-  "if(e.isFartGuard){if(window.PPA_FART_GUARD_DRAW)window.PPA_FART_GUARD_DRAW(e);continue;}if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW)window.PPA_DRAGON60_DRAW(e);continue;}if(e.isDungeon21Boss){drawDungeon21Boss(e);continue;}"
+  "window.__PPA_FART_DRAW_ENTITY=(e&&e.isFartGuard)?e:null;if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW)window.PPA_DRAGON60_DRAW(e);continue;}if(e.isDungeon21Boss){drawDungeon21Boss(e);continue;}"
 );
 
 const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "(function(){\n"+
-"  var atlases=[new Image(),new Image(),new Image()];\n"+
-"  atlases[0].src='./assets/fart-tentacle.webp';\n"+
-"  atlases[1].src='./assets/fart-spider.webp';\n"+
-"  atlases[2].src='./assets/fart-reaper.webp';\n"+
+"  var sheets=[new Image(),new Image(),new Image()];\n"+
+"  sheets[0].src='./assets/fart-tentacle.webp';\n"+
+"  sheets[1].src='./assets/fart-spider.webp';\n"+
+"  sheets[2].src='./assets/fart-reaper.webp';\n"+
 "  var TILE=192;\n"+
-"  var cachedCanvas=null,cachedCtx=null,lastCanvasScan=0;\n"+
-"  function mainCtx(){\n"+
-"    var now=Date.now();\n"+
-"    if(cachedCtx&&cachedCanvas&&cachedCanvas.isConnected&&now-lastCanvasScan<1500)return cachedCtx;\n"+
-"    lastCanvasScan=now;\n"+
-"    var list=Array.prototype.slice.call(document.querySelectorAll('canvas'));\n"+
-"    list=list.filter(function(c){return c&&c.width>=240&&c.height>=180&&c.offsetParent!==null});\n"+
-"    list.sort(function(a,b){return (b.width*b.height)-(a.width*a.height)});\n"+
-"    cachedCanvas=list[0]||null;\n"+
-"    cachedCtx=cachedCanvas?cachedCanvas.getContext('2d'):null;\n"+
-"    return cachedCtx;\n"+
-"  }\n"+
 "  function skinOf(e){\n"+
 "    if(Number.isInteger(e.__ppaFartSkin))return e.__ppaFartSkin;\n"+
 "    var idx=-1;\n"+
@@ -2280,76 +2228,55 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "    }catch(_){}\n"+
 "    if(idx<0){\n"+
 "      var key=String(e.id||e.uid||e.mineId||'')+'|'+Math.round(Number(e.x)||0)+'|'+Math.round(Number(e.y)||0);\n"+
-"      var h=0;for(var i=0;i<key.length;i++)h=((h*31)+key.charCodeAt(i))|0;\n"+
-"      idx=Math.abs(h);\n"+
+"      var h=0;for(var i=0;i<key.length;i++)h=((h*31)+key.charCodeAt(i))|0;idx=Math.abs(h);\n"+
 "    }\n"+
-"    e.__ppaFartSkin=idx%3;\n"+
-"    return e.__ppaFartSkin;\n"+
+"    e.__ppaFartSkin=idx%3;return e.__ppaFartSkin;\n"+
 "  }\n"+
 "  function dirOf(e,v){\n"+
 "    var d=NaN;\n"+
 "    if(Number.isFinite(Number(e.__ppaServerDir)))d=Number(e.__ppaServerDir);\n"+
 "    else if(Number.isFinite(Number(e.dir)))d=Number(e.dir);\n"+
-"    if(d===0)return 0;\n"+
-"    if(d===1)return 1;\n"+
-"    if(d===3)return 2;\n"+
-"    if(d===2)return 3;\n"+
-"    if(Number.isFinite(Number(e.visDir))){\n"+
-"      var q=Number(e.visDir);if(q===2)return 0;if(q===3)return 1;if(q===0)return 2;if(q===1)return 3;\n"+
-"    }\n"+
+"    if(d===0)return 0;if(d===1)return 1;if(d===3)return 2;if(d===2)return 3;\n"+
+"    if(Number.isFinite(Number(e.visDir))){var q=Number(e.visDir);if(q===2)return 0;if(q===3)return 1;if(q===0)return 2;if(q===1)return 3;}\n"+
 "    var dx=(Number(e.x)||0)-v.lastX,dy=(Number(e.y)||0)-v.lastY;\n"+
 "    if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>.05)return dx>=0?2:3;\n"+
-"    if(Math.abs(dy)>.05)return dy>=0?1:0;\n"+
-"    return v.dir||1;\n"+
+"    if(Math.abs(dy)>.05)return dy>=0?1:0;return v.dir||1;\n"+
 "  }\n"+
-"  window.PPA_FART_GUARD_DRAW=function(e){\n"+
-"    try{\n"+
-"      if(!e||e.hp<=0)return false;\n"+
-"      var g=mainCtx();if(!g)return false;\n"+
-"      var now=performance.now();\n"+
-"      var v=e.__ppaFartVis;\n"+
-"      if(!v)v=e.__ppaFartVis={lastX:Number(e.x)||0,lastY:Number(e.y)||0,prevAtk:Number(e.atkCD)||0,attackUntil:0,dir:1};\n"+
-"      var x=Number(e.x)||0,y=Number(e.y)||0;\n"+
-"      var mdx=x-v.lastX,mdy=y-v.lastY;\n"+
-"      var moving=(mdx*mdx+mdy*mdy)>.015;\n"+
-"      var atk=Number(e.atkCD)||0;\n"+
-"      if(atk>v.prevAtk+.08||e.attacking===true||e.isAttacking===true||Number(e.attackAnim)>0||Number(e.atkAnim)>0)v.attackUntil=now+430;\n"+
-"      v.prevAtk=atk;\n"+
-"      var attacking=now<v.attackUntil;\n"+
-"      var dir=dirOf(e,v);v.dir=dir;\n"+
-"      var skin=skinOf(e),sheet=atlases[skin],baseRow=0,col=0;\n"+
-"      if(!sheet||!sheet.complete||!sheet.naturalWidth)return false;\n"+
-"      if(skin===2){\n"+
-"        if(attacking)col=4+(Math.floor(now/105)%4);\n"+
-"        else col=Math.floor(now/230)%4;\n"+
-"      }else{\n"+
-"        if(attacking)col=5+(Math.floor(now/105)%4);\n"+
-"        else if(moving)col=1+(Math.floor(now/145)%4);\n"+
-"        else col=0;\n"+
-"      }\n"+
-"      var size=skin===0?72:(skin===1?76:84);\n"+
-"      var bob=0;\n"+
-"      if(skin===2&&moving)bob=(Math.floor(now/85)%2?1.5:-1.5);\n"+
-"      var t=null;try{t=g.getTransform()}catch(_){}\n"+
-"      var worldTransform=!!(t&&(Math.abs(t.e)>2||Math.abs(t.f)>2));\n"+
-"      var dw=size,dh=size,dx,dy;\n"+
-"      if(worldTransform){\n"+
-"        dx=x-dw/2;dy=y-dh*.56+bob;\n"+
-"      }else{\n"+
-"        var cv=g.canvas,cssW=cv.clientWidth||cv.width,cssH=cv.clientHeight||cv.height;\n"+
-"        var scX=cv.width/Math.max(1,cssW),scY=cv.height/Math.max(1,cssH);\n"+
-"        var px=0,py=0;try{px=Number(P.x)||0;py=Number(P.y)||0}catch(_){}\n"+
-"        dw=size*scX;dh=size*scY;\n"+
-"        dx=cv.width*.5+(x-px)*scX-dw*.5;\n"+
-"        dy=cv.height*.5+(y-py)*scY-dh*.56+bob*scY;\n"+
-"      }\n"+
-"      g.save();\n"+
-"      try{g.imageSmoothingEnabled=false}catch(_){}\n"+
-"      g.drawImage(sheet,col*TILE,(baseRow+dir)*TILE,TILE,TILE,dx,dy,dw,dh);\n"+
-"      g.restore();\n"+
-"      v.lastX=x;v.lastY=y;\n"+
-"      return true;\n"+
-"    }catch(err){return false}\n"+
+"  function frameFor(e){\n"+
+"    var now=performance.now();\n"+
+"    var v=e.__ppaFartVis;if(!v)v=e.__ppaFartVis={lastX:Number(e.x)||0,lastY:Number(e.y)||0,prevAtk:Number(e.atkCD)||0,attackUntil:0,dir:1};\n"+
+"    var x=Number(e.x)||0,y=Number(e.y)||0,mdx=x-v.lastX,mdy=y-v.lastY;\n"+
+"    var moving=(mdx*mdx+mdy*mdy)>.015,atk=Number(e.atkCD)||0;\n"+
+"    if(atk>v.prevAtk+.08||e.attacking===true||e.isAttacking===true||Number(e.attackAnim)>0||Number(e.atkAnim)>0)v.attackUntil=now+430;\n"+
+"    v.prevAtk=atk;var attacking=now<v.attackUntil,dir=dirOf(e,v);v.dir=dir;\n"+
+"    var skin=skinOf(e),col=0;\n"+
+"    if(skin===2){col=attacking?4+(Math.floor(now/105)%4):(Math.floor(now/230)%4);}\n"+
+"    else{col=attacking?5+(Math.floor(now/105)%4):(moving?1+(Math.floor(now/145)%4):0);}\n"+
+"    v.lastX=x;v.lastY=y;return {skin:skin,col:col,row:dir};\n"+
+"  }\n"+
+"  var proto=window.CanvasRenderingContext2D&&CanvasRenderingContext2D.prototype;\n"+
+"  if(!proto||proto.__ppaFartGuardNative)return;\n"+
+"  proto.__ppaFartGuardNative=true;\n"+
+"  var original=proto.drawImage;\n"+
+"  proto.drawImage=function(){\n"+
+"    var e=window.__PPA_FART_DRAW_ENTITY;\n"+
+"    if(e&&e.isFartGuard&&e.hp>0){\n"+
+"      try{\n"+
+"        var a=Array.prototype.slice.call(arguments),dx,dy,dw,dh;\n"+
+"        if(a.length===5){dx=Number(a[1]);dy=Number(a[2]);dw=Number(a[3]);dh=Number(a[4]);}\n"+
+"        else if(a.length>=9){dx=Number(a[5]);dy=Number(a[6]);dw=Number(a[7]);dh=Number(a[8]);}\n"+
+"        if(Number.isFinite(dx)&&Number.isFinite(dy)&&Number.isFinite(dw)&&Number.isFinite(dh)&&Math.abs(dw)>=24&&Math.abs(dh)>=24){\n"+
+"          var fr=frameFor(e),sheet=sheets[fr.skin];\n"+
+"          if(sheet&&sheet.complete&&sheet.naturalWidth){\n"+
+"            window.__PPA_FART_DRAW_ENTITY=null;\n"+
+"            var oldSmooth=this.imageSmoothingEnabled;this.imageSmoothingEnabled=false;\n"+
+"            original.call(this,sheet,fr.col*TILE,fr.row*TILE,TILE,TILE,dx,dy,dw,dh);\n"+
+"            this.imageSmoothingEnabled=oldSmooth;return;\n"+
+"          }\n"+
+"        }\n"+
+"      }catch(_){}\n"+
+"    }\n"+
+"    return original.apply(this,arguments);\n"+
 "  };\n"+
 "})();\n"+
 "</script>";
@@ -2361,12 +2288,13 @@ ppaPatchRegex(
 );
 
 if(!output.includes("id='ppaFartGuardVisuals'") ||
-   !output.includes("if(e.isFartGuard){if(window.PPA_FART_GUARD_DRAW)window.PPA_FART_GUARD_DRAW(e);continue;}") ||
-   !output.includes("if(e.isFartGuard){if(window.PPA_FART_GUARD_DRAW)window.PPA_FART_GUARD_DRAW(e);return;}") ||
+   !output.includes("window.__PPA_FART_DRAW_ENTITY=(e&&e.isFartGuard)?e:null") ||
+   !output.includes("if(e.isFartGuard)window.__PPA_FART_DRAW_ENTITY=e") ||
+   !output.includes("proto.__ppaFartGuardNative=true") ||
+   !output.includes("original.call(this,sheet") ||
    !output.includes("./assets/fart-tentacle.webp") ||
    !output.includes("./assets/fart-spider.webp") ||
-   !output.includes("./assets/fart-reaper.webp") ||
-   !output.includes("g.imageSmoothingEnabled=false")) {
+   !output.includes("./assets/fart-reaper.webp")) {
   throw new Error('Fart guard visual test patch did not apply');
 }
 /* ======================================================================== */
