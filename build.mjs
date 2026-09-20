@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v412-global-image-longpress-20260920';
+const CLIENT_BUILD = 'v413-no-native-image-menu-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2233,6 +2233,36 @@ if(!output.includes("ppaGlobalImageLongPressGuard") ||
    !output.includes("document.addEventListener('contextmenu'") ||
    !output.includes("new MutationObserver(function(list)")) {
   throw new Error('Global image longpress guard did not apply');
+}
+/* ======================================================================== */
+
+/* === HARD DISABLE WEBVIEW IMAGE MENU ==================================== */
+// Telegram/Android WebView may show its native image menu before JS contextmenu
+// handlers win. Make images transparent to hit-testing so presses land on the
+// actual game card/button underneath instead of on the <img> resource itself.
+ppaPatchRegex(
+  'hard disable native image longpress target',
+  /<style id="ppaGlobalImageLongPressGuard">[\s\S]*?<\/style>/,
+  `<style id="ppaGlobalImageLongPressGuard">
+img{
+  -webkit-touch-callout:none!important;
+  -webkit-user-select:none!important;
+  user-select:none!important;
+  pointer-events:none!important;
+}
+</style>`
+);
+
+ppaPatchRegex(
+  'hard disable image hit testing dynamically',
+  /img\.draggable=false;\s*img\.setAttribute\('draggable','false'\);/g,
+  "img.draggable=false;img.setAttribute('draggable','false');img.style.pointerEvents='none';",
+  true
+);
+
+if(!output.includes("pointer-events:none!important") ||
+   !output.includes("img.style.pointerEvents='none'")) {
+  throw new Error('Hard WebView image-menu guard did not apply');
 }
 /* ======================================================================== */
 
