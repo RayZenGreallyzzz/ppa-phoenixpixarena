@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v436-fart-slag-buildfix-20260920';
+const CLIENT_BUILD = 'v437-fart-slag-loadfix-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2868,7 +2868,13 @@ if(!output.includes("FART_PICKAXE_COMMON_IMG='data:image/webp;base64,") ||
 ppaPatchRegex(
   'pickaxe image globals',
   /(const FART_PICKAXE_LEGENDARY_IMG='data:image\/webp;base64,[A-Za-z0-9+/=]+';)/,
-  "$1\nwindow.PPA_FART_PICKAXE_COMMON_IMG=FART_PICKAXE_COMMON_IMG;\nwindow.PPA_FART_PICKAXE_LEGENDARY_IMG=FART_PICKAXE_LEGENDARY_IMG;\nwindow.PPA_FART_SLAG_IMG=FART_SLAG_IMG;"
+  "$1\nwindow.PPA_FART_PICKAXE_COMMON_IMG=FART_PICKAXE_COMMON_IMG;\nwindow.PPA_FART_PICKAXE_LEGENDARY_IMG=FART_PICKAXE_LEGENDARY_IMG;"
+);
+
+ppaPatchRegex(
+  'slag image global after declaration',
+  /(const FART_SLAG_IMG='data:image\/webp;base64,[A-Za-z0-9+/=]+';)/,
+  "$1\nwindow.PPA_FART_SLAG_IMG=FART_SLAG_IMG;"
 );
 
 ppaPatchRegex(
@@ -2925,7 +2931,8 @@ if(!output.includes("const FART_SLAG_INTERVAL_MS=40000") ||
    !output.includes("FART_ZONE_STATE.slagSince") ||
    !output.includes('id="fartGuideSlagSell"') ||
    !output.includes("Шлак ×'+n+' продан") ||
-   !output.includes("window.PPA_FART_SLAG_IMG=FART_SLAG_IMG")) {
+   !output.includes("window.PPA_FART_SLAG_IMG=FART_SLAG_IMG") ||
+   output.indexOf("window.PPA_FART_SLAG_IMG=FART_SLAG_IMG")<output.indexOf("const FART_SLAG_IMG='data:image/webp;base64,")) {
   throw new Error('Fart slag/icon patch did not apply');
 }
 /* ======================================================================== */
