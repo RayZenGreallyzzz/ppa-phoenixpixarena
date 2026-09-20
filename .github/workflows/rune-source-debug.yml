@@ -1,0 +1,33 @@
+name: Rune Source Debug
+
+on:
+  push:
+    branches: [debug-rune-source]
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect packed source around rune menu
+        shell: python
+        run: |
+          import gzip, pathlib
+          parts=[pathlib.Path(f"PPA{i:02d}.bin") for i in range(1,13)]
+          packed=b"".join(p.read_bytes() for p in parts)
+          src=gzip.decompress(packed).decode("utf-8")
+          needles=["ДОСТУПНЫЕ РУНЫ","Ячейки рун","следующий слот","РУНЫ"]
+          for needle in needles:
+              print("\n===== NEEDLE:",needle,"=====")
+              start=0
+              found=0
+              while True:
+                  i=src.find(needle,start)
+                  if i<0: break
+                  found+=1
+                  a=max(0,i-5000); b=min(len(src),i+9000)
+                  print(f"\n--- occurrence {found} @ {i} ---\n")
+                  print(src[a:b])
+                  start=i+len(needle)
+                  if found>=8: break
+              if not found: print("NOT FOUND")
