@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v398-blue-resource-curve-20260920';
+const CLIENT_BUILD = 'v399-fart-pickaxe-legendary-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1297,6 +1297,202 @@ if (!output.includes("return .007+(lv-21)*(.015/39); // 0.7% at 21 -> 2.2% at 60
   throw new Error('Blue resource 21-60 curve did not apply');
 }
 
+/* ======================================================================== */
+
+/* === FART GUARD LEGENDARY + 14H PICKAXE ================================= */
+ppaPatchRegex(
+  'fart guard legendary gear chance constant',
+  /const FART_GUARD_EPIC_GEAR_CHANCE=0\.00001;/,
+  "const FART_GUARD_EPIC_GEAR_CHANCE=0.00001;\nconst FART_GUARD_LEGENDARY_GEAR_CHANCE=0.0000013; // 0.00013%"
+);
+
+ppaPatchRegex(
+  'fart guard legendary gear drop',
+  /(\/\/ Epic equipment — 0\.001%\.[\s\S]*?\n\s*\}\n\s*\})\n\n\s*\/\/ Epic universal stat rune/,
+  `$1
+
+  // Legendary equipment — 0.00013%, independent roll.
+  if(Math.random()<FART_GUARD_LEGENDARY_GEAR_CHANCE){
+    const it=(typeof v271MakeDungeon41LegendaryItem==='function')
+      ?v271MakeDungeon41LegendaryItem()
+      :genItem(20,false,'legendary');
+    if(it){
+      LOOT.push({
+        x:e.x+(Math.random()-.5)*30,
+        y:e.y+(Math.random()-.5)*30,
+        kind:'gear',item:it,gear:it,bob:Math.random()*6
+      });
+    }
+  }
+
+  // Epic universal stat rune`
+);
+
+ppaPatchRegex(
+  'fart pickaxe helpers',
+  /function\s+fartMineTick\(mine,dt\)\s*\{\s*if\(!INV\.fartPickaxe\)return;/,
+  `const FART_PICKAXE_DURATION_MS=14*60*60*1000;
+function fartPickaxeBagItem(){
+  return (INV.bag||[]).find(function(it){return it&&it.fartPickaxe===true})||null;
+}
+function fartRemovePickaxeItem(){
+  if(!Array.isArray(INV.bag))return;
+  for(let i=INV.bag.length-1;i>=0;i--)if(INV.bag[i]&&INV.bag[i].fartPickaxe===true)INV.bag.splice(i,1);
+}
+function fartMakePickaxeItem(expiresAt){
+  return {
+    uid:'fart_pickaxe_'+Date.now().toString(36),
+    name:'Шахтёрская кирка',
+    slot:'tool',
+    rarity:'uncommon',
+    icon:'⛏',
+    ic:'⛏',
+    img:'',
+    classKey:'all',
+    className:'Все классы',
+    enh:0,level:0,sell:0,
+    stats:{},
+    bonusText:'Фарт Зона · авто-добыча · действует 14 часов',
+    bound:true,tradeLocked:true,blackMarket:false,
+    fartPickaxe:true,
+    expiresAt:Math.max(0,Number(expiresAt)||0)
+  };
+}
+function fartNormalizePickaxe(){
+  if(!Array.isArray(INV.bag))INV.bag=[];
+  let until=Math.max(0,Number(INV.fartPickaxeUntil)||0);
+  let item=fartPickaxeBagItem();
+  // Migrate the old permanent boolean to one fresh 14-hour item.
+  if(INV.fartPickaxe===true&&!until){
+    until=Date.now()+FART_PICKAXE_DURATION_MS;
+    INV.fartPickaxeUntil=until;
+  }
+  if(until>Date.now()){
+    INV.fartPickaxe=true;
+    if(!item){
+      item=fartMakePickaxeItem(until);
+      INV.bag.push(item);
+    }else item.expiresAt=until;
+    return true;
+  }
+  if(until||INV.fartPickaxe||item){
+    INV.fartPickaxe=false;INV.fartPickaxeUntil=0;
+    fartRemovePickaxeItem();
+  }
+  return false;
+}
+function fartHasPickaxe(){return fartNormalizePickaxe()}
+function fartPickaxeRemainingText(){
+  if(!fartHasPickaxe())return '';
+  const ms=Math.max(0,Number(INV.fartPickaxeUntil)-Date.now());
+  const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);
+  return h+'ч '+String(m).padStart(2,'0')+'м';
+}
+
+function fartMineTick(mine,dt){
+  if(!fartHasPickaxe())return;`
+);
+
+ppaPatchRegex(
+  'fart auto button pickaxe active check',
+  /if\(!INV\.fartPickaxe\)\{/g,
+  "if(!fartHasPickaxe()){",
+  true
+);
+
+ppaPatchRegex(
+  'fart update mining active checks',
+  /FART_ZONE_STATE\.autoMining&&!INV\.fartPickaxe/g,
+  "FART_ZONE_STATE.autoMining&&!fartHasPickaxe()",
+  true
+);
+ppaPatchRegex(
+  'fart update mining positive checks',
+  /FART_ZONE_STATE\.autoMining&&INV\.fartPickaxe/g,
+  "FART_ZONE_STATE.autoMining&&fartHasPickaxe()",
+  true
+);
+
+ppaPatchRegex(
+  'fart pickaxe purchase 14h inventory item',
+  /INV\.ppa=\(Number\(INV\.ppa\)\|\|0\)-price;\s*INV\.fartPickaxe=true;\s*saveGame\(\);/,
+  `if((INV.bag||[]).length>=100){
+        showPickup('Сумка полна · освободи 1 слот для кирки','#ff8c78');
+        return;
+      }
+      INV.ppa=(Number(INV.ppa)||0)-price;
+      fartRemovePickaxeItem();
+      INV.fartPickaxeUntil=Date.now()+FART_PICKAXE_DURATION_MS;
+      INV.fartPickaxe=true;
+      INV.bag.push(fartMakePickaxeItem(INV.fartPickaxeUntil));
+      saveGame();`
+);
+
+ppaPatchRegex(
+  'fart pickaxe purchase message 14h',
+  /showPickup\('⛏ Кирка куплена · −200 PPA','#9dff91'\);/,
+  "showPickup('⛏ Кирка куплена на 14 часов · −200 PPA','#9dff91');"
+);
+
+ppaPatchRegex(
+  'fart pickaxe guide purchased status',
+  /if\(ps\)ps\.textContent='Кирка: куплена · добыча доступна';/,
+  "if(ps)ps.textContent='Кирка: в сумке · осталось '+fartPickaxeRemainingText();"
+);
+
+ppaPatchRegex(
+  'fart pickaxe guide live status',
+  /if\(ps\)ps\.textContent=INV\.fartPickaxe\?'Кирка: куплена · добыча доступна':'Кирка: нет · без неё добыча не работает';/,
+  "const _hasPickaxe=fartHasPickaxe();if(ps)ps.textContent=_hasPickaxe?('Кирка: в сумке · осталось '+fartPickaxeRemainingText()):'Кирка: нет · без неё добыча не работает';"
+);
+
+ppaPatchRegex(
+  'fart pickaxe guide button live state',
+  /pb\.disabled=!!INV\.fartPickaxe;\s*pb\.textContent=INV\.fartPickaxe\?'✓ КИРКА КУПЛЕНА':'⛏ КУПИТЬ КИРКУ · 200 PPA';\s*pb\.style\.opacity=INV\.fartPickaxe\?'\.65':'1';/,
+  "pb.disabled=_hasPickaxe;pb.textContent=_hasPickaxe?('✓ КИРКА · '+fartPickaxeRemainingText()):'⛏ КУПИТЬ КИРКУ · 200 PPA';pb.style.opacity=_hasPickaxe?'.65':'1';"
+);
+
+ppaPatchRegex(
+  'fart guide top purchase check',
+  /if\(INV\.fartPickaxe\)\{\s*showPickup\('Кирка уже куплена','#9dff91'\);/,
+  "if(fartHasPickaxe()){showPickup('Кирка уже в сумке · осталось '+fartPickaxeRemainingText(),'#9dff91');"
+);
+
+ppaPatchRegex(
+  'fart guard inspect legendary gear',
+  /(if\(e&&e\.isFartGuard\)return \[\s*\['Эпический шмот\/оружие · случайный','0\.001%'\],)/,
+  "$1\n      ['Легендарный шмот/оружие · случайный','0.00013%'],"
+);
+
+ppaPatchRegex(
+  'fart guard final inspect before elite branch',
+  /window\.mobDropInfo=function\(e\)\{\s*if\(!e\)return \[\];/,
+  `window.mobDropInfo=function(e){
+  if(!e)return [];
+  if(e.isFartGuard)return [
+    ['Эпический шмот/оружие · случайный','0.001%'],
+    ['Легендарный шмот/оружие · случайный','0.00013%'],
+    ['Эпическая универсальная руна','0.00012%'],
+    ['Обычная универсальная руна','10%'],
+    ['Премиум руна заточки','6%'],
+    ['Изумруд Вечности · легендарный ресурс','0.00020%'],
+    ['Адская руда · легендарный ресурс','0.00017%'],
+    ['Кристалл Бездны · легендарный ресурс','0.00012%']
+  ];`
+);
+
+ppaPatchRegex(
+  'exclude fart pickaxe from auction inventory',
+  /\(INV\.bag\|\|\[\]\)\.forEach\(function\(it,i\)\{if\(!it\)return;/,
+  "(INV.bag||[]).forEach(function(it,i){if(!it||it.fartPickaxe===true)return;"
+);
+
+if(!output.includes("FART_GUARD_LEGENDARY_GEAR_CHANCE=0.0000013") ||
+   !output.includes("const FART_PICKAXE_DURATION_MS=14*60*60*1000") ||
+   !output.includes("name:'Шахтёрская кирка'") ||
+   !output.includes("Легендарный шмот/оружие · случайный','0.00013%")) {
+  throw new Error('Fart legendary/pickaxe patch did not apply');
+}
 /* ======================================================================== */
 
 /* === RUNTIME BUILD AUDIT ================================================= */
