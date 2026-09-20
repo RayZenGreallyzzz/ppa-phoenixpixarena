@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v423-pickaxe-icons-20260920';
+const CLIENT_BUILD = 'v424-fart-guard-names-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2189,9 +2189,9 @@ if(!output.includes("🔥 УЛУЧШИТЬ ДО ЛЕГЕНДАРНОЙ · 2120 P
 /* ======================================================================== */
 
 
-/* === FART ZONE GUARD VISUAL TEST ======================================== */
-// Five approved transparent guard skins for visual testing:
-// 0 tentacle, 1 toxic spider, 2 reaper, 3 bronze golem, 4 dark guard.
+/* === FART ZONE GUARDS ==================================================== */
+// Five approved transparent guard skins.
+// 0 Tentacle Monster, 1 Venomous Spider, 2 Reaper, 3 Molten Core Golem, 4 Abyss Guardian.
 // Mechanics, drops, respawn and Fart-zone mining logic stay unchanged.
 
 ppaPatchRegex(
@@ -2221,20 +2221,19 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "  sheets[3].src='./assets/fart-golem.webp';\n"+
 "  sheets[4].src='./assets/fart-darkguard.webp';\n"+
 "  var TILE=192;\n"+
+"  var GUARD_NAMES=['Тентаклевый монстр','Ядовитый паук','Жнец','Голем Раскалённого Ядра','Страж Бездны'];\n"+
+"  function applyGuardName(e,skin){\n"+
+"    var n=GUARD_NAMES[skin]||'Страж Фарт-зоны';\n"+
+"    try{e.name=n;e.displayName=n;e.mobName=n;e.__ppaFartName=n}catch(_){}\n"+
+"    return skin;\n"+
+"  }\n"+
 "  function skinOf(e){\n"+
-"    if(Number.isInteger(e.__ppaFartSkin))return e.__ppaFartSkin;\n"+
-"    var idx=-1;\n"+
-"    try{\n"+
-"      if(typeof EN!=='undefined'&&Array.isArray(EN)){\n"+
-"        var gs=EN.filter(function(v){return v&&v.isFartGuard&&v.hp>0}).slice().sort(function(a,b){return ((Number(a.x)||0)-(Number(b.x)||0))||((Number(a.y)||0)-(Number(b.y)||0))});\n"+
-"        idx=gs.indexOf(e);\n"+
-"      }\n"+
-"    }catch(_){}\n"+
-"    if(idx<0){\n"+
-"      var key=String(e.id||e.uid||e.mineId||'')+'|'+Math.round(Number(e.x)||0)+'|'+Math.round(Number(e.y)||0);\n"+
-"      var h=0;for(var i=0;i<key.length;i++)h=((h*31)+key.charCodeAt(i))|0;idx=Math.abs(h);\n"+
-"    }\n"+
-"    e.__ppaFartSkin=idx%5;return e.__ppaFartSkin;\n"+
+"    if(Number.isInteger(e.__ppaFartSkin))return applyGuardName(e,e.__ppaFartSkin);\n"+
+"    var sx=Number.isFinite(Number(e.__ppaServerX))?Number(e.__ppaServerX):(Number(e.x)||0);\n"+
+"    var sy=Number.isFinite(Number(e.__ppaServerY))?Number(e.__ppaServerY):(Number(e.y)||0);\n"+
+"    var key=String(e.mineId||'')+'|'+String(e.guardIndex||e.index||e.id||e.uid||'')+'|'+Math.round(sx/16)+'|'+Math.round(sy/16);\n"+
+"    var h=0;for(var i=0;i<key.length;i++)h=((h*31)+key.charCodeAt(i))|0;\n"+
+"    e.__ppaFartSkin=Math.abs(h)%5;return applyGuardName(e,e.__ppaFartSkin);\n"+
 "  }\n"+
 "  function dirOf(e,v){\n"+
 "    var d=NaN;\n"+
@@ -2306,7 +2305,8 @@ if(!output.includes("id='ppaFartGuardVisuals'") ||
    !output.includes("./assets/fart-reaper.webp") ||
    !output.includes("./assets/fart-golem.webp") ||
    !output.includes("./assets/fart-darkguard.webp") ||
-   !output.includes("idx%5") ||
+   !output.includes("GUARD_NAMES=['Тентаклевый монстр','Ядовитый паук','Жнец','Голем Раскалённого Ядра','Страж Бездны']") ||
+   !output.includes("e.__ppaFartSkin=Math.abs(h)%5") ||
    !output.includes("skin===4")) {
   throw new Error('Fart guard visual test patch did not apply');
 }
