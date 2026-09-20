@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v414-pickaxe-real-icons-20260920';
+const CLIENT_BUILD = 'v415-character-inventory-canvas-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2268,14 +2268,73 @@ if(!output.includes("pointer-events:none!important") ||
 
 /* === CHARACTER INVENTORY NATIVE-MENU REMOVAL + HOLD PREVIEW ============= */
 // The character iframe used real <img> elements for every item. Telegram WebView
-// can invoke a native image/link menu before JS cancellation. Render those item
-// arts as CSS backgrounds instead, and bind the desired tap/hold behavior to
-// the card itself.
+// can invoke a native image/link menu before JS cancellation. Render item art
+// into canvas pixels so neither <img> nor CSS background URLs exist on the held
+// card. Bind the desired tap/hold behavior to the card itself.
 
 ppaPatchRegex(
-  'character inventory item art is css background',
+  'character inventory item art uses canvas',
   /function itemVisual\(it,size\)\{[\s\S]*?\n\}\nfunction enhBadge/,
-  ppaEscapeSrcdocCode(`function itemVisual(it,size){
+  ppaEscapeSrcdocCode(`var CHAR_ITEM_ART_SEQ=0,CHAR_ITEM_ARTS={};
+
+function ppaRegisterItemArt(src,scale,filter){
+  var key='a'+(++CHAR_ITEM_ART_SEQ);
+  CHAR_ITEM_ARTS[key]={src:String(src||''),scale:Number(scale)||1,filter:String(filter||'none')};
+  return key;
+}
+
+function ppaPaintItemCanvas(c){
+  if(!c||c.__ppaPainted)return;
+  var key=c.getAttribute('data-art-key');
+  var art=CHAR_ITEM_ARTS[key];
+  if(!art||!art.src)return;
+  c.__ppaPainted=true;
+  var im=new Image();
+  im.onload=function(){
+    try{
+      var rect=c.getBoundingClientRect();
+      var dpr=Math.min(2,window.devicePixelRatio||1);
+      var w=Math.max(32,Math.round((rect.width||96)*dpr));
+      var h=Math.max(32,Math.round((rect.height||96)*dpr));
+      c.width=w;c.height=h;
+      var ctx=c.getContext('2d');
+      ctx.clearRect(0,0,w,h);
+      ctx.imageSmoothingEnabled=true;
+      try{ctx.filter=art.filter||'none'}catch(_){}
+      var iw=Math.max(1,im.naturalWidth||im.width||1);
+      var ih=Math.max(1,im.naturalHeight||im.height||1);
+      var fit=Math.min(w/iw,h/ih)*(art.scale||1);
+      var dw=iw*fit,dh=ih*fit;
+      ctx.drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh);
+      try{ctx.filter='none'}catch(_){}
+      delete CHAR_ITEM_ARTS[key];
+    }catch(_){c.__ppaPainted=false}
+  };
+  im.onerror=function(){c.__ppaPainted=false};
+  im.src=art.src;
+}
+
+function ppaPaintItemCanvases(root){
+  try{
+    var host=root&&root.querySelectorAll?root:document;
+    var list=host.querySelectorAll('canvas.ppaItemCanvas[data-art-key]');
+    for(var i=0;i<list.length;i++)ppaPaintItemCanvas(list[i]);
+    if(root&&root.matches&&root.matches('canvas.ppaItemCanvas[data-art-key]'))ppaPaintItemCanvas(root);
+  }catch(_){}
+}
+
+try{
+  new MutationObserver(function(ms){
+    ms.forEach(function(m){
+      (m.addedNodes||[]).forEach(function(n){
+        if(!n||n.nodeType!==1)return;
+        requestAnimationFrame(function(){ppaPaintItemCanvases(n)});
+      });
+    });
+  }).observe(document.documentElement,{childList:true,subtree:true});
+}catch(_){}
+
+function itemVisual(it,size){
   size=size||34;
   if(it&&it.img){
     var sc=1,flt='none';
@@ -2287,7 +2346,8 @@ ppaPatchRegex(
       flt='sepia(.28) saturate(2.7) hue-rotate(232deg) brightness(1.13) contrast(1.07) drop-shadow(0 0 3px rgba(208,108,255,.68))';
     }
     var wh=size==='fill'?(it.slot?'94%':'100%'):(size+'px');
-    return '<span class="ppaItemArtBg" aria-hidden="true" style="width:'+wh+';height:'+wh+';display:block;margin:auto;background-image:url('+it.img+');background-repeat:no-repeat;background-position:center;background-size:contain;transform:scale('+sc+');transform-origin:center;filter:'+flt+';pointer-events:none"></span>';
+    var key=ppaRegisterItemArt(it.img,sc,flt);
+    return '<canvas class="ppaItemCanvas" data-art-key="'+key+'" aria-hidden="true" style="width:'+wh+';height:'+wh+';display:block;margin:auto;pointer-events:none;touch-action:none"></canvas>';
   }
   var fs=(size==='fill'?24:Math.max(14,size-10));
   return '<span style="font-size:'+fs+'px">'+((it&&it.icon)||'◆')+'</span>';
@@ -2353,12 +2413,13 @@ for(var i=0;i<100;i++){
 });`)
 );
 
-if(!output.includes('class="ppaItemArtBg"') ||
-   !output.includes("background-image:url('+it.img+')") ||
+if(!output.includes('class="ppaItemCanvas"') ||
+   !output.includes("var key=ppaRegisterItemArt(it.img,sc,flt)") ||
+   !output.includes("delete CHAR_ITEM_ARTS[key]") ||
    !output.includes("function bindCharItemHold(el,getItem,context)") ||
    !output.includes("type:'itemInspectHoldStart'") ||
    !output.includes("type:'itemInspectHoldEnd'")) {
-  throw new Error('Character inventory native-menu removal did not apply');
+  throw new Error('Character inventory canvas/hold preview patch did not apply');
 }
 /* ======================================================================== */
 
