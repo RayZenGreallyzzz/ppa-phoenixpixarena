@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v430-fart-real-names-20260920';
+const CLIENT_BUILD = 'v431-fart-clean-labels-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2255,7 +2255,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'fart guard main render hook',
   /if\(e\.isDungeon60Boss\)\{if\(window\.PPA_DRAGON60_DRAW\)window\.PPA_DRAGON60_DRAW\(e\);continue;\}if\(e\.isDungeon21Boss\)\{drawDungeon21Boss\(e\);continue;\}/,
-  "window.__PPA_FART_LABEL_ENTITY=(e&&e.isFartGuard)?e:null;window.__PPA_FART_DRAW_ENTITY=(e&&e.isFartGuard)?e:null;if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW)window.PPA_DRAGON60_DRAW(e);continue;}if(e.isDungeon21Boss){drawDungeon21Boss(e);continue;}"
+  "window.__PPA_FART_DRAW_ENTITY=(e&&e.isFartGuard)?e:null;if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW)window.PPA_DRAGON60_DRAW(e);continue;}if(e.isDungeon21Boss){drawDungeon21Boss(e);continue;}"
 );
 
 const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
@@ -2270,7 +2270,10 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "  var GUARD_NAMES=['Тентаклевый монстр','Ядовитый паук','Жнец','Голем Раскалённого Ядра','Страж Бездны'];\n"+
 "  function applyGuardName(e,skin){\n"+
 "    var n=GUARD_NAMES[skin]||'Страж Фарт-зоны';\n"+
-"    try{e.name=n;e.displayName=n;e.mobName=n;e.__ppaFartName=n}catch(_){}\n"+
+"    try{\n"+
+"      e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;\n"+
+"      e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1;e.eliteWindowKey='';e.eliteMode='';e.eliteExpiresAt=0;e.eliteHpMultiplier=1;e.eliteCombatBonusApplied=false;\n"+
+"    }catch(_){}\n"+
 "    return skin;\n"+
 "  }\n"+
 "  function skinOf(e){\n"+
@@ -2285,7 +2288,7 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "  window.PPA_FART_GUARD_SKIN=function(e){return skinOf(e);};\n"+
 "  function assignGuardIdentity(e){\n"+
 "    if(!e||!e.isFartGuard)return e;var skin=skinOf(e),n=GUARD_NAMES[skin]||'Страж Фарт-зоны';\n"+
-"    try{e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;e.__ppaFartNamed=true}catch(_){}\n"+
+"    try{e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;e.__ppaFartNamed=true;e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1;e.eliteWindowKey='';e.eliteMode='';e.eliteExpiresAt=0;e.eliteHpMultiplier=1;e.eliteCombatBonusApplied=false}catch(_){}\n"+
 "    return e;\n"+
 "  }\n"+
 "  function installSpawnNameHook(){\n"+
@@ -2354,20 +2357,7 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "    }\n"+
 "    return original.apply(this,arguments);\n"+
 "  };\n"+
-"  function fartLabelText(txt){\n"+
-"    var e=window.__PPA_FART_LABEL_ENTITY,t=String(txt==null?'':txt);\n"+
-"    if(!e||!e.isFartGuard)return {skip:false,text:t};\n"+
-"    var name='Страж Фарт-зоны';try{name=window.PPA_FART_GUARD_NAME?window.PPA_FART_GUARD_NAME(e):(e.__ppaFartName||name)}catch(_){}\n"+
-"    var lv=t.match(/\\[\\s*\\d+\\s*\\]/);\n"+
-"    if(lv)return {skip:false,text:lv[0]+' '+name};\n"+
-"    if(/ЭЛИТА(?:\\s+ПОДЗЕМЕЛЬЯ)?/i.test(t))return {skip:true,text:''};\n"+
-"    return {skip:false,text:t};\n"+
-"  }\n"+
-"  ['fillText','strokeText'].forEach(function(k){\n"+
-"    var base=proto[k];if(typeof base!=='function'||base.__ppaFartLabel)return;\n"+
-"    var wrap=function(txt){var a=Array.prototype.slice.call(arguments),r=fartLabelText(txt);if(r.skip)return;a[0]=r.text;return base.apply(this,a)};\n"+
-"    wrap.__ppaFartLabel=true;proto[k]=wrap;\n"+
-"  });\n"+
+
 "})();\n"+
 "</script>";
 
@@ -2378,13 +2368,8 @@ ppaPatchRegex(
 );
 
 if(!output.includes("id='ppaFartGuardVisuals'") ||
-   !output.includes("window.__PPA_FART_LABEL_ENTITY=(e&&e.isFartGuard)?e:null") ||
    !output.includes("window.__PPA_FART_DRAW_ENTITY=(e&&e.isFartGuard)?e:null") ||
    !output.includes("if(e.isFartGuard)window.__PPA_FART_DRAW_ENTITY=e") ||
-   !output.includes("function fartLabelText(txt)") ||
-   !output.includes("function fartLabelText(txt)") ||
-   !output.includes("if(lv)return {skip:false,text:lv[0]+' '+name}") ||
-   !output.includes("/ЭЛИТА(?:\\s+ПОДЗЕМЕЛЬЯ)?/i.test(t)") ||
    !output.includes("proto.__ppaFartGuardNative=true") ||
    !output.includes("original.call(this,sheet") ||
    !output.includes("./assets/fart-tentacle.webp") ||
@@ -2398,9 +2383,13 @@ if(!output.includes("id='ppaFartGuardVisuals'") ||
    !output.includes("e.__ppaFartSkin=Math.abs(h)%5") ||
    !output.includes("skin===4")) {
   throw new Error('Fart guard visual test patch did not apply');
+if(output.includes("function fartLabelText(txt)") || output.includes("__PPA_FART_LABEL_ENTITY")) {
+  throw new Error('Fart guard native labels must not be globally intercepted');
 }
-if(output.includes("window.__PPA_FART_LABEL_ENTITY=null")) {
-  throw new Error('Fart label pointer must survive stroke/fill pair');
+if(!output.includes("e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1")) {
+  throw new Error('Fart guard elite-state cleanup did not apply');
+}
+
 }
 /* ======================================================================== */
 
