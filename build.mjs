@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v422-fart-drop-panel-20260920';
+const CLIENT_BUILD = 'v423-pickaxe-icons-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2645,6 +2645,56 @@ if(!output.includes("FART_PICKAXE_COMMON_IMG='data:image/webp;base64,") ||
    !output.includes("item.img=_ppaLegendVisual?FART_PICKAXE_LEGENDARY_IMG:FART_PICKAXE_COMMON_IMG")) {
   throw new Error('Pickaxe real inventory icons did not apply');
 }
+ppaPatchRegex(
+  'pickaxe image globals',
+  /(const FART_PICKAXE_LEGENDARY_IMG='data:image\/webp;base64,[A-Za-z0-9+/=]+';)/,
+  "$1\nwindow.PPA_FART_PICKAXE_COMMON_IMG=FART_PICKAXE_COMMON_IMG;\nwindow.PPA_FART_PICKAXE_LEGENDARY_IMG=FART_PICKAXE_LEGENDARY_IMG;"
+);
+
+ppaPatchRegex(
+  'pickaxe inventory iframe fallback image',
+  /function itemVisual\(it,size\)\{\s*size=size\|\|34;/,
+  `function itemVisual(it,size){
+  size=size||34;
+  if(it&&it.fartPickaxe===true&&!it.img){
+    try{
+      it.img=it.fartPickaxeTier==='legendary'
+        ?parent.PPA_FART_PICKAXE_LEGENDARY_IMG
+        :parent.PPA_FART_PICKAXE_COMMON_IMG;
+    }catch(_){}
+  }`
+);
+
+ppaPatchRegex(
+  'pickaxe npc button images',
+  /const lb=shade\.querySelector\('#fartGuideLegendPickaxe'\);\s*const _hasPickaxe=fartHasPickaxe\(\);/,
+  `const lb=shade.querySelector('#fartGuideLegendPickaxe');
+  if(pb){
+    pb.style.backgroundImage='url("'+FART_PICKAXE_COMMON_IMG+'")';
+    pb.style.backgroundRepeat='no-repeat';
+    pb.style.backgroundPosition='10px center';
+    pb.style.backgroundSize='34px 34px';
+    pb.style.paddingLeft='52px';
+    pb.style.textAlign='left';
+  }
+  if(lb){
+    lb.style.backgroundImage='url("'+FART_PICKAXE_LEGENDARY_IMG+'")';
+    lb.style.backgroundRepeat='no-repeat';
+    lb.style.backgroundPosition='10px center';
+    lb.style.backgroundSize='34px 34px';
+    lb.style.paddingLeft='52px';
+    lb.style.textAlign='left';
+  }
+  const _hasPickaxe=fartHasPickaxe();`
+);
+
+if(!output.includes("window.PPA_FART_PICKAXE_COMMON_IMG=FART_PICKAXE_COMMON_IMG") ||
+   !output.includes("it&&it.fartPickaxe===true&&!it.img") ||
+   !output.includes("pb.style.backgroundImage='url(\"'+FART_PICKAXE_COMMON_IMG+'\")'") ||
+   !output.includes("lb.style.backgroundImage='url(\"'+FART_PICKAXE_LEGENDARY_IMG+'\")'")) {
+  throw new Error('Pickaxe icon visibility patch did not apply');
+}
+
 /* ======================================================================== */
 
 /* === CHARACTER INVENTORY FAST SELECTION ================================= */
