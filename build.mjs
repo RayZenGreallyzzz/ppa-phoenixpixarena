@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v400-fart-pickaxe-lock-20260920';
+const CLIENT_BUILD = 'v401-common-pickaxe-4h-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1299,7 +1299,19 @@ if (!output.includes("return .007+(lv-21)*(.015/39); // 0.7% at 21 -> 2.2% at 60
 
 /* ======================================================================== */
 
-/* === FART GUARD LEGENDARY + 14H PICKAXE ================================= */
+/* === FART GUARD LEGENDARY + COMMON 4H PICKAXE =========================== */
+ppaPatchRegex(
+  'ordinary fart pickaxe resource bonuses',
+  /if\(Math\.random\(\)<0\.25\)rarity='rare';\s*else if\(Math\.random\(\)<0\.55\)rarity='uncommon';\s*else if\(Math\.random\(\)<0\.70\)rarity='common';/,
+  `const _pickaxeBonus=(typeof fartHasPickaxe==='function'&&fartHasPickaxe());
+  // Ordinary pickaxe: relative bonuses, not flat percentage points.
+  // blue +3%, rare/green +5%, any resource/common +10%.
+  if(Math.random()<(0.25*(_pickaxeBonus?1.03:1)))rarity='rare';
+  else if(Math.random()<(0.55*(_pickaxeBonus?1.05:1)))rarity='uncommon';
+  else if(Math.random()<(0.70*(_pickaxeBonus?1.10:1)))rarity='common';`
+);
+
+
 ppaPatchRegex(
   'fart guard legendary gear chance constant',
   /const FART_GUARD_EPIC_GEAR_CHANCE=0\.00001;/,
@@ -1331,7 +1343,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'fart pickaxe helpers',
   /function\s+fartMineTick\(mine,dt\)\s*\{\s*if\(!INV\.fartPickaxe\)return;/,
-  `const FART_PICKAXE_DURATION_MS=14*60*60*1000;
+  `const FART_PICKAXE_DURATION_MS=4*60*60*1000;
 function fartPickaxeBagItem(){
   return (INV.bag||[]).find(function(it){return it&&it.fartPickaxe===true})||null;
 }
@@ -1342,9 +1354,9 @@ function fartRemovePickaxeItem(){
 function fartMakePickaxeItem(expiresAt){
   return {
     uid:'fart_pickaxe_'+Date.now().toString(36),
-    name:'Шахтёрская кирка',
+    name:'Обычная шахтёрская кирка',
     slot:'tool',
-    rarity:'uncommon',
+    rarity:'common',
     icon:'⛏',
     ic:'⛏',
     img:'',
@@ -1352,7 +1364,7 @@ function fartMakePickaxeItem(expiresAt){
     className:'Все классы',
     enh:0,level:0,sell:0,
     stats:{},
-    bonusText:'Фарт Зона · авто-добыча · действует 14 часов',
+    bonusText:'Фарт Зона · 4 часа · добыча +10% · редкие +5% · синие +3%',
     bound:true,tradeLocked:true,blackMarket:false,
     fartPickaxe:true,
     expiresAt:Math.max(0,Number(expiresAt)||0)
@@ -1362,7 +1374,7 @@ function fartNormalizePickaxe(){
   if(!Array.isArray(INV.bag))INV.bag=[];
   let until=Math.max(0,Number(INV.fartPickaxeUntil)||0);
   let item=fartPickaxeBagItem();
-  // Migrate the old permanent boolean to one fresh 14-hour item.
+  // Migrate the old permanent boolean to one fresh 4-hour common pickaxe.
   if(INV.fartPickaxe===true&&!until){
     until=Date.now()+FART_PICKAXE_DURATION_MS;
     INV.fartPickaxeUntil=until;
@@ -1415,7 +1427,7 @@ ppaPatchRegex(
 );
 
 ppaPatchRegex(
-  'fart pickaxe purchase 14h inventory item',
+  'fart pickaxe purchase 4h inventory item',
   /INV\.ppa=\(Number\(INV\.ppa\)\|\|0\)-price;\s*INV\.fartPickaxe=true;\s*saveGame\(\);/,
   `if((INV.bag||[]).length>=100){
         showPickup('Сумка полна · освободи 1 слот для кирки','#ff8c78');
@@ -1430,9 +1442,9 @@ ppaPatchRegex(
 );
 
 ppaPatchRegex(
-  'fart pickaxe purchase message 14h',
+  'fart pickaxe purchase message 4h',
   /showPickup\('⛏ Кирка куплена · −200 PPA','#9dff91'\);/,
-  "showPickup('⛏ Кирка куплена на 14 часов · −200 PPA','#9dff91');"
+  "showPickup('⛏ Обычная кирка · 4 часа · −200 PPA','#9dff91');"
 );
 
 ppaPatchRegex(
@@ -1489,10 +1501,13 @@ ppaPatchRegex(
 );
 
 if(!output.includes("FART_GUARD_LEGENDARY_GEAR_CHANCE=0.0000013") ||
-   !output.includes("const FART_PICKAXE_DURATION_MS=14*60*60*1000") ||
-   !output.includes("name:'Шахтёрская кирка'") ||
+   !output.includes("const FART_PICKAXE_DURATION_MS=4*60*60*1000") ||
+   !output.includes("name:'Обычная шахтёрская кирка'") ||
+   !output.includes("0.25*(_pickaxeBonus?1.03:1)") ||
+   !output.includes("0.55*(_pickaxeBonus?1.05:1)") ||
+   !output.includes("0.70*(_pickaxeBonus?1.10:1)") ||
    !output.includes("Легендарный шмот/оружие · случайный','0.00013%")) {
-  throw new Error('Fart legendary/pickaxe patch did not apply');
+  throw new Error('Fart legendary/common pickaxe patch did not apply');
 }
 /* ======================================================================== */
 
