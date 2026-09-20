@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v403-fart-pickaxe-tiers-20260920';
+const CLIENT_BUILD = 'v404-fart-gear-pickaxe-gate-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1364,7 +1364,7 @@ function fartMakePickaxeItem(expiresAt){
     className:'Все классы',
     enh:0,level:0,sell:0,
     stats:{},
-    bonusText:'Фарт Зона · 4 часа · добыча +10% · редкие +5% · синие +3%',
+    bonusText:'Фарт Зона · 4 часа · добыча +10% · редкие +5% · синие +3% · эпик с охранников 0.0003% · легендарный шмот недоступен',
     bound:true,tradeLocked:true,blackMarket:false,
     fartPickaxe:true,
     expiresAt:Math.max(0,Number(expiresAt)||0)
@@ -1618,7 +1618,7 @@ ppaPatchRegex(
     enh:0,level:0,sell:0,
     stats:{},
     bonusText:legendary
-      ?'Фарт Зона · 14 часов · добыча +50% · редкие +30% · синие +20%'
+      ?'Фарт Зона · 14 часов · добыча +50% · редкие +30% · синие +20% · эпик с охранников 0.001% · легендарный шмот 0.00013%'
       :'Фарт Зона · 4 часа · добыча +10% · редкие +5% · синие +3%',
     bound:true,tradeLocked:true,blackMarket:false,
     fartPickaxe:true,
@@ -1731,6 +1731,66 @@ if(!output.includes("FART_PICKAXE_LEGENDARY_DURATION_MS=14*60*60*1000") ||
    !output.includes("2120 PPA · 14 Ч") ||
    !output.includes("const _blueMul=_pickaxeBonus?(_pickaxeTier==='legendary'?1.20:1.03):1")) {
   throw new Error('Two-tier Fart pickaxe patch did not apply');
+}
+/* ======================================================================== */
+
+/* === FART GUARD GEAR GATED BY PICKAXE =================================== */
+ppaPatchRegex(
+  'fart guard gear chance helper',
+  /function\s+fartGuardRareDrops\(e\)\s*\{/,
+  `function fartGuardGearDropChances(){
+  const has=(typeof fartHasPickaxe==='function')?fartHasPickaxe():false;
+  if(!has)return {epic:0,legendary:0,tier:'none'};
+  const tier=(typeof fartPickaxeTier==='function')?fartPickaxeTier():'common';
+  if(tier==='legendary')return {epic:0.00001,legendary:0.0000013,tier:'legendary'};
+  return {epic:0.000003,legendary:0,tier:'common'};
+}
+function fartGuardRareDrops(e){`
+);
+
+ppaPatchRegex(
+  'fart guard epic chance from active pickaxe',
+  /\/\/ Epic equipment — 0\.001%\.\s*if\(Math\.random\(\)<FART_GUARD_EPIC_GEAR_CHANCE\)\{/,
+  `// Epic equipment depends on the active pickaxe:
+  // no pickaxe 0%; common 0.0003%; legendary 0.001%.
+  const _fartGearDrop=fartGuardGearDropChances();
+  if(_fartGearDrop.epic>0&&Math.random()<_fartGearDrop.epic){`
+);
+
+ppaPatchRegex(
+  'fart guard legendary chance only with legendary pickaxe',
+  /\/\/ Legendary equipment — 0\.00013%, independent roll\.\s*if\(Math\.random\(\)<FART_GUARD_LEGENDARY_GEAR_CHANCE\)\{/,
+  `// Legendary equipment is unlocked only by the legendary pickaxe.
+  if(_fartGearDrop.legendary>0&&Math.random()<_fartGearDrop.legendary){`
+);
+
+ppaPatchRegex(
+  'fart guard inspect follows active pickaxe',
+  /if\(e\.isFartGuard\)return \[\s*\['Эпический шмот\/оружие · случайный','0\.001%'\],\s*\['Легендарный шмот\/оружие · случайный','0\.00013%'\],/,
+  `if(e.isFartGuard){
+    const _gear=(typeof fartGuardGearDropChances==='function')
+      ?fartGuardGearDropChances()
+      :{epic:0,legendary:0,tier:'none'};
+    const _epicPct=_gear.epic===0.00001?'0.001%':(_gear.epic===0.000003?'0.0003%':'0%');
+    const _legendPct=_gear.legendary===0.0000013?'0.00013%':'0%';
+    return [
+    ['Эпический шмот/оружие · случайный',_epicPct],
+    ['Легендарный шмот/оружие · случайный',_legendPct],`
+);
+
+ppaPatchRegex(
+  'close dynamic fart guard inspect block',
+  /(\['Кристалл Бездны · легендарный ресурс','0\.00012%'\]\s*\n\s*\];)/,
+  "$1\n  }"
+);
+
+if(!output.includes("return {epic:0.000003,legendary:0,tier:'common'}") ||
+   !output.includes("return {epic:0.00001,legendary:0.0000013,tier:'legendary'}") ||
+   !output.includes("if(_fartGearDrop.epic>0&&Math.random()<_fartGearDrop.epic)") ||
+   !output.includes("if(_fartGearDrop.legendary>0&&Math.random()<_fartGearDrop.legendary)") ||
+   !output.includes("легендарный шмот недоступен") ||
+   !output.includes("легендарный шмот 0.00013%")) {
+  throw new Error('Fart guard gear gating by pickaxe did not apply');
 }
 /* ======================================================================== */
 
