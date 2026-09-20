@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v421-fart-guard-native-render-20260920';
+const CLIENT_BUILD = 'v422-fart-five-guards-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -32,7 +32,9 @@ fs.mkdirSync(gameDir, { recursive: true });
 const fartGuardSources = [
   ['fart-tentacle.webp', 'fart-tentacle.webp'],
   ['fart-spider.webp', 'fart-spider.webp'],
-  ['fart-reaper.webp', 'fart-reaper.webp']
+  ['fart-reaper.webp', 'fart-reaper.webp'],
+  ['fart-golem.webp', 'fart-golem.webp'],
+  ['fart-darkguard.webp', 'fart-darkguard.webp']
 ];
 for (const [srcName, outName] of fartGuardSources) {
   const srcPath = path.join(ROOT, 'assets-src', srcName);
@@ -2188,8 +2190,8 @@ if(!output.includes("🔥 УЛУЧШИТЬ ДО ЛЕГЕНДАРНОЙ · 2120 P
 
 
 /* === FART ZONE GUARD VISUAL TEST ======================================== */
-// Three approved transparent guard skins for visual testing:
-// 0 tentacle, 1 toxic spider, 2 reaper.
+// Five approved transparent guard skins for visual testing:
+// 0 tentacle, 1 toxic spider, 2 reaper, 3 bronze golem, 4 dark guard.
 // Mechanics, drops, respawn and Fart-zone mining logic stay unchanged.
 
 ppaPatchRegex(
@@ -2212,10 +2214,12 @@ ppaPatchRegex(
 
 const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "(function(){\n"+
-"  var sheets=[new Image(),new Image(),new Image()];\n"+
+"  var sheets=[new Image(),new Image(),new Image(),new Image(),new Image()];\n"+
 "  sheets[0].src='./assets/fart-tentacle.webp';\n"+
 "  sheets[1].src='./assets/fart-spider.webp';\n"+
 "  sheets[2].src='./assets/fart-reaper.webp';\n"+
+"  sheets[3].src='./assets/fart-golem.webp';\n"+
+"  sheets[4].src='./assets/fart-darkguard.webp';\n"+
 "  var TILE=192;\n"+
 "  function skinOf(e){\n"+
 "    if(Number.isInteger(e.__ppaFartSkin))return e.__ppaFartSkin;\n"+
@@ -2230,7 +2234,7 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "      var key=String(e.id||e.uid||e.mineId||'')+'|'+Math.round(Number(e.x)||0)+'|'+Math.round(Number(e.y)||0);\n"+
 "      var h=0;for(var i=0;i<key.length;i++)h=((h*31)+key.charCodeAt(i))|0;idx=Math.abs(h);\n"+
 "    }\n"+
-"    e.__ppaFartSkin=idx%3;return e.__ppaFartSkin;\n"+
+"    e.__ppaFartSkin=idx%5;return e.__ppaFartSkin;\n"+
 "  }\n"+
 "  function dirOf(e,v){\n"+
 "    var d=NaN;\n"+
@@ -2250,8 +2254,13 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "    if(atk>v.prevAtk+.08||e.attacking===true||e.isAttacking===true||Number(e.attackAnim)>0||Number(e.atkAnim)>0)v.attackUntil=now+430;\n"+
 "    v.prevAtk=atk;var attacking=now<v.attackUntil,dir=dirOf(e,v);v.dir=dir;\n"+
 "    var skin=skinOf(e),col=0;\n"+
-"    if(skin===2){col=attacking?4+(Math.floor(now/105)%4):(Math.floor(now/230)%4);}\n"+
-"    else{col=attacking?5+(Math.floor(now/105)%4):(moving?1+(Math.floor(now/145)%4):0);}\n"+
+"    if(skin===2){\n"+
+"      col=attacking?4+(Math.floor(now/105)%4):(Math.floor(now/230)%4);\n"+
+"    }else if(skin===4){\n"+
+"      col=attacking?8+(Math.floor(now/105)%4):(moving?4+(Math.floor(now/145)%4):(Math.floor(now/240)%4));\n"+
+"    }else{\n"+
+"      col=attacking?5+(Math.floor(now/105)%4):(moving?1+(Math.floor(now/145)%4):0);\n"+
+"    }\n"+
 "    v.lastX=x;v.lastY=y;return {skin:skin,col:col,row:dir};\n"+
 "  }\n"+
 "  var proto=window.CanvasRenderingContext2D&&CanvasRenderingContext2D.prototype;\n"+
@@ -2294,7 +2303,11 @@ if(!output.includes("id='ppaFartGuardVisuals'") ||
    !output.includes("original.call(this,sheet") ||
    !output.includes("./assets/fart-tentacle.webp") ||
    !output.includes("./assets/fart-spider.webp") ||
-   !output.includes("./assets/fart-reaper.webp")) {
+   !output.includes("./assets/fart-reaper.webp") ||
+   !output.includes("./assets/fart-golem.webp") ||
+   !output.includes("./assets/fart-darkguard.webp") ||
+   !output.includes("idx%5") ||
+   !output.includes("skin===4")) {
   throw new Error('Fart guard visual test patch did not apply');
 }
 /* ======================================================================== */
