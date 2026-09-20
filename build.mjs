@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v446-blacksmith-build-audit-fix-20260921';
+const CLIENT_BUILD = 'v447-rune-fusion-rune-bag-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3000,31 +3000,74 @@ ppaPatchRegex(
     if(!('count' in v)&&!('qty' in v)&&!('amount' in v))v.count=n;
   }
   function ownedEntries(){
-    var out=[],seen=new Set(),root=null;
-    try{root=INV}catch(_){root=null}
-    if(!root)return out;
+    var out=[],seen=new Set(),roots=[];
+    // Rune ownership is stored with the character/rune menu, NOT in INV.bag.
+    // Scan player save/state plus rune-named globals, while excluding equipped slots.
+    try{if(P&&typeof P==='object')roots.push({v:P,path:'P'})}catch(_){}
+    try{if(P&&P._saved&&typeof P._saved==='object')roots.push({v:P._saved,path:'P._saved'})}catch(_){}
+    try{
+      Object.keys(window).forEach(function(k){
+        if(!/(rune|runes|runa|runy)/i.test(k))return;
+        if(/catalog|defs|config|meta|icon|img|sprite|art|chance|drop|shop|black/i.test(k))return;
+        var v;try{v=window[k]}catch(_){return}
+        if(v&&typeof v==='object')roots.push({v:v,path:'window.'+k});
+      });
+    }catch(_){}
+
+    function excluded(path){
+      return /equip|equipped|slot|active|installed|socket|selected|preview|catalog|defs|config|meta|shop|drop|chance/i.test(path);
+    }
+    function pseudoFromKey(k,count){
+      return {id:String(k),refId:String(k),key:String(k),name:String(k),rune:true,count:Math.max(1,Math.floor(Number(count)||1))};
+    }
     function walk(v,path,parent,key,depth){
-      if(!v||depth>5)return;
-      if(typeof v==='object'){
-        if(seen.has(v))return;seen.add(v);
-        if(isRune(v)&&!/equip|equipped|slot|active|installed|socket/i.test(path)){
-          out.push({item:v,parent:parent,key:key,path:path,count:countOf(v)});
-          return;
+      if(v==null||depth>7||excluded(path))return;
+
+      if(typeof v==='string'){
+        if(/rune|руна/i.test(path)||/rune|руна/i.test(v)){
+          out.push({item:pseudoFromKey(v,1),parent:parent,key:key,path:path,count:1,mode:'string-array'});
         }
-        if(Array.isArray(v)){
-          for(var i=0;i<v.length;i++)walk(v[i],path+'['+i+']',v,i,depth+1);
-        }else{
-          var ks=[];try{ks=Object.keys(v)}catch(_){ks=[]}
-          for(var j=0;j<ks.length;j++){
-            var k=ks[j];
-            if(/^(img|image|sprite|html|srcdoc)$/i.test(k))continue;
-            walk(v[k],path+'.'+k,v,k,depth+1);
-          }
+        return;
+      }
+      if(typeof v!=='object')return;
+      if(seen.has(v))return;seen.add(v);
+
+      if(isRune(v)){
+        out.push({item:v,parent:parent,key:key,path:path,count:countOf(v),mode:'object'});
+        return;
+      }
+
+      if(Array.isArray(v)){
+        for(var i=0;i<v.length;i++)walk(v[i],path+'['+i+']',v,i,depth+1);
+        return;
+      }
+
+      var ks=[];try{ks=Object.keys(v)}catch(_){ks=[]}
+      var runeContainer=/rune|руна|runy/i.test(path);
+      for(var j=0;j<ks.length;j++){
+        var k=ks[j],x;
+        if(/^(img|image|sprite|html|srcdoc)$/i.test(k))continue;
+        try{x=v[k]}catch(_){continue}
+
+        // Common rune-bag shape: { rune_id: count }.
+        if(runeContainer&&typeof x==='number'&&isFinite(x)&&x>0){
+          out.push({item:pseudoFromKey(k,x),parent:v,key:k,path:path+'.'+k,count:Math.floor(x),mode:'count-map'});
+          continue;
         }
+        walk(x,path+'.'+k,v,k,depth+1);
       }
     }
-    walk(root,'INV',null,null,0);
-    return out;
+
+    for(var r=0;r<roots.length;r++)walk(roots[r].v,roots[r].path,null,null,0);
+
+    // Deduplicate aliases that point at the exact same storage cell.
+    var dedup=[],keysSeen={};
+    out.forEach(function(e){
+      var sig=e.path+'|'+String(e.key)+'|'+typeKey(e.item)+'|'+rarityIndex(e.item);
+      if(keysSeen[sig])return;
+      keysSeen[sig]=1;dedup.push(e);
+    });
+    return dedup;
   }
   function sourceIdentifiers(){
     var names={};
@@ -3123,13 +3166,21 @@ ppaPatchRegex(
   }
   function consumeTwo(group){
     var need=2;
-    // Process array indices from high to low so splices remain valid.
     var arr=group.entries.slice().sort(function(a,b){
       if(a.parent===b.parent&&Array.isArray(a.parent))return Number(b.key)-Number(a.key);
       return 0;
     });
     for(var i=0;i<arr.length&&need>0;i++){
-      var e=arr[i],n=countOf(e.item),take=Math.min(need,n);
+      var e=arr[i];
+      if(e.mode==='count-map'&&e.parent&&e.key!=null){
+        var n0=Math.max(0,Math.floor(Number(e.parent[e.key])||0)),take0=Math.min(need,n0);
+        if(n0>take0)e.parent[e.key]=n0-take0;else try{delete e.parent[e.key]}catch(_){}
+        need-=take0;continue;
+      }
+      if(e.mode==='string-array'&&Array.isArray(e.parent)){
+        e.parent.splice(Number(e.key),1);need--;continue;
+      }
+      var n=countOf(e.item),take=Math.min(need,n);
       if(n>take){setCount(e.item,n-take)}
       else if(Array.isArray(e.parent)){e.parent.splice(Number(e.key),1)}
       else if(e.parent&&e.key!=null){try{delete e.parent[e.key]}catch(_){}}
@@ -3138,9 +3189,22 @@ ppaPatchRegex(
     return need===0;
   }
   function addResult(group,item){
-    var target=group.entries[0]&&group.entries[0].parent;
-    if(!target||!Array.isArray(target))return false;
+    var first=group.entries[0],target=first&&first.parent;
+    if(!first||!target)return false;
     var key=typeKey(item),r=rarityIndex(item);
+
+    if(first.mode==='count-map'&&!Array.isArray(target)){
+      var storageKey=String(item.refId||item.id||item.key||'');
+      if(!storageKey)return false;
+      target[storageKey]=Math.max(0,Math.floor(Number(target[storageKey])||0))+1;
+      return true;
+    }
+    if(first.mode==='string-array'&&Array.isArray(target)){
+      var storageId=String(item.refId||item.id||item.key||'');
+      if(!storageId)return false;
+      target.push(storageId);return true;
+    }
+    if(!Array.isArray(target))return false;
     for(var i=0;i<target.length;i++){
       var x=target[i];
       if(x&&isRune(x)&&typeKey(x)===key&&rarityIndex(x)===r&&('count' in x||'qty' in x||'amount' in x)){
@@ -3292,6 +3356,9 @@ ppaPatchRegex(
 if(!output.includes("id=\"ppaRuneFusionRuntime\"") ||
    !output.includes("var CHANCE={0:.37,1:.30,2:.22}") ||
    !output.includes("var COST=5000") ||
+   !output.includes("Rune ownership is stored with the character/rune menu, NOT in INV.bag") ||
+   !output.includes("mode:'count-map'") ||
+   !output.includes("mode:'string-array'") ||
    !output.includes("Фиолетовые руны не сливаются в легендарные") ||
    !output.includes("PPA_RUNE_FUSION_TRY")) {
   throw new Error('Rune fusion patch did not apply');
@@ -3363,7 +3430,7 @@ function openRuneFusionPanel(){
   var rows=[];
   try{rows=parent.PPA_RUNE_FUSION_LIST?parent.PPA_RUNE_FUSION_LIST():[]}catch(_){}
   if(!rows.length){
-    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">Нет подходящих рун для слияния.</div>';
+    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">В сумке рун нет подходящей пары для слияния.</div>';
   }else{
     var rarity=['Серая','Зелёная','Синяя','Фиолетовая','Легендарная'];
     rows.forEach(function(x){
