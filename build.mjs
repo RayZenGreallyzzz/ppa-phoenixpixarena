@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v407-fart-audit-fix-20260920';
+const CLIENT_BUILD = 'v408-fart-gate-audit-fix-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1618,7 +1618,7 @@ ppaPatchRegex(
     stats:{},
     bonusText:legendary
       ?'Фарт Зона · 14 часов · добыча +50% · редкие +30% · синие +20% · эпик с охранников 0.001% · легендарный шмот 0.00013%'
-      :'Фарт Зона · 4 часа · добыча +10% · редкие +5% · синие +3%',
+      :'Фарт Зона · 4 часа · добыча +10% · редкие +5% · синие +3% · эпик с охранников 0.0003% · легендарный шмот недоступен',
     bound:true,tradeLocked:true,blackMarket:false,
     fartPickaxe:true,
     fartPickaxeTier:tier,
@@ -1787,8 +1787,8 @@ if(!output.includes("return {epic:0.000003,legendary:0,tier:'common'}") ||
    !output.includes("return {epic:0.00001,legendary:0.0000013,tier:'legendary'}") ||
    !output.includes("if(_fartGearDrop.epic>0&&Math.random()<_fartGearDrop.epic)") ||
    !output.includes("if(_fartGearDrop.legendary>0&&Math.random()<_fartGearDrop.legendary)") ||
-   !output.includes("легендарный шмот недоступен") ||
-   !output.includes("легендарный шмот 0.00013%")) {
+   !output.includes("const _epicPct=_gear.epic===0.00001?'0.001%':(_gear.epic===0.000003?'0.0003%':'0%')") ||
+   !output.includes("const _legendPct=_gear.legendary===0.0000013?'0.00013%':'0%'")) {
   throw new Error('Fart guard gear gating by pickaxe did not apply');
 }
 /* ======================================================================== */
@@ -1803,7 +1803,9 @@ if(!output.includes("FART_PICKAXE_COMMON_DURATION_MS=4*60*60*1000") ||
    !output.includes("const _rareMul=_pickaxeBonus?(_pickaxeTier==='legendary'?1.30:1.05):1") ||
    !output.includes("const _resourceMul=_pickaxeBonus?(_pickaxeTier==='legendary'?1.50:1.10):1") ||
    !output.includes("return {epic:0.000003,legendary:0,tier:'common'}") ||
-   !output.includes("return {epic:0.00001,legendary:0.0000013,tier:'legendary'}")) {
+   !output.includes("return {epic:0.00001,legendary:0.0000013,tier:'legendary'}") ||
+   !output.includes("эпик с охранников 0.0003% · легендарный шмот недоступен") ||
+   !output.includes("эпик с охранников 0.001% · легендарный шмот 0.00013%")) {
   throw new Error('Final Fart pickaxe tier audit failed');
 }
 /* ======================================================================== */
