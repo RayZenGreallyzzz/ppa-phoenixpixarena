@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v437-fart-slag-loadfix-20260920';
+const CLIENT_BUILD = 'v438-fart-slag-icon-collision-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1595,7 +1595,31 @@ ppaPatchRegex(
 ppaPatchRegex(
   'passive fart mining loop',
   /function\s+updateFartZoneSystem\(\)\s*\{[\s\S]*?\n\}\n\nfunction\s+drawFartZoneMines\(\)/,
-  `function updateFartZoneSystem(){
+  `function fartResolveGuardCollision(){
+  if(!P||P.scene!=='fartzone'||!Array.isArray(EN))return;
+  const px=Number(P.x),py=Number(P.y);
+  if(!Number.isFinite(px)||!Number.isFinite(py))return;
+  const playerR=9;
+  for(let pass=0;pass<2;pass++){
+    for(let i=0;i<EN.length;i++){
+      const e=EN[i];
+      if(!e||!e.isFartGuard||Number(e.hp)<=0)continue;
+      const ex=Number(e.x),ey=Number(e.y);
+      if(!Number.isFinite(ex)||!Number.isFinite(ey))continue;
+      const mobR=Math.max(16,Math.min(30,Number(e.__ppaFartCollisionRadius)||22));
+      const minD=playerR+mobR;
+      let dx=Number(P.x)-ex,dy=Number(P.y)-ey;
+      let d2=dx*dx+dy*dy;
+      if(d2>=minD*minD)continue;
+      if(d2<0.0001){dx=1;dy=0;d2=1}
+      const d=Math.sqrt(d2);
+      const push=Math.min(3.5,minD-d);
+      P.x+=dx/d*push;
+      P.y+=dy/d*push;
+    }
+  }
+}
+function updateFartZoneSystem(){
   if(P.scene!=='fartzone'){
     const b=document.getElementById('fartAutoMineBtn');
     if(b)b.style.display='none';
@@ -1608,6 +1632,9 @@ ppaPatchRegex(
   const now=Date.now();
   const dt=Math.max(0,Math.min(250,now-(FART_ZONE_STATE.lastTick||now)));
   FART_ZONE_STATE.lastTick=now;
+
+  // Small body collision for the enlarged Fart guard sprites.
+  fartResolveGuardCollision();
 
   // Slag: one piece every 40 seconds while continuously standing on any mine.
   const _slagMine=fartNearestMine(FART_MINE_RADIUS);
@@ -2361,7 +2388,7 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "  function applyGuardName(e,skin){\n"+
 "    var n=GUARD_NAMES[skin]||'Страж Фарт-зоны';\n"+
 "    try{\n"+
-"      e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;\n"+
+"      e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;e.__ppaFartCollisionRadius=([22,18,23,27,23][skin]||22);\n"+
 "      e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1;e.eliteWindowKey='';e.eliteMode='';e.eliteExpiresAt=0;e.eliteHpMultiplier=1;e.eliteCombatBonusApplied=false;\n"+
 "    }catch(_){}\n"+
 "    return skin;\n"+
@@ -2378,7 +2405,7 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "  window.PPA_FART_GUARD_SKIN=function(e){return skinOf(e);};\n"+
 "  function assignGuardIdentity(e){\n"+
 "    if(!e||!e.isFartGuard)return e;var skin=skinOf(e),n=GUARD_NAMES[skin]||'Страж Фарт-зоны';\n"+
-"    try{e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;e.__ppaFartNamed=true;e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1;e.eliteWindowKey='';e.eliteMode='';e.eliteExpiresAt=0;e.eliteHpMultiplier=1;e.eliteCombatBonusApplied=false}catch(_){}\n"+
+"    try{e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;e.__ppaFartNamed=true;e.__ppaFartCollisionRadius=([22,18,23,27,23][skin]||22);e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1;e.eliteWindowKey='';e.eliteMode='';e.eliteExpiresAt=0;e.eliteHpMultiplier=1;e.eliteCombatBonusApplied=false}catch(_){}\n"+
 "    return e;\n"+
 "  }\n"+
 "  function installSpawnNameHook(){\n"+
@@ -2878,10 +2905,16 @@ ppaPatchRegex(
 );
 
 ppaPatchRegex(
-  'pickaxe inventory iframe fallback image',
+  'fart inventory iframe fallback images',
   /function itemVisual\(it,size\)\{\s*size=size\|\|34;/,
   `function itemVisual(it,size){
   size=size||34;
+  if(it&&it.fartSlag===true){
+    try{
+      var _ppaSlagArt=parent.PPA_FART_SLAG_IMG;
+      if(_ppaSlagArt)it.img=_ppaSlagArt;
+    }catch(_){}
+  }
   if(it&&it.fartPickaxe===true&&!it.img){
     try{
       it.img=it.fartPickaxeTier==='legendary'
@@ -2915,15 +2948,24 @@ ppaPatchRegex(
 );
 
 if(!output.includes("window.PPA_FART_PICKAXE_COMMON_IMG=FART_PICKAXE_COMMON_IMG") ||
+   !output.includes("it&&it.fartSlag===true") ||
+   !output.includes("parent.PPA_FART_SLAG_IMG") ||
    !output.includes("it&&it.fartPickaxe===true&&!it.img") ||
    !output.includes("pb.style.backgroundImage='url(\"'+FART_PICKAXE_COMMON_IMG+'\")'") ||
    !output.includes("lb.style.backgroundImage='url(\"'+FART_PICKAXE_LEGENDARY_IMG+'\")'")) {
-  throw new Error('Pickaxe icon visibility patch did not apply');
+  throw new Error('Fart inventory icon visibility patch did not apply');
 }
 
 /* ======================================================================== */
 
 
+
+if(!output.includes("function fartResolveGuardCollision()") ||
+   !output.includes("fartResolveGuardCollision();") ||
+   !output.includes("__ppaFartCollisionRadius=([22,18,23,27,23][skin]||22)") ||
+   !output.includes("parent.PPA_FART_SLAG_IMG")) {
+  throw new Error('Fart slag icon/collision patch did not apply');
+}
 
 if(!output.includes("const FART_SLAG_INTERVAL_MS=40000") ||
    !output.includes("const FART_SLAG_SELL_PRICE=2") ||
