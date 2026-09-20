@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v450-rune-fusion-available-runes-path-20260921';
+const CLIENT_BUILD = 'v451-rune-fusion-exact-inv-runes-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3459,6 +3459,125 @@ if(!output.includes("id=\"ppaRuneFusionRuntime\"") ||
    !output.includes("Фиолетовые руны не сливаются в легендарные") ||
    !output.includes("PPA_RUNE_FUSION_TRY")) {
   throw new Error('Rune fusion patch did not apply');
+}
+/* ======================================================================== */
+
+/* === EXACT RUNE FUSION SOURCE ============================================ */
+// Verified from the packed game source:
+//   "ДОСТУПНЫЕ РУНЫ" is rendered by renderRunes(rs) from rs.inventory.
+//   char state sends runes:runeUiState().
+//   runeUiState() builds inventory directly from INV.runes.
+// So fusion must use INV.runes (unequipped runes only), not INV.bag and not a scanner.
+ppaPatchRegex(
+  'exact rune fusion source INV.runes',
+  /<\/body>/,
+  `<script id="ppaRuneFusionExactSource">
+(function(){
+  var COST=5000;
+  var CHANCE={common:.37,uncommon:.30,rare:.22};
+  var NEXT={common:'uncommon',uncommon:'rare',rare:'epic'};
+  var RIDX={common:0,uncommon:1,rare:2,epic:3,legendary:4};
+
+  function refresh(){
+    try{normalizeRuneState()}catch(_){}
+    try{saveGame()}catch(_){}
+    try{recomputeStats()}catch(_){}
+    try{sendInvState()}catch(_){}
+    try{sendBlacksmithState()}catch(_){}
+    try{updateUI()}catch(_){}
+  }
+
+  window.PPA_RUNE_FUSION_SOURCE=function(){
+    return 'INV.runes → runeUiState().inventory';
+  };
+
+  window.PPA_RUNE_FUSION_LIST=function(){
+    try{normalizeRuneState()}catch(_){}
+    var out=[];
+    var bag=(typeof INV!=='undefined'&&INV&&INV.runes&&typeof INV.runes==='object')?INV.runes:{};
+    Object.keys(bag).forEach(function(key){
+      var d=null;
+      try{d=runeDefByKey(key)}catch(_){}
+      var count=Math.max(0,Math.floor(Number(bag[key])||0));
+      if(!d||count<=0||CHANCE[d.rarity]==null)return;
+      out.push({
+        id:d.key||key,
+        key:d.key||key,
+        type:d.type||'',
+        name:d.name||'Руна',
+        count:count,
+        rarity:RIDX[d.rarity],
+        rarityKey:d.rarity,
+        nextRarity:RIDX[NEXT[d.rarity]],
+        chance:CHANCE[d.rarity],
+        eligible:count>=2,
+        img:d.img||'',
+        icon:d.icon||'◇',
+        valueText:d.valueText||''
+      });
+    });
+    out.sort(function(a,b){
+      return Number(a.rarity)-Number(b.rarity)||
+        String(a.type||'').localeCompare(String(b.type||''));
+    });
+    return out;
+  };
+
+  window.PPA_RUNE_FUSION_TRY=function(key){
+    try{normalizeRuneState()}catch(_){}
+    var d=null;
+    try{d=runeDefByKey(key)}catch(_){}
+    if(!d)return {ok:false,message:'Руна не найдена'};
+    if(CHANCE[d.rarity]==null)return {ok:false,message:'Эту редкость нельзя сливать'};
+    var have=Math.max(0,Math.floor(Number(INV.runes&&INV.runes[d.key])||0));
+    if(have<2)return {ok:false,message:'Нужно 2 одинаковые руны'};
+    var gold=Math.max(0,Math.floor(Number(INV.gold)||0));
+    if(gold<COST)return {ok:false,message:'Нужно 5000 золота'};
+
+    INV.gold=gold-COST;
+    INV.runes[d.key]=have-2;
+    if(INV.runes[d.key]<=0)delete INV.runes[d.key];
+
+    var success=Math.random()<CHANCE[d.rarity];
+    if(success){
+      var nextKey=null,nextDef=null;
+      try{
+        nextKey=runeKey(d.type,NEXT[d.rarity]);
+        nextDef=runeDefByKey(nextKey);
+      }catch(_){}
+      if(!nextKey||!nextDef){
+        // Safety: refund if the next rune definition is unexpectedly missing.
+        INV.gold=gold;
+        INV.runes[d.key]=(Number(INV.runes[d.key])||0)+2;
+        refresh();
+        return {ok:false,message:'Слияние отменено · не найдена следующая редкость'};
+      }
+      try{
+        if(typeof addStatRune==='function')addStatRune(nextKey,1);
+        else INV.runes[nextKey]=(Number(INV.runes[nextKey])||0)+1;
+      }catch(_){
+        INV.runes[nextKey]=(Number(INV.runes[nextKey])||0)+1;
+      }
+      refresh();
+      var nr=(typeof RUNE_RARITY_NAME!=='undefined'&&RUNE_RARITY_NAME[NEXT[d.rarity]])||NEXT[d.rarity];
+      try{showPickup('✨ Слияние успешно · '+(nextDef.name||'Руна')+' · '+nr,'#c987ff')}catch(_){}
+      return {ok:true,success:true,message:'Успех! '+(nextDef.name||'Руна')+' · '+nr};
+    }
+
+    refresh();
+    try{showPickup('Слияние не удалось · 2 руны и 5000 золота сгорели','#ff8c78')}catch(_){}
+    return {ok:true,success:false,message:'Слияние не удалось · 2 руны и 5000 золота израсходованы'};
+  };
+})();
+</script>
+</body>`
+);
+
+if(!output.includes("id=\"ppaRuneFusionExactSource\"") ||
+   !output.includes("INV.runes → runeUiState().inventory") ||
+   !output.includes("var CHANCE={common:.37,uncommon:.30,rare:.22}") ||
+   !output.includes("INV.runes[d.key]=have-2")) {
+  throw new Error('Exact INV.runes fusion source patch did not apply');
 }
 /* ======================================================================== */
 
