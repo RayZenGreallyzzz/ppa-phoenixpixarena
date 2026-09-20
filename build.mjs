@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v404-fart-gear-pickaxe-gate-20260920';
+const CLIENT_BUILD = 'v405-hold-inspect-tap-select-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1791,6 +1791,157 @@ if(!output.includes("return {epic:0.000003,legendary:0,tier:'common'}") ||
    !output.includes("легендарный шмот недоступен") ||
    !output.includes("легендарный шмот 0.00013%")) {
   throw new Error('Fart guard gear gating by pickaxe did not apply');
+}
+/* ======================================================================== */
+
+/* === TAP SELECT / HOLD INSPECT =========================================== */
+// Phone/tablet inventory UX:
+//   tap = select item for the current action
+//   hold ~0.9s = inspect stats
+// Scrolling cancels the hold once the finger moves more than ~12px.
+
+ppaPatchRegex(
+  'keeper storage hold helper',
+  /function\s+inspectStorageItem\(it,side\)\s*\{/,
+  `function bindHoldInfo(el,fn){
+  if(!el||typeof fn!=='function')return;
+  var timer=0,sx=0,sy=0;
+  function cancel(){if(timer){clearTimeout(timer);timer=0}}
+  el.addEventListener('pointerdown',function(e){
+    cancel();el.__ppaHeld=false;sx=Number(e.clientX)||0;sy=Number(e.clientY)||0;
+    timer=setTimeout(function(){timer=0;el.__ppaHeld=true;try{fn()}catch(_){}},900);
+  },{passive:true});
+  el.addEventListener('pointermove',function(e){
+    var dx=(Number(e.clientX)||0)-sx,dy=(Number(e.clientY)||0)-sy;
+    if(dx*dx+dy*dy>144)cancel();
+  },{passive:true});
+  el.addEventListener('pointerup',cancel,{passive:true});
+  el.addEventListener('pointercancel',cancel,{passive:true});
+  el.addEventListener('pointerleave',cancel,{passive:true});
+}
+function inspectStorageItem(it,side){`
+);
+
+ppaPatchRegex(
+  'keeper storage tap selects only',
+  /s\.onclick=\(\)=&gt;\{\s*if\(!it\)\{selected=\{side:null,idx:-1\};render\(\);return\}\s*selected=\{side:side,idx:i\};render\(\);\s*inspectStorageItem\(it,side\);\s*\};/,
+  `if(it)bindHoldInfo(s,function(){inspectStorageItem(it,side)});
+    s.onclick=function(){
+      if(s.__ppaHeld){s.__ppaHeld=false;return}
+      if(!it){selected={side:null,idx:-1};render();return}
+      selected={side:side,idx:i};render();
+    };`
+);
+
+ppaPatchRegex(
+  'auction hold helper',
+  /function\s+inspectAuctionItem\(it,context\)\s*\{/,
+  `function bindHoldInfo(el,fn){
+  if(!el||typeof fn!=='function')return;
+  var timer=0,sx=0,sy=0;
+  function cancel(){if(timer){clearTimeout(timer);timer=0}}
+  el.addEventListener('pointerdown',function(e){
+    cancel();el.__ppaHeld=false;sx=Number(e.clientX)||0;sy=Number(e.clientY)||0;
+    timer=setTimeout(function(){timer=0;el.__ppaHeld=true;try{fn()}catch(_){}},900);
+  },{passive:true});
+  el.addEventListener('pointermove',function(e){
+    var dx=(Number(e.clientX)||0)-sx,dy=(Number(e.clientY)||0)-sy;
+    if(dx*dx+dy*dy>144)cancel();
+  },{passive:true});
+  el.addEventListener('pointerup',cancel,{passive:true});
+  el.addEventListener('pointercancel',cancel,{passive:true});
+  el.addEventListener('pointerleave',cancel,{passive:true});
+}
+function inspectAuctionItem(it,context){`
+);
+
+ppaPatchRegex(
+  'auction sell tap selects hold inspects',
+  /d\.onclick=\(\)=&gt;\{selectItem\(it\.ref\);inspectAuctionItem\(it,&#x27;Аукцион · выставление&#x27;\);\};sellGrid\.appendChild\(d\)/,
+  `bindHoldInfo(d,function(){inspectAuctionItem(it,'Аукцион · выставление')});
+    d.onclick=function(){if(d.__ppaHeld){d.__ppaHeld=false;return}selectItem(it.ref)};
+    sellGrid.appendChild(d)`
+);
+
+ppaPatchRegex(
+  'blacksmith hold helper',
+  /function\s+inspectSmithItem\(it,context\)\s*\{/,
+  `function bindHoldInfo(el,fn){
+  if(!el||typeof fn!=='function')return;
+  var timer=0,sx=0,sy=0;
+  function cancel(){if(timer){clearTimeout(timer);timer=0}}
+  el.addEventListener('pointerdown',function(e){
+    cancel();el.__ppaHeld=false;sx=Number(e.clientX)||0;sy=Number(e.clientY)||0;
+    timer=setTimeout(function(){timer=0;el.__ppaHeld=true;try{fn()}catch(_){}},900);
+  },{passive:true});
+  el.addEventListener('pointermove',function(e){
+    var dx=(Number(e.clientX)||0)-sx,dy=(Number(e.clientY)||0)-sy;
+    if(dx*dx+dy*dy>144)cancel();
+  },{passive:true});
+  el.addEventListener('pointerup',cancel,{passive:true});
+  el.addEventListener('pointercancel',cancel,{passive:true});
+  el.addEventListener('pointerleave',cancel,{passive:true});
+}
+function inspectSmithItem(it,context){`
+);
+
+ppaPatchRegex(
+  'blacksmith gear tap selects hold inspects',
+  /s\.onclick=\(\)=&gt;\{if\(sharpenable\)selectSmithGear\(c\.idx\);inspectSmithItem\(it,sharpenable\?&#x27;Кузнец · можно выбрать для заточки&#x27;:&#x27;Кузнец · просмотр предмета&#x27;\);\};/,
+  `bindHoldInfo(s,function(){inspectSmithItem(it,sharpenable?'Кузнец · можно выбрать для заточки':'Кузнец · просмотр предмета')});
+        s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}if(sharpenable)selectSmithGear(c.idx)};`
+);
+
+ppaPatchRegex(
+  'blacksmith material hold inspects',
+  /s\.onclick=\(\)=&gt;inspectSmithItem\(\{name:c\.name,kind:&#x27;material&#x27;,rarity:c\.rarity,count:c\.count,img:RES\[c\.name\]\|\|&#x27;&#x27;,icon:&#x27;◆&#x27;\},&#x27;Кузнец · материал&#x27;\);/,
+  `bindHoldInfo(s,function(){inspectSmithItem({name:c.name,kind:'material',rarity:c.rarity,count:c.count,img:RES[c.name]||'',icon:'◆'},'Кузнец · материал')});
+        s.onclick=function(){if(s.__ppaHeld)s.__ppaHeld=false};`
+);
+
+ppaPatchRegex(
+  'blacksmith stone hold inspects',
+  /s\.onclick=\(\)=&gt;inspectSmithItem\(\{name:c\.name,kind:&#x27;stone&#x27;,rarity:c\.rarity,count:c\.count,img:c\.img\|\|&#x27;&#x27;,icon:c\.icon,refId:c\.name\.indexOf\(&#x27;Премиум&#x27;\)&gt;=0\?&#x27;premium&#x27;:\(c\.name\.indexOf\(&#x27;руна&#x27;\)&gt;=0\?&#x27;rune&#x27;:&#x27;normal&#x27;\)\},&#x27;Кузнец · заточка&#x27;\);/,
+  `bindHoldInfo(s,function(){inspectSmithItem({name:c.name,kind:'stone',rarity:c.rarity,count:c.count,img:c.img||'',icon:c.icon,refId:c.name.indexOf('Премиум')>=0?'premium':(c.name.indexOf('руна')>=0?'rune':'normal')},'Кузнец · заточка')});
+        s.onclick=function(){if(s.__ppaHeld)s.__ppaHeld=false};`
+);
+
+ppaPatchRegex(
+  'clan storage hold helper',
+  /function\s+renderStorage\(\)\s*\{/,
+  `function bindHoldInfo(el,fn){
+  if(!el||typeof fn!=='function')return;
+  var timer=0,sx=0,sy=0;
+  function cancel(){if(timer){clearTimeout(timer);timer=0}}
+  el.addEventListener('pointerdown',function(e){
+    cancel();el.__ppaHeld=false;sx=Number(e.clientX)||0;sy=Number(e.clientY)||0;
+    timer=setTimeout(function(){timer=0;el.__ppaHeld=true;try{fn()}catch(_){}},900);
+  },{passive:true});
+  el.addEventListener('pointermove',function(e){
+    var dx=(Number(e.clientX)||0)-sx,dy=(Number(e.clientY)||0)-sy;
+    if(dx*dx+dy*dy>144)cancel();
+  },{passive:true});
+  el.addEventListener('pointerup',cancel,{passive:true});
+  el.addEventListener('pointercancel',cancel,{passive:true});
+  el.addEventListener('pointerleave',cancel,{passive:true});
+}
+function renderStorage(){`
+);
+
+ppaPatchRegex(
+  'clan storage hold inspect instead of tap inspect',
+  /document\.querySelectorAll\(&#x27;\.clanInspectCard&#x27;\)\.forEach\(card=&gt;card\.onclick=\(ev\)=&gt;\{\s*if\(ev\.target&amp;&amp;ev\.target\.closest&amp;&amp;ev\.target\.closest\(&#x27;\.clanMoveBtn&#x27;\)\)return;\s*const side=card\.dataset\.side,idx=Number\(card\.dataset\.index\),it=side===&#x27;bag&#x27;\?bag\[idx\]:st\[idx\];\s*if\(it\)parent\.postMessage\(\{type:&#x27;itemInspect&#x27;,item:it,context:side===&#x27;bag&#x27;\?&#x27;Клан · инвентарь&#x27;:&#x27;Клановый склад&#x27;\},&#x27;\*&#x27;\);\s*\}\);/,
+  `document.querySelectorAll('.clanInspectCard').forEach(function(card){
+    const side=card.dataset.side,idx=Number(card.dataset.index),it=side==='bag'?bag[idx]:st[idx];
+    if(it)bindHoldInfo(card,function(){parent.postMessage({type:'itemInspect',item:it,context:side==='bag'?'Клан · инвентарь':'Клановый склад'},'*')});
+    card.onclick=function(){if(card.__ppaHeld)card.__ppaHeld=false};
+  });`
+);
+
+if(!output.includes("timer=setTimeout(function(){timer=0;el.__ppaHeld=true;try{fn()}catch(_){}},900)") ||
+   output.includes("selectItem(it.ref);inspectAuctionItem(it,&#x27;Аукцион · выставление&#x27;)") ||
+   output.includes("selected={side:side,idx:i};render();\n      inspectStorageItem(it,side);")) {
+  throw new Error('Tap-select / hold-inspect UX patch did not apply');
 }
 /* ======================================================================== */
 
