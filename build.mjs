@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v417-fast-inventory-selection-20260920';
+const CLIENT_BUILD = 'v418-fart-guard-visuals-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -29,6 +29,9 @@ const gameDir = path.join(publicDir, 'game');
 fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
+const fartGuardAtlasSource = path.join(ROOT, 'assets-src', 'fart-guards.webp');
+if (!fs.existsSync(fartGuardAtlasSource)) throw new Error('Fart guard atlas source missing');
+fs.copyFileSync(fartGuardAtlasSource, path.join(assetsDir, 'fart-guards.webp'));
 
 const extByMime = { png: 'png', webp: 'webp', jpeg: 'jpg' };
 const seen = new Map();
@@ -2172,6 +2175,144 @@ ppaPatchRegex(
 if(!output.includes("🔥 УЛУЧШИТЬ ДО ЛЕГЕНДАРНОЙ · 2120 PPA") ||
    !output.includes("&& !(_hasCurrent&&_currentTier==='common')") && !output.includes("&&!(_hasCurrent&&_currentTier==='common')")) {
   throw new Error('Pickaxe upgrade button state did not apply');
+}
+/* ======================================================================== */
+
+
+/* === FART ZONE GUARD VISUAL TEST ======================================== */
+// Three approved transparent guard skins for visual testing:
+// 0 tentacle, 1 toxic spider, 2 reaper.
+// Mechanics, drops, respawn and Fart-zone mining logic stay unchanged.
+
+ppaPatchRegex(
+  'fart guard visual metrics',
+  /function\s+ppaMobVisualMetrics\(e\)\s*\{\s*if\(!e\)return\{w:0,h:0\};\s*if\(e\.isDungeon60Boss\)return\{w:270,h:270\};/,
+  "function ppaMobVisualMetrics(e){\n  if(!e)return{w:0,h:0};\n  if(e.isFartGuard)return{w:92,h:92};\n  if(e.isDungeon60Boss)return{w:270,h:270};"
+);
+
+ppaPatchRegex(
+  'fart guard body-only repaint hook',
+  /function\s+ppaDrawWorldBodyOnly\(e\)\s*\{\s*if\(!e\|\|e\.hp<=0\)return;\s*if\(e\.isDungeon60Boss\)\{if\(window\.PPA_DRAGON60_DRAW_BODY\)window\.PPA_DRAGON60_DRAW_BODY\(e\);return;\}/,
+  "function ppaDrawWorldBodyOnly(e){\n  if(!e||e.hp<=0)return;\n  if(e.isFartGuard&&window.PPA_FART_GUARD_DRAW&&window.PPA_FART_GUARD_DRAW(e)!==false)return;\n  if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW_BODY)window.PPA_DRAGON60_DRAW_BODY(e);return;}"
+);
+
+ppaPatchRegex(
+  'fart guard main render hook',
+  /if\(e\.isDungeon60Boss\)\{if\(window\.PPA_DRAGON60_DRAW\)window\.PPA_DRAGON60_DRAW\(e\);continue;\}if\(e\.isDungeon21Boss\)\{drawDungeon21Boss\(e\);continue;\}/,
+  "if(e.isFartGuard&&window.PPA_FART_GUARD_DRAW&&window.PPA_FART_GUARD_DRAW(e)!==false){continue;}if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW)window.PPA_DRAGON60_DRAW(e);continue;}if(e.isDungeon21Boss){drawDungeon21Boss(e);continue;}"
+);
+
+const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
+"(function(){\n"+
+"  var atlas=new Image();\n"+
+"  atlas.src='./assets/fart-guards.webp';\n"+
+"  var TILE=32;\n"+
+"  var cachedCanvas=null,cachedCtx=null,lastCanvasScan=0;\n"+
+"  function mainCtx(){\n"+
+"    var now=Date.now();\n"+
+"    if(cachedCtx&&cachedCanvas&&cachedCanvas.isConnected&&now-lastCanvasScan<1500)return cachedCtx;\n"+
+"    lastCanvasScan=now;\n"+
+"    var list=Array.prototype.slice.call(document.querySelectorAll('canvas'));\n"+
+"    list=list.filter(function(c){return c&&c.width>=240&&c.height>=180&&c.offsetParent!==null});\n"+
+"    list.sort(function(a,b){return (b.width*b.height)-(a.width*a.height)});\n"+
+"    cachedCanvas=list[0]||null;\n"+
+"    cachedCtx=cachedCanvas?cachedCanvas.getContext('2d'):null;\n"+
+"    return cachedCtx;\n"+
+"  }\n"+
+"  function skinOf(e){\n"+
+"    if(Number.isInteger(e.__ppaFartSkin))return e.__ppaFartSkin;\n"+
+"    var idx=-1;\n"+
+"    try{\n"+
+"      if(typeof EN!=='undefined'&&Array.isArray(EN)){\n"+
+"        var gs=EN.filter(function(v){return v&&v.isFartGuard&&v.hp>0}).slice().sort(function(a,b){return ((Number(a.x)||0)-(Number(b.x)||0))||((Number(a.y)||0)-(Number(b.y)||0))});\n"+
+"        idx=gs.indexOf(e);\n"+
+"      }\n"+
+"    }catch(_){}\n"+
+"    if(idx<0){\n"+
+"      var key=String(e.id||e.uid||e.mineId||'')+'|'+Math.round(Number(e.x)||0)+'|'+Math.round(Number(e.y)||0);\n"+
+"      var h=0;for(var i=0;i<key.length;i++)h=((h*31)+key.charCodeAt(i))|0;\n"+
+"      idx=Math.abs(h);\n"+
+"    }\n"+
+"    e.__ppaFartSkin=idx%3;\n"+
+"    return e.__ppaFartSkin;\n"+
+"  }\n"+
+"  function dirOf(e,v){\n"+
+"    var d=NaN;\n"+
+"    if(Number.isFinite(Number(e.__ppaServerDir)))d=Number(e.__ppaServerDir);\n"+
+"    else if(Number.isFinite(Number(e.dir)))d=Number(e.dir);\n"+
+"    if(d===0)return 0;\n"+
+"    if(d===1)return 1;\n"+
+"    if(d===3)return 2;\n"+
+"    if(d===2)return 3;\n"+
+"    if(Number.isFinite(Number(e.visDir))){\n"+
+"      var q=Number(e.visDir);if(q===2)return 0;if(q===3)return 1;if(q===0)return 2;if(q===1)return 3;\n"+
+"    }\n"+
+"    var dx=(Number(e.x)||0)-v.lastX,dy=(Number(e.y)||0)-v.lastY;\n"+
+"    if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>.05)return dx>=0?2:3;\n"+
+"    if(Math.abs(dy)>.05)return dy>=0?1:0;\n"+
+"    return v.dir||1;\n"+
+"  }\n"+
+"  window.PPA_FART_GUARD_DRAW=function(e){\n"+
+"    try{\n"+
+"      if(!e||e.hp<=0||!atlas.complete||!atlas.naturalWidth)return false;\n"+
+"      var g=mainCtx();if(!g)return false;\n"+
+"      var now=performance.now();\n"+
+"      var v=e.__ppaFartVis;\n"+
+"      if(!v)v=e.__ppaFartVis={lastX:Number(e.x)||0,lastY:Number(e.y)||0,prevAtk:Number(e.atkCD)||0,attackUntil:0,dir:1};\n"+
+"      var x=Number(e.x)||0,y=Number(e.y)||0;\n"+
+"      var mdx=x-v.lastX,mdy=y-v.lastY;\n"+
+"      var moving=(mdx*mdx+mdy*mdy)>.015;\n"+
+"      var atk=Number(e.atkCD)||0;\n"+
+"      if(atk>v.prevAtk+.08||e.attacking===true||e.isAttacking===true||Number(e.attackAnim)>0||Number(e.atkAnim)>0)v.attackUntil=now+430;\n"+
+"      v.prevAtk=atk;\n"+
+"      var attacking=now<v.attackUntil;\n"+
+"      var dir=dirOf(e,v);v.dir=dir;\n"+
+"      var skin=skinOf(e),baseRow=skin*4,col=0;\n"+
+"      if(skin===2){\n"+
+"        if(attacking)col=4+(Math.floor(now/105)%4);\n"+
+"        else col=Math.floor(now/230)%4;\n"+
+"      }else{\n"+
+"        if(attacking)col=5+(Math.floor(now/105)%4);\n"+
+"        else if(moving)col=1+(Math.floor(now/145)%4);\n"+
+"        else col=0;\n"+
+"      }\n"+
+"      var size=skin===0?72:(skin===1?76:84);\n"+
+"      var bob=0;\n"+
+"      if(skin===2&&moving)bob=(Math.floor(now/85)%2?1.5:-1.5);\n"+
+"      var t=null;try{t=g.getTransform()}catch(_){}\n"+
+"      var worldTransform=!!(t&&(Math.abs(t.e)>2||Math.abs(t.f)>2));\n"+
+"      var dw=size,dh=size,dx,dy;\n"+
+"      if(worldTransform){\n"+
+"        dx=x-dw/2;dy=y-dh*.56+bob;\n"+
+"      }else{\n"+
+"        var cv=g.canvas,cssW=cv.clientWidth||cv.width,cssH=cv.clientHeight||cv.height;\n"+
+"        var scX=cv.width/Math.max(1,cssW),scY=cv.height/Math.max(1,cssH);\n"+
+"        var px=0,py=0;try{px=Number(P.x)||0;py=Number(P.y)||0}catch(_){}\n"+
+"        dw=size*scX;dh=size*scY;\n"+
+"        dx=cv.width*.5+(x-px)*scX-dw*.5;\n"+
+"        dy=cv.height*.5+(y-py)*scY-dh*.56+bob*scY;\n"+
+"      }\n"+
+"      g.save();\n"+
+"      try{g.imageSmoothingEnabled=true}catch(_){}\n"+
+"      g.drawImage(atlas,col*TILE,(baseRow+dir)*TILE,TILE,TILE,dx,dy,dw,dh);\n"+
+"      g.restore();\n"+
+"      v.lastX=x;v.lastY=y;\n"+
+"      return true;\n"+
+"    }catch(err){return false}\n"+
+"  };\n"+
+"})();\n"+
+"</script>";
+
+ppaPatchRegex(
+  'fart guard visual runtime',
+  /<\/body>/,
+  fartGuardRuntime+"\n</body>"
+);
+
+if(!output.includes("id='ppaFartGuardVisuals'") ||
+   !output.includes("e.isFartGuard&&window.PPA_FART_GUARD_DRAW") ||
+   !output.includes("./assets/fart-guards.webp")) {
+  throw new Error('Fart guard visual test patch did not apply');
 }
 /* ======================================================================== */
 
