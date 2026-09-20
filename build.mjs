@@ -2383,13 +2383,12 @@ if(!output.includes("id='ppaFartGuardVisuals'") ||
    !output.includes("e.__ppaFartSkin=Math.abs(h)%5") ||
    !output.includes("skin===4")) {
   throw new Error('Fart guard visual test patch did not apply');
+}
 if(output.includes("function fartLabelText(txt)") || output.includes("__PPA_FART_LABEL_ENTITY")) {
   throw new Error('Fart guard native labels must not be globally intercepted');
 }
 if(!output.includes("e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1")) {
   throw new Error('Fart guard elite-state cleanup did not apply');
-}
-
 }
 /* ======================================================================== */
 
