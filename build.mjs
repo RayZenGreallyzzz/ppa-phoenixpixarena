@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v424-fart-guard-names-20260920';
+const CLIENT_BUILD = 'v425-smith-menu-fart-names-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1911,7 +1911,53 @@ ppaPatchRegex(
   el.addEventListener('pointercancel',cancel,{passive:true});
   el.addEventListener('pointerleave',cancel,{passive:true});
 }
-function inspectSmithItem(it,context){`
+function ppaSmithCanvasize(root){
+  try{
+    var host=root&&root.querySelectorAll?root:document;
+    var imgs=[];
+    if(root&&root.tagName==='IMG')imgs.push(root);
+    host.querySelectorAll('img').forEach(function(x){imgs.push(x)});
+    imgs.forEach(function(img){
+      if(!img||img.__ppaCanvasized)return;
+      img.__ppaCanvasized=true;
+      var src=img.currentSrc||img.src||'';if(!src)return;
+      var c=document.createElement('canvas');
+      c.className=img.className||'';
+      c.style.cssText=img.style.cssText||'';
+      try{
+        var cs=getComputedStyle(img);
+        if(!c.style.width)c.style.width=cs.width;
+        if(!c.style.height)c.style.height=cs.height;
+        c.style.objectFit='contain';
+      }catch(_){}
+      c.setAttribute('aria-hidden','true');
+      c.style.pointerEvents='none';
+      var rect=img.getBoundingClientRect();
+      var w=Math.max(24,Math.round(rect.width||img.width||48));
+      var h=Math.max(24,Math.round(rect.height||img.height||48));
+      var dpr=Math.min(2,window.devicePixelRatio||1);
+      c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+      var im=new Image();
+      im.onload=function(){
+        try{
+          var ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);
+          var iw=Math.max(1,im.naturalWidth||1),ih=Math.max(1,im.naturalHeight||1);
+          var fit=Math.min(c.width/iw,c.height/ih),dw=iw*fit,dh=ih*fit;
+          ctx.drawImage(im,(c.width-dw)/2,(c.height-dh)/2,dw,dh);
+        }catch(_){}
+      };
+      im.src=src;
+      if(img.parentNode)img.parentNode.replaceChild(c,img);
+    });
+  }catch(_){}
+}
+try{
+  new MutationObserver(function(ms){
+    ms.forEach(function(m){(m.addedNodes||[]).forEach(function(n){if(n&&n.nodeType===1)requestAnimationFrame(function(){ppaSmithCanvasize(n)})})});
+  }).observe(document.documentElement,{childList:true,subtree:true});
+  requestAnimationFrame(function(){ppaSmithCanvasize(document)});
+}catch(_){}
+function inspectSmithItem(it,context){
 );
 
 ppaPatchRegex(
@@ -2235,6 +2281,8 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "    var h=0;for(var i=0;i<key.length;i++)h=((h*31)+key.charCodeAt(i))|0;\n"+
 "    e.__ppaFartSkin=Math.abs(h)%5;return applyGuardName(e,e.__ppaFartSkin);\n"+
 "  }\n"+
+"  window.PPA_FART_GUARD_NAME=function(e){var s=skinOf(e);return GUARD_NAMES[s]||'Страж Фарт-зоны';};\n"+
+"  window.PPA_FART_GUARD_SKIN=function(e){return skinOf(e);};\n"+
 "  function dirOf(e,v){\n"+
 "    var d=NaN;\n"+
 "    if(Number.isFinite(Number(e.__ppaServerDir)))d=Number(e.__ppaServerDir);\n"+
@@ -2327,6 +2375,20 @@ const fartDropPanelRuntime = "<script id='ppaFartDropPanelFix'>\n"+
 "  }\n"+
 "  window.mobDropInfo=function(e){\n"+
 "    if(e&&e.isFartGuard){\n"+
+"      var guardName='Страж Фарт-зоны';try{if(window.PPA_FART_GUARD_NAME)guardName=window.PPA_FART_GUARD_NAME(e)||guardName}catch(_){}\n"+
+"      window.__PPA_FART_INSPECT_NAME=guardName;\n"+
+"      function applyFartInspectName(){\n"+
+"        try{\n"+
+"          var name=window.__PPA_FART_INSPECT_NAME;if(!name)return;\n"+
+"          var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);var n;\n"+
+"          while((n=w.nextNode())){\n"+
+"            var t=String(n.nodeValue||'').trim();\n"+
+"            if(/^\\[\\d+\\]\\s+.+$/.test(t)){var m=t.match(/^(\\[\\d+\\])\\s+/);if(m)n.nodeValue=t.replace(/^\\[\\d+\\]\\s+.+$/,m[1]+' '+name);}\n"+
+"            else if(t==='Обитатель подземелья.')n.nodeValue='Страж Фарт-зоны.';\n"+
+"          }\n"+
+"        }catch(_){}\n"+
+"      }\n"+
+"      setTimeout(applyFartInspectName,0);setTimeout(applyFartInspectName,60);setTimeout(applyFartInspectName,180);\n"+
 "      var g=pctGear();\n"+
 "      var epic=g.epic===0.00001?'0.001%':(g.epic===0.000003?'0.0003%':'0%');\n"+
 "      var legendary=g.legendary===0.0000013?'0.00013%':'0%';\n"+
@@ -2356,6 +2418,18 @@ if(!output.includes("id='ppaFartDropPanelFix'") ||
    !output.includes("var epic=g.epic===0.00001?'0.001%'") ||
    !output.includes("var legendary=g.legendary===0.0000013?'0.00013%'")) {
   throw new Error('Final Fart guard drop panel patch did not apply');
+}
+
+if(!output.includes("window.PPA_FART_GUARD_NAME=function(e)") ||
+   !output.includes("window.__PPA_FART_INSPECT_NAME=guardName") ||
+   !output.includes("t==='Обитатель подземелья.'")) {
+  throw new Error('Fart guard inspect naming patch did not apply');
+}
+
+if(!output.includes("function ppaSmithCanvasize(root)") ||
+   !output.includes("img.parentNode.replaceChild(c,img)") ||
+   !output.includes("new MutationObserver(function(ms)")) {
+  throw new Error('Blacksmith canvas image guard did not apply');
 }
 /* ======================================================================== */
 
