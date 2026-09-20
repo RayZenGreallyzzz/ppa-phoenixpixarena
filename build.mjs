@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v435-fart-slag-icons-20260920';
+const CLIENT_BUILD = 'v436-fart-slag-buildfix-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2923,7 +2923,7 @@ if(!output.includes("const FART_SLAG_INTERVAL_MS=40000") ||
    !output.includes("const FART_SLAG_SELL_PRICE=2") ||
    !output.includes("function fartMakeSlagItem(count)") ||
    !output.includes("FART_ZONE_STATE.slagSince") ||
-   !output.includes("id=\\\"fartGuideSlagSell\\\"") ||
+   !output.includes('id="fartGuideSlagSell"') ||
    !output.includes("Шлак ×'+n+' продан") ||
    !output.includes("window.PPA_FART_SLAG_IMG=FART_SLAG_IMG")) {
   throw new Error('Fart slag/icon patch did not apply');
