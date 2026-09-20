@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v419-fart-guard-hq-20260920';
+const CLIENT_BUILD = 'v420-fart-guard-leash-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1556,6 +1556,45 @@ ppaPatchRegex(
     FART_ZONE_STATE.respawns.splice(i,1);
   }
 
+  // Every guard belongs to the place where it spawned.
+  // It may fight around that point, but it must never migrate to another mine.
+  const _fartGuardLeash=150;
+  const _fartGuardReturnAt=118;
+  const _fartGuardReturnStep=Math.max(3,Math.min(10,dt*0.035));
+  if(typeof EN!=='undefined'&&Array.isArray(EN)){
+    EN.forEach(function(g){
+      if(!g||!g.isFartGuard||g.hp<=0)return;
+      if(!Number.isFinite(Number(g.__ppaFartHomeX))||!Number.isFinite(Number(g.__ppaFartHomeY))){
+        g.__ppaFartHomeX=Number(g.x)||0;
+        g.__ppaFartHomeY=Number(g.y)||0;
+      }
+      const hx=Number(g.__ppaFartHomeX)||0,hy=Number(g.__ppaFartHomeY)||0;
+      let dx=(Number(g.x)||0)-hx,dy=(Number(g.y)||0)-hy;
+      let dist=Math.hypot(dx,dy);
+
+      // Hard boundary: impossible to run from one ore node to the next.
+      if(dist>_fartGuardLeash&&dist>0.001){
+        g.x=hx+dx/dist*_fartGuardLeash;
+        g.y=hy+dy/dist*_fartGuardLeash;
+        dx=(Number(g.x)||0)-hx;dy=(Number(g.y)||0)-hy;dist=_fartGuardLeash;
+      }
+
+      // If the player has left this guard's home area, break aggro and walk home.
+      const pd=Math.hypot((Number(P.x)||0)-hx,(Number(P.y)||0)-hy);
+      if(dist>_fartGuardReturnAt&&pd>_fartGuardLeash){
+        try{g.aggro=false}catch(_){}
+        try{g.target=null}catch(_){}
+        try{g.targetId=null}catch(_){}
+        try{g.__ppaServerTarget=null}catch(_){}
+        const back=Math.hypot(hx-(Number(g.x)||0),hy-(Number(g.y)||0));
+        if(back>1){
+          g.x+=(hx-(Number(g.x)||0))/back*_fartGuardReturnStep;
+          g.y+=(hy-(Number(g.y)||0))/back*_fartGuardReturnStep;
+        }
+      }
+    });
+  }
+
   const oldBtn=document.getElementById('fartAutoMineBtn');
   if(oldBtn)oldBtn.style.display='none';
   FART_ZONE_STATE.activeMineId=null;
@@ -1596,7 +1635,9 @@ function drawFartZoneMines()`
 
 if(output.includes('id="fartAutoMineBtn" type="button" onclick="fartToggleAutoMining()"') ||
    !output.includes("if(d<=FART_MINE_RADIUS&&!fartMineHasLivingGuard(mine))") ||
-   !output.includes("FART_ZONE_STATE.autoMineId=near.id")) {
+   !output.includes("FART_ZONE_STATE.autoMineId=near.id") ||
+   !output.includes("const _fartGuardLeash=150") ||
+   !output.includes("g.__ppaFartHomeX")) {
   throw new Error('Passive Fart mining patch did not apply');
 }
 /* ======================================================================== */
@@ -2200,13 +2241,13 @@ ppaPatchRegex(
 ppaPatchRegex(
   'fart guard body-only repaint hook',
   /function\s+ppaDrawWorldBodyOnly\(e\)\s*\{\s*if\(!e\|\|e\.hp<=0\)return;\s*if\(e\.isDungeon60Boss\)\{if\(window\.PPA_DRAGON60_DRAW_BODY\)window\.PPA_DRAGON60_DRAW_BODY\(e\);return;\}/,
-  "function ppaDrawWorldBodyOnly(e){\n  if(!e||e.hp<=0)return;\n  if(e.isFartGuard&&window.PPA_FART_GUARD_DRAW&&window.PPA_FART_GUARD_DRAW(e)!==false)return;\n  if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW_BODY)window.PPA_DRAGON60_DRAW_BODY(e);return;}"
+  "function ppaDrawWorldBodyOnly(e){\n  if(!e||e.hp<=0)return;\n  if(e.isFartGuard){if(window.PPA_FART_GUARD_DRAW)window.PPA_FART_GUARD_DRAW(e);return;}\n  if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW_BODY)window.PPA_DRAGON60_DRAW_BODY(e);return;}"
 );
 
 ppaPatchRegex(
   'fart guard main render hook',
   /if\(e\.isDungeon60Boss\)\{if\(window\.PPA_DRAGON60_DRAW\)window\.PPA_DRAGON60_DRAW\(e\);continue;\}if\(e\.isDungeon21Boss\)\{drawDungeon21Boss\(e\);continue;\}/,
-  "if(e.isFartGuard&&window.PPA_FART_GUARD_DRAW&&window.PPA_FART_GUARD_DRAW(e)!==false){continue;}if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW)window.PPA_DRAGON60_DRAW(e);continue;}if(e.isDungeon21Boss){drawDungeon21Boss(e);continue;}"
+  "if(e.isFartGuard){if(window.PPA_FART_GUARD_DRAW)window.PPA_FART_GUARD_DRAW(e);continue;}if(e.isDungeon60Boss){if(window.PPA_DRAGON60_DRAW)window.PPA_DRAGON60_DRAW(e);continue;}if(e.isDungeon21Boss){drawDungeon21Boss(e);continue;}"
 );
 
 const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
@@ -2303,7 +2344,7 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "        dy=cv.height*.5+(y-py)*scY-dh*.56+bob*scY;\n"+
 "      }\n"+
 "      g.save();\n"+
-"      try{g.imageSmoothingEnabled=true}catch(_){}\n"+
+"      try{g.imageSmoothingEnabled=false}catch(_){}\n"+
 "      g.drawImage(sheet,col*TILE,(baseRow+dir)*TILE,TILE,TILE,dx,dy,dw,dh);\n"+
 "      g.restore();\n"+
 "      v.lastX=x;v.lastY=y;\n"+
@@ -2320,10 +2361,12 @@ ppaPatchRegex(
 );
 
 if(!output.includes("id='ppaFartGuardVisuals'") ||
-   !output.includes("e.isFartGuard&&window.PPA_FART_GUARD_DRAW") ||
+   !output.includes("if(e.isFartGuard){if(window.PPA_FART_GUARD_DRAW)window.PPA_FART_GUARD_DRAW(e);continue;}") ||
+   !output.includes("if(e.isFartGuard){if(window.PPA_FART_GUARD_DRAW)window.PPA_FART_GUARD_DRAW(e);return;}") ||
    !output.includes("./assets/fart-tentacle.webp") ||
    !output.includes("./assets/fart-spider.webp") ||
-   !output.includes("./assets/fart-reaper.webp")) {
+   !output.includes("./assets/fart-reaper.webp") ||
+   !output.includes("g.imageSmoothingEnabled=false")) {
   throw new Error('Fart guard visual test patch did not apply');
 }
 /* ======================================================================== */
