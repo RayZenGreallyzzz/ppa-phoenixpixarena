@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v418-fart-guard-visuals-20260920';
+const CLIENT_BUILD = 'v419-fart-guard-hq-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -29,9 +29,16 @@ const gameDir = path.join(publicDir, 'game');
 fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
-const fartGuardAtlasSource = path.join(ROOT, 'assets-src', 'fart-guards.webp');
-if (!fs.existsSync(fartGuardAtlasSource)) throw new Error('Fart guard atlas source missing');
-fs.copyFileSync(fartGuardAtlasSource, path.join(assetsDir, 'fart-guards.webp'));
+const fartGuardSources = [
+  ['fart-tentacle.webp', 'fart-tentacle.webp'],
+  ['fart-spider.webp', 'fart-spider.webp'],
+  ['fart-reaper.webp', 'fart-reaper.webp']
+];
+for (const [srcName, outName] of fartGuardSources) {
+  const srcPath = path.join(ROOT, 'assets-src', srcName);
+  if (!fs.existsSync(srcPath)) throw new Error('Fart guard source missing: ' + srcName);
+  fs.copyFileSync(srcPath, path.join(assetsDir, outName));
+}
 
 const extByMime = { png: 'png', webp: 'webp', jpeg: 'jpg' };
 const seen = new Map();
@@ -2204,9 +2211,11 @@ ppaPatchRegex(
 
 const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "(function(){\n"+
-"  var atlas=new Image();\n"+
-"  atlas.src='./assets/fart-guards.webp';\n"+
-"  var TILE=32;\n"+
+"  var atlases=[new Image(),new Image(),new Image()];\n"+
+"  atlases[0].src='./assets/fart-tentacle.webp';\n"+
+"  atlases[1].src='./assets/fart-spider.webp';\n"+
+"  atlases[2].src='./assets/fart-reaper.webp';\n"+
+"  var TILE=192;\n"+
 "  var cachedCanvas=null,cachedCtx=null,lastCanvasScan=0;\n"+
 "  function mainCtx(){\n"+
 "    var now=Date.now();\n"+
@@ -2254,7 +2263,7 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "  }\n"+
 "  window.PPA_FART_GUARD_DRAW=function(e){\n"+
 "    try{\n"+
-"      if(!e||e.hp<=0||!atlas.complete||!atlas.naturalWidth)return false;\n"+
+"      if(!e||e.hp<=0)return false;\n"+
 "      var g=mainCtx();if(!g)return false;\n"+
 "      var now=performance.now();\n"+
 "      var v=e.__ppaFartVis;\n"+
@@ -2267,7 +2276,8 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "      v.prevAtk=atk;\n"+
 "      var attacking=now<v.attackUntil;\n"+
 "      var dir=dirOf(e,v);v.dir=dir;\n"+
-"      var skin=skinOf(e),baseRow=skin*4,col=0;\n"+
+"      var skin=skinOf(e),sheet=atlases[skin],baseRow=0,col=0;\n"+
+"      if(!sheet||!sheet.complete||!sheet.naturalWidth)return false;\n"+
 "      if(skin===2){\n"+
 "        if(attacking)col=4+(Math.floor(now/105)%4);\n"+
 "        else col=Math.floor(now/230)%4;\n"+
@@ -2294,7 +2304,7 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "      }\n"+
 "      g.save();\n"+
 "      try{g.imageSmoothingEnabled=true}catch(_){}\n"+
-"      g.drawImage(atlas,col*TILE,(baseRow+dir)*TILE,TILE,TILE,dx,dy,dw,dh);\n"+
+"      g.drawImage(sheet,col*TILE,(baseRow+dir)*TILE,TILE,TILE,dx,dy,dw,dh);\n"+
 "      g.restore();\n"+
 "      v.lastX=x;v.lastY=y;\n"+
 "      return true;\n"+
@@ -2311,7 +2321,9 @@ ppaPatchRegex(
 
 if(!output.includes("id='ppaFartGuardVisuals'") ||
    !output.includes("e.isFartGuard&&window.PPA_FART_GUARD_DRAW") ||
-   !output.includes("./assets/fart-guards.webp")) {
+   !output.includes("./assets/fart-tentacle.webp") ||
+   !output.includes("./assets/fart-spider.webp") ||
+   !output.includes("./assets/fart-reaper.webp")) {
   throw new Error('Fart guard visual test patch did not apply');
 }
 /* ======================================================================== */
