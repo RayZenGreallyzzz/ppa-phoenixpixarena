@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v427-fart-native-labels-20260920';
+const CLIENT_BUILD = 'v428-fart-label-order-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2338,8 +2338,9 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "    var e=window.__PPA_FART_LABEL_ENTITY;if(!e||!e.isFartGuard)return {skip:false,text:String(txt)};\n"+
 "    var name='Страж Фарт-зоны';try{name=window.PPA_FART_GUARD_NAME?window.PPA_FART_GUARD_NAME(e):(e.__ppaFartName||name)}catch(_){}\n"+
 "    var t=String(txt==null?'':txt);\n"+
+"    var lv=t.match(/\\[\\s*\\d+\\s*\\]/);\n"+
+"    if(lv){window.__PPA_FART_LABEL_ENTITY=null;return {skip:false,text:lv[0]+' '+name};}\n"+
 "    if(/ЭЛИТА(?:\\s+ПОДЗЕМЕЛЬЯ)?/i.test(t))return {skip:true,text:''};\n"+
-"    var m=t.match(/^(\\s*\\[\\d+\\]\\s*).+$/);if(m)return {skip:false,text:m[1]+name};\n"+
 "    return {skip:false,text:t};\n"+
 "  }\n"+
 "  ['fillText','strokeText'].forEach(function(k){\n"+
@@ -2361,6 +2362,8 @@ if(!output.includes("id='ppaFartGuardVisuals'") ||
    !output.includes("window.__PPA_FART_DRAW_ENTITY=(e&&e.isFartGuard)?e:null") ||
    !output.includes("if(e.isFartGuard)window.__PPA_FART_DRAW_ENTITY=e") ||
    !output.includes("function fartLabelText(txt)") ||
+   !output.includes("var lv=t.match(/\\[\\s*\\d+\\s*\\]/)") ||
+   !output.includes("window.__PPA_FART_LABEL_ENTITY=null;return {skip:false,text:lv[0]+' '+name}") ||
    !output.includes("/ЭЛИТА(?:\\s+ПОДЗЕМЕЛЬЯ)?/i.test(t)") ||
    !output.includes("proto.__ppaFartGuardNative=true") ||
    !output.includes("original.call(this,sheet") ||
