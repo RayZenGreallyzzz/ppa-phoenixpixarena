@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v405-hold-inspect-tap-select-20260920';
+const CLIENT_BUILD = 'v406-unified-hold-inspect-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1942,6 +1942,37 @@ if(!output.includes("timer=setTimeout(function(){timer=0;el.__ppaHeld=true;try{f
    output.includes("selectItem(it.ref);inspectAuctionItem(it,&#x27;Аукцион · выставление&#x27;)") ||
    output.includes("selected={side:side,idx:i};render();\n      inspectStorageItem(it,side);")) {
   throw new Error('Tap-select / hold-inspect UX patch did not apply');
+}
+/* ======================================================================== */
+
+/* === AUCTION HOLD INSPECT COMPLETE ======================================= */
+ppaPatchRegex(
+  'auction market item hold inspect',
+  /buyTable\.querySelectorAll\(&#x27;\.inspectMarketItem&#x27;\)\.forEach\(el=&gt;el\.onclick=\(\)=&gt;\{let l=\(STATE\.marketLots\|\|\[\]\)\.find\(x=&gt;String\(x\.id\)===String\(el\.dataset\.inspect\)\);if\(l\)inspectAuctionItem\(l\.item\|\|\{\},&#x27;Аукцион · покупка&#x27;\);\}\);/,
+  `buyTable.querySelectorAll('.inspectMarketItem').forEach(function(el){
+    bindHoldInfo(el,function(){
+      let l=(STATE.marketLots||[]).find(function(x){return String(x.id)===String(el.dataset.inspect)});
+      if(l)inspectAuctionItem(l.item||{},'Аукцион · покупка');
+    });
+    el.onclick=function(){if(el.__ppaHeld)el.__ppaHeld=false};
+  });`
+);
+
+ppaPatchRegex(
+  'auction own lot hold inspect',
+  /lotsTable\.querySelectorAll\(&#x27;\.inspectOwnLot&#x27;\)\.forEach\(el=&gt;el\.onclick=\(\)=&gt;\{let l=\(STATE\.lots\|\|\[\]\)\.find\(x=&gt;String\(x\.id\)===String\(el\.dataset\.inspect\)\);if\(l\)inspectAuctionItem\(l\.item\|\|\{\},&#x27;Аукцион · мой лот&#x27;\);\}\);/,
+  `lotsTable.querySelectorAll('.inspectOwnLot').forEach(function(el){
+    bindHoldInfo(el,function(){
+      let l=(STATE.lots||[]).find(function(x){return String(x.id)===String(el.dataset.inspect)});
+      if(l)inspectAuctionItem(l.item||{},'Аукцион · мой лот');
+    });
+    el.onclick=function(){if(el.__ppaHeld)el.__ppaHeld=false};
+  });`
+);
+
+if(output.includes("inspectMarketItem&#x27;).forEach(el=&gt;el.onclick") ||
+   output.includes("inspectOwnLot&#x27;).forEach(el=&gt;el.onclick")) {
+  throw new Error('Auction hold-inspect completion did not apply');
 }
 /* ======================================================================== */
 
