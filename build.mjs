@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v425-smith-menu-fart-names-20260920';
+const CLIENT_BUILD = 'v426-clean-item-descriptions-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2769,6 +2769,30 @@ if(!output.includes("window.PPA_FART_PICKAXE_COMMON_IMG=FART_PICKAXE_COMMON_IMG"
   throw new Error('Pickaxe icon visibility patch did not apply');
 }
 
+/* ======================================================================== */
+
+
+/* === CLEAN RELEASE ITEM DESCRIPTIONS ==================================== */
+// Remove old developer/placeholder text from item inspection cards.
+// Functional item descriptions above it remain unchanged.
+ppaPatchRegex(
+  'remove smith placeholder description',
+  /Этот тип предмета сейчас не затачивается\s*[—–-]\s*карточка открыта только для просмотра\.?/g,
+  '',
+  true
+);
+ppaPatchRegex(
+  'remove residual inspect-only placeholder',
+  /Карточка открыта только для просмотра\.?/g,
+  '',
+  true
+);
+
+if(output.includes('Этот тип предмета сейчас не затачивается') ||
+   output.includes('карточка открыта только для просмотра') ||
+   output.includes('Карточка открыта только для просмотра')) {
+  throw new Error('Release item-description cleanup did not apply');
+}
 /* ======================================================================== */
 
 /* === CHARACTER INVENTORY FAST SELECTION ================================= */
