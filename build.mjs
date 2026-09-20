@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v448-rune-fusion-character-rune-bag-ui-20260921';
+const CLIENT_BUILD = 'v449-rune-fusion-audit-order-fix-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3417,7 +3417,6 @@ if(!output.includes("id=\"ppaRuneFusionRuntime\"") ||
    !output.includes("mode:'map-count'") ||
    !output.includes("mode:'count-map'") ||
    !output.includes("mode:'string-array'") ||
-   !output.includes("СУМКА РУН") ||
    !output.includes("Фиолетовые руны не сливаются в легендарные") ||
    !output.includes("PPA_RUNE_FUSION_TRY")) {
   throw new Error('Rune fusion patch did not apply');
@@ -3582,7 +3581,8 @@ function inspectSmithItem(it,context){`)
 if(!output.includes("function ppaInstallRuneFusionTab()") ||
    !output.includes("ppaRuneFusionTab") ||
    !output.includes("function openRuneFusionPanel()") ||
-   !output.includes("СЛИЯНИЕ РУН")) {
+   !output.includes("СЛИЯНИЕ РУН") ||
+   !output.includes("СУМКА РУН")) {
   throw new Error('Direct blacksmith rune fusion tab did not apply');
 }
 if(!output.includes("function ppaRingCraftVisibility()") ||
