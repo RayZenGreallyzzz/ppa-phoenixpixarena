@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v432-fart-name-stable-20260920';
+const CLIENT_BUILD = 'v433-fart-clean-runtime-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2357,6 +2357,19 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "    }\n"+
 "    return original.apply(this,arguments);\n"+
 "  };\n"+
+"  function fartGuardLabel(txt){\n"+
+"    var e=window.__PPA_FART_LABEL_ENTITY,t=String(txt==null?'':txt);\n"+
+"    if(!e||!e.isFartGuard)return {skip:false,text:t};\n"+
+"    if(/ЭЛИТА(?:\\s+ПОДЗЕМЕЛЬЯ)?/i.test(t))return {skip:true,text:''};\n"+
+"    var lv=t.match(/\\[\\s*\\d+\\s*\\]/);\n"+
+"    if(lv){var n=e.__ppaFartName||e.name||'Страж Фарт-зоны';return {skip:false,text:lv[0]+' '+n};}\n"+
+"    return {skip:false,text:t};\n"+
+"  }\n"+
+"  ['fillText','strokeText'].forEach(function(k){\n"+
+"    var base=proto[k];if(typeof base!=='function'||base.__ppaFartNameStable)return;\n"+
+"    var wrap=function(txt){var a=Array.prototype.slice.call(arguments),r=fartGuardLabel(txt);if(r.skip)return;a[0]=r.text;return base.apply(this,a)};\n"+
+"    wrap.__ppaFartNameStable=true;proto[k]=wrap;\n"+
+"  });\n"+
 
 "})();\n"+
 "</script>";
@@ -2401,28 +2414,10 @@ if(!output.includes("e.isDungeonElite=false;e.isElite=false;e.elite=false;e.elit
 const fartDropPanelRuntime = "<script id='ppaFartDropPanelFix'>\n"+
 "(function(){\n"+
 "  var prev=window.mobDropInfo;\n"+
-"  function pctGear(){\n"+
-"    try{\n"+
-"      if(typeof fartGuardGearDropChances==='function')return fartGuardGearDropChances();\n"+
-"    }catch(_){}\n"+
-"    return {epic:0,legendary:0,tier:'none'};\n"+
-"  }\n"+
+"  function pctGear(){try{if(typeof fartGuardGearDropChances==='function')return fartGuardGearDropChances()}catch(_){}return {epic:0,legendary:0,tier:'none'};}\n"+
 "  window.mobDropInfo=function(e){\n"+
 "    if(e&&e.isFartGuard){\n"+
-"      var guardName='Страж Фарт-зоны';try{if(window.PPA_FART_GUARD_NAME)guardName=window.PPA_FART_GUARD_NAME(e)||guardName}catch(_){}\n"+
-"      window.__PPA_FART_INSPECT_NAME=guardName;\n"+
-"      function applyFartInspectName(){\n"+
-"        try{\n"+
-"          var name=window.__PPA_FART_INSPECT_NAME;if(!name)return;\n"+
-"          var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);var n;\n"+
-"          while((n=w.nextNode())){\n"+
-"            var t=String(n.nodeValue||'').trim();\n"+
-"            if(/^\\[\\d+\\]\\s+.+$/.test(t)){var m=t.match(/^(\\[\\d+\\])\\s+/);if(m)n.nodeValue=t.replace(/^\\[\\d+\\]\\s+.+$/,m[1]+' '+name);}\n"+
-"            else if(t==='Обитатель подземелья.')n.nodeValue='Страж Фарт-зоны.';\n"+
-"          }\n"+
-"        }catch(_){}\n"+
-"      }\n"+
-"      setTimeout(applyFartInspectName,0);setTimeout(applyFartInspectName,60);setTimeout(applyFartInspectName,180);\n"+
+"      try{if(window.PPA_FART_GUARD_NAME)window.PPA_FART_GUARD_NAME(e)}catch(_){}\n"+
 "      var g=pctGear();\n"+
 "      var epic=g.epic===0.00001?'0.001%':(g.epic===0.000003?'0.0003%':'0%');\n"+
 "      var legendary=g.legendary===0.0000013?'0.00013%':'0%';\n"+
@@ -2438,19 +2433,7 @@ const fartDropPanelRuntime = "<script id='ppaFartDropPanelFix'>\n"+
 "      ];\n"+
 "    }\n"+
 "    return typeof prev==='function'?prev(e):[];\n"+
-"  function fartGuardLabel(txt){\n"+
-"    var e=window.__PPA_FART_LABEL_ENTITY,t=String(txt==null?'':txt);\n"+
-"    if(!e||!e.isFartGuard)return {skip:false,text:t};\n"+
-"    if(/ЭЛИТА(?:\\s+ПОДЗЕМЕЛЬЯ)?/i.test(t))return {skip:true,text:''};\n"+
-"    var lv=t.match(/\\[\\s*\\d+\\s*\\]/);\n"+
-"    if(lv){var n=e.__ppaFartName||e.name||'Страж Фарт-зоны';return {skip:false,text:lv[0]+' '+n};}\n"+
-"    return {skip:false,text:t};\n"+
-"  }\n"+
-"  ['fillText','strokeText'].forEach(function(k){\n"+
-"    var base=proto[k];if(typeof base!=='function'||base.__ppaFartNameStable)return;\n"+
-"    var wrap=function(txt){var a=Array.prototype.slice.call(arguments),r=fartGuardLabel(txt);if(r.skip)return;a[0]=r.text;return base.apply(this,a)};\n"+
-"    wrap.__ppaFartNameStable=true;proto[k]=wrap;\n"+
-"  });\n"+"  };\n"+
+"  };\n"+
 "})();\n"+
 "</script>";
 
@@ -2467,9 +2450,13 @@ if(!output.includes("id='ppaFartDropPanelFix'") ||
 }
 
 if(!output.includes("window.PPA_FART_GUARD_NAME=function(e)") ||
-   !output.includes("window.__PPA_FART_INSPECT_NAME=guardName") ||
-   !output.includes("t==='Обитатель подземелья.'")) {
-  throw new Error('Fart guard inspect naming patch did not apply');
+   !output.includes("try{if(window.PPA_FART_GUARD_NAME)window.PPA_FART_GUARD_NAME(e)}catch(_){}")) {
+  throw new Error('Fart guard inspect identity patch did not apply');
+}
+if(output.includes("document.createTreeWalker(document.body") ||
+   output.includes("setTimeout(applyFartInspectName") ||
+   output.includes("window.__PPA_FART_INSPECT_NAME")) {
+  throw new Error('Laggy legacy Fart inspect overlay is still present');
 }
 
 if(!output.includes("function ppaSmithCanvasize(root)") ||
