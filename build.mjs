@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v401-common-pickaxe-4h-20260920';
+const CLIENT_BUILD = 'v402-passive-fart-mining-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1508,6 +1508,87 @@ if(!output.includes("FART_GUARD_LEGENDARY_GEAR_CHANCE=0.0000013") ||
    !output.includes("0.70*(_pickaxeBonus?1.10:1)") ||
    !output.includes("Легендарный шмот/оружие · случайный','0.00013%")) {
   throw new Error('Fart legendary/common pickaxe patch did not apply');
+}
+/* ======================================================================== */
+
+/* === FART PASSIVE MINING ================================================== */
+// Mining no longer has its own ON/OFF button. Standing at a cleared mine with
+// a valid pickaxe starts production automatically. The mine remains anchored
+// while AUTO combat kills its guards, so the combat helper can return the
+// character to the same mine and production resumes by itself.
+ppaPatchRegex(
+  'remove fart auto mining button',
+  /<button id="fartAutoMineBtn"[^>]*>[\s\S]*?<\/button>/,
+  ''
+);
+
+ppaPatchRegex(
+  'passive fart mining loop',
+  /function\s+updateFartZoneSystem\(\)\s*\{[\s\S]*?\n\}\n\nfunction\s+drawFartZoneMines\(\)/,
+  `function updateFartZoneSystem(){
+  if(P.scene!=='fartzone'){
+    const b=document.getElementById('fartAutoMineBtn');
+    if(b)b.style.display='none';
+    FART_ZONE_STATE.activeMineId=null;
+    return;
+  }
+  if(!FART_ZONE_STATE.ready)fartInitZone();
+
+  const now=Date.now();
+  const dt=Math.max(0,Math.min(250,now-(FART_ZONE_STATE.lastTick||now)));
+  FART_ZONE_STATE.lastTick=now;
+
+  // Individual guard respawns stay unchanged.
+  for(let i=FART_ZONE_STATE.respawns.length-1;i>=0;i--){
+    const q=FART_ZONE_STATE.respawns[i];
+    if(now<q.at)continue;
+    const mine=fartMineById(q.mineId);
+    if(mine)fartSpawnGuard(mine,q.index);
+    FART_ZONE_STATE.respawns.splice(i,1);
+  }
+
+  const oldBtn=document.getElementById('fartAutoMineBtn');
+  if(oldBtn)oldBtn.style.display='none';
+  FART_ZONE_STATE.activeMineId=null;
+
+  // No pickaxe = no production. Expiration cleanup is handled here as well.
+  if(!fartHasPickaxe())return;
+
+  const near=fartNearestMine(FART_MINE_RADIUS);
+  let mine=FART_ZONE_STATE.autoMineId?fartMineById(FART_ZONE_STATE.autoMineId):null;
+
+  // Walking onto a mine anchors it automatically. A different mine takes over
+  // only after the player has genuinely left the old one, so AUTO combat cannot
+  // accidentally change the mining target while chasing guards.
+  if(near&&(!mine||String(near.id)!==String(mine.id))){
+    const oldDist=mine?Math.hypot(P.x-mine.x,P.y-mine.y):Infinity;
+    if(!mine||oldDist>FART_MINE_RADIUS*1.25){
+      FART_ZONE_STATE.autoMineId=near.id;
+      mine=near;
+    }
+  }else if(!mine&&near){
+    FART_ZONE_STATE.autoMineId=near.id;
+    mine=near;
+  }
+
+  if(!mine)return;
+
+  const d=Math.hypot(P.x-mine.x,P.y-mine.y);
+  // Guards pause the mine but never clear its anchor. AUTO combat can therefore
+  // kill them, return to this exact mine, and mining resumes automatically.
+  if(d<=FART_MINE_RADIUS&&!fartMineHasLivingGuard(mine)){
+    FART_ZONE_STATE.activeMineId=mine.id;
+    fartMineTick(mine,dt);
+  }
+}
+
+function drawFartZoneMines()`
+);
+
+if(output.includes('id="fartAutoMineBtn" type="button" onclick="fartToggleAutoMining()"') ||
+   !output.includes("if(d<=FART_MINE_RADIUS&&!fartMineHasLivingGuard(mine))") ||
+   !output.includes("FART_ZONE_STATE.autoMineId=near.id")) {
+  throw new Error('Passive Fart mining patch did not apply');
 }
 /* ======================================================================== */
 
