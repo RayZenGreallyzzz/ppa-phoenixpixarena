@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v406-unified-hold-inspect-20260920';
+const CLIENT_BUILD = 'v407-fart-audit-fix-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1500,14 +1500,13 @@ ppaPatchRegex(
   "(INV.bag||[]).forEach(function(it,idx){if(!it||it.fartPickaxe===true)return;"
 );
 
+// Transitional Fart checks only verify what this block itself establishes.
+// Later v403/v404 patches intentionally replace the 4h helper and bonus formulas.
 if(!output.includes("FART_GUARD_LEGENDARY_GEAR_CHANCE=0.0000013") ||
-   !output.includes("const FART_PICKAXE_DURATION_MS=4*60*60*1000") ||
-   !output.includes("name:'Обычная шахтёрская кирка'") ||
-   !output.includes("0.25*(_pickaxeBonus?1.03:1)") ||
-   !output.includes("0.55*(_pickaxeBonus?1.05:1)") ||
-   !output.includes("0.70*(_pickaxeBonus?1.10:1)") ||
+   !output.includes("function fartPickaxeBagItem()") ||
+   !output.includes("function fartHasPickaxe()") ||
    !output.includes("Легендарный шмот/оружие · случайный','0.00013%")) {
-  throw new Error('Fart legendary/common pickaxe patch did not apply');
+  throw new Error('Base Fart pickaxe/guard patch did not apply');
 }
 /* ======================================================================== */
 
@@ -1791,6 +1790,21 @@ if(!output.includes("return {epic:0.000003,legendary:0,tier:'common'}") ||
    !output.includes("легендарный шмот недоступен") ||
    !output.includes("легендарный шмот 0.00013%")) {
   throw new Error('Fart guard gear gating by pickaxe did not apply');
+}
+/* ======================================================================== */
+
+/* === FINAL FART PICKAXE AUDIT ============================================ */
+if(!output.includes("FART_PICKAXE_COMMON_DURATION_MS=4*60*60*1000") ||
+   !output.includes("FART_PICKAXE_LEGENDARY_DURATION_MS=14*60*60*1000") ||
+   !output.includes("fartPickaxeTier:tier") ||
+   !output.includes("2120 PPA · 14 Ч") ||
+   !output.includes("200 PPA · 4 Ч") ||
+   !output.includes("const _blueMul=_pickaxeBonus?(_pickaxeTier==='legendary'?1.20:1.03):1") ||
+   !output.includes("const _rareMul=_pickaxeBonus?(_pickaxeTier==='legendary'?1.30:1.05):1") ||
+   !output.includes("const _resourceMul=_pickaxeBonus?(_pickaxeTier==='legendary'?1.50:1.10):1") ||
+   !output.includes("return {epic:0.000003,legendary:0,tier:'common'}") ||
+   !output.includes("return {epic:0.00001,legendary:0.0000013,tier:'legendary'}")) {
+  throw new Error('Final Fart pickaxe tier audit failed');
 }
 /* ======================================================================== */
 
