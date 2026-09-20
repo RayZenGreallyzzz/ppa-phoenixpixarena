@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v413-no-native-image-menu-20260920';
+const CLIENT_BUILD = 'v414-character-inventory-no-native-menu-20260920';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2263,6 +2263,102 @@ ppaPatchRegex(
 if(!output.includes("pointer-events:none!important") ||
    !output.includes("img.style.pointerEvents='none'")) {
   throw new Error('Hard WebView image-menu guard did not apply');
+}
+/* ======================================================================== */
+
+/* === CHARACTER INVENTORY NATIVE-MENU REMOVAL + HOLD PREVIEW ============= */
+// The character iframe used real <img> elements for every item. Telegram WebView
+// can invoke a native image/link menu before JS cancellation. Render those item
+// arts as CSS backgrounds instead, and bind the desired tap/hold behavior to
+// the card itself.
+
+ppaPatchRegex(
+  'character inventory item art is css background',
+  /function itemVisual\(it,size\)\{[\s\S]*?\n\}\nfunction enhBadge/,
+  ppaEscapeSrcdocCode(`function itemVisual(it,size){
+  size=size||34;
+  if(it&&it.img){
+    var sc=1,flt='none';
+    if(it.rarity==='epic'&&it.slot==='weapon'){
+      sc=1.20;
+      flt='sepia(.30) saturate(2.9) hue-rotate(232deg) brightness(1.16) contrast(1.08) drop-shadow(0 0 3px rgba(208,108,255,.72))';
+    }else if(it.rarity==='epic'&&it.slot==='boots'){
+      sc=1.16;
+      flt='sepia(.28) saturate(2.7) hue-rotate(232deg) brightness(1.13) contrast(1.07) drop-shadow(0 0 3px rgba(208,108,255,.68))';
+    }
+    var wh=size==='fill'?(it.slot?'94%':'100%'):(size+'px');
+    return '<span class="ppaItemArtBg" aria-hidden="true" style="width:'+wh+';height:'+wh+';display:block;margin:auto;background-image:url('+it.img+');background-repeat:no-repeat;background-position:center;background-size:contain;transform:scale('+sc+');transform-origin:center;filter:'+flt+';pointer-events:none"></span>';
+  }
+  var fs=(size==='fill'?24:Math.max(14,size-10));
+  return '<span style="font-size:'+fs+'px">'+((it&&it.icon)||'◆')+'</span>';
+}
+function enhBadge`)
+);
+
+ppaPatchRegex(
+  'character inventory hold helper and bag binding',
+  /var bagGrid=document\.getElementById\(&#x27;bagGrid&#x27;\),bagSlots=\[\];\s*for\(var i=0;i&lt;100;i\+\+\)\{\s*var d=document\.createElement\(&#x27;div&#x27;\);\s*d\.className=i&lt;50\?&#x27;bagSlot&#x27;:&#x27;bagSlot paid locked&#x27;;\s*\(function\(idx\)\{d\.onclick=function\(\)\{bagClick\(idx\)\}\}\)\(i\);\s*bagSlots\.push\(d\);bagGrid\.appendChild\(d\);\s*\}/,
+  ppaEscapeSrcdocCode(`function bindCharItemHold(el,getItem,context){
+  if(!el||typeof getItem!=='function')return;
+  var timer=0,sx=0,sy=0;
+  function cancelTimer(){if(timer){clearTimeout(timer);timer=0}}
+  function releasePreview(){
+    if(el.__ppaHeld){
+      try{parent.postMessage({type:'itemInspectHoldEnd'},'*')}catch(_){}
+    }
+  }
+  el.addEventListener('pointerdown',function(e){
+    cancelTimer();el.__ppaHeld=false;
+    sx=Number(e.clientX)||0;sy=Number(e.clientY)||0;
+    timer=setTimeout(function(){
+      timer=0;
+      var it=null;try{it=getItem()}catch(_){}
+      if(!it)return;
+      el.__ppaHeld=true;
+      try{parent.postMessage({type:'itemInspectHoldStart'},'*')}catch(_){}
+      try{parent.postMessage({type:'itemInspect',item:it,context:context||'Персонаж · инвентарь'},'*')}catch(_){}
+    },900);
+  },{passive:true});
+  el.addEventListener('pointermove',function(e){
+    var dx=(Number(e.clientX)||0)-sx,dy=(Number(e.clientY)||0)-sy;
+    if(dx*dx+dy*dy>144)cancelTimer();
+  },{passive:true});
+  el.addEventListener('pointerup',function(){cancelTimer();releasePreview()},{passive:true});
+  el.addEventListener('pointercancel',function(){cancelTimer();releasePreview()},{passive:true});
+  el.addEventListener('pointerleave',function(){cancelTimer();releasePreview()},{passive:true});
+  el.addEventListener('contextmenu',function(e){e.preventDefault();e.stopPropagation()},true);
+  el.addEventListener('click',function(e){
+    if(el.__ppaHeld){
+      e.preventDefault();e.stopImmediatePropagation();el.__ppaHeld=false;
+    }
+  },true);
+}
+
+var bagGrid=document.getElementById('bagGrid'),bagSlots=[];
+for(var i=0;i<100;i++){
+  var d=document.createElement('div');
+  d.className=i<50?'bagSlot':'bagSlot paid locked';
+  (function(idx,slot){
+    bindCharItemHold(slot,function(){
+      var v=_bagView[idx];
+      return v&&v.it?v.it:null;
+    },'Персонаж · сумка');
+    slot.onclick=function(){bagClick(idx)};
+  })(i,d);
+  bagSlots.push(d);bagGrid.appendChild(d);
+}
+['weapon','helmet','armor','gloves','ring','legs','boots','necklace','artifact','cloak','wings','pet'].forEach(function(slotName){
+  var slotEl=document.getElementById('eq_'+slotName);
+  if(slotEl)bindCharItemHold(slotEl,function(){return _inv.equipped[slotName]||null},'Персонаж · экипировка');
+});`)
+);
+
+if(!output.includes('class="ppaItemArtBg"') ||
+   !output.includes("background-image:url('+it.img+')") ||
+   !output.includes("function bindCharItemHold(el,getItem,context)") ||
+   !output.includes("type:'itemInspectHoldStart'") ||
+   !output.includes("type:'itemInspectHoldEnd'")) {
+  throw new Error('Character inventory native-menu removal did not apply');
 }
 /* ======================================================================== */
 
