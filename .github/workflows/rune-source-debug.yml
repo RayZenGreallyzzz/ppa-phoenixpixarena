@@ -9,45 +9,59 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect exact dungeon drop code
+      - name: Inspect exact dungeon drop functions
         shell: python
         run: |
           import gzip, pathlib, re
           src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode("utf-8")
 
-          def around(label, needle, before=2200, after=9000, limit=20):
-              print("\n===== "+label+" =====")
-              start=0
-              for n in range(limit):
-                  i=src.find(needle,start)
-                  if i<0: break
-                  a=max(0,i-before); b=min(len(src),i+after)
-                  print(f"\n--- {n+1} @ {i} ---\n"+src[a:b])
-                  start=i+len(needle)
+          def function_block(name, maxlen=16000):
+              pat=re.compile(r"function\s+"+re.escape(name)+r"\s*\([^)]*\)\s*\{")
+              m=pat.search(src)
+              if not m:
+                  print("\n===== "+name+" NOT FOUND =====")
+                  return
+              i=m.start(); depth=0; end=None; quote=None; esc=False
+              for j in range(m.end()-1,min(len(src),i+maxlen)):
+                  ch=src[j]
+                  if quote:
+                      if esc: esc=False
+                      elif ch=="\\": esc=True
+                      elif ch==quote: quote=None
+                      continue
+                  if ch in ("'",'"',chr(96)): quote=ch; continue
+                  if ch=="{": depth+=1
+                  elif ch=="}":
+                      depth-=1
+                      if depth==0:
+                          end=j+1; break
+              if end is None:end=min(len(src),i+maxlen)
+              print("\n===== "+name+" =====\n"+src[i:end])
 
-          for label,needle in [
-              ("gear chance function","v232GearChance"),
-              ("push gear","v232PushGear"),
-              ("drop loot","function dropLoot"),
-              ("mob drop info","function mobDropInfo"),
-              ("mob drop info assign","mobDropInfo="),
-              ("41-60 constants","V271_D41_"),
-              ("41-60 legendary maker","v271MakeDungeon41LegendaryItem"),
-              ("41-60 drop","v271PushDungeon41"),
-              ("active book chance","v232ActiveBookChance"),
-              ("passive book chance","v232PassiveBookChance"),
-              ("typed book","v232RollTypedBook"),
-              ("blue res","v232BlueRes2130"),
-              ("materials","pushMaterialDrop"),
-              ("teleport","Телепорт"),
-              ("premium sharpen","Премиум заточ"),
-              ("luck coin","Монета удачи")
-          ]:
-              around(label,needle)
+          sm=src.find('<script id="v232DropLordElitePatch">')
+          se=src.find('</script>',sm)
+          block=src[sm:se] if sm>=0 and se>sm else ''
+          print('===== V232 FUNCTION NAMES =====')
+          names=re.findall(r"function\s+([A-Za-z0-9_$]+)\s*\(",block)
+          print('\n'.join(names))
+          for name in names:
+              if re.search(r"(drop|chance|gear|book|info|blue|elite|lord|mob)",name,re.I):
+                  function_block(name)
 
-          print("\n===== function headers with drop/gear/book/dungeon41 =====")
-          for m in re.finditer(r"function\s+([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{",src):
-              name=m.group(1)
-              if re.search(r"(drop|gear|book|grimoire|dungeon41|v232|v271)",name,re.I):
-                  a=max(0,m.start()-300); b=min(len(src),m.start()+3500)
-                  print("\n--- "+name+" ---\n"+src[a:b])
+          print('\n===== V271 CONSTANTS =====')
+          for m in re.finditer(r"(?:const|let|var)\s+(V271_D41_[A-Z0-9_]+)\s*=\s*([^;]+);",src):
+              print(m.group(1)+' = '+m.group(2))
+
+          print('\n===== V271 FUNCTION NAMES =====')
+          vnames=[]
+          for m in re.finditer(r"function\s+(v271[A-Za-z0-9_$]+)\s*\(",src):
+              if m.group(1) not in vnames:vnames.append(m.group(1))
+          print('\n'.join(vnames))
+          for name in vnames:
+              if re.search(r"(drop|chance|gear|book|legend|dungeon41|info|loot)",name,re.I):
+                  function_block(name)
+
+          print('\n===== EXACT DROP ROW STRINGS =====')
+          for line in block.splitlines():
+              if re.search(r"(шмот|оруж|книг|ресурс|заточ|зель|телеп|руна|PPA|Монета|Свиток)",line,re.I):
+                  print(line)
