@@ -198,9 +198,23 @@
       }
       #ppaChatSend{height:31px;border:1px solid #885f32;border-radius:5px;background:linear-gradient(#4b301c,#24170f);color:#ffe0ad;font:bold 9px Georgia,serif}
       @media (max-width:600px){
-        #ppaChatRoot.ppaChatV2Root{width:min(355px,calc(100vw - 14px))!important;left:7px!important;bottom:92px!important}
-        #ppaChatRoot.ppaChatV2Root.nativeTyping{bottom:calc(6px + var(--ppa-chat-kb))!important}
-        #ppaChatBoxV2{height:228px}
+        #ppaChatRoot.ppaChatV2Root{
+          width:min(330px,calc(100vw - 18px))!important;
+          left:9px!important;
+          bottom:178px!important;
+        }
+        #ppaChatRoot.ppaChatV2Root.nativeTyping{
+          left:7px!important;
+          width:min(355px,calc(100vw - 14px))!important;
+          bottom:calc(6px + var(--ppa-chat-kb))!important;
+        }
+        #ppaChatBoxV2{height:176px}
+        #ppaChatBoxV2 .ppaChatTabs{gap:2px;padding:3px 4px}
+        #ppaChatBoxV2 .ppaChatTab,#ppaChatBoxV2 .ppaFriendsTab{height:23px;font-size:6.7px}
+        #ppaChatBoxV2 .ppaChatTop{padding:4px 5px 3px}
+        #ppaChatComposer{padding:4px}
+        #ppaChatRoot.ppaChatV2Root #ppaChatNativeInput{height:29px!important;min-height:29px!important;font-size:12px!important;line-height:29px!important}
+        #ppaChatSend{height:29px}
       }
     `;document.head.appendChild(st);
   }
