@@ -452,11 +452,7 @@ async function ppaOpenGramTonConnect(){
       gramWalletLink(address);
       return;
     }
-    if(typeof ui.openSingleWalletModal==='function'){
-      await ui.openSingleWalletModal('gramwallet');
-    }else{
-      await ui.openModal();
-    }
+    await ui.openModal();
   }catch(err){
     gramWalletResult(false,'Gram Wallet не открылся: '+String(err&&err.message||err||'неизвестно'));
   }
@@ -488,11 +484,11 @@ ppaPatchRegex(
 ppaPatchRegex(
   'gram wallet ton connect labels',
   /Введи TON-адрес Gram Wallet\. В HTML-прототипе сохраняется привязка к текущему Telegram ID; серверная проверка подключается отдельно\./,
-  'Подключение выполняется через TON Connect. Адрес Gram Wallet определяется автоматически после подтверждения в кошельке.'
+  'Подключение выполняется через TON Connect. Выбери Wallet in Telegram / DeFi Account или другой TON-кошелёк; адрес определяется автоматически.'
 );
 
 if(!output.includes('tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js') ||
-   !output.includes("openSingleWalletModal('gramwallet')") ||
+   !output.includes("await ui.openModal()") ||
    !output.includes("d.type==='gramWalletTonConnectOpen'") ||
    !output.includes("d.type==='gramWalletTonConnectDisconnect'") ||
    !output.includes(ppaEscapeSrcdocCode("type:'gramWalletTonConnectOpen'")) ||
