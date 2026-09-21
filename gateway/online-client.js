@@ -250,7 +250,14 @@
         try{gramWalletResult(false,'Минимальный вывод — 15 Gram (15 TON)')}catch(_){}
         return Promise.reject(new Error('Минимальный вывод — 15 Gram (15 TON)'));
       }
-      return PPA.ppaWalletWithdraw(payload);
+      return PPA.ppaWalletWithdraw(payload).then(function(r){
+        if(r&&r.ok){
+          if(Number.isFinite(Number(r.gameGram)))INV.gram=Math.max(0,Number(r.gameGram)||0);
+          try{saveGame();sendInvState();sendPremiumState();sendGramWalletState();updateUI()}catch(_){}
+          try{gramWalletResult(true,r.message||'Заявка на вывод создана')}catch(_){}
+        }
+        return r;
+      });
     };
     var _openWallet=openGramWallet;openGramWallet=function(){_openWallet();setTimeout(refreshWallet,30);setTimeout(refreshWallet,2500);setTimeout(refreshWallet,7000);setTimeout(attachGramResetGesture,120)};window.openGramWallet=openGramWallet;
     premiumWalletLink=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletDeposit=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletWithdraw=function(){try{closePremiumStore()}catch(_){};openGramWallet()};
