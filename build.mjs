@@ -4629,6 +4629,12 @@ try{
 
 function itemVisual(it,size){
   size=size||34;
+  if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){
+    try{
+      var _ppaCharSlagArt=parent.PPA_FART_SLAG_IMG||'';
+      if(_ppaCharSlagArt)it.img=_ppaCharSlagArt;
+    }catch(_){}
+  }
   if(it&&it.img){
     var sc=1,flt='none';
     if(it.rarity==='epic'&&it.slot==='weapon'){
@@ -4954,6 +4960,11 @@ ppaPatchRegex(
   /var bc=document\.querySelector\(&#x27;\.bagCount&#x27;\);/,
   "if(bagGrid)bagGrid.__ppaSelectedIndex=(_sel>=0?_sel:-1);\n  var bc=document.querySelector(&#x27;.bagCount&#x27;);"
 );
+
+if(!output.includes(ppaEscapeSrcdocCode("var _ppaCharSlagArt=parent.PPA_FART_SLAG_IMG||''")) ||
+   !output.includes(ppaEscapeSrcdocCode("if(_ppaCharSlagArt)it.img=_ppaCharSlagArt"))) {
+  throw new Error('Character slag canvas art bridge did not apply');
+}
 
 if(!output.includes("function ppaSetBagVisualSelection(i)") ||
    !output.includes("ppaSetBagVisualSelection(i);") ||
