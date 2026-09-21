@@ -7,7 +7,7 @@
   var STORE='ppaChatV2History';
   var TARGET_STORE='ppaChatV2PrivateTarget';
   var state={channel:'general',collapsed:true,unread:{general:0,clan:0,party:0,private:0},history:{general:[],clan:[],party:[],private:[]},target:''};
-  var root=null,box=null,nativeInput=null,visualInput=null,msgs=null,targetRow=null,targetInput=null,collapseBtn=null,launcher=null,sendBtn=null,dismissLayer=null;
+  var root=null,box=null,nativeInput=null,visualInput=null,msgs=null,targetRow=null,targetInput=null,collapseBtn=null,launcher=null,sendBtn=null;
   var typing=false,legacyNativeInput=false,typingShiftY=0;
 
   function escText(v){return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]/g,'').slice(0,180)}
@@ -84,7 +84,6 @@
     state.collapsed=!!v;
     if(box)box.classList.toggle('collapsed',state.collapsed);
     if(launcher)launcher.classList.toggle('hidden',!state.collapsed);
-    if(dismissLayer)dismissLayer.classList.toggle('on',!state.collapsed);
     if(!state.collapsed){
       state.unread[state.channel]=0;
       renderUnread();
@@ -158,7 +157,9 @@
     if(root)root.style.removeProperty('transform');
   }
   function menuVisible(){
-    var open=['#gramWalletPanel.open','#eventsPanel.open','#premiumPanel.open'];
+    var open=['#gramWalletPanel.open','#eventsPanel.open','#premiumPanel.open',
+      '#inventoryPanel.open','#inventoryModal.open','#characterPanel.open','#characterMenu.open',
+      '#invPanel.open','#invModal.open'];
     for(var i=0;i<open.length;i++){try{if(document.querySelector(open[i]))return true}catch(_){}}
     var frames=['#blacksmithFrame','#auctionFrame','#blackmarketFrame'];
     for(var j=0;j<frames.length;j++){
@@ -173,7 +174,6 @@
     if(!root)return;
     var hide=menuVisible();
     root.classList.toggle('suppressed',hide);
-    if(dismissLayer)dismissLayer.classList.toggle('on',!state.collapsed&&!hide);
     if(hide){
       try{if(document.activeElement===nativeInput||document.activeElement===targetInput)document.activeElement.blur()}catch(_){}
     }
@@ -188,10 +188,6 @@
         font-family:Arial,sans-serif
       }
       #ppaChatRoot.ppaChatV2Root:not(.nativeTyping){top:auto!important;bottom:178px!important}
-      #ppaChatDismiss{
-        position:fixed;inset:0;z-index:38;display:none;background:transparent;pointer-events:auto;touch-action:manipulation
-      }
-      #ppaChatDismiss.on{display:block}
       #ppaChatRoot.ppaChatV2Root.suppressed{display:none!important}
       #ppaChatRoot.ppaChatV2Root > :not(#ppaChatBoxV2):not(#ppaChatNativeInput):not(#ppaChatLauncher){display:none!important}
       #ppaChatBox{display:none!important;visibility:hidden!important;pointer-events:none!important}
@@ -312,15 +308,9 @@
 
     launcher=document.createElement('button');launcher.id='ppaChatLauncher';launcher.type='button';launcher.textContent='💬 ЧАТ';root.appendChild(launcher);
 
-    dismissLayer=document.getElementById('ppaChatDismiss');
-    if(!dismissLayer){
-      dismissLayer=document.createElement('div');
-      dismissLayer.id='ppaChatDismiss';
-      document.body.appendChild(dismissLayer);
-    }
-    dismissLayer.addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation()});
-    dismissLayer.addEventListener('pointerup',function(e){e.preventDefault();e.stopPropagation();setCollapsed(true)});
-    dismissLayer.addEventListener('click',function(e){e.preventDefault();e.stopPropagation()});
+    // Remove the old full-screen transparent dismiss layer if a hot reload left it behind.
+    // It used to sit over inventory/menus and could make them look frozen.
+    try{var staleDismiss=document.getElementById('ppaChatDismiss');if(staleDismiss)staleDismiss.remove()}catch(_){}
 
     visualInput=box.querySelector('#ppaChatVisualInput');
     msgs=box.querySelector('#ppaChatMessages');targetRow=box.querySelector('#ppaChatPrivateTargetRow');targetInput=box.querySelector('#ppaChatPrivateTarget');
@@ -362,6 +352,17 @@
     targetInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();try{nativeInput.focus({preventScroll:true})}catch(_){nativeInput.focus()}}});
 
     ['pointerdown','touchstart','click'].forEach(function(type){root.addEventListener(type,function(e){e.stopPropagation()},false)});
+
+    // Close an open chat by tapping anywhere outside it, without swallowing
+    // the tap. This keeps inventory, item popups, joystick and other menus usable.
+    document.addEventListener('pointerup',function(e){
+      try{
+        if(state.collapsed||!root||root.classList.contains('suppressed'))return;
+        var t=e&&e.target;
+        if(t&&(t===root||root.contains(t)))return;
+        setCollapsed(true);
+      }catch(_){}
+    },true);
 
     syncVisualInput();
     if(window.visualViewport){
