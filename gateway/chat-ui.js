@@ -193,7 +193,8 @@
         position:static!important;left:auto!important;top:auto!important;right:auto!important;bottom:auto!important;transform:none!important;
         opacity:1!important;width:100%!important;height:31px!important;min-width:0!important;min-height:31px!important;
         margin:0!important;padding:0 8px!important;box-sizing:border-box!important;border:1px solid #6f5337!important;border-radius:5px!important;
-        background:#0c0907!important;color:#efe0c8!important;caret-color:#ffd18d!important;font:12px/31px Arial,sans-serif!important;outline:none!important;overflow:visible!important
+        background:#0c0907!important;color:#efe0c8!important;caret-color:#ffd18d!important;font:12px/31px Arial,sans-serif!important;outline:none!important;overflow:visible!important;
+        pointer-events:auto!important;touch-action:manipulation!important;user-select:text!important;-webkit-user-select:text!important
       }
       #ppaChatSend{height:31px;border:1px solid #885f32;border-radius:5px;background:linear-gradient(#4b301c,#24170f);color:#ffe0ad;font:bold 9px Georgia,serif}
       @media (max-width:600px){
@@ -214,13 +215,21 @@
     root.style.setProperty('pointer-events','auto','important');
 
     var oldInput=document.getElementById('ppaChatNativeInput');
-    if(oldInput){
-      var clone=oldInput.cloneNode(false);oldInput.parentNode.replaceChild(clone,oldInput);nativeInput=clone;
-    }else{
-      nativeInput=document.createElement('input');nativeInput.id='ppaChatNativeInput';root.appendChild(nativeInput);
-    }
-    nativeInput.type='text';nativeInput.maxLength=180;nativeInput.autocomplete='off';nativeInput.spellcheck=false;
-    nativeInput.setAttribute('enterkeyhint','send');nativeInput.setAttribute('inputmode','text');nativeInput.placeholder='Сообщение…';
+    if(oldInput&&oldInput.parentNode){try{oldInput.parentNode.removeChild(oldInput)}catch(_){}}
+    nativeInput=document.createElement('input');
+    nativeInput.id='ppaChatNativeInput';
+    nativeInput.type='text';
+    nativeInput.maxLength=180;
+    nativeInput.autocomplete='off';
+    nativeInput.spellcheck=false;
+    nativeInput.disabled=false;
+    nativeInput.readOnly=false;
+    nativeInput.tabIndex=0;
+    nativeInput.setAttribute('enterkeyhint','send');
+    nativeInput.setAttribute('inputmode','text');
+    nativeInput.setAttribute('autocapitalize','sentences');
+    nativeInput.placeholder='Сообщение…';
+    root.appendChild(nativeInput);
 
     box=document.createElement('div');box.id='ppaChatBoxV2';box.className='collapsed';
     box.innerHTML='<div class="ppaChatTop"><div class="ppaChatTitle">💬 PPA CHAT</div><button id="ppaChatMin" type="button">—</button></div>'+
@@ -247,6 +256,17 @@
     collapseBtn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();setCollapsed(true)});
     sendBtn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();dispatchSend()});
 
+    nativeInput.addEventListener('pointerdown',function(e){
+      try{e.stopPropagation()}catch(_){}
+      try{nativeInput.focus({preventScroll:true})}catch(_){try{nativeInput.focus()}catch(__){}}
+    });
+    nativeInput.addEventListener('touchstart',function(e){
+      try{e.stopPropagation()}catch(_){}
+    },{passive:true});
+    nativeInput.addEventListener('click',function(e){
+      try{e.stopPropagation()}catch(_){}
+      try{nativeInput.focus({preventScroll:true})}catch(_){try{nativeInput.focus()}catch(__){}}
+    });
     nativeInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping');syncKeyboardOffset()});
     nativeInput.addEventListener('blur',function(){typing=false;root.classList.remove('nativeTyping');syncKeyboardOffset()});
     nativeInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();dispatchSend()}});
