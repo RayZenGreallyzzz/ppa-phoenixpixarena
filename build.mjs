@@ -4571,9 +4571,15 @@ if(!output.includes("var PPA_RUNE_INFO_HOLD_MS=650") ||
 }
 /* ======================================================================== */
 
-const ppaCharacterSlagImgMatch=output.match(/const FART_SLAG_IMG='(data:image\/webp;base64,[A-Za-z0-9+/=]+)';/);
-const ppaCharacterSlagImg=ppaCharacterSlagImgMatch?ppaCharacterSlagImgMatch[1]:'';
-if(!ppaCharacterSlagImg)throw new Error('Fart slag image data not found before character inventory patch');
+const ppaBuildSelf=fs.readFileSync(path.join(ROOT,'build.mjs'),'utf8');
+const ppaSlagSourceAnchor=ppaBuildSelf.indexOf("'pickaxe image constants'");
+const ppaSlagDataPrefix="const FART_SLAG_IMG='data:image/webp;base64,";
+const ppaSlagDataStart=ppaSlagSourceAnchor>=0?ppaBuildSelf.indexOf(ppaSlagDataPrefix,ppaSlagSourceAnchor):-1;
+const ppaSlagDataEnd=ppaSlagDataStart>=0?ppaBuildSelf.indexOf("';",ppaSlagDataStart+ppaSlagDataPrefix.length):-1;
+const ppaCharacterSlagImg=(ppaSlagDataStart>=0&&ppaSlagDataEnd>ppaSlagDataStart)
+  ?ppaBuildSelf.slice(ppaSlagDataStart+"const FART_SLAG_IMG='".length,ppaSlagDataEnd)
+  :'';
+if(!ppaCharacterSlagImg.startsWith('data:image/webp;base64,'))throw new Error('Fart slag image data not found in build source');
 
 /* === CHARACTER INVENTORY NATIVE-MENU REMOVAL + HOLD PREVIEW ============= */
 // The character iframe used real <img> elements for every item. Telegram WebView
