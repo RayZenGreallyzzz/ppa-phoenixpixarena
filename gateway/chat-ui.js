@@ -196,7 +196,7 @@
       #ppaChatRoot.ppaChatV2Root > :not(#ppaChatBoxV2):not(#ppaChatNativeInput):not(#ppaChatLauncher){display:none!important}
       #ppaChatBox{display:none!important;visibility:hidden!important;pointer-events:none!important}
       #ppaChatBoxV2{
-        width:100%;height:238px;box-sizing:border-box;border:1px solid rgba(174,112,50,.72);border-radius:8px;
+        width:100%;height:278px;box-sizing:border-box;border:1px solid rgba(174,112,50,.72);border-radius:8px;
         background:rgba(10,7,6,.78);box-shadow:0 6px 24px rgba(0,0,0,.48),inset 0 0 20px rgba(94,45,14,.12);
         backdrop-filter:blur(3px);overflow:hidden;display:flex;flex-direction:column;color:#eadbc4
       }
@@ -256,7 +256,7 @@
           width:min(315px,calc(100vw - 30px))!important;
           max-width:calc(100vw - 30px)!important;
         }
-        #ppaChatBoxV2{height:176px}
+        #ppaChatBoxV2{height:222px}
         #ppaChatBoxV2 .ppaChatTabs{gap:2px;padding:3px 4px}
         #ppaChatBoxV2 .ppaChatTab,#ppaChatBoxV2 .ppaFriendsTab{height:23px;font-size:6.7px}
         #ppaChatBoxV2 .ppaChatTop{padding:4px 5px 3px}
