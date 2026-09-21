@@ -36,8 +36,18 @@
 
   function applyWalletState(r){
     try{
-      var p=gramWalletProfile();p.connected=!!(r&&r.connected);p.address=String((r&&r.address)||'');p.walletGram=null;
-      if(r&&Array.isArray(r.history))p.history=r.history.slice(-100);p.updatedAt=Date.now();saveGame();sendGramWalletState();sendPremiumState();
+      var p=gramWalletProfile();
+      var serverConnected=!!(r&&r.connected);
+      var tonConnected=!!(window.PPA_TON_CONNECTED&&window.PPA_TON_UI&&window.PPA_TON_UI.connected);
+      p.serverConnected=serverConnected;
+      // A saved server address is NOT an active wallet session.
+      // Show "connected" only after TON Connect has actually restored/connected.
+      p.connected=serverConnected&&tonConnected;
+      p.address=String((r&&r.address)||'');
+      p.walletGram=null;
+      if(r&&Array.isArray(r.history))p.history=r.history.slice(-100);
+      p.updatedAt=Date.now();
+      saveGame();sendGramWalletState();sendPremiumState();
     }catch(e){console.warn('Wallet state',e)}
   }
   async function refreshWallet(){if(!online()||!PPA.ppaWalletState)return;try{applyWalletState(await PPA.ppaWalletState())}catch(e){console.warn('Wallet sync',e)}}
@@ -133,7 +143,7 @@
       return r;
     };
 
-    gramWalletLink=function(address){if(!PPA.ppaWalletLink){gramWalletResult(false,'Сервер Wallet недоступен');return}PPA.ppaWalletLink(address).then(function(r){applyWalletState(r);gramWalletResult(true,r.message||'Gram Wallet привязан')}).catch(function(e){gramWalletResult(false,msg(e))})};
+    gramWalletLink=function(address){if(!PPA.ppaWalletLink){gramWalletResult(false,'Сервер Wallet недоступен');return}PPA.ppaWalletLink(address).then(function(r){applyWalletState(r);gramWalletResult(true,'TON Connect подключён · адрес синхронизирован с сервером')}).catch(function(e){gramWalletResult(false,msg(e))})};
     gramWalletUnlink=function(){if(!PPA.ppaWalletUnlink){gramWalletResult(false,'Сервер Wallet недоступен');return}PPA.ppaWalletUnlink().then(function(r){applyWalletState(r);gramWalletResult(true,r.message||'Gram Wallet отвязан')}).catch(function(e){gramWalletResult(false,msg(e))})};
     window.PPA_GRAM_WALLET_DEPOSIT_HANDLER=function(payload){return PPA.ppaWalletDeposit(payload)};
     window.PPA_GRAM_WALLET_WITHDRAW_HANDLER=function(payload){return PPA.ppaWalletWithdraw(payload)};
