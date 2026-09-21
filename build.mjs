@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v458-rune-hold-smith-art-race-fix-20260921';
+const CLIENT_BUILD = 'v459-rune-fusion-hold-info-clean-ui-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3560,6 +3560,46 @@ ppaPatchRegex(
     return 'INV.runes → runeUiState().inventory';
   };
 
+  function ppaFusionRuneInfoText(d){
+    if(!d)return '';
+    var lines=[];
+    var text=d.description||d.desc||d.valueText||d.effectText||d.bonusText||
+             d.effectDescription||d.tooltip||d.info||'';
+    if(!text&&typeof d.effect==='string')text=d.effect;
+    if(!text&&typeof d.bonus==='string')text=d.bonus;
+    if(!text&&typeof d.stat==='string'){
+      var vv=d.value!=null?d.value:(d.amount!=null?d.amount:'');
+      text=String(d.stat)+(vv!==''?' '+String(vv):'');
+    }
+    if(text)lines.push(String(text));
+    if(d.stats&&typeof d.stats==='object'){
+      var ss=[];
+      try{
+        Object.keys(d.stats).forEach(function(k){
+          var v=d.stats[k];
+          if(v==null||v===''||typeof v==='object')return;
+          ss.push(String(k)+': '+String(v));
+        });
+      }catch(_){}
+      if(ss.length)lines.push(ss.join(' · '));
+    }
+    if(!lines.length){
+      var skip=/^(id|uid|key|refId|name|title|label|runeName|rarity|quality|tier|img|image|src|icon|iconImg|count|qty|amount|rune|isRune|kind|type|category)$/i;
+      var extra=[];
+      try{
+        Object.keys(d).forEach(function(k){
+          if(skip.test(k))return;
+          var v=d[k];
+          if(v==null||v===''||typeof v==='object'||typeof v==='function'||typeof v==='boolean')return;
+          if(String(v).length>80)return;
+          extra.push(String(k)+': '+String(v));
+        });
+      }catch(_){}
+      if(extra.length)lines.push(extra.slice(0,4).join(' · '));
+    }
+    return lines.join('\n');
+  }
+
   window.PPA_RUNE_FUSION_LIST=function(){
     try{normalizeRuneState()}catch(_){}
     var out=[];
@@ -3582,7 +3622,8 @@ ppaPatchRegex(
         eligible:count>=2,
         img:d.img||'',
         icon:d.icon||'◇',
-        valueText:d.valueText||''
+        valueText:d.valueText||'',
+        infoText:ppaFusionRuneInfoText(d)
       });
     });
     out.sort(function(a,b){
@@ -3645,6 +3686,8 @@ ppaPatchRegex(
 if(!output.includes("id=\"ppaRuneFusionExactSource\"") ||
    !output.includes("INV.runes → runeUiState().inventory") ||
    !output.includes("var CHANCE={common:.37,uncommon:.30,rare:.22}") ||
+   !output.includes("function ppaFusionRuneInfoText(d)") ||
+   !output.includes("infoText:ppaFusionRuneInfoText(d)") ||
    !output.includes("INV.runes[d.key]=have-2")) {
   throw new Error('Exact INV.runes fusion source patch did not apply');
 }
@@ -3683,6 +3726,8 @@ ppaPatchRegex(
     '#ppaRuneFusionPanel{width:min(580px,96vw);max-height:88vh;overflow:auto;border:1px solid #93602c;border-radius:10px;background:#120d09;color:#e6c58b;padding:12px;box-sizing:border-box;box-shadow:0 12px 38px #000}'+
     '.ppaRFrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 7px;margin:6px 0;border:1px solid #5a4027;border-radius:7px;background:#0c0a08}'+
     '.ppaRFbtn{height:34px;border:1px solid #92612d;border-radius:6px;background:#35200e;color:#f0cb7c;font:bold 10px monospace;padding:0 10px}.ppaRFbtn:disabled{opacity:.4}'+
+    '#ppaFusionRuneHoldInfo{position:fixed;z-index:2147483500;left:50%;top:50%;transform:translate(-50%,-50%);width:min(390px,88vw);max-height:70vh;overflow:auto;padding:13px 14px;border:1px solid #95622d;border-radius:10px;background:rgba(16,11,8,.98);box-shadow:0 14px 38px rgba(0,0,0,.82);display:none;box-sizing:border-box;pointer-events:none;color:#d8bd8c}'+
+    '#ppaFusionRuneHoldInfo.on{display:block}#ppaFusionRuneHoldName{font:bold 15px Georgia,serif;color:#f1ce82;text-align:center;margin-bottom:7px}#ppaFusionRuneHoldText{white-space:pre-line;font:10px/1.55 monospace;color:#cdb892;text-align:center}#ppaFusionRuneHoldHint{margin-top:8px;font:8px monospace;color:#776a59;text-align:center}'+
     '@media(max-width:480px){#ppaRFList>div[style*="grid-template-columns"]{grid-template-columns:repeat(3,minmax(0,1fr))!important}}';
   (document.head||document.documentElement).appendChild(st);
 
@@ -3703,8 +3748,53 @@ ppaPatchRegex(
   '</div>';
   document.body.appendChild(shade);
 
-  shade.querySelector('#ppaRFClose').onclick=function(){shade.classList.remove('on')};
+  var holdInfo=document.createElement('div');
+  holdInfo.id='ppaFusionRuneHoldInfo';
+  holdInfo.innerHTML='<div id="ppaFusionRuneHoldName"></div><div id="ppaFusionRuneHoldText"></div><div id="ppaFusionRuneHoldHint">отпусти · окно закроется</div>';
+  document.body.appendChild(holdInfo);
+
+  shade.querySelector('#ppaRFClose').onclick=function(){shade.classList.remove('on');holdInfo.classList.remove('on')};
   shade.addEventListener('click',function(e){if(e.target===shade)shade.classList.remove('on')});
+}
+function ppaFusionRuneHoldShow(x){
+  var box=document.getElementById('ppaFusionRuneHoldInfo');
+  if(!box||!x)return;
+  var rarity=['Серая','Зелёная','Синяя','Фиолетовая','Легендарная'];
+  box.querySelector('#ppaFusionRuneHoldName').textContent=String(x.name||'Руна');
+  var lines=[];
+  lines.push(String(rarity[x.rarity]||'')+' руна');
+  if(x.infoText)lines.push(String(x.infoText));
+  else if(x.valueText)lines.push(String(x.valueText));
+  lines.push('В наличии: '+String(x.count||0));
+  box.querySelector('#ppaFusionRuneHoldText').textContent=lines.filter(Boolean).join('\n');
+  box.classList.add('on');
+}
+function ppaFusionRuneHoldHide(){
+  var box=document.getElementById('ppaFusionRuneHoldInfo');
+  if(box)box.classList.remove('on');
+}
+function ppaFusionRuneBindHold(card,x){
+  var timer=0,sx=0,sy=0,shown=false;
+  function clear(hide){
+    if(timer){clearTimeout(timer);timer=0}
+    if(hide&&shown){ppaFusionRuneHoldHide();shown=false}
+  }
+  card.addEventListener('pointerdown',function(e){
+    clear(true);sx=Number(e.clientX)||0;sy=Number(e.clientY)||0;
+    timer=setTimeout(function(){
+      timer=0;shown=true;card.__ppaSuppressFusionClick=true;
+      ppaFusionRuneHoldShow(x);
+      try{if(navigator.vibrate)navigator.vibrate(18)}catch(_){}
+    },650);
+  },true);
+  card.addEventListener('pointermove',function(e){
+    if(!timer)return;
+    var dx=(Number(e.clientX)||0)-sx,dy=(Number(e.clientY)||0)-sy;
+    if(dx*dx+dy*dy>196)clear(false);
+  },true);
+  card.addEventListener('pointerup',function(){clear(true)},true);
+  card.addEventListener('pointercancel',function(){clear(true)},true);
+  card.addEventListener('contextmenu',function(e){e.preventDefault();e.stopImmediatePropagation()},true);
 }
 function openRuneFusionPanel(){
   var shade=document.getElementById('ppaRuneFusionShade');
@@ -3724,19 +3814,14 @@ function openRuneFusionPanel(){
     title.textContent='ДОСТУПНЫЕ РУНЫ';
     title.style.cssText='margin:8px 0 7px;text-align:center;font:bold 12px Georgia,serif;color:#e8c778;letter-spacing:.08em';
     list.appendChild(title);
-    var source=document.createElement('div');
-    var sourceText='';try{sourceText=parent.PPA_RUNE_FUSION_SOURCE?parent.PPA_RUNE_FUSION_SOURCE():''}catch(_){}
-    source.textContent=sourceText&&sourceText!=='ДОСТУПНЫЕ РУНЫ'?('Источник: '+sourceText):'';
-    source.style.cssText='min-height:10px;margin:-3px 0 6px;text-align:center;font:7px monospace;color:#766b5d';
-    list.appendChild(source);
     var grid=document.createElement('div');
     grid.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';
     rows.forEach(function(x){
       var pct=Math.round((Number(x.chance)||0)*100);
       var card=document.createElement('button');
       card.type='button';
-      card.disabled=!x.eligible;
-      card.style.cssText='position:relative;min-height:112px;padding:7px 5px;border:1px solid #76522a;border-radius:7px;background:#0c0b0a;color:#d9bd88;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;overflow:hidden';
+      card.disabled=false;
+      card.style.cssText='position:relative;min-height:112px;padding:7px 5px;border:1px solid #76522a;border-radius:7px;background:#0c0b0a;color:#d9bd88;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;overflow:hidden;opacity:'+(x.eligible?'1':'.72');
       var art=document.createElement('div');
       art.style.cssText='width:54px;height:54px;background-position:center;background-repeat:no-repeat;background-size:contain;pointer-events:none';
       if(x.img)art.style.backgroundImage='url("'+String(x.img).replace(/"/g,'%22')+'")';
@@ -3748,8 +3833,10 @@ function openRuneFusionPanel(){
       info.textContent='×'+x.count+' · '+rarity[x.rarity]+' · '+pct+'%';
       info.style.cssText='font:8px monospace;color:'+(x.eligible?'#d9bd88':'#766b5d')+';text-align:center;pointer-events:none';
       card.appendChild(art);card.appendChild(name);card.appendChild(info);
+      ppaFusionRuneBindHold(card,x);
       card.onclick=function(){
-        if(!x.eligible)return;
+        if(card.__ppaSuppressFusionClick){card.__ppaSuppressFusionClick=false;return}
+        if(!x.eligible){msg.textContent='Для слияния нужны 2 одинаковые руны';return}
         card.disabled=true;var r;
         try{r=parent.PPA_RUNE_FUSION_TRY(x.id)}catch(e){r={ok:false,message:'Ошибка слияния'}}
         msg.textContent=(r&&r.message)||'';
@@ -3814,6 +3901,8 @@ function inspectSmithItem(it,context){`)
 if(!output.includes("function ppaInstallRuneFusionTab()") ||
    !output.includes("ppaRuneFusionTab") ||
    !output.includes("function openRuneFusionPanel()") ||
+   !output.includes("function ppaFusionRuneBindHold(card,x)") ||
+   !output.includes("ppaFusionRuneHoldInfo") ||
    !output.includes("СЛИЯНИЕ РУН") ||
    !output.includes("ДОСТУПНЫЕ РУНЫ")) {
   throw new Error('Direct blacksmith rune fusion tab did not apply');
