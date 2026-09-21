@@ -26,6 +26,7 @@ async function ensureSchema(env) {
     reviewed_at INTEGER NOT NULL DEFAULT 0,
     paid_at INTEGER NOT NULL DEFAULT 0
   )`).run();
+  try { await env.DB.prepare('ALTER TABLE withdraw_requests ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0').run(); } catch (_) {}
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_withdraw_requests_status_created ON withdraw_requests(status, created_at)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_withdraw_requests_user ON withdraw_requests(telegram_id, created_at)').run();
 }
@@ -60,7 +61,7 @@ function statusText(status) {
 }
 function requestText(r) {
   return [
-    '💸 PPA · ЗАЯВКА НА ВЫВОД','',
+    (Number(r.is_test) === 1 ? '🧪 PPA · ТЕСТОВАЯ ЗАЯВКА НА ВЫВОД' : '💸 PPA · ЗАЯВКА НА ВЫВОД'),'',
     'Статус: ' + statusText(r.status),
     'Игрок: ' + (r.nickname || ('ID ' + r.telegram_id)),
     'Telegram ID: ' + r.telegram_id,
@@ -105,6 +106,14 @@ async function refundRequest(env, requestId, reviewerId) {
     if (req.status === 'rejected') return { ok: true, row: req, message: 'Заявка уже отклонена.' };
     if (req.status === 'paid') return { ok: false, message: 'Выплаченный вывод нельзя отклонить.' };
     if (req.status !== 'pending' && req.status !== 'approved') return { ok: false, message: 'Этот статус нельзя отклонить.' };
+
+    if (Number(req.is_test) === 1) {
+      const now = Date.now();
+      await env.DB.prepare("UPDATE withdraw_requests SET status='rejected',reviewer_id=?1,reviewed_at=?2 WHERE id=?3 AND is_test=1 AND status IN ('pending','approved')")
+        .bind(String(reviewerId), now, requestId).run();
+      const after = await env.DB.prepare('SELECT * FROM withdraw_requests WHERE id=?1').bind(requestId).first();
+      return { ok: true, row: after, message: 'Тестовая заявка отклонена. Игровой баланс не менялся.' };
+    }
 
     const save = await env.DB.prepare('SELECT version,state_json FROM saves WHERE telegram_id=?1').bind(req.telegram_id).first();
     if (!save) return { ok: false, message: 'Сейв игрока не найден — возврат не выполнен.' };
@@ -155,13 +164,23 @@ async function handleMessage(env, message) {
   }
   if (/^\/pending(?:@\w+)?$/i.test(text)) return listRequests(env, chatId, 'pending');
   if (/^\/approved(?:@\w+)?$/i.test(text)) return listRequests(env, chatId, 'approved');
+  if (/^\/testwithdraw(?:@\w+)?$/i.test(text)) {
+    const id = 'wd_' + crypto.randomUUID();
+    const now = Date.now();
+    await env.DB.prepare(`INSERT INTO withdraw_requests(id,telegram_id,nickname,wallet_address,amount_gram,fee_gram,payout_gram,status,reviewer_id,created_at,reviewed_at,paid_at,is_test)
+      VALUES(?1,?2,'TEST ADMIN','TEST_ONLY_NO_REAL_PAYOUT',15,1.5,13.5,'pending','',?3,0,0,1)`)
+      .bind(id, String(fromId), now).run();
+    const row = await env.DB.prepare('SELECT * FROM withdraw_requests WHERE id=?1').bind(id).first();
+    await sendCard(env, chatId, row);
+    return;
+  }
   const pending = await env.DB.prepare("SELECT COUNT(*) AS n FROM withdraw_requests WHERE status='pending'").first();
   const approved = await env.DB.prepare("SELECT COUNT(*) AS n FROM withdraw_requests WHERE status='approved'").first();
   await tg(env, 'sendMessage', {
     chat_id: chatId,
     text: '🤖 PPA Withdraw Admin\n\nОжидают решения: ' + (Number(pending && pending.n) || 0) +
       '\nОдобрены, ждут выплаты: ' + (Number(approved && approved.n) || 0) +
-      '\n\n/pending — новые заявки\n/approved — одобренные заявки'
+      '\n\n/pending — новые заявки\n/approved — одобренные заявки\n/testwithdraw — тестовая заявка 15 Gram без списания'
   });
 }
 
@@ -203,7 +222,8 @@ export async function handleWithdrawBotRequest(request, env) {
         commands: [
           { command: 'start', description: 'Статус бота и твой доступ' },
           { command: 'pending', description: 'Новые заявки на вывод' },
-          { command: 'approved', description: 'Одобренные заявки к выплате' }
+          { command: 'approved', description: 'Одобренные заявки к выплате' },
+          { command: 'testwithdraw', description: 'Тестовая заявка 15 Gram без списания' }
         ]
       });
       const me = await tg(env, 'getMe', {});
