@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v465-inventory-overlay-fix-20260922';
+const CLIENT_BUILD = 'v466-native-drops-fart-stability-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2016,6 +2016,21 @@ function updateFartZoneSystem(){
   }
   if(!FART_ZONE_STATE.ready)fartInitZone();
 
+  // Fart guard balance lives in the packed game scope so it can always reach EN.
+  // Apply exactly once per guard and preserve already-taken damage.
+  if(Array.isArray(EN)){
+    for(let _fi=0;_fi<EN.length;_fi++){
+      const _fg=EN[_fi];
+      if(!_fg||!_fg.isFartGuard||_fg.__ppaFartHpPlus8000===true)continue;
+      const _oldMax=Math.max(1,Number(_fg.mhp)||Number(_fg.hp)||1);
+      const _oldHp=Number(_fg.hp);
+      _fg.__ppaFartHpPlus8000=true;
+      _fg.__ppaFartHpBeforeBonus=_oldMax;
+      _fg.mhp=_oldMax+8000;
+      if(Number.isFinite(_oldHp)&&_oldHp>0)_fg.hp=Math.min(_fg.mhp,_oldHp+8000);
+    }
+  }
+
   const now=Date.now();
   const dt=Math.max(0,Math.min(250,now-(FART_ZONE_STATE.lastTick||now)));
   FART_ZONE_STATE.lastTick=now;
@@ -2844,6 +2859,7 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "    var n=GUARD_NAMES[skin]||'Страж Фарт-зоны';\n"+
 "    try{\n"+
 "      e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;e.__ppaFartCollisionRadius=([22,18,23,27,23][skin]||22);\n"+
+"      if(e.type&&typeof e.type==='object'){if(!e.__ppaFartOwnType){e.type=Object.assign({},e.type);e.__ppaFartOwnType=true}e.type.n=n;e.type.name=n;e.type.nm=n;e.type.title=n;e.type.label=n;e.type.displayName=n;e.type.mobName=n;e.type.typeName=n;}\n"+
 "      e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1;e.eliteWindowKey='';e.eliteMode='';e.eliteExpiresAt=0;e.eliteHpMultiplier=1;e.eliteCombatBonusApplied=false;\n"+
 "    }catch(_){}\n"+
 "    return skin;\n"+
@@ -2860,7 +2876,7 @@ const fartGuardRuntime = "<script id='ppaFartGuardVisuals'>\n"+
 "  window.PPA_FART_GUARD_SKIN=function(e){return skinOf(e);};\n"+
 "  function assignGuardIdentity(e){\n"+
 "    if(!e||!e.isFartGuard)return e;var skin=skinOf(e),n=GUARD_NAMES[skin]||'Страж Фарт-зоны';\n"+
-"    try{e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;e.__ppaFartNamed=true;e.__ppaFartCollisionRadius=([22,18,23,27,23][skin]||22);e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1;e.eliteWindowKey='';e.eliteMode='';e.eliteExpiresAt=0;e.eliteHpMultiplier=1;e.eliteCombatBonusApplied=false}catch(_){}\n"+
+"    try{e.name=n;e.n=n;e.nm=n;e.title=n;e.label=n;e.displayName=n;e.mobName=n;e.typeName=n;e.__ppaFartName=n;e.__ppaFartNamed=true;e.__ppaFartCollisionRadius=([22,18,23,27,23][skin]||22);if(e.type&&typeof e.type==='object'){if(!e.__ppaFartOwnType){e.type=Object.assign({},e.type);e.__ppaFartOwnType=true}e.type.n=n;e.type.name=n;e.type.nm=n;e.type.title=n;e.type.label=n;e.type.displayName=n;e.type.mobName=n;e.type.typeName=n;}e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1;e.eliteWindowKey='';e.eliteMode='';e.eliteExpiresAt=0;e.eliteHpMultiplier=1;e.eliteCombatBonusApplied=false}catch(_){}\n"+
 "    return e;\n"+
 "  }\n"+
 "  function installSpawnNameHook(){\n"+
@@ -2984,6 +3000,11 @@ if(!output.includes("window.__PPA_FART_LABEL_ENTITY=(e&&e.isFartGuard)?e:null") 
 if(!output.includes("e.isDungeonElite=false;e.isElite=false;e.elite=false;e.eliteVisualScale=1")) {
   throw new Error('Fart guard elite-state cleanup did not apply');
 }
+if(!output.includes("__ppaFartOwnType") ||
+   !output.includes("__ppaFartHpPlus8000=true") ||
+   !output.includes("_fg.mhp=_oldMax+8000")) {
+  throw new Error('Fart guard stable name/HP patch did not apply');
+}
 /* ======================================================================== */
 
 
@@ -2994,27 +3015,10 @@ const fartDropPanelRuntime = "<script id='ppaFartDropPanelFix'>\n"+
 "(function(){\n"+
 "  var prev=window.mobDropInfo;\n"+
 "  function pctGear(){try{if(typeof fartGuardGearDropChances==='function')return fartGuardGearDropChances()}catch(_){}return {epic:0,legendary:0,tier:'none'};}\n"+
-"  function fixGuardMenu(e){\n"+
-"    var name=e&&e.__ppaFartName?String(e.__ppaFartName):'Страж Фарт-зоны';\n"+
-"    try{if(window.PPA_FART_GUARD_NAME)name=window.PPA_FART_GUARD_NAME(e)||name}catch(_){}\n"+
-"    var lvl=Math.max(1,Math.floor(Number(e&&e.lvl)||40));\n"+
-"    requestAnimationFrame(function(){\n"+
-"      try{\n"+
-"        var oldNames=/^\\[\\s*\\d+\\s*\\]\\s*(?:Рудный берсерк|Пещерный воин|Горный хищник|Каменный громила|Дикий страж)$/i;\n"+
-"        var els=document.querySelectorAll('h1,h2,h3,h4,strong,b,div,span,p');\n"+
-"        for(var i=0;i<els.length;i++){\n"+
-"          var el=els[i];if(el.children&&el.children.length)continue;\n"+
-"          var t=String(el.textContent||'').trim();\n"+
-"          if(oldNames.test(t)){el.textContent='['+lvl+'] '+name;continue;}\n"+
-"          if(t==='Обитатель подземелья.')el.textContent='Страж рудника Фарт-зоны.';\n"+
-"        }\n"+
-"      }catch(_){}\n"+
-"    });\n"+
-"  }\n"+
+
 "  window.mobDropInfo=function(e){\n"+
 "    if(e&&e.isFartGuard){\n"+
 "      try{if(window.PPA_FART_GUARD_NAME)window.PPA_FART_GUARD_NAME(e)}catch(_){}\n"+
-"      fixGuardMenu(e);\n"+
 "      var g=pctGear();\n"+
 "      var epic=g.epic===0.00001?'0.001%':(g.epic===0.000003?'0.0003%':'0%');\n"+
 "      var legendary=g.legendary===0.0000013?'0.00013%':'0%';\n"+
@@ -3074,15 +3078,15 @@ if(!output.includes("id='ppaFartDropPanelFix'") ||
 }
 
 if(!output.includes("window.PPA_FART_GUARD_NAME=function(e)") ||
-   !output.includes("function fixGuardMenu(e)") ||
-   !output.includes("requestAnimationFrame(function()") ||
-   !output.includes("Страж рудника Фарт-зоны.")) {
-  throw new Error('Fart guard menu patch did not apply');
+   !output.includes("__ppaFartOwnType") ||
+   !output.includes("e.type.n=n;e.type.name=n")) {
+  throw new Error('Fart guard stable identity patch did not apply');
 }
-if(output.includes("document.createTreeWalker(document.body") ||
+if(output.includes("function fixGuardMenu(e)") ||
+   output.includes("document.createTreeWalker(document.body") ||
    output.includes("setTimeout(applyFartInspectName") ||
    output.includes("window.__PPA_FART_INSPECT_NAME")) {
-  throw new Error('Laggy legacy Fart inspect overlay is still present');
+  throw new Error('Laggy Fart inspect name overlay is still present');
 }
 
 if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
@@ -5239,7 +5243,6 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
   const dungeonMobEvents=fs.readFileSync(path.join(ROOT,'gateway/dungeon-mob-events.js'),'utf8');
   const dungeonDropSlotsAudit=fs.readFileSync(path.join(ROOT,'gateway/dungeon-drop-slots.js'),'utf8');
   const bossDropBoost=fs.readFileSync(path.join(ROOT,'gateway/boss-drop-boost.js'),'utf8');
-  const fartGuardBalance=fs.readFileSync(path.join(ROOT,'gateway/fart-guard-balance.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
 
@@ -5307,22 +5310,24 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
   }
   if (!bossDropBoost.includes('BONUS_ROLL_CHANCE=0.50') ||
       !bossDropBoost.includes('__ppaBossBonusRoll') ||
+      !bossDropBoost.includes('Keep the boss table itself exactly as configured') ||
       !bossDropBoost.includes('Бонусный бросок таблицы босса')) {
     throw new Error('Boss drop boost helper incomplete');
   }
-  if (!dungeonDropSlotsAudit.includes('function canonicalGearRarity(e,label)') ||
-      !dungeonDropSlotsAudit.includes("if(lv>=21&&lv<=60)return 'Синее'") ||
-      !dungeonDropSlotsAudit.includes("if(lv>=11&&lv<=20)return 'Зелёное'") ||
-      !dungeonDropSlotsAudit.includes('function finalGearLabelGuard(e,rows)') ||
-      !dungeonDropSlotsAudit.includes('PPA_DUNGEON_DROP_TABLE_AUDIT')) {
-    throw new Error('Dungeon drop-table rarity guard incomplete');
+  if (!dungeonDropSlotsAudit.includes('__ppaDungeonNativeDropRows') ||
+      !dungeonDropSlotsAudit.includes("PPA_DUNGEON_DROP_TABLE_MODE='native'") ||
+      !dungeonDropSlotsAudit.includes('__ppaPhoenixNoBlueGear') ||
+      !dungeonDropSlotsAudit.includes('removePhoenixBlueGear') ||
+      dungeonDropSlotsAudit.includes('rows=expandGearRows(e,rows)') ||
+      dungeonDropSlotsAudit.includes('rows=expandBookRows(e,rows)')) {
+    throw new Error('Native dungeon drop-table restore is incomplete');
   }
   if (!dungeonMobEvents.includes("rows.push(['p20',3913") ||
       !dungeonMobEvents.includes("DUNGEON21_BOSS_HP:9000)||9000)+5350") ||
       !dungeonMobEvents.includes("rows.push(['b60',36700") ||
-      !fartGuardBalance.includes('var HP_BONUS=8000') ||
-      !fartGuardBalance.includes('__ppaFartHpPlus8000')) {
-    throw new Error('Boss/Fart HP balance helper incomplete');
+      !output.includes('__ppaFartHpPlus8000=true') ||
+      !output.includes('_fg.mhp=_oldMax+8000')) {
+    throw new Error('Boss/Fart HP balance patch incomplete');
   }
 }
 
@@ -5339,7 +5344,6 @@ const filesToPublish = [
   ['gateway/dungeon-mob-events.js','dungeon-mob-events.js','Dungeon mob event bridge missing'],
   ['gateway/dungeon-drop-slots.js','dungeon-drop-slots.js','Dungeon drop slot helper missing'],
   ['gateway/boss-drop-boost.js','boss-drop-boost.js','Boss drop boost helper missing'],
-  ['gateway/fart-guard-balance.js','fart-guard-balance.js','Fart guard balance helper missing'],
   ['gateway/qa-test-access.js','qa-test-access.js','QA dungeon access helper missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
   ['gateway/mobile-sprite-performance.js','mobile-sprite-performance.js','Mobile sprite performance helper missing'],
@@ -5362,7 +5366,6 @@ const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
 output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('chat-ui.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
 <script src="${js('dungeon-drop-slots.js')}"></script>
 <script src="${js('boss-drop-boost.js')}"></script>
-<script src="${js('fart-guard-balance.js')}"></script>
 <script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
@@ -5379,7 +5382,6 @@ console.log('Dungeon 60 dragon: /game/dungeon60-dragon.js');
 console.log('Dungeon mob events: /game/dungeon-mob-events.js');
 console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
 console.log('Boss drop boost: /game/boss-drop-boost.js');
-console.log('Fart guard balance: /game/fart-guard-balance.js');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
