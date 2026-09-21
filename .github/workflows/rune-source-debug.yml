@@ -9,18 +9,45 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect exact rune inventory code
+      - name: Inspect exact dungeon drop code
         shell: python
         run: |
           import gzip, pathlib, re
           src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode("utf-8")
-          needles=["runeInventory","renderRunes","runeSlotsGrid","charState","charRequestState","runes:","runeSlots","runeBag","ownedRunes"]
-          for needle in needles:
-              print("\n===== "+needle+" =====")
+
+          def around(label, needle, before=2200, after=9000, limit=20):
+              print("\n===== "+label+" =====")
               start=0
-              for n in range(12):
+              for n in range(limit):
                   i=src.find(needle,start)
                   if i<0: break
-                  a=max(0,i-1800); b=min(len(src),i+4200)
+                  a=max(0,i-before); b=min(len(src),i+after)
                   print(f"\n--- {n+1} @ {i} ---\n"+src[a:b])
                   start=i+len(needle)
+
+          for label,needle in [
+              ("gear chance function","v232GearChance"),
+              ("push gear","v232PushGear"),
+              ("drop loot","function dropLoot"),
+              ("mob drop info","function mobDropInfo"),
+              ("mob drop info assign","mobDropInfo="),
+              ("41-60 constants","V271_D41_"),
+              ("41-60 legendary maker","v271MakeDungeon41LegendaryItem"),
+              ("41-60 drop","v271PushDungeon41"),
+              ("active book chance","v232ActiveBookChance"),
+              ("passive book chance","v232PassiveBookChance"),
+              ("typed book","v232RollTypedBook"),
+              ("blue res","v232BlueRes2130"),
+              ("materials","pushMaterialDrop"),
+              ("teleport","Телепорт"),
+              ("premium sharpen","Премиум заточ"),
+              ("luck coin","Монета удачи")
+          ]:
+              around(label,needle)
+
+          print("\n===== function headers with drop/gear/book/dungeon41 =====")
+          for m in re.finditer(r"function\s+([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{",src):
+              name=m.group(1)
+              if re.search(r"(drop|gear|book|grimoire|dungeon41|v232|v271)",name,re.I):
+                  a=max(0,m.start()-300); b=min(len(src),m.start()+3500)
+                  print("\n--- "+name+" ---\n"+src[a:b])
