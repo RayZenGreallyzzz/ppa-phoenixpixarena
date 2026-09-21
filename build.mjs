@@ -919,9 +919,10 @@ if (!output.includes("БОЙ · ДОБЫЧА НА ПАУЗЕ")) {
 /* ======================================================================== */
 
 /* === AUCTION PREMIUM PURCHASE ENTITLEMENT =============================== */
-// 1 qualifying Gram = 1 simultaneous auction lot, capped at 10.
-// Verified paid Gram still counts. Premium Shop goods, bundles and Premium
-// subscriptions count too. Black Market and paid class-change spend do not.
+// Cumulative Gram spent in Premium Shop = simultaneous auction lots, 1:1,
+// capped at 10. At 1 spent Gram, trading/selling is unlocked.
+// Premium goods, bundles and Premium subscriptions count.
+// Black Market, top-up balance itself and paid class-change spend do not.
 ppaPatchRegex(
   'auction slots count premium purchases',
   /function accountActivated\(\)\{\s*return accountLifetimePaidGram\(\)>=1 \|\| premiumPurchasedAnyBundle\(\);\s*\}\s*function accountAuctionSlots\(\)\{[\s\S]*?return Math\.max\(0,Math\.min\(10,Math\.floor\(paid\)\)\);\s*\}/,
@@ -962,10 +963,10 @@ function recordPremiumAuctionSpend(amount){
   return INV.premiumShop.auctionSlotGram;
 }
 function accountAuctionCreditGram(){
-  return Math.max(accountLifetimePaidGram(),accountPremiumAuctionSpend());
+  return accountPremiumAuctionSpend();
 }
 function accountActivated(){
-  return accountAuctionCreditGram()>=1||premiumPurchasedAnyBundle();
+  return accountAuctionCreditGram()>=1;
 }
 function accountAuctionSlots(){
   return Math.max(0,Math.min(10,Math.floor(accountAuctionCreditGram())));
