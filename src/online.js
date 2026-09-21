@@ -193,10 +193,40 @@ function sanitizeLotId(v) {
 }
 function sanitizeCurrency(v) { return v === 'gram' ? 'gram' : 'ppa'; }
 function activeSlots(state) {
-  let paid = Math.max(0, Number(state && state.lifetimePaidGram) || 0);
-  const b = state && state.premiumShop && state.premiumShop.purchasedBundles;
-  if (paid < 1 && b && Object.keys(b).some((k) => !!b[k])) paid = 1;
-  return Math.max(0, Math.min(10, Math.floor(paid)));
+  state = state && typeof state === 'object' ? state : {};
+  const ps = state.premiumShop && typeof state.premiumShop === 'object' ? state.premiumShop : {};
+  const b = ps.purchasedBundles && typeof ps.purchasedBundles === 'object' ? ps.purchasedBundles : {};
+
+  // 1 qualifying Premium Gram = 1 simultaneous lot, maximum 10.
+  // Keep verified lifetime paid Gram, but also recover legacy Premium purchases
+  // from the save so old test purchases/subscriptions do not collapse to 1 slot.
+  let credit = Math.max(0, Number(state.lifetimePaidGram) || 0);
+  credit = Math.max(credit, Math.max(0, Number(ps.auctionSlotGram) || 0));
+
+  const bundlePrice = { starter: 1, growth: 3, adventurer: 5, unique: 10, epic: 30 };
+  let knownPremiumSpend = 0;
+  for (const k of Object.keys(b)) {
+    const n = b[k] === true ? 1 : Math.max(0, Number(b[k]) || 0);
+    if (bundlePrice[k]) knownPremiumSpend += n * bundlePrice[k];
+  }
+
+  const planPrice = { mini: 1, week: 5, month: 10 };
+  if (ps.lastPremiumPlan && planPrice[ps.lastPremiumPlan]) {
+    knownPremiumSpend += planPrice[ps.lastPremiumPlan];
+  }
+
+  // A saved 30-day Premium purchase therefore restores all 10 auction slots.
+  credit = Math.max(credit, knownPremiumSpend);
+
+  const hasLegacyPremium =
+    !!ps.lastPremiumPlan ||
+    Number(ps.lastPremiumPurchaseAt) > 0 ||
+    Number(ps.premiumTier) > 0 ||
+    Number(ps.premiumUntil) > 0 ||
+    Object.keys(b).some((k) => !!b[k]);
+  if (credit < 1 && hasLegacyPremium) credit = 1;
+
+  return Math.max(0, Math.min(10, Math.floor(credit)));
 }
 function payloadToUi(item) {
   item = item && typeof item === 'object' ? item : {};
