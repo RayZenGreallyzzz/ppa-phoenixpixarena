@@ -328,6 +328,10 @@ ppaPatchRegex(
   /function gramWalletTelegramUser\(\)\{[\s\S]*?return \{id:'',name:'Вне Telegram',username:''\};\n\}/,
   `function gramWalletTelegramUser(){
   try{
+    var verified=window.PPA_GRAM_WALLET_IDENTITY;
+    if(verified&&verified.id){
+      return {id:String(verified.id),name:String(verified.name||('ID '+verified.id)),username:String(verified.username||'')};
+    }
     var wa=window.Telegram&&window.Telegram.WebApp;
     var u=wa&&wa.initDataUnsafe&&wa.initDataUnsafe.user;
     if(u&&u.id){
@@ -365,7 +369,8 @@ try{
 }catch(_){}`
 );
 
-if(!output.includes("var wa=window.Telegram&&window.Telegram.WebApp") ||
+if(!output.includes("var verified=window.PPA_GRAM_WALLET_IDENTITY") ||
+   !output.includes("var wa=window.Telegram&&window.Telegram.WebApp") ||
    !output.includes("var q=new URLSearchParams(raw),uj=q.get('user')") ||
    !output.includes("setTimeout(sendGramWalletState,1600)")) {
   throw new Error('Gram Wallet Telegram identity refresh patch did not apply');
