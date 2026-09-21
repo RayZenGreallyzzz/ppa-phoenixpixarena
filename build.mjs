@@ -64,6 +64,14 @@ output = output.replace(
   'https://telegram.org/js/telegram-web-app.js?63"'
 );
 
+output = output.replace(
+  '<script src="https://telegram.org/js/telegram-web-app.js?63"></script>',
+  '<script src="https://telegram.org/js/telegram-web-app.js?63"></script>\n<script defer src="https://unpkg.com/@tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js" data-ppa-tonconnect="1"></script>'
+);
+if (!output.includes('data-ppa-tonconnect="1"')) {
+  throw new Error('TON Connect preload did not apply');
+}
+
 if (!output.includes('<head>')) throw new Error('PPA <head> not found');
 output = output.replace('<head>', `<head>\n<script>window.PPA_CLIENT_BUILD=${JSON.stringify(CLIENT_BUILD)};window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=true;window.PPA_TEST_ALL_DUNGEONS=true;</script>`);
 
@@ -321,6 +329,246 @@ function esc(s){`)
 if (!output.includes('id=&quot;clanRankList&quot;')) {
   throw new Error('Clan ranking srcdoc escaping failed');
 }
+
+/* === TON CONNECT · PARENT PICKER · DIRECT REDIRECT ====================== */
+// Keep Telegram account / numeric Telegram ID untouched.
+// The wallet chooser lives in the parent document, so the wallet redirect runs
+// directly inside the user's click instead of after an iframe postMessage.
+ppaPatchRegex(
+  'ton connect parent runtime direct redirect',
+  /function gramWalletLink\(address\)\{/,
+  `window.PPA_TWA_RETURN_URL='https://t.me/PhoenixPixMMORPGbot?game=pheonixpixarena';
+var PPA_TON_UI=null;
+var PPA_TON_LOADING=null;
+var PPA_TON_CONNECTED=false;
+var PPA_TON_WALLET_NAME='';
+var PPA_TON_SELECTED_WALLET='';
+var PPA_TON_CHAIN_BALANCE=null;
+var PPA_TON_BALANCE_TIMER=0;
+var PPA_TON_PICKER=null;
+
+function ppaWaitTonSdk(){
+  if(window.TON_CONNECT_UI&&typeof window.TON_CONNECT_UI.TonConnectUI==='function')return Promise.resolve(true);
+  if(PPA_TON_LOADING)return PPA_TON_LOADING;
+  PPA_TON_LOADING=new Promise(function(resolve,reject){
+    var n=0,t=setInterval(function(){
+      n++;
+      if(window.TON_CONNECT_UI&&typeof window.TON_CONNECT_UI.TonConnectUI==='function'){
+        clearInterval(t);resolve(true);return;
+      }
+      if(n>=60){
+        clearInterval(t);PPA_TON_LOADING=null;reject(new Error('TON Connect SDK не загрузился'));
+      }
+    },50);
+  });
+  return PPA_TON_LOADING;
+}
+
+async function ppaRefreshTonBalance(address){
+  address=String(address||'').trim();
+  if(!address)return null;
+  try{
+    var r=await fetch('/api/ton-balance?address='+encodeURIComponent(address),{cache:'no-store',credentials:'same-origin'});
+    var d=await r.json();
+    if(!r.ok||!d||d.ok!==true)throw new Error((d&&d.message)||('HTTP '+r.status));
+    var bal=Number(d.balance);
+    if(!Number.isFinite(bal)||bal<0)throw new Error('Некорректный баланс');
+    PPA_TON_CHAIN_BALANCE=bal;
+    try{var p=gramWalletProfile();p.walletGram=bal;p.updatedAt=Date.now()}catch(_){}
+    try{sendGramWalletState()}catch(_){}
+    return bal;
+  }catch(err){
+    console.warn('PPA TON balance:',err);
+    return null;
+  }
+}
+
+function ppaStartTonBalance(address){
+  clearInterval(PPA_TON_BALANCE_TIMER);
+  ppaRefreshTonBalance(address);
+  PPA_TON_BALANCE_TIMER=setInterval(function(){
+    if(PPA_TON_CONNECTED)ppaRefreshTonBalance(address);
+  },15000);
+}
+
+async function ppaTonInit(){
+  if(PPA_TON_UI)return PPA_TON_UI;
+  try{
+    await ppaWaitTonSdk();
+    var ui=new window.TON_CONNECT_UI.TonConnectUI({
+      manifestUrl:location.origin+'/tonconnect-manifest.json',
+      analytics:{mode:'off'}
+    });
+    ui.uiOptions={
+      language:'ru',
+      uiPreferences:{theme:'DARK'},
+      actionsConfiguration:{
+        returnStrategy:'back',
+        twaReturnUrl:window.PPA_TWA_RETURN_URL
+      }
+    };
+    PPA_TON_UI=ui;
+    ui.onStatusChange(function(wallet){
+      try{
+        if(wallet&&wallet.account&&wallet.account.address){
+          var names={tonhub:'Tonhub',tonkeeper:'Keeper',mytonwallet:'My Wallet'};
+          PPA_TON_CONNECTED=true;
+          PPA_TON_WALLET_NAME=names[PPA_TON_SELECTED_WALLET]||String((wallet.device&&wallet.device.appName)||'TON Wallet');
+          var address=String(wallet.account.address||'');
+          gramWalletLink(address);
+          ppaStartTonBalance(address);
+          setTimeout(function(){gramWalletResult(true,'TON Connect подключён · '+PPA_TON_WALLET_NAME)},300);
+        }else{
+          PPA_TON_CONNECTED=false;
+          PPA_TON_WALLET_NAME='';
+          PPA_TON_CHAIN_BALANCE=null;
+          clearInterval(PPA_TON_BALANCE_TIMER);
+          PPA_TON_BALANCE_TIMER=0;
+          try{var p=gramWalletProfile();p.walletGram=null;sendGramWalletState()}catch(_){}
+        }
+      }catch(err){gramWalletResult(false,'TON Connect: '+String(err&&err.message||err||'ошибка подключения'))}
+    },function(err){gramWalletResult(false,'TON Connect: '+String(err&&err.message||err||'ошибка подключения'))});
+    try{await ui.connectionRestored}catch(_){}
+    return ui;
+  }catch(err){
+    gramWalletResult(false,'TON Connect не запустился: '+String(err&&err.message||err||'неизвестно'));
+    return null;
+  }
+}
+
+function ppaTonWalletConfig(appName){
+  var map={
+    tonhub:{name:'Tonhub',universalLink:'https://tonhub.com/ton-connect',bridgeUrl:'https://connect.tonhubapi.com/tonconnect'},
+    tonkeeper:{name:'Keeper',universalLink:'https://app.tonkeeper.com/ton-connect',bridgeUrl:'https://bridge.tonapi.io/bridge'},
+    mytonwallet:{name:'My Wallet',universalLink:'https://connect.mytonwallet.org',bridgeUrl:'https://tonconnectbridge.mytonwallet.org/bridge/'}
+  };
+  return map[String(appName||'')]||null;
+}
+
+function ppaHideTonWalletPicker(){
+  if(PPA_TON_PICKER)PPA_TON_PICKER.style.display='none';
+}
+
+function ppaOpenTonWalletDirect(appName){
+  var cfg=ppaTonWalletConfig(appName);
+  if(!cfg){gramWalletResult(false,'Неизвестный TON-кошелёк');return}
+  if(!PPA_TON_UI||!PPA_TON_UI.connector){
+    gramWalletResult(false,'TON Connect ещё запускается · повтори через секунду');
+    ppaTonInit();
+    return;
+  }
+  try{
+    PPA_TON_SELECTED_WALLET=String(appName);
+    // connector.connect is synchronous and returns the universal TON Connect URL.
+    // Keeping this inside the button click preserves Android/Telegram user activation.
+    var connectUrl=PPA_TON_UI.connector.connect({
+      universalLink:cfg.universalLink,
+      bridgeUrl:cfg.bridgeUrl
+    });
+    if(!connectUrl)throw new Error('TON Connect не вернул ссылку');
+    ppaHideTonWalletPicker();
+    gramWalletResult(false,'Открываю '+cfg.name+'…');
+    var wa=window.Telegram&&window.Telegram.WebApp;
+    if(wa&&typeof wa.openLink==='function'){
+      wa.openLink(connectUrl);
+      return;
+    }
+    window.location.assign(connectUrl);
+  }catch(err){
+    gramWalletResult(false,'Не удалось открыть '+cfg.name+': '+String(err&&err.message||err||'неизвестно'));
+  }
+}
+
+function ppaEnsureTonWalletPicker(){
+  if(PPA_TON_PICKER)return PPA_TON_PICKER;
+  var root=document.createElement('div');
+  root.id='ppaTonWalletPicker';
+  root.style.cssText='position:fixed;inset:0;z-index:2147483600;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.76);padding:18px';
+  root.innerHTML='<div style="width:min(92vw,440px);border:1px solid #41779b;border-radius:13px;background:#091116;padding:15px;box-shadow:0 18px 42px rgba(0,0,0,.8)">'+
+    '<div style="color:#a5dcff;font:700 18px Georgia,serif;margin-bottom:5px">ВЫБЕРИ TON WALLET</div>'+
+    '<div style="font-size:10px;color:#8da0ac;margin-bottom:12px">TON Connect уже загружен · переход сразу в выбранный кошелёк</div>'+
+    '<div style="display:grid;gap:10px">'+
+      '<button data-wallet="tonhub" style="height:52px;border:1px solid #268bc2;border-radius:10px;background:#0b3048;color:#e7f7ff;font-weight:900;font-size:14px">TONHUB</button>'+
+      '<button data-wallet="tonkeeper" style="height:52px;border:1px solid #268bc2;border-radius:10px;background:#0b3048;color:#e7f7ff;font-weight:900;font-size:14px">KEEPER</button>'+
+      '<button data-wallet="mytonwallet" style="height:52px;border:1px solid #268bc2;border-radius:10px;background:#0b3048;color:#e7f7ff;font-weight:900;font-size:14px">MY WALLET</button>'+
+      '<button data-close="1" style="height:40px;border:1px solid #764139;border-radius:9px;background:#321916;color:#ffaea3;font-weight:800">ОТМЕНА</button>'+
+    '</div></div>';
+  document.body.appendChild(root);
+  root.querySelectorAll('[data-wallet]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      ppaOpenTonWalletDirect(btn.getAttribute('data-wallet'));
+    });
+  });
+  var close=root.querySelector('[data-close]');
+  if(close)close.addEventListener('click',ppaHideTonWalletPicker);
+  root.addEventListener('click',function(e){if(e.target===root)ppaHideTonWalletPicker()});
+  PPA_TON_PICKER=root;
+  return root;
+}
+
+function ppaShowTonWalletPicker(){
+  var tg=gramWalletTelegramUser();
+  if(!tg.id){gramWalletResult(false,'Откройте PPA через Telegram-бота');return}
+  var root=ppaEnsureTonWalletPicker();
+  root.style.display='flex';
+  // Init is already started on page load; this is only a safety retry.
+  if(!PPA_TON_UI)ppaTonInit();
+}
+
+async function ppaTonDisconnectAndUnlink(){
+  try{if(PPA_TON_UI&&PPA_TON_UI.connected)await PPA_TON_UI.disconnect()}catch(_){}
+  gramWalletUnlink();
+}
+
+function ppaPreinitTonConnect(){
+  ppaEnsureTonWalletPicker();
+  ppaTonInit();
+}
+if(document.readyState==='complete')setTimeout(ppaPreinitTonConnect,0);
+else window.addEventListener('load',function(){setTimeout(ppaPreinitTonConnect,0)},{once:true});
+
+function gramWalletLink(address){`
+);
+
+// Route the old iframe "ПРИВЯЗАТЬ" button to the parent picker.
+// Correct helper syntax is $('link'), not $('#link').
+ppaPatchRegex(
+  'gram wallet link opens parent ton picker',
+  /\$\(&#x27;link&#x27;\)\.onclick=\(\)=&gt;openModal\(&#x27;link&#x27;\);/,
+  ppaEscapeSrcdocCode("$('link').onclick=()=>parent.postMessage({type:'gramWalletShowTonPicker'},'*');")
+);
+
+// Keep deposit/withdraw old modal intact; add parent picker routing and TON disconnect.
+ppaPatchRegex(
+  'gram wallet parent ton routes',
+  /if\(d\.type==='gramWalletReady'\|\|d\.type==='gramWalletRequestState'\)sendGramWalletState\(\);else if\(d\.type==='gramWalletClose'\)closeGramWallet\(\);else if\(d\.type==='gramWalletLink'\)gramWalletLink\(d\.address\);else if\(d\.type==='gramWalletUnlink'\)gramWalletUnlink\(\);/,
+  "if(d.type==='gramWalletReady'||d.type==='gramWalletRequestState')sendGramWalletState();else if(d.type==='gramWalletClose')closeGramWallet();else if(d.type==='gramWalletShowTonPicker')ppaShowTonWalletPicker();else if(d.type==='gramWalletLink')gramWalletLink(d.address);else if(d.type==='gramWalletUnlink')ppaTonDisconnectAndUnlink();"
+);
+
+// Always surface the latest on-chain balance in the existing wallet iframe.
+ppaPatchRegex(
+  'gram wallet uses live ton chain balance',
+  /function sendGramWalletState\(\)\{\s*if\(!GRAM_WALLET_OPEN\)return;\s*try\{\s*var p=gramWalletProfile\(\),tg=gramWalletTelegramUser\(\);/,
+  "function sendGramWalletState(){\n  if(!GRAM_WALLET_OPEN)return;\n  try{\n    var p=gramWalletProfile(),tg=gramWalletTelegramUser();\n    if(typeof PPA_TON_CHAIN_BALANCE==='number'&&Number.isFinite(PPA_TON_CHAIN_BALANCE))p.walletGram=PPA_TON_CHAIN_BALANCE;"
+);
+
+// Do not call the old server deposit stub when there is no active TON Connect session.
+ppaPatchRegex(
+  'gram deposit requires active direct ton connect',
+  /if\(!p\.connected\|\|!p\.address\)\{gramWalletResult\(false,'Сначала привяжи Gram Wallet'\);return\}\n  if\(!\(amount>0\)\)/,
+  "if(!p.connected||!p.address){gramWalletResult(false,'Сначала привяжи TON Wallet');return}\n  if(kind==='deposit'&&typeof PPA_TON_CONNECTED!=='undefined'&&!PPA_TON_CONNECTED){gramWalletResult(false,'TON адрес привязан, но TON Connect не активен · нажми ПЕРЕПРИВЯЗАТЬ');return}\n  if(!(amount>0))"
+);
+
+if(!output.includes('data-ppa-tonconnect="1"') ||
+   !output.includes("ppaOpenTonWalletDirect") ||
+   !output.includes("connector.connect({") ||
+   !output.includes("wa.openLink(connectUrl)") ||
+   !output.includes("gramWalletShowTonPicker") ||
+   !output.includes("fetch('/api/ton-balance?address='") ||
+   !output.includes(ppaEscapeSrcdocCode("type:'gramWalletShowTonPicker'"))) {
+  throw new Error('Direct parent TON Connect flow did not apply');
+}
+/* ======================================================================== */
 
 /* === CLASS RANGE CONSISTENCY ============================================ */
 /* Use the older, tighter ranged values for BOTH player and AI. */
