@@ -322,6 +322,120 @@ if (!output.includes('id=&quot;clanRankList&quot;')) {
   throw new Error('Clan ranking srcdoc escaping failed');
 }
 
+/* === TON CONNECT · GRAM WALLET ========================================== */
+ppaPatchRegex(
+  'ton connect ui sdk script',
+  /<\/head>/,
+  '<script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"><\/script>\n<\/head>'
+);
+
+ppaPatchRegex(
+  'gram wallet ton connect runtime',
+  /function gramWalletLink\(address\)\{/,
+  `var PPA_TON_CONNECT_UI_INSTANCE=null;
+var PPA_TON_CONNECT_UNSUB=null;
+
+async function ppaTonConnectInit(){
+  if(PPA_TON_CONNECT_UI_INSTANCE)return PPA_TON_CONNECT_UI_INSTANCE;
+  if(!window.TON_CONNECT_UI||!window.TON_CONNECT_UI.TonConnectUI){
+    gramWalletResult(false,'TON Connect не загрузился · проверьте интернет и перезапустите игру');
+    return null;
+  }
+  try{
+    var ui=new window.TON_CONNECT_UI.TonConnectUI({
+      manifestUrl:location.origin+'/tonconnect-manifest.json',
+      analytics:{mode:'off'}
+    });
+    try{
+      ui.uiOptions={
+        language:'ru',
+        uiPreferences:{theme:'DARK'},
+        actionsConfiguration:{returnStrategy:'back'}
+      };
+    }catch(_){}
+    PPA_TON_CONNECT_UI_INSTANCE=ui;
+    PPA_TON_CONNECT_UNSUB=ui.onStatusChange(function(wallet){
+      try{
+        if(!wallet||!wallet.account||!wallet.account.address)return;
+        var address=String(wallet.account.address||'');
+        try{
+          if(window.TON_CONNECT_UI.toUserFriendlyAddress){
+            address=window.TON_CONNECT_UI.toUserFriendlyAddress(address);
+          }
+        }catch(_){}
+        gramWalletLink(address);
+      }catch(err){
+        gramWalletResult(false,'Ошибка TON Connect: '+String(err&&err.message||err||'неизвестно'));
+      }
+    });
+    try{await ui.connectionRestored}catch(_){}
+    return ui;
+  }catch(err){
+    gramWalletResult(false,'Не удалось запустить TON Connect: '+String(err&&err.message||err||'неизвестно'));
+    return null;
+  }
+}
+
+async function ppaOpenGramTonConnect(){
+  var ui=await ppaTonConnectInit();
+  if(!ui)return;
+  try{
+    if(ui.wallet&&ui.wallet.account&&ui.wallet.account.address){
+      var address=String(ui.wallet.account.address||'');
+      try{
+        if(window.TON_CONNECT_UI.toUserFriendlyAddress)address=window.TON_CONNECT_UI.toUserFriendlyAddress(address);
+      }catch(_){}
+      gramWalletLink(address);
+      return;
+    }
+    if(typeof ui.openSingleWalletModal==='function'){
+      await ui.openSingleWalletModal('gramwallet');
+    }else{
+      await ui.openModal();
+    }
+  }catch(err){
+    gramWalletResult(false,'Gram Wallet не открылся: '+String(err&&err.message||err||'неизвестно'));
+  }
+}
+
+async function ppaDisconnectGramTonConnect(){
+  var ui=await ppaTonConnectInit();
+  try{if(ui&&ui.wallet)await ui.disconnect()}catch(_){}
+  gramWalletUnlink();
+}
+
+setTimeout(function(){ppaTonConnectInit()},500);
+
+function gramWalletLink(address){`
+);
+
+ppaPatchRegex(
+  'gram wallet iframe uses ton connect',
+  /\$\(&#x27;link&#x27;\)\.onclick=\(\)=&gt;openModal\(&#x27;link&#x27;\);\$\(&#x27;unlink&#x27;\)\.onclick=\(\)=&gt;parent\.postMessage\(\{type:&#x27;gramWalletUnlink&#x27;\},&#x27;\*&#x27;\);/,
+  ppaEscapeSrcdocCode("$('#link').onclick=()=>parent.postMessage({type:'gramWalletTonConnectOpen'},'*');$('#unlink').onclick=()=>parent.postMessage({type:'gramWalletTonConnectDisconnect'},'*');")
+);
+
+ppaPatchRegex(
+  'gram wallet parent handles ton connect',
+  /else if\(d\.type==='gramWalletLink'\)gramWalletLink\(d\.address\);else if\(d\.type==='gramWalletUnlink'\)gramWalletUnlink\(\);/,
+  "else if(d.type==='gramWalletTonConnectOpen')ppaOpenGramTonConnect();else if(d.type==='gramWalletTonConnectDisconnect')ppaDisconnectGramTonConnect();else if(d.type==='gramWalletLink')gramWalletLink(d.address);else if(d.type==='gramWalletUnlink')gramWalletUnlink();"
+);
+
+ppaPatchRegex(
+  'gram wallet ton connect labels',
+  /Введи TON-адрес Gram Wallet\. В HTML-прототипе сохраняется привязка к текущему Telegram ID; серверная проверка подключается отдельно\./,
+  'Подключение выполняется через TON Connect. Адрес Gram Wallet определяется автоматически после подтверждения в кошельке.'
+);
+
+if(!output.includes('tonconnect/ui@latest/dist/tonconnect-ui.min.js') ||
+   !output.includes("openSingleWalletModal('gramwallet')") ||
+   !output.includes("type:'gramWalletTonConnectOpen'") ||
+   !output.includes("type:'gramWalletTonConnectDisconnect'") ||
+   !output.includes("manifestUrl:location.origin+'/tonconnect-manifest.json'")) {
+  throw new Error('Gram Wallet TON Connect patch did not apply');
+}
+/* ======================================================================== */
+
 /* === CLASS RANGE CONSISTENCY ============================================ */
 /* Use the older, tighter ranged values for BOTH player and AI. */
 ppaPatchRegex(
