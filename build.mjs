@@ -4571,7 +4571,7 @@ if(!output.includes("var PPA_RUNE_INFO_HOLD_MS=650") ||
 }
 /* ======================================================================== */
 
-const ppaCharacterSlagImgMatch=output.match(/const FART_SLAG_IMG='(data:image\\/webp;base64,[A-Za-z0-9+/=]+)';/);
+const ppaCharacterSlagImgMatch=output.match(/const FART_SLAG_IMG='(data:image\/webp;base64,[A-Za-z0-9+/=]+)';/);
 const ppaCharacterSlagImg=ppaCharacterSlagImgMatch?ppaCharacterSlagImgMatch[1]:'';
 if(!ppaCharacterSlagImg)throw new Error('Fart slag image data not found before character inventory patch');
 
