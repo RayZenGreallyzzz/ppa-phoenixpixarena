@@ -215,11 +215,7 @@ function activeSlots(state) {
     premiumSpent = Math.max(0, Number(state.gramSpentLifetime) || 0);
   }
 
-  // Verified paid account credit is kept as a backward-compatible floor.
-  const verifiedPaid = Math.max(0, Number(state.lifetimePaidGram) || 0);
-  const credit = Math.max(verifiedPaid, premiumSpent);
-
-  return Math.max(0, Math.min(10, Math.floor(credit)));
+  return Math.max(0, Math.min(10, Math.floor(premiumSpent)));
 }
 function payloadToUi(item) {
   item = item && typeof item === 'object' ? item : {};
