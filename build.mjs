@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v451-rune-fusion-exact-inv-runes-20260921';
+const CLIENT_BUILD = 'v451-rune-fusion-character-bridge-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2934,6 +2934,18 @@ ppaPatchRegex(
   var NEXT={0:1,1:2,2:3};
   var RARITY_NAME=['Серая','Зелёная','Синяя','Фиолетовая','Легендарная'];
 
+  window.PPA_CHARACTER_RUNE_CATALOG=window.PPA_CHARACTER_RUNE_CATALOG||[];
+  window.PPA_CHARACTER_AVAILABLE_RUNES=window.PPA_CHARACTER_AVAILABLE_RUNES||[];
+  window.PPA_CHARACTER_RUNE_SOURCE=window.PPA_CHARACTER_RUNE_SOURCE||'';
+  window.PPA_REGISTER_CHARACTER_RUNES=function(payload){
+    try{
+      payload=payload||{};
+      if(Array.isArray(payload.catalog)&&payload.catalog.length)window.PPA_CHARACTER_RUNE_CATALOG=payload.catalog;
+      if(Array.isArray(payload.available)&&payload.available.length)window.PPA_CHARACTER_AVAILABLE_RUNES=payload.available;
+      if(payload.source)window.PPA_CHARACTER_RUNE_SOURCE=String(payload.source);
+    }catch(_){}
+  };
+
   function safeClone(v){
     try{return JSON.parse(JSON.stringify(v))}catch(_){}
     try{return Object.assign({},v)}catch(_){}
@@ -3142,6 +3154,11 @@ ppaPatchRegex(
   function catalogRunes(){
     var out=[],seen=new Set(),roots=[];
     try{
+      if(Array.isArray(window.PPA_CHARACTER_RUNE_CATALOG)){
+        window.PPA_CHARACTER_RUNE_CATALOG.forEach(function(v){if(v&&typeof v==='object')out.push(v)});
+      }
+    }catch(_){}
+    try{
       sourceIdentifiers().forEach(function(n){
         try{var v=eval(n);if(v&&typeof v==='object')roots.push(v)}catch(_){}
       });
@@ -3338,7 +3355,14 @@ ppaPatchRegex(
 
   window.PPA_RUNE_FUSION_SOURCE=function(){
     var p=window.PPA_AVAILABLE_RUNES_PATHS||[];
-    return p.length?p.join(' · '):'ДОСТУПНЫЕ РУНЫ';
+    if(p.length)return p.join(' · ');
+    if(window.PPA_CHARACTER_RUNE_SOURCE)return window.PPA_CHARACTER_RUNE_SOURCE;
+    return 'ДОСТУПНЫЕ РУНЫ';
+  };
+  window.PPA_RUNE_FUSION_DEBUG=function(){
+    var entries=[];try{entries=ownedEntries()}catch(_){}
+    var cat=[];try{cat=catalogRunes()}catch(_){}
+    return {owned:entries.length,catalog:cat.length,characterCatalog:(window.PPA_CHARACTER_RUNE_CATALOG||[]).length,characterAvailable:(window.PPA_CHARACTER_AVAILABLE_RUNES||[]).length,source:window.PPA_RUNE_FUSION_SOURCE()};
   };
   window.PPA_RUNE_FUSION_LIST=function(){
     return groupList().map(function(g){
@@ -3452,6 +3476,8 @@ if(!output.includes("id=\"ppaRuneFusionRuntime\"") ||
    !output.includes("addInvRuneBranches(INV,'INV',0)") ||
    !output.includes("low==='bag'") ||
    !output.includes("PPA_AVAILABLE_RUNES_PATHS") ||
+   !output.includes("PPA_CHARACTER_RUNE_CATALOG") ||
+   !output.includes("PPA_REGISTER_CHARACTER_RUNES") ||
    !output.includes("lexical.'+n") ||
    !output.includes("mode:'map-count'") ||
    !output.includes("mode:'count-map'") ||
@@ -3647,7 +3673,8 @@ function openRuneFusionPanel(){
   var rows=[];
   try{rows=parent.PPA_RUNE_FUSION_LIST?parent.PPA_RUNE_FUSION_LIST():[]}catch(_){}
   if(!rows.length){
-    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">В «ДОСТУПНЫЕ РУНЫ» нет рун серой / зелёной / синей редкости.</div>';
+    var dbg={};try{dbg=parent.PPA_RUNE_FUSION_DEBUG?parent.PPA_RUNE_FUSION_DEBUG():{}}catch(_){}
+    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">Не удалось прочитать «ДОСТУПНЫЕ РУНЫ».<br><span style="font-size:8px">найдено: '+(dbg.owned||0)+' · каталог: '+(dbg.catalog||0)+' · мост: '+(dbg.characterCatalog||0)+'</span></div>';
   }else{
     var rarity=['Серая','Зелёная','Синяя','Фиолетовая','Легендарная'];
     var title=document.createElement('div');
@@ -3758,6 +3785,123 @@ if(!output.includes("function ppaRingCraftVisibility()") ||
 if(!output.includes("shade.innerHTML=&#x27;&lt;div id=&quot;ppaRuneFusionPanel&quot;")) {
   throw new Error('Rune fusion srcdoc escaping did not apply');
 }
+/* === CHARACTER AVAILABLE-RUNES BRIDGE =================================== */
+ppaPatchRegex(
+  'character available runes bridge',
+  /function\s+itemVisual\(it,size\)\s*\{/,
+  ppaEscapeSrcdocCode(`function ppaCharacterRuneBridge(){
+  try{
+    var catalog=[],available=[],seen=new Set(),sources=[];
+    function txt(v){
+      return String(v&&(v.name||v.title||v.label||v.runeName||v.id||v.refId||v.key)||'');
+    }
+    function looksRune(v){
+      if(!v||typeof v!=='object')return false;
+      if(v.rune===true||v.isRune===true||v.kind==='rune'||v.type==='rune'||v.category==='rune')return true;
+      var z=(txt(v)+' '+String(v.kind||'')+' '+String(v.type||'')+' '+String(v.refId||'')+' '+String(v.id||'')).toLowerCase();
+      if(z.indexOf('rune')>=0||z.indexOf('руна')>=0)return true;
+      var im=String(v.img||v.image||v.src||'').toLowerCase();
+      return !!((v.rarity!=null||v.quality!=null||v.tier!=null)&&(v.effect!=null||v.stat!=null||v.bonus!=null||v.bonusText!=null||v.stats!=null)&&/rune|runa|руна/.test(im));
+    }
+    function countOf(v){
+      var n=Number(v&&(v.count!=null?v.count:(v.qty!=null?v.qty:(v.amount!=null?v.amount:1))));
+      return isFinite(n)&&n>0?Math.floor(n):1;
+    }
+    function walk(v,path,depth){
+      if(v==null||depth>6||/equip|equipped|slot|socket|active|installed|selected|preview/i.test(path))return;
+      if(typeof v!=='object')return;
+      if(seen.has(v))return;seen.add(v);
+      if(looksRune(v)){
+        catalog.push(v);
+        available.push({item:v,path:path,count:countOf(v)});
+        sources.push(path);
+        return;
+      }
+      if(v instanceof Map){
+        v.forEach(function(x,k){
+          if(typeof x==='number'&&x>0&&/rune|руна/i.test(path)){
+            available.push({id:String(k),path:path+'.'+String(k),count:Math.floor(x)});
+            sources.push(path);
+          }else walk(x,path+'.'+String(k),depth+1);
+        });
+        return;
+      }
+      if(Array.isArray(v)){
+        for(var i=0;i<v.length&&i<500;i++)walk(v[i],path+'['+i+']',depth+1);
+        return;
+      }
+      var ks=[];try{ks=Object.keys(v)}catch(_){ks=[]}
+      var rc=/rune|runes|runa|runy|руна|руны/i.test(path);
+      for(var j=0;j<ks.length&&j<800;j++){
+        var k=ks[j],x;try{x=v[k]}catch(_){continue}
+        if(rc&&typeof x==='number'&&isFinite(x)&&x>0){
+          available.push({id:String(k),path:path+'.'+k,count:Math.floor(x)});
+          sources.push(path);
+          continue;
+        }
+        walk(x,path+'.'+k,depth+1);
+      }
+    }
+
+    // Discover lexical/global variables declared inside THIS character iframe.
+    var names={};
+    try{
+      document.querySelectorAll('script').forEach(function(sc){
+        var t=String(sc.textContent||'');
+        var re=/\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)/g,m;
+        while((m=re.exec(t))){
+          var n=m[1];
+          if(/rune|runes|runa|runy|inv|state|save|character|player/i.test(n))names[n]=1;
+        }
+      });
+    }catch(_){}
+    Object.keys(names).forEach(function(n){
+      try{
+        var v=eval(n);
+        if(v&&typeof v==='object')walk(v,'character.'+n,0);
+      }catch(_){}
+    });
+
+    // Also inspect enumerable globals in the same iframe realm.
+    try{
+      Object.keys(window).forEach(function(k){
+        if(!/rune|runes|runa|runy|inv|state|save|character|player/i.test(k))return;
+        var v;try{v=window[k]}catch(_){return}
+        if(v&&typeof v==='object')walk(v,'character.window.'+k,0);
+      });
+    }catch(_){}
+
+    // Deduplicate catalogue by id/name/rarity while keeping real menu objects.
+    var cm={},clean=[];
+    catalog.forEach(function(v){
+      var k=String(v.refId||v.id||v.key||v.name||'')+'|'+String(v.rarity||v.quality||v.tier||'');
+      if(cm[k])return;cm[k]=1;clean.push(v);
+    });
+    var src='';
+    if(sources.length){
+      var sm={};sources.forEach(function(x){sm[String(x).replace(/\\[[0-9]+\\].*$/,'').replace(/\\.[^.]+$/,'')]=1});
+      src=Object.keys(sm).slice(0,4).join(' · ');
+    }
+    if(parent&&typeof parent.PPA_REGISTER_CHARACTER_RUNES==='function'){
+      parent.PPA_REGISTER_CHARACTER_RUNES({catalog:clean,available:available,source:src||'ДОСТУПНЫЕ РУНЫ'});
+    }
+  }catch(_){}
+}
+setTimeout(ppaCharacterRuneBridge,0);
+setTimeout(ppaCharacterRuneBridge,400);
+setTimeout(ppaCharacterRuneBridge,1200);
+window.addEventListener('message',function(){setTimeout(ppaCharacterRuneBridge,30)},true);
+try{new MutationObserver(function(){setTimeout(ppaCharacterRuneBridge,30)}).observe(document.documentElement,{childList:true,subtree:true})}catch(_){}
+function itemVisual(it,size){`)
+);
+
+if(!output.includes("function ppaCharacterRuneBridge()") ||
+   !output.includes("PPA_REGISTER_CHARACTER_RUNES") ||
+   !output.includes("character available runes bridge")) {
+  throw new Error('Character available-runes bridge did not apply');
+}
+/* ======================================================================== */
+
 /* === CHARACTER INVENTORY NATIVE-MENU REMOVAL + HOLD PREVIEW ============= */
 // The character iframe used real <img> elements for every item. Telegram WebView
 // can invoke a native image/link menu before JS cancellation. Render item art
