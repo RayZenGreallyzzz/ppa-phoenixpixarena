@@ -2396,6 +2396,22 @@ ppaPatchRegex(
   if(it.fartPickaxe===true){
     showPickup('Кирку нельзя продать','#ffb36b');
     return;
+  }
+
+  // Inventory gear sale rule:
+  // grey/common gear = exactly 100 gold; every higher rarity is protected.
+  var _ppaSellSlot=String(it.slot||'').toLowerCase();
+  var _ppaIsGear=!!_ppaSellSlot&&_ppaSellSlot!=='tool';
+  if(_ppaIsGear){
+    var _ppaSellRarity=String(it.rarity||'common').toLowerCase();
+    if(_ppaSellRarity!=='common'){
+      showPickup('Этот шмот нельзя продать за золото','#ff8c78');
+      return;
+    }
+    it.sell=100;
+    it.sellPrice=100;
+    it.vendorPrice=100;
+    it.goldValue=100;
   }`
 );
 
@@ -2441,6 +2457,9 @@ ppaPatchRegex(
 );
 
 if(!output.includes("showPickup('Кирку нельзя продать'") ||
+   !output.includes("var _ppaIsGear=!!_ppaSellSlot&&_ppaSellSlot!=='tool'") ||
+   !output.includes("if(_ppaSellRarity!=='common')") ||
+   !output.includes("it.sell=100;") ||
    !output.includes("Never resurrect a timed pickaxe from the timer alone") ||
    !output.includes("_currentTier==='legendary'")) {
   throw new Error('Fart pickaxe direct-sale/upgrade fix did not apply');
