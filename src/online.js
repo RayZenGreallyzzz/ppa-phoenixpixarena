@@ -197,36 +197,39 @@ function activeSlots(state) {
   const ps = state.premiumShop && typeof state.premiumShop === 'object' ? state.premiumShop : {};
   const b = ps.purchasedBundles && typeof ps.purchasedBundles === 'object' ? ps.purchasedBundles : {};
 
-  // 1 qualifying Premium Gram = 1 simultaneous lot, maximum 10.
-  // Keep verified lifetime paid Gram, but also recover legacy Premium purchases
-  // from the save so old test purchases/subscriptions do not collapse to 1 slot.
-  let credit = Math.max(0, Number(state.lifetimePaidGram) || 0);
-  credit = Math.max(credit, Math.max(0, Number(ps.auctionSlotGram) || 0));
+  // Original paid-account rule remains: 1 verified lifetime-paid Gram = 1 slot.
+  const paidSlots = Math.max(0, Math.floor(Number(state.lifetimePaidGram) || 0));
 
-  const bundlePrice = { starter: 1, growth: 3, adventurer: 5, unique: 10, epic: 30 };
-  let knownPremiumSpend = 0;
+  // Premium bundles/subscriptions unlock +1 slot per separate purchase.
+  let legacyBundlePurchases = 0;
   for (const k of Object.keys(b)) {
-    const n = b[k] === true ? 1 : Math.max(0, Number(b[k]) || 0);
-    if (bundlePrice[k]) knownPremiumSpend += n * bundlePrice[k];
+    if (b[k] === true) legacyBundlePurchases += 1;
+    else legacyBundlePurchases += Math.max(0, Math.floor(Number(b[k]) || 0));
   }
 
-  const planPrice = { mini: 1, week: 5, month: 10 };
-  if (ps.lastPremiumPlan && planPrice[ps.lastPremiumPlan]) {
-    knownPremiumSpend += planPrice[ps.lastPremiumPlan];
+  let legacySubscriptionPurchases = ps.lastPremiumPlan ? 1 : 0;
+  const planDays = { mini: 3, week: 7, month: 30 };
+  const days = planDays[ps.lastPremiumPlan];
+  const boughtAt = Math.max(0, Number(ps.lastPremiumPurchaseAt) || 0);
+  const until = Math.max(0, Number(ps.premiumUntil) || 0);
+  if (days && boughtAt > 0 && until > boughtAt) {
+    const duration = days * 24 * 60 * 60 * 1000;
+    legacySubscriptionPurchases = Math.max(
+      1,
+      Math.ceil(((until - boughtAt) / duration) - 1e-9)
+    );
   }
 
-  // A saved 30-day Premium purchase therefore restores all 10 auction slots.
-  credit = Math.max(credit, knownPremiumSpend);
+  const savedPremiumPurchases = Math.max(
+    0,
+    Math.floor(Number(ps.auctionSlotPurchases) || 0)
+  );
+  const premiumPurchases = Math.max(
+    savedPremiumPurchases,
+    legacyBundlePurchases + legacySubscriptionPurchases
+  );
 
-  const hasLegacyPremium =
-    !!ps.lastPremiumPlan ||
-    Number(ps.lastPremiumPurchaseAt) > 0 ||
-    Number(ps.premiumTier) > 0 ||
-    Number(ps.premiumUntil) > 0 ||
-    Object.keys(b).some((k) => !!b[k]);
-  if (credit < 1 && hasLegacyPremium) credit = 1;
-
-  return Math.max(0, Math.min(10, Math.floor(credit)));
+  return Math.max(0, Math.min(10, paidSlots + premiumPurchases));
 }
 function payloadToUi(item) {
   item = item && typeof item === 'object' ? item : {};
