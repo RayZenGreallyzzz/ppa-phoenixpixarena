@@ -142,13 +142,13 @@
 
   function armChatKeyboardFreeze(){
     document.addEventListener('focusin',function(e){
-      try{if(e&&e.target&&e.target.id==='ppaChatNativeInput')beginKeyboardFreeze()}catch(_){}
+      try{if(e&&e.target&&(e.target.id==='ppaChatNativeInput'||e.target.id==='ppaChatPrivateTarget'))beginKeyboardFreeze()}catch(_){}
     },true);
     document.addEventListener('focusout',function(e){
       try{
-        if(!e||!e.target||e.target.id!=='ppaChatNativeInput')return;
+        if(!e||!e.target||(e.target.id!=='ppaChatNativeInput'&&e.target.id!=='ppaChatPrivateTarget'))return;
         setTimeout(function(){
-          try{if(document.activeElement&&document.activeElement.id==='ppaChatNativeInput')return}catch(_){}
+          try{if(document.activeElement&&(document.activeElement.id==='ppaChatNativeInput'||document.activeElement.id==='ppaChatPrivateTarget'))return}catch(_){}
           finishKeyboardFreeze(false);
         },160);
       }catch(_){}
