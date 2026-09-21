@@ -36,6 +36,13 @@
 
   function applyWalletState(r){
     try{
+      if(r&&r.telegram&&r.telegram.id){
+        window.PPA_GRAM_WALLET_IDENTITY={
+          id:String(r.telegram.id||''),
+          name:String(r.telegram.name||('ID '+r.telegram.id)),
+          username:String(r.telegram.username||'')
+        };
+      }
       var p=gramWalletProfile();p.connected=!!(r&&r.connected);p.address=String((r&&r.address)||'');p.walletGram=null;
       if(r&&Array.isArray(r.history))p.history=r.history.slice(-100);p.updatedAt=Date.now();saveGame();sendGramWalletState();sendPremiumState();
     }catch(e){console.warn('Wallet state',e)}
