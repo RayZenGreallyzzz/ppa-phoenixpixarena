@@ -337,7 +337,7 @@ if (!output.includes('id=&quot;clanRankList&quot;')) {
 ppaPatchRegex(
   'ton connect parent runtime direct redirect',
   /function gramWalletLink\(address\)\{/,
-  `window.PPA_TWA_RETURN_URL='https://t.me/PhoenixPixMMORPGbot?game=pheonixpixarena';
+  `window.PPA_TWA_RETURN_URL='https://t.me/PhoenixPixMMORPGbot?startapp';
 var PPA_TON_UI=null;
 var PPA_TON_LOADING=null;
 var PPA_TON_CONNECTED=false;
@@ -449,33 +449,38 @@ function ppaHideTonWalletPicker(){
   if(PPA_TON_PICKER)PPA_TON_PICKER.style.display='none';
 }
 
-function ppaOpenTonWalletDirect(appName){
+async function ppaOpenTonWalletDirect(appName){
   var cfg=ppaTonWalletConfig(appName);
   if(!cfg){gramWalletResult(false,'Неизвестный TON-кошелёк');return}
-  if(!PPA_TON_UI||!PPA_TON_UI.connector){
+  if(!PPA_TON_UI){
     gramWalletResult(false,'TON Connect ещё запускается · повтори через секунду');
     ppaTonInit();
     return;
   }
   try{
     PPA_TON_SELECTED_WALLET=String(appName);
-    // connector.connect is synchronous and returns the universal TON Connect URL.
-    // Keeping this inside the button click preserves Android/Telegram user activation.
-    var connectUrl=PPA_TON_UI.connector.connect({
-      universalLink:cfg.universalLink,
-      bridgeUrl:cfg.bridgeUrl
-    });
-    if(!connectUrl)throw new Error('TON Connect не вернул ссылку');
     ppaHideTonWalletPicker();
-    gramWalletResult(false,'Открываю '+cfg.name+'…');
-    var wa=window.Telegram&&window.Telegram.WebApp;
-    if(wa&&typeof wa.openLink==='function'){
-      wa.openLink(connectUrl);
+
+    // IMPORTANT: do not call connector.connect()+Telegram.WebApp.openLink() here.
+    // @tonconnect/ui has its own Android/Telegram Mini App redirect strategy
+    // (universal/deep-link + return handling). Bypassing it caused the SDK
+    // "User rejects the action" error without ever opening the wallet.
+    if(typeof PPA_TON_UI.openSingleWalletModal==='function'){
+      gramWalletResult(false,'Открываю '+cfg.name+' через TON Connect…');
+      await PPA_TON_UI.openSingleWalletModal(String(appName));
       return;
     }
-    window.location.assign(connectUrl);
+
+    // Compatibility fallback for an older cached SDK build.
+    gramWalletResult(false,'Открываю список TON Wallet…');
+    await PPA_TON_UI.openModal();
   }catch(err){
-    gramWalletResult(false,'Не удалось открыть '+cfg.name+': '+String(err&&err.message||err||'неизвестно'));
+    var msg=String(err&&err.message||err||'неизвестно');
+    if(/user rejects|user declined|action declined/i.test(msg)){
+      gramWalletResult(false,'Подключение к '+cfg.name+' отменено');
+      return;
+    }
+    gramWalletResult(false,'Не удалось открыть '+cfg.name+': '+msg);
   }
 }
 
@@ -561,12 +566,11 @@ ppaPatchRegex(
 
 if(!output.includes('data-ppa-tonconnect="1"') ||
    !output.includes("ppaOpenTonWalletDirect") ||
-   !output.includes("connector.connect({") ||
-   !output.includes("wa.openLink(connectUrl)") ||
+   !output.includes("openSingleWalletModal(String(appName))") ||
    !output.includes("gramWalletShowTonPicker") ||
    !output.includes("fetch('/api/ton-balance?address='") ||
    !output.includes(ppaEscapeSrcdocCode("type:'gramWalletShowTonPicker'"))) {
-  throw new Error('Direct parent TON Connect flow did not apply');
+  throw new Error('Parent TON Connect flow did not apply');
 }
 /* ======================================================================== */
 
