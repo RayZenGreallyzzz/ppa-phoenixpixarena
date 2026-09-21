@@ -414,7 +414,10 @@ async function ppaTonConnectInit(){
       ui.uiOptions={
         language:'ru',
         uiPreferences:{theme:'DARK'},
-        actionsConfiguration:{returnStrategy:'back'}
+        actionsConfiguration:{
+          returnStrategy:'back',
+          twaReturnUrl:'https://t.me/PhoenixPixMMORPGbot?startapp'
+        }
       };
     }catch(_){}
     PPA_TON_CONNECT_UI_INSTANCE=ui;
@@ -431,6 +434,8 @@ async function ppaTonConnectInit(){
       }catch(err){
         gramWalletResult(false,'Ошибка TON Connect: '+String(err&&err.message||err||'неизвестно'));
       }
+    },function(err){
+      gramWalletResult(false,'TON Connect: '+String(err&&err.message||err||'ошибка подключения'));
     });
     try{await ui.connectionRestored}catch(_){}
     return ui;
@@ -493,7 +498,8 @@ if(!output.includes('tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js') ||
    !output.includes("d.type==='gramWalletTonConnectDisconnect'") ||
    !output.includes(ppaEscapeSrcdocCode("type:'gramWalletTonConnectOpen'")) ||
    !output.includes(ppaEscapeSrcdocCode("type:'gramWalletTonConnectDisconnect'")) ||
-   !output.includes("manifestUrl:location.origin+'/tonconnect-manifest.json'")) {
+   !output.includes("manifestUrl:location.origin+'/tonconnect-manifest.json'") ||
+   !output.includes("twaReturnUrl:'https://t.me/PhoenixPixMMORPGbot?startapp'")) {
   throw new Error('Gram Wallet TON Connect patch did not apply');
 }
 /* ======================================================================== */
