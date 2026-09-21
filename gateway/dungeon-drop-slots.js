@@ -310,17 +310,37 @@
 
   function installInfo(){
     try{
-      if(typeof mobDropInfo!=='function'||mobDropInfo.__ppaDungeonSlotRows)return;
+      if(typeof mobDropInfo!=='function'||mobDropInfo.__ppaDungeonNativeDropRows)return;
       var base=mobDropInfo;
       var wrapped=function(e){
         var rows=base.apply(this,arguments);
-        rows=expandBookRows(e,rows);
-        rows=expandGearRows(e,rows);
-        return finalGearLabelGuard(e,rows);
+        if(!Array.isArray(rows))return rows;
+
+        // Restore the original per-floor / per-boss drop table exactly as the
+        // game defines it. Do not split gear into synthetic per-slot rows and
+        // do not rewrite rarities based on guessed level brackets.
+        rows=rows.map(function(r){return Array.isArray(r)?r.slice():r});
+
+        // Phoenix is a level-20 boss: blue equipment/weapons are intentionally
+        // disabled. Keep every other configured Phoenix reward untouched.
+        if(e&&e.isDungeonPhoenixBoss){
+          rows=rows.filter(function(r){
+            if(!Array.isArray(r)||r.length<2)return true;
+            var s=String(r[0]||'').toLowerCase();
+            var gear=(s.indexOf('шмот')>=0||s.indexOf('оруж')>=0||s.indexOf('экипиров')>=0||
+                      s.indexOf('брон')>=0||s.indexOf('шлем')>=0||s.indexOf('перчат')>=0||
+                      s.indexOf('кольц')>=0||s.indexOf('понож')>=0||s.indexOf('сапог')>=0);
+            if(!gear)return true;
+            return !(s.indexOf('син')>=0||s.indexOf('редк')>=0||s.indexOf('rare')>=0||s.indexOf('blue')>=0);
+          });
+        }
+        return rows;
       };
-      wrapped.__ppaDungeonSlotRows=1;
+      wrapped.__ppaDungeonNativeDropRows=1;
+      wrapped.__ppaDungeonNativeBase=base;
       try{mobDropInfo=wrapped}catch(_){}
       try{window.mobDropInfo=wrapped}catch(_){}
+      window.PPA_DUNGEON_DROP_TABLE_MODE='native';
     }catch(_){}
   }
 
