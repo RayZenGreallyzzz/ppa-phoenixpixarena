@@ -8,7 +8,7 @@
   var TARGET_STORE='ppaChatV2PrivateTarget';
   var state={channel:'general',collapsed:true,unread:{general:0,clan:0,party:0,private:0},history:{general:[],clan:[],party:[],private:[]},target:''};
   var root=null,box=null,nativeInput=null,visualInput=null,msgs=null,targetRow=null,targetInput=null,collapseBtn=null,launcher=null,sendBtn=null;
-  var typing=false,legacyNativeInput=false;
+  var typing=false,legacyNativeInput=false,typingShiftY=0;
 
   function escText(v){return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]/g,'').slice(0,180)}
   function selfName(){
@@ -115,6 +115,46 @@
     var v=String(nativeInput.value||'');
     visualInput.textContent=v||'Сообщение…';
     visualInput.classList.toggle('empty',!v);
+  }
+  function keyboardVisibleBottom(){
+    var vals=[];
+    try{
+      var vv=window.visualViewport;
+      if(vv&&Number(vv.height)>120)vals.push((Number(vv.offsetTop)||0)+Number(vv.height));
+    }catch(_){}
+    try{if(Number(window.innerHeight)>120)vals.push(Number(window.innerHeight))}catch(_){}
+    if(!vals.length)return 0;
+    return Math.min.apply(Math,vals);
+  }
+  function fullViewportHeight(){
+    var h=0;
+    try{h=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ppa-game-full-h'))||0}catch(_){}
+    if(!(h>0)){try{h=Math.max(Number(screen&&screen.height)||0,Number(document.documentElement.clientHeight)||0)}catch(_){}}
+    return h||keyboardVisibleBottom();
+  }
+  function dockChatToKeyboard(){
+    if(!root||!typing)return;
+    var visibleBottom=keyboardVisibleBottom(),fullH=fullViewportHeight();
+    if(!(visibleBottom>100)||!(fullH>100))return;
+    // Wait until Android/Telegram has actually reduced the visible viewport.
+    if(visibleBottom>fullH*.93)return;
+    try{
+      var r=root.getBoundingClientRect();
+      var desiredBottom=visibleBottom-6;
+      var delta=desiredBottom-r.bottom;
+      if(Math.abs(delta)<1)return;
+      typingShiftY=Math.max(-120,Math.min(420,typingShiftY+delta));
+      root.style.setProperty('transform','translateY('+Math.round(typingShiftY)+'px)','important');
+    }catch(_){}
+  }
+  function scheduleKeyboardDock(){
+    [0,45,100,180,280,420,650].forEach(function(ms){
+      setTimeout(function(){if(typing)dockChatToKeyboard()},ms);
+    });
+  }
+  function clearKeyboardDock(){
+    typingShiftY=0;
+    if(root)root.style.removeProperty('transform');
   }
   function menuVisible(){
     var open=['#gramWalletPanel.open','#eventsPanel.open','#premiumPanel.open'];
@@ -281,19 +321,36 @@
     visualInput.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();focusNative()});
     visualInput.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();focusNative()}});
     nativeInput.addEventListener('input',syncVisualInput);
-    nativeInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping');if(visualInput)visualInput.classList.add('focused')});
-    nativeInput.addEventListener('blur',function(){typing=false;root.classList.remove('nativeTyping');if(visualInput)visualInput.classList.remove('focused')});
+    nativeInput.addEventListener('focus',function(){
+      typing=true;root.classList.add('nativeTyping');
+      if(visualInput)visualInput.classList.add('focused');
+      clearKeyboardDock();scheduleKeyboardDock();
+    });
+    nativeInput.addEventListener('blur',function(){
+      typing=false;root.classList.remove('nativeTyping');
+      if(visualInput)visualInput.classList.remove('focused');
+      clearKeyboardDock();
+    });
     nativeInput.addEventListener('keydown',function(e){
       if(e.key==='Enter'){e.preventDefault();e.stopImmediatePropagation();dispatchSend()}
     },true);
-    targetInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping')});
-    targetInput.addEventListener('blur',function(){typing=false;root.classList.remove('nativeTyping')});
+    targetInput.addEventListener('focus',function(){
+      typing=true;root.classList.add('nativeTyping');clearKeyboardDock();scheduleKeyboardDock();
+    });
+    targetInput.addEventListener('blur',function(){
+      typing=false;root.classList.remove('nativeTyping');clearKeyboardDock();
+    });
     targetInput.addEventListener('input',function(){state.target=escText(targetInput.value).slice(0,24);save()});
     targetInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();try{nativeInput.focus({preventScroll:true})}catch(_){nativeInput.focus()}}});
 
     ['pointerdown','touchstart','click'].forEach(function(type){root.addEventListener(type,function(e){e.stopPropagation()},false)});
 
     syncVisualInput();
+    if(window.visualViewport){
+      window.visualViewport.addEventListener('resize',function(){if(typing)scheduleKeyboardDock()},{passive:true});
+      window.visualViewport.addEventListener('scroll',function(){if(typing)dockChatToKeyboard()},{passive:true});
+    }
+    window.addEventListener('resize',function(){if(typing)scheduleKeyboardDock()},{passive:true});
 
     window.PPA_CHAT_RECEIVE=function(channel,from,text,meta){add(channel,from,text,meta||{})};
     window.PPA_CHAT_OPEN=function(channel){setCollapsed(false);if(channel)setChannel(channel);return true};
