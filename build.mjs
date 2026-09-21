@@ -919,8 +919,8 @@ if (!output.includes("БОЙ · ДОБЫЧА НА ПАУЗЕ")) {
 /* ======================================================================== */
 
 /* === AUCTION PREMIUM PURCHASE ENTITLEMENT =============================== */
-// Cumulative Gram spent in Premium Shop = simultaneous auction lots, 1:1,
-// capped at 10. At 1 spent Gram, trading/selling is unlocked.
+// Auction slots use a stepped cumulative Premium-spend ladder:
+// 1 Gram => 1 slot; 4 total => 3; 9 => 5; 16 => 7; 25 => 9; 36 => 10 max.
 // Premium goods, bundles and Premium subscriptions count.
 // Black Market, top-up balance itself and paid class-change spend do not.
 ppaPatchRegex(
@@ -944,23 +944,31 @@ function premiumAuctionLegacyKnownSpend(){
 }
 function accountPremiumAuctionSpend(){
   if(!INV.premiumShop)INV.premiumShop={purchasedBundles:{}};
-  var ps=INV.premiumShop,v=Number(ps.auctionSlotGram);
-  if(!Number.isFinite(v)||v<0){
-    var legacy=premiumAuctionLegacyEvidence();
-    var known=premiumAuctionLegacyKnownSpend();
-    var analytics=legacy?Math.max(0,Number(INV.gramSpentLifetime)||0):0;
-    v=Math.min(10,Math.max(known,analytics,legacy?1:0));
-    ps.auctionSlotGram=Math.round(v*100)/100;
-  }
-  return Math.max(0,Number(ps.auctionSlotGram)||0);
+  var ps=INV.premiumShop,legacy=premiumAuctionLegacyEvidence();
+  var known=premiumAuctionLegacyKnownSpend();
+  var analytics=legacy?Math.max(0,Number(INV.gramSpentLifetime)||0):0;
+  var stored=Math.max(0,Number(ps.auctionSlotGram)||0);
+  var v=Math.max(stored,known,analytics,legacy?1:0);
+  ps.auctionSlotGram=Math.round(v*100)/100;
+  return ps.auctionSlotGram;
 }
 function recordPremiumAuctionSpend(amount){
   amount=Number(amount);
   if(!Number.isFinite(amount)||amount<=0)return accountPremiumAuctionSpend();
   if(!INV.premiumShop)INV.premiumShop={purchasedBundles:{}};
-  var next=Math.min(10,accountPremiumAuctionSpend()+amount);
+  var next=accountPremiumAuctionSpend()+amount;
   INV.premiumShop.auctionSlotGram=Math.round(next*100)/100;
   return INV.premiumShop.auctionSlotGram;
+}
+function auctionSlotsFromPremiumSpend(spent){
+  spent=Math.max(0,Number(spent)||0);
+  if(spent<1)return 0;
+  if(spent<4)return 1;
+  if(spent<9)return 3;
+  if(spent<16)return 5;
+  if(spent<25)return 7;
+  if(spent<36)return 9;
+  return 10;
 }
 function accountAuctionCreditGram(){
   return accountPremiumAuctionSpend();
@@ -969,7 +977,7 @@ function accountActivated(){
   return accountAuctionCreditGram()>=1;
 }
 function accountAuctionSlots(){
-  return Math.max(0,Math.min(10,Math.floor(accountAuctionCreditGram())));
+  return auctionSlotsFromPremiumSpend(accountAuctionCreditGram());
 }`
 );
 
@@ -1021,6 +1029,8 @@ if (!output.includes('autoAttackUnlocked')) {
 if (!output.includes('function accountPremiumAuctionSpend()') ||
     !output.includes('function recordPremiumAuctionSpend(amount)') ||
     !output.includes('function accountAuctionCreditGram()') ||
+    !output.includes('function auctionSlotsFromPremiumSpend(spent)') ||
+    !output.includes("if(spent<36)return 9") ||
     !output.includes("recordPremiumAuctionSpend(cfg.price)") ||
     !output.includes("recordPremiumAuctionSpend(g.price)")) {
   throw new Error('Premium auction-slot entitlement patch did not apply');
