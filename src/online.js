@@ -797,13 +797,13 @@ export async function handleOnlineRoute(path, ctx) {
           'К выплате: ' + created.payout_gram + ' TON\n' +
           'Кошелёк: ' + created.wallet_address + '\n\n' +
           'Открой /pending в боте.';
-        for (const chatId of ids.slice(0, 10)) {
+        await Promise.allSettled(ids.slice(0, 10).map((chatId) =>
           fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ chat_id: chatId, text })
-          }).catch(() => {});
-        }
+          })
+        ));
       }
     } catch (_) {}
 
