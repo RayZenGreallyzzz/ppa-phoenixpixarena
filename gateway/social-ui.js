@@ -45,7 +45,7 @@
       .ppaSocialName{font-size:18px;font-weight:800;color:#f2d39a;text-align:center;text-shadow:1px 2px 2px #000}
       .ppaSocialClass{margin-top:4px;text-align:center;color:#b9d6e8;font-size:11px}
       .ppaSocialStats{display:flex;justify-content:center;gap:18px;margin:12px 0;padding:9px;border-top:1px solid rgba(191,130,63,.4);border-bottom:1px solid rgba(191,130,63,.4);color:#ffd66f;font:bold 12px monospace}
-      .ppaSocialBtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+      .ppaSocialBtns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
       .ppaSocialBtn,.ppaInviteBtn{
         min-height:42px;border:1px solid #8f673a;border-radius:7px;
         background:linear-gradient(180deg,#3b2b1d,#1d1713);color:#f2dfbd;
@@ -112,7 +112,7 @@
   }
 
   function ensureFriendsTab(){
-    var tabs=document.querySelector('#ppaChatBox .ppaChatTabs')||document.querySelector('.ppaChatTabs');if(!tabs)return false;
+    var tabs=document.querySelector('#ppaChatBoxV2 .ppaChatTabs')||document.querySelector('#ppaChatBox .ppaChatTabs')||document.querySelector('.ppaChatTabs');if(!tabs)return false;
     tabs.style.gridTemplateColumns='repeat(5,1fr)';
     var b=document.getElementById('ppaFriendsTab');
     if(!b){
@@ -129,10 +129,16 @@
     if(!document.getElementById('ppaSocialShade')){var s=document.createElement('div');s.id='ppaSocialShade';document.body.appendChild(s);s.addEventListener('pointerdown',closeAll)}
     if(!document.getElementById('ppaPlayerCard')){
       var c=document.createElement('div');c.id='ppaPlayerCard';
-      c.innerHTML='<div class="ppaSocialName" id="ppaSocialName">Игрок</div><div class="ppaSocialClass" id="ppaSocialClass">ГЕРОЙ</div><div class="ppaSocialStats"><span id="ppaSocialLevel">УР. 1</span><span id="ppaSocialBm">⚔ БМ 0</span></div><div class="ppaSocialBtns"><button class="ppaSocialBtn" id="ppaInviteParty">ПРИГЛАСИТЬ В ГРУППУ</button><button class="ppaSocialBtn friend" id="ppaAddFriend">ДОБАВИТЬ В ДРУЗЬЯ</button></div>';
+      c.innerHTML='<div class="ppaSocialName" id="ppaSocialName">Игрок</div><div class="ppaSocialClass" id="ppaSocialClass">ГЕРОЙ</div><div class="ppaSocialStats"><span id="ppaSocialLevel">УР. 1</span><span id="ppaSocialBm">⚔ БМ 0</span></div><div class="ppaSocialBtns"><button class="ppaSocialBtn" id="ppaInviteParty">ПРИГЛАСИТЬ В ГРУППУ</button><button class="ppaSocialBtn friend" id="ppaAddFriend">ДОБАВИТЬ В ДРУЗЬЯ</button><button class="ppaSocialBtn" id="ppaWritePrivate">НАПИСАТЬ</button></div>';
       document.body.appendChild(c);c.addEventListener('pointerdown',function(e){e.stopPropagation()});
       document.getElementById('ppaInviteParty').addEventListener('click',inviteCurrent);
       document.getElementById('ppaAddFriend').addEventListener('click',addCurrentFriend);
+      document.getElementById('ppaWritePrivate').addEventListener('click',function(){
+        if(!current)return;
+        var name=String(current.name||current.n||'').trim();
+        closeAll();
+        if(name&&window.PPA_CHAT_PRIVATE_TO)window.PPA_CHAT_PRIVATE_TO(name);
+      });
     }
     if(!document.getElementById('ppaFriendsPanel')){
       var p=document.createElement('div');p.id='ppaFriendsPanel';
