@@ -192,18 +192,30 @@ function sanitizeLotId(v) {
   return /^[A-Za-z0-9_-]{4,120}$/.test(v) ? v : '';
 }
 function sanitizeCurrency(v) { return v === 'gram' ? 'gram' : 'ppa'; }
+function auctionSlotsFromPremiumSpend(spent) {
+  spent = Math.max(0, Number(spent) || 0);
+  if (spent < 1) return 0;
+  if (spent < 4) return 1;
+  if (spent < 9) return 3;
+  if (spent < 16) return 5;
+  if (spent < 25) return 7;
+  if (spent < 36) return 9;
+  return 10;
+}
 function activeSlots(state) {
   state = state && typeof state === 'object' ? state : {};
   const ps = state.premiumShop && typeof state.premiumShop === 'object' ? state.premiumShop : {};
   const b = ps.purchasedBundles && typeof ps.purchasedBundles === 'object' ? ps.purchasedBundles : {};
 
-  // Auction entitlement:
-  // cumulative qualifying Gram spent in Premium Shop = simultaneous sell slots,
-  // 1:1, capped at 10. At 1 Gram trading/selling is unlocked.
+  // Auction ladder is based only on cumulative qualifying Premium-shop spend:
+  // 1 Gram => 1 slot; +3 Gram (4 total) => 3 slots;
+  // +5 Gram (9 total) => 5; +7 (16 total) => 7;
+  // +9 (25 total) => 9; +11 (36 total) => 10 max.
   let premiumSpent = Math.max(0, Number(ps.auctionSlotGram) || 0);
 
-  // Legacy saves did not have auctionSlotGram. If the save proves Premium usage,
-  // recover the old cumulative Premium spend counter so test purchases still count.
+  // Legacy recovery: older test saves tracked Premium purchases in the generic
+  // Gram-spend counter before auctionSlotGram existed. If Premium evidence is
+  // present, use the larger value so repeated old subscriptions are not lost.
   const hasPremiumEvidence =
     !!ps.lastPremiumPlan ||
     Number(ps.lastPremiumPurchaseAt) > 0 ||
@@ -211,11 +223,11 @@ function activeSlots(state) {
     Number(ps.premiumUntil) > 0 ||
     Object.keys(b).some((k) => !!b[k]);
 
-  if (premiumSpent <= 0 && hasPremiumEvidence) {
-    premiumSpent = Math.max(0, Number(state.gramSpentLifetime) || 0);
+  if (hasPremiumEvidence) {
+    premiumSpent = Math.max(premiumSpent, Math.max(0, Number(state.gramSpentLifetime) || 0));
   }
 
-  return Math.max(0, Math.min(10, Math.floor(premiumSpent)));
+  return auctionSlotsFromPremiumSpend(premiumSpent);
 }
 function payloadToUi(item) {
   item = item && typeof item === 'object' ? item : {};
