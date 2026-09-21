@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v462-boss-drop-boost-20260921';
+const CLIENT_BUILD = 'v463-boss-fart-hp-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1496,14 +1496,14 @@ ppaPatchRegex(
 ppaPatchRegex(
   'dragon60 keeper card text',
   /Те же типы мобов · усиление ×3 · без босса/g,
-  "Те же типы мобов · усиление ×3 · босс: Дракон Пепла · 27 000 HP",
+  "Те же типы мобов · усиление ×3 · босс: Дракон Пепла · 36 700 HP",
   true
 );
 
 ppaPatchRegex(
   'dragon60 dungeon subtitle',
   /Уровни 41–60 · те же типы мобов · HP \/ DEF \/ ATK ×3 от 21–40 · БОССА НЕТ/g,
-  "Уровни 41–60 · мобы ×3 · Дракон Пепла · 27 000 HP · урон 180",
+  "Уровни 41–60 · мобы ×3 · Дракон Пепла · 36 700 HP · урон 180",
   true
 );
 
@@ -5238,6 +5238,7 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
   const arenaPvp=fs.readFileSync(path.join(ROOT,'gateway/arena-pvp-client.js'),'utf8');
   const dungeonMobEvents=fs.readFileSync(path.join(ROOT,'gateway/dungeon-mob-events.js'),'utf8');
   const bossDropBoost=fs.readFileSync(path.join(ROOT,'gateway/boss-drop-boost.js'),'utf8');
+  const fartGuardBalance=fs.readFileSync(path.join(ROOT,'gateway/fart-guard-balance.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
 
@@ -5308,6 +5309,13 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
       !bossDropBoost.includes('Бонусный бросок таблицы босса')) {
     throw new Error('Boss drop boost helper incomplete');
   }
+  if (!dungeonMobEvents.includes("rows.push(['p20',3913") ||
+      !dungeonMobEvents.includes("DUNGEON21_BOSS_HP:9000)||9000)+5350") ||
+      !dungeonMobEvents.includes("rows.push(['b60',36700") ||
+      !fartGuardBalance.includes('var HP_BONUS=8000') ||
+      !fartGuardBalance.includes('__ppaFartHpPlus8000')) {
+    throw new Error('Boss/Fart HP balance helper incomplete');
+  }
 }
 
 /* ======================================================================== */
@@ -5323,6 +5331,7 @@ const filesToPublish = [
   ['gateway/dungeon-mob-events.js','dungeon-mob-events.js','Dungeon mob event bridge missing'],
   ['gateway/dungeon-drop-slots.js','dungeon-drop-slots.js','Dungeon drop slot helper missing'],
   ['gateway/boss-drop-boost.js','boss-drop-boost.js','Boss drop boost helper missing'],
+  ['gateway/fart-guard-balance.js','fart-guard-balance.js','Fart guard balance helper missing'],
   ['gateway/qa-test-access.js','qa-test-access.js','QA dungeon access helper missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
   ['gateway/mobile-sprite-performance.js','mobile-sprite-performance.js','Mobile sprite performance helper missing'],
@@ -5345,6 +5354,7 @@ const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
 output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('chat-ui.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
 <script src="${js('dungeon-drop-slots.js')}"></script>
 <script src="${js('boss-drop-boost.js')}"></script>
+<script src="${js('fart-guard-balance.js')}"></script>
 <script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
@@ -5361,6 +5371,7 @@ console.log('Dungeon 60 dragon: /game/dungeon60-dragon.js');
 console.log('Dungeon mob events: /game/dungeon-mob-events.js');
 console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
 console.log('Boss drop boost: /game/boss-drop-boost.js');
+console.log('Fart guard balance: /game/fart-guard-balance.js');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
