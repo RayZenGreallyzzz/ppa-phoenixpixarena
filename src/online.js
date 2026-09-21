@@ -200,7 +200,23 @@ async function ensureOnlineSchema(env) {
       wallet_address TEXT NOT NULL DEFAULT '',
       last_scan_at INTEGER NOT NULL DEFAULT 0,
       updated_at INTEGER NOT NULL
-    )`
+    )`,
+    `CREATE TABLE IF NOT EXISTS withdraw_requests (
+      id TEXT PRIMARY KEY,
+      telegram_id TEXT NOT NULL,
+      nickname TEXT NOT NULL DEFAULT '',
+      wallet_address TEXT NOT NULL,
+      amount_gram REAL NOT NULL,
+      fee_gram REAL NOT NULL,
+      payout_gram REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      reviewer_id TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      reviewed_at INTEGER NOT NULL DEFAULT 0,
+      paid_at INTEGER NOT NULL DEFAULT 0
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_withdraw_requests_status_created ON withdraw_requests(status, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_withdraw_requests_user ON withdraw_requests(telegram_id, created_at)`
   ];
   for (const q of sql) await env.DB.prepare(q).run();
   schemaReady = true;
@@ -732,11 +748,75 @@ export async function handleOnlineRoute(path, ctx) {
   }
   if (path === '/api/wallet/deposit') return walletDeposit(env, telegramId, body);
   if (path === '/api/wallet/withdraw') {
-    const amount = Number(body && body.amount);
+    const amount = Math.round((Number(body && body.amount) + Number.EPSILON) * 1e9) / 1e9;
     if (!Number.isFinite(amount) || amount < 15) {
       return out({ ok: false, code: 'WITHDRAW_MIN_15_TON', message: 'Минимальный вывод — 15 Gram (15 TON).' }, 400);
     }
-    return out({ ok: false, code: 'TREASURY_SIGNER_REQUIRED', message: 'Минимальный вывод — 15 Gram. Для реального вывода осталось подключить безопасную серверную подпись казны.' }, 501);
+    const wallet = await walletState(env, telegramId);
+    if (!wallet.connected || !wallet.address) return out({ ok: false, message: 'Сначала подключи TON Wallet.' }, 409);
+    const save = await loadSaveRow(env, telegramId);
+    if (!save) return out({ ok: false, message: 'Сейв персонажа не найден.' }, 409);
+    const state = save.state && typeof save.state === 'object' ? save.state : {};
+    const balance = Math.max(0, Number(state.gram) || 0);
+    if (balance + 1e-9 < amount) return out({ ok: false, code: 'WITHDRAW_BALANCE_LOW', message: 'Недостаточно Gram для вывода.' }, 409);
+
+    const pending = await env.DB.prepare("SELECT id FROM withdraw_requests WHERE telegram_id=?1 AND status IN ('pending','approved') ORDER BY created_at DESC LIMIT 1")
+      .bind(telegramId).first();
+    if (pending) return out({ ok: false, code: 'WITHDRAW_ALREADY_PENDING', message: 'У тебя уже есть заявка на вывод в обработке.' }, 409);
+
+    const fee = Math.round((amount * 0.10 + Number.EPSILON) * 1e9) / 1e9;
+    const payout = Math.round(((amount - fee) + Number.EPSILON) * 1e9) / 1e9;
+    state.gram = Math.round(((balance - amount) + Number.EPSILON) * 1e9) / 1e9;
+    const raw = JSON.stringify(state);
+    if (new TextEncoder().encode(raw).byteLength > 1_800_000) return out({ ok: false, message: 'Сейв после заявки слишком большой.' }, 413);
+
+    const id = 'wd_' + crypto.randomUUID();
+    const now = Date.now();
+    const nextVersion = (Number(save.row.version) || 0) + 1;
+    const updateSave = env.DB.prepare(`UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5`)
+      .bind(nextVersion, raw, now, telegramId, Number(save.row.version) || 0);
+    const insertRequest = env.DB.prepare(`INSERT INTO withdraw_requests(id,telegram_id,nickname,wallet_address,amount_gram,fee_gram,payout_gram,status,created_at)
+      SELECT ?1,?2,?3,?4,?5,?6,?7,'pending',?8
+      WHERE EXISTS(SELECT 1 FROM saves WHERE telegram_id=?2 AND version=?9 AND updated_at=?8 AND state_json=?10)`)
+      .bind(id, telegramId, String(player && player.nickname || ''), wallet.address, amount, fee, payout, now, nextVersion, raw);
+    await env.DB.batch([updateSave, insertRequest]);
+
+    const created = await env.DB.prepare('SELECT * FROM withdraw_requests WHERE id=?1 AND telegram_id=?2').bind(id, telegramId).first();
+    if (!created) return out({ ok: false, code: 'WITHDRAW_RETRY', message: 'Баланс изменился. Повтори заявку на вывод.' }, 409);
+
+    try {
+      const ids = String(env.WITHDRAW_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean);
+      const token = String(env.WITHDRAW_BOT_TOKEN || '').trim();
+      if (token && ids.length) {
+        const text =
+          '🆕 PPA · новая заявка на вывод\n\n' +
+          'Игрок: ' + (created.nickname || ('ID ' + telegramId)) + '\n' +
+          'Telegram ID: ' + telegramId + '\n' +
+          'Запрошено: ' + created.amount_gram + ' Gram\n' +
+          'Комиссия 10%: ' + created.fee_gram + ' Gram\n' +
+          'К выплате: ' + created.payout_gram + ' TON\n' +
+          'Кошелёк: ' + created.wallet_address + '\n\n' +
+          'Открой /pending в боте.';
+        for (const chatId of ids.slice(0, 10)) {
+          fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text })
+          }).catch(() => {});
+        }
+      }
+    } catch (_) {}
+
+    return out({
+      ok: true,
+      requestId: id,
+      amount,
+      fee,
+      payout,
+      gameGram: state.gram,
+      status: 'pending',
+      message: 'Заявка на вывод создана · к выплате ' + String(payout).replace('.', ',') + ' TON'
+    });
   }
   return null;
 }
