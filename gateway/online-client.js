@@ -65,7 +65,8 @@
           },'*');
         }
       }catch(_){}
-      try{sendGramWalletState()}catch(_){}
+      // The verified server state was already posted directly above.
+      // Do not repaint it immediately from older/local wallet state.
       try{sendPremiumState()}catch(_){}
     }catch(e){console.warn('Wallet state',e)}
   }
