@@ -4571,17 +4571,6 @@ if(!output.includes("var PPA_RUNE_INFO_HOLD_MS=650") ||
 }
 /* ======================================================================== */
 
-const ppaBuildSelf=fs.readFileSync(path.join(ROOT,'build.mjs'),'utf8');
-// Build the search needles from pieces so this lookup cannot match its own source line.
-const ppaSlagSourceAnchor=ppaBuildSelf.indexOf("'pickaxe image "+"constants'");
-const ppaSlagDataPrefix="const FART_SLAG_"+"IMG='data:image/webp;base64,";
-const ppaSlagDataStart=ppaSlagSourceAnchor>=0?ppaBuildSelf.indexOf(ppaSlagDataPrefix,ppaSlagSourceAnchor):-1;
-const ppaSlagDataEnd=ppaSlagDataStart>=0?ppaBuildSelf.indexOf("';",ppaSlagDataStart+ppaSlagDataPrefix.length):-1;
-const ppaCharacterSlagImg=(ppaSlagDataStart>=0&&ppaSlagDataEnd>ppaSlagDataStart)
-  ?ppaBuildSelf.slice(ppaSlagDataStart+"const FART_SLAG_IMG='".length,ppaSlagDataEnd)
-  :'';
-if(!ppaCharacterSlagImg.startsWith('data:image/webp;base64,'))throw new Error('Fart slag image data not found in build source');
-
 /* === CHARACTER INVENTORY NATIVE-MENU REMOVAL + HOLD PREVIEW ============= */
 // The character iframe used real <img> elements for every item. Telegram WebView
 // can invoke a native image/link menu before JS cancellation. Render item art
@@ -4653,7 +4642,10 @@ try{
 function itemVisual(it,size){
   size=size||34;
   if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){
-    it.img='${ppaCharacterSlagImg}';
+    try{
+      var _ppaCharSlagArt=parent.PPA_FART_SLAG_IMG||'';
+      if(_ppaCharSlagArt)it.img=_ppaCharSlagArt;
+    }catch(_){}
   }
   if(it&&it.img){
     var sc=1,flt='none';
@@ -4937,7 +4929,7 @@ ppaPatchRegex(
     it.kind='resource';
     it.typeName='Ресурс Фарт-зоны';
     it.useText='Можно продать только местному NPC в Фарт-зоне.';
-    it.img='${ppaCharacterSlagImg}';
+    try{it.img=parent.PPA_FART_SLAG_IMG||it.img||''}catch(_){}
   }`)
 );
 
@@ -4986,8 +4978,9 @@ ppaPatchRegex(
   "if(bagGrid)bagGrid.__ppaSelectedIndex=(_sel>=0?_sel:-1);\n  var bc=document.querySelector(&#x27;.bagCount&#x27;);"
 );
 
-if(!output.includes(ppaEscapeSrcdocCode("it.img='"+ppaCharacterSlagImg+"'"))) {
-  throw new Error('Character slag embedded canvas art did not apply');
+if(!output.includes(ppaEscapeSrcdocCode("var _ppaCharSlagArt=parent.PPA_FART_SLAG_IMG||''")) ||
+   !output.includes(ppaEscapeSrcdocCode("if(_ppaCharSlagArt)it.img=_ppaCharSlagArt"))) {
+  throw new Error('Character slag canvas art bridge did not apply');
 }
 
 if(!output.includes("function ppaSetBagVisualSelection(i)") ||
