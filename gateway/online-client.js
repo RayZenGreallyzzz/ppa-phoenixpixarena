@@ -36,15 +36,37 @@
 
   function applyWalletState(r){
     try{
+      var verified=null;
       if(r&&r.telegram&&r.telegram.id){
-        window.PPA_GRAM_WALLET_IDENTITY={
+        verified={
           id:String(r.telegram.id||''),
           name:String(r.telegram.name||('ID '+r.telegram.id)),
           username:String(r.telegram.username||'')
         };
+        window.PPA_GRAM_WALLET_IDENTITY=verified;
       }
       var p=gramWalletProfile();p.connected=!!(r&&r.connected);p.address=String((r&&r.address)||'');p.walletGram=null;
-      if(r&&Array.isArray(r.history))p.history=r.history.slice(-100);p.updatedAt=Date.now();saveGame();sendGramWalletState();sendPremiumState();
+      if(r&&Array.isArray(r.history))p.history=r.history.slice(-100);p.updatedAt=Date.now();saveGame();
+
+      // Push the verified server identity straight into the wallet iframe.
+      // This bypasses Telegram WebView timing and any stale local wallet state.
+      try{
+        var wf=document.getElementById('gramWalletFrame');
+        if(wf&&wf.contentWindow){
+          wf.contentWindow.postMessage({
+            type:'gramWalletState',
+            connected:!!p.connected,
+            address:p.address||'',
+            gameGram:Math.max(0,Number(INV.gram)||0),
+            walletGram:p.walletGram,
+            history:p.history||[],
+            telegram:verified||window.PPA_GRAM_WALLET_IDENTITY||{id:'',name:'Вне Telegram',username:''},
+            withdrawFeePct:10
+          },'*');
+        }
+      }catch(_){}
+      try{sendGramWalletState()}catch(_){}
+      try{sendPremiumState()}catch(_){}
     }catch(e){console.warn('Wallet state',e)}
   }
   async function refreshWallet(){if(!online()||!PPA.ppaWalletState)return;try{applyWalletState(await PPA.ppaWalletState())}catch(e){console.warn('Wallet sync',e)}}
