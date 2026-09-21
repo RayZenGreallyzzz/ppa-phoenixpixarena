@@ -194,7 +194,13 @@ async function ensureOnlineSchema(env) {
       created_at INTEGER NOT NULL,
       credited_at INTEGER NOT NULL DEFAULT 0
     )`,
-    `CREATE INDEX IF NOT EXISTS idx_ton_deposits_user ON ton_deposits(telegram_id, created_at)`
+    `CREATE INDEX IF NOT EXISTS idx_ton_deposits_user ON ton_deposits(telegram_id, created_at)`,
+    `CREATE TABLE IF NOT EXISTS wallet_sync_state (
+      telegram_id TEXT PRIMARY KEY,
+      wallet_address TEXT NOT NULL DEFAULT '',
+      last_scan_at INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    )`
   ];
   for (const q of sql) await env.DB.prepare(q).run();
   schemaReady = true;
@@ -480,6 +486,141 @@ async function walletWrite(env, telegramId, connected, address, text) {
   return walletState(env, telegramId);
 }
 
+async function creditTonDeposit(env, telegramId, wallet, messageHash, txHash, amountNano, createdAt, historyText) {
+  messageHash = tonHashToHex(messageHash);
+  if (!messageHash) return { ok: false, credited: 0, gameGram: null, reason: 'hash' };
+  let nano;
+  try { nano = BigInt(String(amountNano)); } catch (_) { return { ok: false, credited: 0, gameGram: null, reason: 'amount' }; }
+  if (nano <= 0n) return { ok: false, credited: 0, gameGram: null, reason: 'amount' };
+
+  let row = await env.DB.prepare('SELECT * FROM ton_deposits WHERE message_hash=?1').bind(messageHash).first();
+  if (row) {
+    if (String(row.telegram_id) !== telegramId) return { ok: false, credited: 0, gameGram: null, reason: 'owner' };
+    if (String(row.amount_nano) !== nano.toString()) return { ok: false, credited: 0, gameGram: null, reason: 'amount_mismatch' };
+    if (Number(row.credited) === 1) {
+      const save = await loadSaveRow(env, telegramId);
+      return { ok: true, credited: 0, already: true, gameGram: Math.max(0, Number(save && save.state && save.state.gram) || 0) };
+    }
+  } else {
+    const amountGram = Number(nano) / 1e9;
+    await env.DB.prepare(`INSERT OR IGNORE INTO ton_deposits(message_hash,telegram_id,wallet_address,treasury_address,amount_nano,amount_gram,tx_hash,credited,created_at,credited_at)
+      VALUES(?1,?2,?3,?4,?5,?6,?7,0,?8,0)`)
+      .bind(messageHash, telegramId, String(wallet.address || ''), PPA_TON_TREASURY, nano.toString(), amountGram, String(txHash || ''), Number(createdAt) || Date.now()).run();
+    row = await env.DB.prepare('SELECT * FROM ton_deposits WHERE message_hash=?1').bind(messageHash).first();
+    if (!row || String(row.telegram_id) !== telegramId || String(row.amount_nano) !== nano.toString()) {
+      return { ok: false, credited: 0, gameGram: null, reason: 'claim_conflict' };
+    }
+  }
+
+  const save = await loadSaveRow(env, telegramId);
+  if (!save) return { ok: false, credited: 0, gameGram: null, reason: 'save_missing' };
+  const state = save.state && typeof save.state === 'object' ? save.state : {};
+  const amountGram = Number(nano) / 1e9;
+  if (!Number.isFinite(amountGram) || amountGram <= 0) return { ok: false, credited: 0, gameGram: null, reason: 'amount' };
+  state.gram = Math.round(((Math.max(0, Number(state.gram) || 0) + amountGram) + Number.EPSILON) * 1e9) / 1e9;
+  const raw = JSON.stringify(state);
+  if (new TextEncoder().encode(raw).byteLength > 1_800_000) return { ok: false, credited: 0, gameGram: null, reason: 'save_size' };
+
+  const now = Date.now();
+  const nextVersion = (Number(save.row.version) || 0) + 1;
+  const updateSave = env.DB.prepare(`UPDATE saves SET version=?1,state_json=?2,updated_at=?3
+    WHERE telegram_id=?4 AND version=?5
+      AND EXISTS(SELECT 1 FROM ton_deposits WHERE message_hash=?6 AND telegram_id=?4 AND amount_nano=?7 AND credited=0)`)
+    .bind(nextVersion, raw, now, telegramId, Number(save.row.version) || 0, messageHash, nano.toString());
+  const markCredited = env.DB.prepare(`UPDATE ton_deposits SET credited=1,credited_at=?1,tx_hash=?2
+    WHERE message_hash=?3 AND telegram_id=?4 AND amount_nano=?7 AND credited=0
+      AND EXISTS(SELECT 1 FROM saves WHERE telegram_id=?4 AND version=?5 AND updated_at=?1 AND state_json=?6)`)
+    .bind(now, String(txHash || ''), messageHash, telegramId, nextVersion, raw, nano.toString());
+  await env.DB.batch([updateSave, markCredited]);
+
+  const finalDeposit = await env.DB.prepare('SELECT credited FROM ton_deposits WHERE message_hash=?1 AND telegram_id=?2').bind(messageHash, telegramId).first();
+  if (!finalDeposit || Number(finalDeposit.credited) !== 1) {
+    return { ok: false, credited: 0, gameGram: null, retry: true, reason: 'save_race' };
+  }
+
+  const hist = Array.isArray(wallet.history) ? wallet.history.slice(-99) : [];
+  hist.push({ time: now, text: historyText || 'Пополнение через TON', amountText: '+' + String(amountGram).replace('.', ',') + ' Gram' });
+  await env.DB.prepare('UPDATE wallets SET history_json=?1,updated_at=?2 WHERE telegram_id=?3')
+    .bind(JSON.stringify(hist), now, telegramId).run();
+
+  return { ok: true, credited: amountGram, gameGram: state.gram };
+}
+
+async function walletSyncIncoming(env, telegramId) {
+  const wallet = await walletState(env, telegramId);
+  if (!wallet.connected || !wallet.address) return { credited: 0, gameGram: null };
+  const linkedRaw = tonRawAddress(wallet.address);
+  if (!linkedRaw) return { credited: 0, gameGram: null };
+
+  const sync = await env.DB.prepare('SELECT * FROM wallet_sync_state WHERE telegram_id=?1').bind(telegramId).first();
+  const now = Date.now();
+  const sameWallet = !!(sync && tonRawAddress(sync.wallet_address) === linkedRaw);
+  const lastScanAt = sameWallet ? Math.max(0, Number(sync.last_scan_at) || 0) : 0;
+  // Avoid hammering the public indexer when the wallet UI refreshes repeatedly.
+  if (lastScanAt && now - lastScanAt < 15000) return { credited: 0, gameGram: null };
+
+  const startUtime = lastScanAt
+    ? Math.max(0, Math.floor(lastScanAt / 1000) - 120)
+    : Math.max(0, Math.floor(now / 1000) - 86400);
+  const url = 'https://toncenter.com/api/v3/transactions?account=' + encodeURIComponent(PPA_TON_TREASURY) +
+    '&start_utime=' + encodeURIComponent(startUtime) + '&limit=200&sort=asc';
+  const headers = { accept: 'application/json' };
+  if (env && env.TONCENTER_API_KEY) headers['X-API-Key'] = String(env.TONCENTER_API_KEY);
+
+  let data = null;
+  try {
+    const r = await fetch(url, { headers });
+    if (!r.ok) {
+      if (r.status === 429 || r.status >= 500) return { credited: 0, gameGram: null, pending: true };
+      throw new Error('TON index HTTP ' + r.status);
+    }
+    data = await r.json();
+  } catch (err) {
+    console.warn('PPA wallet incoming sync:', err);
+    return { credited: 0, gameGram: null, pending: true };
+  }
+
+  const txs = Array.isArray(data && data.transactions) ? data.transactions : [];
+  let credited = 0;
+  let gameGram = null;
+  for (const tx of txs) {
+    const msg = tx && tx.in_msg;
+    if (!msg) continue;
+    const sourceRaw = tonRawAddress(msg.source);
+    const destRaw = tonRawAddress(msg.destination);
+    if (!sourceRaw || sourceRaw !== linkedRaw || destRaw !== PPA_TON_TREASURY_RAW) continue;
+    if (msg.bounced === true || (tx.description && tx.description.aborted === true) || tx.emulated === true) continue;
+
+    let nano;
+    try { nano = BigInt(String(msg.value || '0')); } catch (_) { continue; }
+    if (nano <= 0n) continue;
+    const messageHash = tonHashToHex(msg.hash_norm || msg.hash);
+    if (!messageHash) continue;
+
+    const result = await creditTonDeposit(
+      env,
+      telegramId,
+      wallet,
+      messageHash,
+      String(tx.hash || ''),
+      nano,
+      (Number(tx.now) || Math.floor(now / 1000)) * 1000,
+      'Входящий TON на казну PPA'
+    );
+    if (result && result.ok && Number(result.credited) > 0) {
+      credited += Number(result.credited) || 0;
+      gameGram = result.gameGram;
+      wallet.history = (await walletState(env, telegramId)).history;
+    }
+  }
+
+  await env.DB.prepare(`INSERT INTO wallet_sync_state(telegram_id,wallet_address,last_scan_at,updated_at) VALUES(?1,?2,?3,?3)
+    ON CONFLICT(telegram_id) DO UPDATE SET wallet_address=excluded.wallet_address,last_scan_at=excluded.last_scan_at,updated_at=excluded.updated_at`)
+    .bind(telegramId, wallet.address, now).run();
+
+  return { credited, gameGram };
+}
+
 async function walletDeposit(env, telegramId, body) {
   let expectedNano = null;
   if (body.nanoAmount != null && /^\d+$/.test(String(body.nanoAmount).trim())) {
@@ -531,50 +672,30 @@ async function walletDeposit(env, telegramId, body) {
   });
   if (!payment) return out({ ok: false, message: 'В подтверждённой транзакции нет перевода нужной суммы в казну PPA.' }, 409);
 
-  const save = await loadSaveRow(env, telegramId);
-  if (!save) return out({ ok: false, message: 'Сейв персонажа не найден.' }, 409);
-  const state = save.state && typeof save.state === 'object' ? save.state : {};
-  const amountGram = Number(expectedNano) / 1e9;
-  if (!Number.isFinite(amountGram) || amountGram <= 0) return out({ ok: false, message: 'Некорректная сумма TON.' }, 400);
-  state.gram = Math.round(((Math.max(0, Number(state.gram) || 0) + amountGram) + Number.EPSILON) * 1e9) / 1e9;
-  const raw = JSON.stringify(state);
-  if (new TextEncoder().encode(raw).byteLength > 1_800_000) return out({ ok: false, message: 'Сейв после пополнения слишком большой.' }, 413);
-
-  const now = Date.now();
-  const nextVersion = (Number(save.row.version) || 0) + 1;
-  const txHash = String(tx.hash || '');
-  const insert = env.DB.prepare(`INSERT OR IGNORE INTO ton_deposits(message_hash,telegram_id,wallet_address,treasury_address,amount_nano,amount_gram,tx_hash,credited,created_at,credited_at)
-    VALUES(?1,?2,?3,?4,?5,?6,?7,0,?8,0)`)
-    .bind(messageHash, telegramId, wallet.address, PPA_TON_TREASURY, expectedNano.toString(), amountGram, txHash, now);
-  const updateSave = env.DB.prepare(`UPDATE saves SET version=?1,state_json=?2,updated_at=?3
-    WHERE telegram_id=?4 AND version=?5
-      AND EXISTS(SELECT 1 FROM ton_deposits WHERE message_hash=?6 AND telegram_id=?4 AND amount_nano=?7 AND credited=0)`)
-    .bind(nextVersion, raw, now, telegramId, Number(save.row.version) || 0, messageHash, expectedNano.toString());
-  const markCredited = env.DB.prepare(`UPDATE ton_deposits SET credited=1,credited_at=?1,tx_hash=?2
-    WHERE message_hash=?3 AND telegram_id=?4 AND amount_nano=?7 AND credited=0
-      AND EXISTS(SELECT 1 FROM saves WHERE telegram_id=?4 AND version=?5 AND updated_at=?1 AND state_json=?6)`)
-    .bind(now, txHash, messageHash, telegramId, nextVersion, raw, expectedNano.toString());
-
-  await env.DB.batch([insert, updateSave, markCredited]);
-  const finalDeposit = await env.DB.prepare('SELECT credited FROM ton_deposits WHERE message_hash=?1 AND telegram_id=?2').bind(messageHash, telegramId).first();
-  if (!finalDeposit || Number(finalDeposit.credited) !== 1) {
-    return out({ ok: false, pending: true, messageHash, message: 'Платёж подтверждён. Синхронизирую игровой баланс…' });
-  }
-
-  const hist = Array.isArray(wallet.history) ? wallet.history.slice(-99) : [];
-  hist.push({ time: now, text: 'Пополнение через TON Connect', amountText: '+' + String(amountGram).replace('.', ',') + ' Gram' });
-  await env.DB.prepare('UPDATE wallets SET history_json=?1,updated_at=?2 WHERE telegram_id=?3')
-    .bind(JSON.stringify(hist), now, telegramId).run();
-
-  return out({
-    ok: true,
+  const credited = await creditTonDeposit(
+    env,
+    telegramId,
+    wallet,
     messageHash,
-    txHash,
-    amount: amountGram,
-    gameGram: state.gram,
-    treasury: PPA_TON_TREASURY,
-    message: 'TON подтверждён · +' + String(amountGram).replace('.', ',') + ' Gram'
-  });
+    String(tx.hash || ''),
+    expectedNano,
+    (Number(tx.now) || Math.floor(Date.now() / 1000)) * 1000,
+    'Пополнение через TON Connect'
+  );
+  if (credited && credited.ok) {
+    return out({
+      ok: true,
+      alreadyCredited: !!credited.already,
+      messageHash,
+      txHash: String(tx.hash || ''),
+      amount: Number(expectedNano) / 1e9,
+      gameGram: credited.gameGram,
+      treasury: PPA_TON_TREASURY,
+      message: credited.already ? 'Пополнение уже было зачислено.' : 'TON подтверждён · +' + String(Number(expectedNano) / 1e9).replace('.', ',') + ' Gram'
+    });
+  }
+  if (credited && credited.retry) return out({ ok: false, pending: true, messageHash, message: 'TON подтверждён. Синхронизирую игровой баланс…' });
+  return out({ ok: false, message: 'Не удалось зачислить подтверждённый TON-платёж.' }, 409);
 }
 
 export async function handleOnlineRoute(path, ctx) {
@@ -592,7 +713,11 @@ export async function handleOnlineRoute(path, ctx) {
   if (path === '/api/auction/buy') return auctionBuy(env, telegramId, body);
   if (path === '/api/auction/ack-credits') return auctionAck(env, telegramId, body);
 
-  if (path === '/api/wallet/state') return out(await walletState(env, telegramId));
+  if (path === '/api/wallet/state') {
+    const sync = await walletSyncIncoming(env, telegramId);
+    const state = await walletState(env, telegramId);
+    return out({ ...state, syncCredited: Math.max(0, Number(sync && sync.credited) || 0), gameGram: sync && sync.gameGram != null ? Number(sync.gameGram) : null });
+  }
   if (path === '/api/wallet/link') {
     const address = String(body.address || '').trim();
     if (!validTonAddress(address)) return out({ ok: false, message: 'Введите корректный TON-адрес Gram Wallet.' }, 400);
