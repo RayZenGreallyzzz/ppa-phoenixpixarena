@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v451-rune-fusion-character-bridge-20260921';
+const CLIENT_BUILD = 'v452-character-runes-bridge-audit-fix-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3897,7 +3897,8 @@ function itemVisual(it,size){`)
 
 if(!output.includes("function ppaCharacterRuneBridge()") ||
    !output.includes("PPA_REGISTER_CHARACTER_RUNES") ||
-   !output.includes("character available runes bridge")) {
+   !output.includes("source:src||&#x27;ДОСТУПНЫЕ РУНЫ&#x27;") ||
+   !output.includes("setTimeout(ppaCharacterRuneBridge,1200)")) {
   throw new Error('Character available-runes bridge did not apply');
 }
 /* ======================================================================== */
