@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v454-character-menu-repair-20260921';
+const CLIENT_BUILD = 'v455-rune-hold-info-window-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3882,6 +3882,22 @@ ppaPatchRegex(
       var sm={};sources.forEach(function(x){sm[String(x).replace(/\\[[0-9]+\\].*$/,'').replace(/\\.[^.]+$/,'')]=1});
       src=Object.keys(sm).slice(0,4).join(' · ');
     }
+    // Keep the same real objects used by the character "ДОСТУПНЫЕ РУНЫ" view
+    // available locally for the non-invasive hold-info listener below.
+    try{
+      window.PPA_CHARACTER_AVAILABLE_RUNES=available.map(function(a){
+        var item=a&&a.item||null;
+        if(!item&&a&&a.id!=null){
+          var aid=String(a.id);
+          for(var ci=0;ci<clean.length;ci++){
+            var c=clean[ci];
+            if(String(c&&(c.refId||c.id||c.key||''))===aid){item=c;break}
+          }
+        }
+        return {item:item,id:a&&a.id,path:a&&a.path,count:a&&a.count};
+      });
+      window.PPA_CHARACTER_RUNE_CATALOG=clean;
+    }catch(_){}
     if(parent&&typeof parent.PPA_REGISTER_CHARACTER_RUNES==='function'){
       parent.PPA_REGISTER_CHARACTER_RUNES({catalog:clean,available:available,source:src||'ДОСТУПНЫЕ РУНЫ'});
     }
@@ -3903,10 +3919,237 @@ if(!output.includes("function ppaCharacterRuneBridge()") ||
 }
 /* ======================================================================== */
 
-/* === RUNE HOLD DESCRIPTION TEMPORARILY DISABLED ========================= */
-// v453 injected code directly into renderRunes(rs) and broke the character iframe.
-// Restore the original character menu first; rune hold descriptions will be re-added
-// later with a non-invasive listener that does not replace renderRunes().
+/* === RUNE HOLD INFO WINDOW ============================================== */
+// Non-invasive: does NOT replace renderRunes(). It only listens for a long hold
+// on rune cards already rendered by Character -> RUNES -> ДОСТУПНЫЕ РУНЫ.
+ppaPatchRegex(
+  'character rune hold info window',
+  /function\s+itemVisual\(it,size\)\s*\{/,
+  ppaEscapeSrcdocCode(`var PPA_RUNE_INFO_HOLD_MS=650;
+var PPA_RUNE_INFO_HOLD={timer:0,rune:null,x:0,y:0,shown:false};
+
+function ppaRuneInfoRarity(v){
+  var r=String(v==null?'':v).toLowerCase();
+  var m={
+    common:'Обычная',gray:'Обычная',grey:'Обычная',
+    uncommon:'Необычная',green:'Необычная',
+    rare:'Редкая',blue:'Редкая',
+    epic:'Эпическая',purple:'Эпическая',
+    legendary:'Легендарная',orange:'Легендарная'
+  };
+  return m[r]||String(v||'');
+}
+function ppaRuneInfoName(r){
+  return String(r&&(r.name||r.title||r.label||r.runeName)||'Руна');
+}
+function ppaRuneInfoText(r,count){
+  if(!r)return '';
+  var lines=[];
+  var rarity=ppaRuneInfoRarity(r.rarity!=null?r.rarity:(r.quality!=null?r.quality:r.tier));
+  if(rarity)lines.push(rarity+' руна');
+
+  var text=r.description||r.desc||r.valueText||r.effectText||r.bonusText||
+           r.effectDescription||r.tooltip||r.info||'';
+  if(!text&&typeof r.effect==='string')text=r.effect;
+  if(!text&&typeof r.bonus==='string')text=r.bonus;
+  if(!text&&typeof r.stat==='string'){
+    var vv=r.value!=null?r.value:(r.amount!=null?r.amount:'');
+    text=String(r.stat)+(vv!==''?' '+String(vv):'');
+  }
+  if(text)lines.push(String(text));
+
+  if(r.stats&&typeof r.stats==='object'){
+    var ss=[];
+    try{
+      Object.keys(r.stats).forEach(function(k){
+        var v=r.stats[k];
+        if(v==null||v===''||typeof v==='object')return;
+        ss.push(String(k)+': '+String(v));
+      });
+    }catch(_){}
+    if(ss.length)lines.push(ss.join(' · '));
+  }
+
+  // Last-resort useful primitive effect fields if this rune has no prose description.
+  if(lines.length<2){
+    var skip=/^(id|uid|key|refId|name|title|label|runeName|rarity|quality|tier|img|image|src|icon|iconImg|count|qty|amount|rune|isRune|kind|type|category)$/i;
+    var extra=[];
+    try{
+      Object.keys(r).forEach(function(k){
+        if(skip.test(k))return;
+        var v=r[k];
+        if(v==null||v===''||typeof v==='object'||typeof v==='function'||typeof v==='boolean')return;
+        if(String(v).length>80)return;
+        extra.push(String(k)+': '+String(v));
+      });
+    }catch(_){}
+    if(extra.length)lines.push(extra.slice(0,4).join(' · '));
+  }
+
+  var n=Math.max(0,Math.floor(Number(count!=null?count:(r.count!=null?r.count:(r.qty!=null?r.qty:r.amount)))||0));
+  if(n>1)lines.push('В наличии: '+n);
+  return lines.join('\n');
+}
+function ppaRuneInfoEnsure(){
+  var box=document.getElementById('ppaRuneHoldInfo');
+  if(box)return box;
+  var st=document.createElement('style');
+  st.id='ppaRuneHoldInfoStyle';
+  st.textContent=
+    '#ppaRuneHoldInfo{position:fixed;z-index:2147483400;left:50%;top:50%;transform:translate(-50%,-50%);width:min(390px,88vw);max-height:70vh;overflow:auto;padding:13px 14px;border:1px solid #95622d;border-radius:10px;background:rgba(16,11,8,.98);box-shadow:0 14px 38px rgba(0,0,0,.82);display:none;box-sizing:border-box;pointer-events:none;color:#d8bd8c}'+
+    '#ppaRuneHoldInfo.on{display:block}'+
+    '#ppaRuneHoldInfoName{font:bold 15px Georgia,serif;color:#f1ce82;text-align:center;margin-bottom:7px}'+
+    '#ppaRuneHoldInfoText{white-space:pre-line;font:10px/1.55 monospace;color:#cdb892;text-align:center}'+
+    '#ppaRuneHoldInfoHint{margin-top:8px;font:8px monospace;color:#776a59;text-align:center}';
+  (document.head||document.documentElement).appendChild(st);
+  box=document.createElement('div');
+  box.id='ppaRuneHoldInfo';
+  box.innerHTML='<div id="ppaRuneHoldInfoName"></div><div id="ppaRuneHoldInfoText"></div><div id="ppaRuneHoldInfoHint">отпусти · окно закроется</div>';
+  document.body.appendChild(box);
+  return box;
+}
+function ppaRuneInfoShow(meta){
+  if(!meta||!meta.item)return;
+  var box=ppaRuneInfoEnsure();
+  box.querySelector('#ppaRuneHoldInfoName').textContent=ppaRuneInfoName(meta.item);
+  box.querySelector('#ppaRuneHoldInfoText').textContent=ppaRuneInfoText(meta.item,meta.count)||'Описание для этой руны не задано.';
+  box.classList.add('on');
+}
+function ppaRuneInfoHide(){
+  var box=document.getElementById('ppaRuneHoldInfo');
+  if(box)box.classList.remove('on');
+}
+function ppaRuneInfoToken(src){
+  src=String(src||'');
+  if(!src)return '';
+  try{src=decodeURIComponent(src)}catch(_){}
+  src=src.split('?')[0].split('#')[0];
+  return src.slice(src.lastIndexOf('/')+1).toLowerCase();
+}
+function ppaRuneInfoPool(){
+  var a=[];
+  try{
+    (window.PPA_CHARACTER_AVAILABLE_RUNES||[]).forEach(function(x){
+      if(x&&x.item)a.push(x);
+    });
+  }catch(_){}
+  return a;
+}
+function ppaRuneInfoFromNode(node){
+  if(!node)return null;
+  var pool=ppaRuneInfoPool();
+  if(!pool.length)return null;
+  var cur=node.nodeType===1?node:node.parentElement;
+  for(var depth=0;cur&&depth<7;depth++,cur=cur.parentElement){
+    if(cur.__ppaRuneInfoMeta)return cur.__ppaRuneInfoMeta;
+
+    var imgs=[];
+    try{
+      if(cur.tagName==='IMG')imgs=[cur];
+      else imgs=Array.prototype.slice.call(cur.querySelectorAll('img')).slice(0,5);
+    }catch(_){}
+    for(var ii=0;ii<imgs.length;ii++){
+      var tok=ppaRuneInfoToken(imgs[ii].currentSrc||imgs[ii].src);
+      if(!tok)continue;
+      for(var pi=0;pi<pool.length;pi++){
+        var it=pool[pi].item;
+        var rt=ppaRuneInfoToken(it&&(it.img||it.image||it.src||it.iconImg));
+        if(rt&&rt===tok){cur.__ppaRuneInfoMeta=pool[pi];return pool[pi]}
+      }
+    }
+
+    var bg='';
+    try{bg=String(getComputedStyle(cur).backgroundImage||'').toLowerCase()}catch(_){}
+    if(bg&&bg!=='none'){
+      for(var bi=0;bi<pool.length;bi++){
+        var bit=pool[bi].item;
+        var bt=ppaRuneInfoToken(bit&&(bit.img||bit.image||bit.src||bit.iconImg));
+        if(bt&&bg.indexOf(bt)>=0){cur.__ppaRuneInfoMeta=pool[bi];return pool[bi]}
+      }
+    }
+
+    var key='';
+    try{
+      key=cur.getAttribute('data-rune-key')||cur.getAttribute('data-key')||
+          (cur.dataset&&(cur.dataset.runeKey||cur.dataset.key))||'';
+    }catch(_){}
+    if(key){
+      for(var ki=0;ki<pool.length;ki++){
+        var rit=pool[ki].item;
+        var rk=String(rit&&(rit.refId||rit.id||rit.key)||pool[ki].id||'');
+        if(rk&&rk===String(key)){cur.__ppaRuneInfoMeta=pool[ki];return pool[ki]}
+      }
+    }
+
+    var tx=String(cur.textContent||'').trim();
+    if(tx&&tx.length<120){
+      for(var ni=0;ni<pool.length;ni++){
+        var nm=ppaRuneInfoName(pool[ni].item);
+        if(nm&&nm!=='Руна'&&tx.indexOf(nm)>=0){cur.__ppaRuneInfoMeta=pool[ni];return pool[ni]}
+      }
+    }
+  }
+  return null;
+}
+function ppaRuneInfoCancel(hide){
+  var st=PPA_RUNE_INFO_HOLD;
+  if(st.timer){clearTimeout(st.timer);st.timer=0}
+  if(hide&&st.shown){ppaRuneInfoHide();st.shown=false}
+}
+function ppaInstallRuneInfoHold(){
+  if(document.__ppaRuneInfoHoldInstalled)return;
+  document.__ppaRuneInfoHoldInstalled=true;
+
+  function start(e){
+    var meta=ppaRuneInfoFromNode(e.target);
+    if(!meta)return;
+    ppaRuneInfoCancel(true);
+    var st=PPA_RUNE_INFO_HOLD;
+    st.rune=meta;st.x=Number(e.clientX)||0;st.y=Number(e.clientY)||0;st.shown=false;
+    st.timer=setTimeout(function(){
+      st.timer=0;
+      st.shown=true;
+      ppaRuneInfoShow(st.rune);
+      try{if(navigator.vibrate)navigator.vibrate(18)}catch(_){}
+    },PPA_RUNE_INFO_HOLD_MS);
+  }
+  function move(e){
+    var st=PPA_RUNE_INFO_HOLD;
+    if(!st.timer)return;
+    var dx=(Number(e.clientX)||0)-st.x,dy=(Number(e.clientY)||0)-st.y;
+    if(dx*dx+dy*dy>196)ppaRuneInfoCancel(false);
+  }
+  function end(){
+    var was=PPA_RUNE_INFO_HOLD.shown;
+    ppaRuneInfoCancel(true);
+    if(was)document.__ppaRuneInfoSuppressClickUntil=Date.now()+500;
+  }
+
+  document.addEventListener('pointerdown',start,true);
+  document.addEventListener('pointermove',move,true);
+  document.addEventListener('pointerup',end,true);
+  document.addEventListener('pointercancel',end,true);
+  document.addEventListener('click',function(e){
+    if((document.__ppaRuneInfoSuppressClickUntil||0)>Date.now()&&ppaRuneInfoFromNode(e.target)){
+      e.preventDefault();e.stopImmediatePropagation();
+      document.__ppaRuneInfoSuppressClickUntil=0;
+    }
+  },true);
+  document.addEventListener('contextmenu',function(e){
+    if(ppaRuneInfoFromNode(e.target)){e.preventDefault();e.stopImmediatePropagation()}
+  },true);
+}
+ppaInstallRuneInfoHold();
+function itemVisual(it,size){`)
+);
+
+if(!output.includes("var PPA_RUNE_INFO_HOLD_MS=650") ||
+   !output.includes("function ppaRuneInfoShow(meta)") ||
+   !output.includes("function ppaRuneInfoFromNode(node)") ||
+   !output.includes("document.__ppaRuneInfoHoldInstalled") ||
+   !output.includes("PPA_CHARACTER_AVAILABLE_RUNES")) {
+  throw new Error('Rune hold info window patch did not apply');
+}
 /* ======================================================================== */
 
 /* === CHARACTER INVENTORY NATIVE-MENU REMOVAL + HOLD PREVIEW ============= */
