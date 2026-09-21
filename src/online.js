@@ -481,7 +481,6 @@ async function walletWrite(env, telegramId, connected, address, text) {
 }
 
 async function walletDeposit(env, telegramId, body) {
-  const amountNano = tonAmountToNano(body.nanoAmount != null ? String(body.nanoAmount).replace(/(\d{9})$/, '.$1') : body.amount);
   let expectedNano = null;
   if (body.nanoAmount != null && /^\d+$/.test(String(body.nanoAmount).trim())) {
     try { expectedNano = BigInt(String(body.nanoAmount).trim()); } catch (_) {}
@@ -549,12 +548,12 @@ async function walletDeposit(env, telegramId, body) {
     .bind(messageHash, telegramId, wallet.address, PPA_TON_TREASURY, expectedNano.toString(), amountGram, txHash, now);
   const updateSave = env.DB.prepare(`UPDATE saves SET version=?1,state_json=?2,updated_at=?3
     WHERE telegram_id=?4 AND version=?5
-      AND EXISTS(SELECT 1 FROM ton_deposits WHERE message_hash=?6 AND telegram_id=?4 AND credited=0)`)
-    .bind(nextVersion, raw, now, telegramId, Number(save.row.version) || 0, messageHash);
+      AND EXISTS(SELECT 1 FROM ton_deposits WHERE message_hash=?6 AND telegram_id=?4 AND amount_nano=?7 AND credited=0)`)
+    .bind(nextVersion, raw, now, telegramId, Number(save.row.version) || 0, messageHash, expectedNano.toString());
   const markCredited = env.DB.prepare(`UPDATE ton_deposits SET credited=1,credited_at=?1,tx_hash=?2
-    WHERE message_hash=?3 AND telegram_id=?4 AND credited=0
+    WHERE message_hash=?3 AND telegram_id=?4 AND amount_nano=?7 AND credited=0
       AND EXISTS(SELECT 1 FROM saves WHERE telegram_id=?4 AND version=?5 AND updated_at=?1 AND state_json=?6)`)
-    .bind(now, txHash, messageHash, telegramId, nextVersion, raw);
+    .bind(now, txHash, messageHash, telegramId, nextVersion, raw, expectedNano.toString());
 
   await env.DB.batch([insert, updateSave, markCredited]);
   const finalDeposit = await env.DB.prepare('SELECT credited FROM ton_deposits WHERE message_hash=?1 AND telegram_id=?2').bind(messageHash, telegramId).first();
