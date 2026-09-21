@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v460-blacksmith-rune-ui-repair-20260921';
+const CLIENT_BUILD = 'v461-rune-fusion-lexical-source-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3531,6 +3531,145 @@ if(!output.includes("id=\"ppaRuneFusionRuntime\"") ||
 }
 /* ======================================================================== */
 
+/* === LEXICAL RUNE FUSION BRIDGE ========================================= */
+// The real "ДОСТУПНЫЕ РУНЫ" source is INV.runes inside the packed game's
+// lexical scope. Appended <script> tags cannot see lexical const/let bindings,
+// which is why the old body script saw 0 runes. Install fusion functions from
+// inside runeUiState()/sendBlacksmithState(), where INV/runeDefByKey/runeKey
+// are directly accessible.
+ppaPatchRegex(
+  'rune fusion lexical bridge at runeUiState',
+  /function\s+runeUiState\(\)\s*\{/,
+  `function ppaInstallRuneFusionLexical(){
+  var COST=5000;
+  var CHANCE={common:.37,uncommon:.30,rare:.22};
+  var NEXT={common:'uncommon',uncommon:'rare',rare:'epic'};
+  var RIDX={common:0,uncommon:1,rare:2,epic:3,legendary:4};
+
+  function infoText(d){
+    if(!d)return '';
+    var a=[];
+    var t=d.description||d.desc||d.valueText||d.effectText||d.bonusText||
+          d.effectDescription||d.tooltip||d.info||'';
+    if(!t&&typeof d.effect==='string')t=d.effect;
+    if(!t&&typeof d.bonus==='string')t=d.bonus;
+    if(t)a.push(String(t));
+    if(d.stats&&typeof d.stats==='object'){
+      var ss=[];
+      try{Object.keys(d.stats).forEach(function(k){
+        var v=d.stats[k];
+        if(v==null||v===''||typeof v==='object')return;
+        ss.push(String(k)+': '+String(v));
+      })}catch(_){}
+      if(ss.length)a.push(ss.join(' · '));
+    }
+    return a.join('\\n');
+  }
+
+  function refresh(){
+    try{normalizeRuneState()}catch(_){}
+    try{saveGame()}catch(_){}
+    try{recomputeStats()}catch(_){}
+    try{sendInvState()}catch(_){}
+    try{sendBlacksmithState()}catch(_){}
+    try{updateUI()}catch(_){}
+  }
+
+  window.__PPA_RUNE_FUSION_LEXICAL=true;
+  window.PPA_RUNE_FUSION_SOURCE=function(){
+    return 'ДОСТУПНЫЕ РУНЫ · runeUiState().inventory ← INV.runes';
+  };
+  window.PPA_RUNE_FUSION_DEBUG=function(){
+    var bag={};try{bag=INV&&INV.runes&&typeof INV.runes==='object'?INV.runes:{}}catch(_){}
+    return {lexical:true,owned:Object.keys(bag).length,catalog:Object.keys(bag).length,characterCatalog:Object.keys(bag).length,characterAvailable:Object.keys(bag).length,source:window.PPA_RUNE_FUSION_SOURCE()};
+  };
+  window.PPA_RUNE_FUSION_LIST=function(){
+    try{normalizeRuneState()}catch(_){}
+    var out=[],bag=(INV&&INV.runes&&typeof INV.runes==='object')?INV.runes:{};
+    Object.keys(bag).forEach(function(key){
+      var d=null;try{d=runeDefByKey(key)}catch(_){}
+      var count=Math.max(0,Math.floor(Number(bag[key])||0));
+      if(!d||count<=0||CHANCE[d.rarity]==null)return;
+      out.push({
+        id:d.key||key,key:d.key||key,type:d.type||'',
+        name:d.name||'Руна',count:count,
+        rarity:RIDX[d.rarity],rarityKey:d.rarity,
+        nextRarity:RIDX[NEXT[d.rarity]],
+        chance:CHANCE[d.rarity],eligible:count>=2,
+        img:d.img||'',icon:d.icon||'◇',
+        valueText:d.valueText||'',infoText:infoText(d)
+      });
+    });
+    out.sort(function(a,b){
+      return Number(a.rarity)-Number(b.rarity)||
+        String(a.type||'').localeCompare(String(b.type||''));
+    });
+    return out;
+  };
+  window.PPA_RUNE_FUSION_TRY=function(key){
+    try{normalizeRuneState()}catch(_){}
+    var d=null;try{d=runeDefByKey(key)}catch(_){}
+    if(!d)return {ok:false,message:'Руна не найдена'};
+    if(CHANCE[d.rarity]==null)return {ok:false,message:'Эту редкость нельзя сливать'};
+    if(!INV.runes||typeof INV.runes!=='object')return {ok:false,message:'ДОСТУПНЫЕ РУНЫ недоступны'};
+    var have=Math.max(0,Math.floor(Number(INV.runes[d.key])||0));
+    if(have<2)return {ok:false,message:'Нужно 2 одинаковые руны'};
+    var gold=Math.max(0,Math.floor(Number(INV.gold)||0));
+    if(gold<COST)return {ok:false,message:'Нужно 5000 золота'};
+
+    INV.gold=gold-COST;
+    INV.runes[d.key]=have-2;
+    if(INV.runes[d.key]<=0)delete INV.runes[d.key];
+
+    var success=Math.random()<CHANCE[d.rarity];
+    if(success){
+      var nextKey=null,nextDef=null;
+      try{nextKey=runeKey(d.type,NEXT[d.rarity]);nextDef=runeDefByKey(nextKey)}catch(_){}
+      if(!nextKey||!nextDef){
+        INV.gold=gold;
+        INV.runes[d.key]=(Number(INV.runes[d.key])||0)+2;
+        refresh();
+        return {ok:false,message:'Слияние отменено · не найдена следующая редкость'};
+      }
+      try{
+        if(typeof addStatRune==='function')addStatRune(nextKey,1);
+        else INV.runes[nextKey]=(Number(INV.runes[nextKey])||0)+1;
+      }catch(_){
+        INV.runes[nextKey]=(Number(INV.runes[nextKey])||0)+1;
+      }
+      refresh();
+      var rn='';
+      try{rn=(typeof RUNE_RARITY_NAME!=='undefined'&&RUNE_RARITY_NAME[NEXT[d.rarity]])||NEXT[d.rarity]}catch(_){rn=NEXT[d.rarity]}
+      try{showPickup('✨ Слияние успешно · '+(nextDef.name||'Руна')+' · '+rn,'#c987ff')}catch(_){}
+      return {ok:true,success:true,message:'Успех! '+(nextDef.name||'Руна')+' · '+rn};
+    }
+
+    refresh();
+    try{showPickup('Слияние не удалось · 2 руны и 5000 золота сгорели','#ff8c78')}catch(_){}
+    return {ok:true,success:false,message:'Слияние не удалось · 2 руны и 5000 золота израсходованы'};
+  };
+}
+function runeUiState(){
+  ppaInstallRuneFusionLexical();`
+);
+
+// Opening the smith always refreshes the lexical bridge before its iframe asks
+// for the list. This makes fusion work even if Character -> RUNES was not opened first.
+ppaPatchRegex(
+  'rune fusion lexical bridge on blacksmith state',
+  /function\s+sendBlacksmithState\(\)\s*\{/,
+  `function sendBlacksmithState(){
+  try{ppaInstallRuneFusionLexical()}catch(_){}`
+);
+
+if(!output.includes("function ppaInstallRuneFusionLexical()") ||
+   !output.includes("window.__PPA_RUNE_FUSION_LEXICAL=true") ||
+   !output.includes("ppaInstallRuneFusionLexical();") ||
+   !output.includes("ДОСТУПНЫЕ РУНЫ · runeUiState().inventory ← INV.runes")) {
+  throw new Error('Lexical rune fusion bridge did not apply');
+}
+/* ======================================================================== */
+
 /* === EXACT RUNE FUSION SOURCE ============================================ */
 // Verified from the packed game source:
 //   "ДОСТУПНЫЕ РУНЫ" is rendered by renderRunes(rs) from rs.inventory.
@@ -3542,6 +3681,7 @@ ppaPatchRegex(
   /<\/body>/,
   `<script id="ppaRuneFusionExactSource">
 (function(){
+  if(window.__PPA_RUNE_FUSION_LEXICAL)return;
   var COST=5000;
   var CHANCE={common:.37,uncommon:.30,rare:.22};
   var NEXT={common:'uncommon',uncommon:'rare',rare:'epic'};
@@ -3760,7 +3900,7 @@ function openRuneFusionPanel(){
   try{rows=parent.PPA_RUNE_FUSION_LIST?parent.PPA_RUNE_FUSION_LIST():[]}catch(_){}
   if(!rows.length){
     var dbg={};try{dbg=parent.PPA_RUNE_FUSION_DEBUG?parent.PPA_RUNE_FUSION_DEBUG():{}}catch(_){}
-    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">Не удалось прочитать «ДОСТУПНЫЕ РУНЫ».<br><span style="font-size:8px">найдено: '+(dbg.owned||0)+' · каталог: '+(dbg.catalog||0)+' · мост: '+(dbg.characterCatalog||0)+'</span></div>';
+    list.innerHTML='<div style="padding:18px;text-align:center;color:#8f806f;font:10px monospace">Не удалось прочитать «ДОСТУПНЫЕ РУНЫ».<br><span style="font-size:8px">найдено: '+(dbg.owned||0)+' · каталог: '+(dbg.catalog||0)+' · мост: '+(dbg.characterCatalog||0)+' · lexical: '+(dbg.lexical?'да':'нет')+'</span></div>';
   }else{
     var rarity=['Серая','Зелёная','Синяя','Фиолетовая','Легендарная'];
     var title=document.createElement('div');
