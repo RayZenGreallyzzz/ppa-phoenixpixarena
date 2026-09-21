@@ -918,19 +918,86 @@ if (!output.includes("БОЙ · ДОБЫЧА НА ПАУЗЕ")) {
 
 /* ======================================================================== */
 
+/* === AUCTION PREMIUM PURCHASE ENTITLEMENT =============================== */
+// 1 qualifying Gram = 1 simultaneous auction lot, capped at 10.
+// Verified paid Gram still counts. Premium Shop goods, bundles and Premium
+// subscriptions count too. Black Market and paid class-change spend do not.
+ppaPatchRegex(
+  'auction slots count premium purchases',
+  /function accountActivated\(\)\{\s*return accountLifetimePaidGram\(\)>=1 \|\| premiumPurchasedAnyBundle\(\);\s*\}\s*function accountAuctionSlots\(\)\{[\s\S]*?return Math\.max\(0,Math\.min\(10,Math\.floor\(paid\)\)\);\s*\}/,
+  `function premiumAuctionLegacyEvidence(){
+  var ps=INV.premiumShop||{},b=ps.purchasedBundles||{};
+  if(ps.lastPremiumPlan||Number(ps.lastPremiumPurchaseAt)>0||Number(ps.premiumTier)>0||Number(ps.premiumUntil)>0)return true;
+  return Object.keys(b).some(function(k){return b[k]===true||Number(b[k])>0});
+}
+function premiumAuctionLegacyKnownSpend(){
+  var ps=INV.premiumShop||{},b=ps.purchasedBundles||{},sum=0;
+  var bundlePrice={starter:1,growth:3,adventurer:5,unique:10,epic:30};
+  Object.keys(b).forEach(function(k){
+    var n=b[k]===true?1:Math.max(0,Number(b[k])||0);
+    if(bundlePrice[k])sum+=n*bundlePrice[k];
+  });
+  var planPrice={mini:1,week:5,month:10};
+  if(ps.lastPremiumPlan&&planPrice[ps.lastPremiumPlan])sum+=planPrice[ps.lastPremiumPlan];
+  return Math.max(0,sum);
+}
+function accountPremiumAuctionSpend(){
+  if(!INV.premiumShop)INV.premiumShop={purchasedBundles:{}};
+  var ps=INV.premiumShop,v=Number(ps.auctionSlotGram);
+  if(!Number.isFinite(v)||v<0){
+    var legacy=premiumAuctionLegacyEvidence();
+    var known=premiumAuctionLegacyKnownSpend();
+    var analytics=legacy?Math.max(0,Number(INV.gramSpentLifetime)||0):0;
+    v=Math.min(10,Math.max(known,analytics,legacy?1:0));
+    ps.auctionSlotGram=Math.round(v*100)/100;
+  }
+  return Math.max(0,Number(ps.auctionSlotGram)||0);
+}
+function recordPremiumAuctionSpend(amount){
+  amount=Number(amount);
+  if(!Number.isFinite(amount)||amount<=0)return accountPremiumAuctionSpend();
+  if(!INV.premiumShop)INV.premiumShop={purchasedBundles:{}};
+  var next=Math.min(10,accountPremiumAuctionSpend()+amount);
+  INV.premiumShop.auctionSlotGram=Math.round(next*100)/100;
+  return INV.premiumShop.auctionSlotGram;
+}
+function accountAuctionCreditGram(){
+  return Math.max(accountLifetimePaidGram(),accountPremiumAuctionSpend());
+}
+function accountActivated(){
+  return accountAuctionCreditGram()>=1||premiumPurchasedAnyBundle();
+}
+function accountAuctionSlots(){
+  return Math.max(0,Math.min(10,Math.floor(accountAuctionCreditGram())));
+}`
+);
+
+ppaPatchRegex(
+  'auction state uses premium slot credit',
+  /var paid=accountLifetimePaidGram\(\);\s*if\(paid<1&&premiumPurchasedAnyBundle\(\)\)paid=1;\s*var mx=accountAuctionSlots\(\);/,
+  "var paid=(typeof accountAuctionCreditGram==='function'?accountAuctionCreditGram():accountLifetimePaidGram());\n  var mx=accountAuctionSlots();"
+);
+
+ppaPatchRegex(
+  'premium subscription counts for auction slots',
+  /if\(typeof recordGramSpend===['"]function['"]\)recordGramSpend\(cfg\.price\);\s*INV\.premiumShop\.premiumPermanent=false;/,
+  "if(typeof recordPremiumAuctionSpend==='function')recordPremiumAuctionSpend(cfg.price);\n  if(typeof recordGramSpend==='function')recordGramSpend(cfg.price);\n\n  INV.premiumShop.premiumPermanent=false;"
+);
+/* ======================================================================== */
+
 /* === PREMIUM AUTO-ATTACK ENTITLEMENT =================================== */
 // AUTO is a permanent account convenience once the player buys any Premium
 // subscription, or makes a single Premium-shop purchase costing at least 5 Gram.
 ppaPatchRegex(
   'auto attack unlock from premium bundle 5 gram',
   /if\(typeof recordGramSpend===['"]function['"]\)recordGramSpend\(cfg\.price\);\s*INV\.bag\.push\.apply\(INV\.bag,items\);/,
-  "if(typeof recordGramSpend==='function')recordGramSpend(cfg.price);if(cfg.price>=5){INV.premiumShop.autoAttackUnlocked=true;}\n  INV.bag.push.apply(INV.bag,items);"
+  "if(typeof recordPremiumAuctionSpend==='function')recordPremiumAuctionSpend(cfg.price);if(typeof recordGramSpend==='function')recordGramSpend(cfg.price);if(cfg.price>=5){INV.premiumShop.autoAttackUnlocked=true;}\n  INV.bag.push.apply(INV.bag,items);"
 );
 
 ppaPatchRegex(
   'auto attack unlock from premium good 5 gram',
   /if\(typeof recordGramSpend===['"]function['"]\)recordGramSpend\(g\.price\);\s*saveGame\(\);/,
-  "if(typeof recordGramSpend==='function')recordGramSpend(g.price);if(g.price>=5){if(!INV.premiumShop)INV.premiumShop={purchasedBundles:{}};INV.premiumShop.autoAttackUnlocked=true;}\n\n  saveGame();"
+  "if(typeof recordPremiumAuctionSpend==='function')recordPremiumAuctionSpend(g.price);if(typeof recordGramSpend==='function')recordGramSpend(g.price);if(g.price>=5){if(!INV.premiumShop)INV.premiumShop={purchasedBundles:{}};INV.premiumShop.autoAttackUnlocked=true;}\n\n  saveGame();"
 );
 
 ppaPatchRegex(
@@ -949,6 +1016,13 @@ ppaPatchRegex(
 
 if (!output.includes('autoAttackUnlocked')) {
   throw new Error('Premium AUTO entitlement patch did not apply');
+}
+if (!output.includes('function accountPremiumAuctionSpend()') ||
+    !output.includes('function recordPremiumAuctionSpend(amount)') ||
+    !output.includes('function accountAuctionCreditGram()') ||
+    !output.includes("recordPremiumAuctionSpend(cfg.price)") ||
+    !output.includes("recordPremiumAuctionSpend(g.price)")) {
+  throw new Error('Premium auction-slot entitlement patch did not apply');
 }
 
 /* === ONLINE ARENA COMBAT BRIDGE ======================================== */
