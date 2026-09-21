@@ -197,39 +197,29 @@ function activeSlots(state) {
   const ps = state.premiumShop && typeof state.premiumShop === 'object' ? state.premiumShop : {};
   const b = ps.purchasedBundles && typeof ps.purchasedBundles === 'object' ? ps.purchasedBundles : {};
 
-  // Original paid-account rule remains: 1 verified lifetime-paid Gram = 1 slot.
-  const paidSlots = Math.max(0, Math.floor(Number(state.lifetimePaidGram) || 0));
+  // Auction entitlement:
+  // cumulative qualifying Gram spent in Premium Shop = simultaneous sell slots,
+  // 1:1, capped at 10. At 1 Gram trading/selling is unlocked.
+  let premiumSpent = Math.max(0, Number(ps.auctionSlotGram) || 0);
 
-  // Premium bundles/subscriptions unlock +1 slot per separate purchase.
-  let legacyBundlePurchases = 0;
-  for (const k of Object.keys(b)) {
-    if (b[k] === true) legacyBundlePurchases += 1;
-    else legacyBundlePurchases += Math.max(0, Math.floor(Number(b[k]) || 0));
+  // Legacy saves did not have auctionSlotGram. If the save proves Premium usage,
+  // recover the old cumulative Premium spend counter so test purchases still count.
+  const hasPremiumEvidence =
+    !!ps.lastPremiumPlan ||
+    Number(ps.lastPremiumPurchaseAt) > 0 ||
+    Number(ps.premiumTier) > 0 ||
+    Number(ps.premiumUntil) > 0 ||
+    Object.keys(b).some((k) => !!b[k]);
+
+  if (premiumSpent <= 0 && hasPremiumEvidence) {
+    premiumSpent = Math.max(0, Number(state.gramSpentLifetime) || 0);
   }
 
-  let legacySubscriptionPurchases = ps.lastPremiumPlan ? 1 : 0;
-  const planDays = { mini: 3, week: 7, month: 30 };
-  const days = planDays[ps.lastPremiumPlan];
-  const boughtAt = Math.max(0, Number(ps.lastPremiumPurchaseAt) || 0);
-  const until = Math.max(0, Number(ps.premiumUntil) || 0);
-  if (days && boughtAt > 0 && until > boughtAt) {
-    const duration = days * 24 * 60 * 60 * 1000;
-    legacySubscriptionPurchases = Math.max(
-      1,
-      Math.ceil(((until - boughtAt) / duration) - 1e-9)
-    );
-  }
+  // Verified paid account credit is kept as a backward-compatible floor.
+  const verifiedPaid = Math.max(0, Number(state.lifetimePaidGram) || 0);
+  const credit = Math.max(verifiedPaid, premiumSpent);
 
-  const savedPremiumPurchases = Math.max(
-    0,
-    Math.floor(Number(ps.auctionSlotPurchases) || 0)
-  );
-  const premiumPurchases = Math.max(
-    savedPremiumPurchases,
-    legacyBundlePurchases + legacySubscriptionPurchases
-  );
-
-  return Math.max(0, Math.min(10, paidSlots + premiumPurchases));
+  return Math.max(0, Math.min(10, Math.floor(credit)));
 }
 function payloadToUi(item) {
   item = item && typeof item === 'object' ? item : {};
