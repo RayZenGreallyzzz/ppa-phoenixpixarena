@@ -134,8 +134,13 @@
       p.address=String((r&&r.address)||'');
       p.walletGram=null;
       if(r&&Array.isArray(r.history))p.history=r.history.slice(-100);
+      var synced=Math.max(0,Number(r&&r.syncCredited)||0);
+      if(synced>0&&Number.isFinite(Number(r&&r.gameGram))){
+        INV.gram=Math.max(0,Number(r.gameGram)||0);
+        try{showPickup('TON ЗАЧИСЛЕН · +'+String(synced).replace('.',',')+' GRAM','#7dff9f')}catch(_){}
+      }
       p.updatedAt=Date.now();
-      saveGame();sendGramWalletState();sendPremiumState();
+      saveGame();sendInvState();sendGramWalletState();sendPremiumState();updateUI();
     }catch(e){console.warn('Wallet state',e)}
   }
   async function refreshWallet(){if(!online()||!PPA.ppaWalletState)return;try{applyWalletState(await PPA.ppaWalletState())}catch(e){console.warn('Wallet sync',e)}}
@@ -235,7 +240,7 @@
     gramWalletUnlink=function(){if(!PPA.ppaWalletUnlink){gramWalletResult(false,'Сервер Wallet недоступен');return}PPA.ppaWalletUnlink().then(function(r){applyWalletState(r);gramWalletResult(true,r.message||'Gram Wallet отвязан')}).catch(function(e){gramWalletResult(false,msg(e))})};
     window.PPA_GRAM_WALLET_DEPOSIT_HANDLER=function(payload){return ppaTonDeposit(payload)};
     window.PPA_GRAM_WALLET_WITHDRAW_HANDLER=function(payload){return PPA.ppaWalletWithdraw(payload)};
-    var _openWallet=openGramWallet;openGramWallet=function(){_openWallet();setTimeout(refreshWallet,30);setTimeout(attachGramResetGesture,120)};window.openGramWallet=openGramWallet;
+    var _openWallet=openGramWallet;openGramWallet=function(){_openWallet();setTimeout(refreshWallet,30);setTimeout(refreshWallet,2500);setTimeout(refreshWallet,7000);setTimeout(attachGramResetGesture,120)};window.openGramWallet=openGramWallet;
     premiumWalletLink=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletDeposit=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletWithdraw=function(){try{closePremiumStore()}catch(_){};openGramWallet()};
 
     setTimeout(function(){refreshClan();refreshAuction();refreshWallet()},200);
