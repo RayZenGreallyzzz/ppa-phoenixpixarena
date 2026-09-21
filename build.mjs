@@ -5234,6 +5234,7 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
   const chatUi=fs.readFileSync(path.join(ROOT,'gateway/chat-ui.js'),'utf8');
   const realtimeClient=fs.readFileSync(path.join(ROOT,'gateway/realtime-client.js'),'utf8');
   const realtimeServer=fs.readFileSync(path.join(ROOT,'src/realtime-stable.js'),'utf8');
+  const realtimeBase=fs.readFileSync(path.join(ROOT,'src/realtime.js'),'utf8');
   const arenaPvp=fs.readFileSync(path.join(ROOT,'gateway/arena-pvp-client.js'),'utf8');
   const dungeonMobEvents=fs.readFileSync(path.join(ROOT,'gateway/dungeon-mob-events.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
@@ -5294,8 +5295,12 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
   if (!chatUi.includes('PPA_CHAT_RECEIVE') ||
       !chatUi.includes('ppa-chat-send') ||
       !chatUi.includes('PPA_CHAT_PRIVATE_TO') ||
-      !chatUi.includes('ppaChatNativeInput')) {
-    throw new Error('Realtime chat UI bridge is incomplete');
+      !chatUi.includes('ppaChatNativeInput') ||
+      !realtimeBase.includes("m.type === 'chat'") ||
+      !realtimeBase.includes("channel === 'private'") ||
+      !realtimeBase.includes("channel === 'clan'") ||
+      !realtimeBase.includes("channel === 'party'")) {
+    throw new Error('Realtime chat UI/server bridge is incomplete');
   }
 }
 
