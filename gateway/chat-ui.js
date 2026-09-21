@@ -7,7 +7,7 @@
   var STORE='ppaChatV2History';
   var TARGET_STORE='ppaChatV2PrivateTarget';
   var state={channel:'general',collapsed:true,unread:{general:0,clan:0,party:0,private:0},history:{general:[],clan:[],party:[],private:[]},target:''};
-  var root=null,box=null,nativeInput=null,visualInput=null,msgs=null,targetRow=null,targetInput=null,collapseBtn=null,launcher=null,sendBtn=null;
+  var root=null,box=null,nativeInput=null,visualInput=null,msgs=null,targetRow=null,targetInput=null,collapseBtn=null,launcher=null,sendBtn=null,dismissLayer=null;
   var typing=false,legacyNativeInput=false,typingShiftY=0;
 
   function escText(v){return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]/g,'').slice(0,180)}
@@ -84,6 +84,7 @@
     state.collapsed=!!v;
     if(box)box.classList.toggle('collapsed',state.collapsed);
     if(launcher)launcher.classList.toggle('hidden',!state.collapsed);
+    if(dismissLayer)dismissLayer.classList.toggle('on',!state.collapsed);
     if(!state.collapsed){
       state.unread[state.channel]=0;
       renderUnread();
@@ -172,6 +173,7 @@
     if(!root)return;
     var hide=menuVisible();
     root.classList.toggle('suppressed',hide);
+    if(dismissLayer)dismissLayer.classList.toggle('on',!state.collapsed&&!hide);
     if(hide){
       try{if(document.activeElement===nativeInput||document.activeElement===targetInput)document.activeElement.blur()}catch(_){}
     }
@@ -181,11 +183,15 @@
     var st=document.createElement('style');st.id='ppaChatV2Style';st.textContent=`
       #ppaChatRoot.ppaChatV2Root{
         position:fixed!important;left:8px!important;right:auto!important;
-        width:min(370px,calc(100vw - 16px))!important;max-width:calc(100vw - 16px)!important;
+        width:min(350px,calc(100vw - 26px))!important;max-width:calc(100vw - 26px)!important;
         z-index:39!important;transform:none!important;pointer-events:auto!important;display:block!important;
         font-family:Arial,sans-serif
       }
       #ppaChatRoot.ppaChatV2Root:not(.nativeTyping){top:auto!important;bottom:178px!important}
+      #ppaChatDismiss{
+        position:fixed;inset:0;z-index:38;display:none;background:transparent;pointer-events:auto;touch-action:manipulation
+      }
+      #ppaChatDismiss.on{display:block}
       #ppaChatRoot.ppaChatV2Root.suppressed{display:none!important}
       #ppaChatRoot.ppaChatV2Root > :not(#ppaChatBoxV2):not(#ppaChatNativeInput):not(#ppaChatLauncher){display:none!important}
       #ppaChatBox{display:none!important;visibility:hidden!important;pointer-events:none!important}
@@ -240,13 +246,15 @@
       #ppaChatSend{height:31px;border:1px solid #885f32;border-radius:5px;background:linear-gradient(#4b301c,#24170f);color:#ffe0ad;font:bold 9px Georgia,serif}
       @media (max-width:600px){
         #ppaChatRoot.ppaChatV2Root{
-          width:min(330px,calc(100vw - 18px))!important;
-          left:9px!important;
+          width:min(315px,calc(100vw - 30px))!important;
+          max-width:calc(100vw - 30px)!important;
+          left:10px!important;
         }
         #ppaChatRoot.ppaChatV2Root:not(.nativeTyping){top:auto!important;bottom:178px!important}
         #ppaChatRoot.ppaChatV2Root.nativeTyping{
-          left:7px!important;
-          width:min(355px,calc(100vw - 14px))!important;
+          left:10px!important;
+          width:min(315px,calc(100vw - 30px))!important;
+          max-width:calc(100vw - 30px)!important;
         }
         #ppaChatBoxV2{height:176px}
         #ppaChatBoxV2 .ppaChatTabs{gap:2px;padding:3px 4px}
@@ -303,6 +311,16 @@
     root.appendChild(box);
 
     launcher=document.createElement('button');launcher.id='ppaChatLauncher';launcher.type='button';launcher.textContent='💬 ЧАТ';root.appendChild(launcher);
+
+    dismissLayer=document.getElementById('ppaChatDismiss');
+    if(!dismissLayer){
+      dismissLayer=document.createElement('div');
+      dismissLayer.id='ppaChatDismiss';
+      document.body.appendChild(dismissLayer);
+    }
+    dismissLayer.addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation()});
+    dismissLayer.addEventListener('pointerup',function(e){e.preventDefault();e.stopPropagation();setCollapsed(true)});
+    dismissLayer.addEventListener('click',function(e){e.preventDefault();e.stopPropagation()});
 
     visualInput=box.querySelector('#ppaChatVisualInput');
     msgs=box.querySelector('#ppaChatMessages');targetRow=box.querySelector('#ppaChatPrivateTargetRow');targetInput=box.querySelector('#ppaChatPrivateTarget');
