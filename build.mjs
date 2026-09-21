@@ -4572,8 +4572,9 @@ if(!output.includes("var PPA_RUNE_INFO_HOLD_MS=650") ||
 /* ======================================================================== */
 
 const ppaBuildSelf=fs.readFileSync(path.join(ROOT,'build.mjs'),'utf8');
-const ppaSlagSourceAnchor=ppaBuildSelf.indexOf("'pickaxe image constants'");
-const ppaSlagDataPrefix="const FART_SLAG_IMG='data:image/webp;base64,";
+// Build the search needles from pieces so this lookup cannot match its own source line.
+const ppaSlagSourceAnchor=ppaBuildSelf.indexOf("'pickaxe image "+"constants'");
+const ppaSlagDataPrefix="const FART_SLAG_"+"IMG='data:image/webp;base64,";
 const ppaSlagDataStart=ppaSlagSourceAnchor>=0?ppaBuildSelf.indexOf(ppaSlagDataPrefix,ppaSlagSourceAnchor):-1;
 const ppaSlagDataEnd=ppaSlagDataStart>=0?ppaBuildSelf.indexOf("';",ppaSlagDataStart+ppaSlagDataPrefix.length):-1;
 const ppaCharacterSlagImg=(ppaSlagDataStart>=0&&ppaSlagDataEnd>ppaSlagDataStart)
