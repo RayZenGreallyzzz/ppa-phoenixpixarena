@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v455-rune-hold-info-window-20260921';
+const CLIENT_BUILD = 'v456-rune-hold-runtime-fix-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3988,7 +3988,7 @@ function ppaRuneInfoText(r,count){
 
   var n=Math.max(0,Math.floor(Number(count!=null?count:(r.count!=null?r.count:(r.qty!=null?r.qty:r.amount)))||0));
   if(n>1)lines.push('В наличии: '+n);
-  return lines.join('\n');
+  return lines.join('\\n');
 }
 function ppaRuneInfoEnsure(){
   var box=document.getElementById('ppaRuneHoldInfo');
@@ -4147,6 +4147,7 @@ if(!output.includes("var PPA_RUNE_INFO_HOLD_MS=650") ||
    !output.includes("function ppaRuneInfoShow(meta)") ||
    !output.includes("function ppaRuneInfoFromNode(node)") ||
    !output.includes("document.__ppaRuneInfoHoldInstalled") ||
+   !output.includes("return lines.join('\\\\n');") ||
    !output.includes("PPA_CHARACTER_AVAILABLE_RUNES")) {
   throw new Error('Rune hold info window patch did not apply');
 }
