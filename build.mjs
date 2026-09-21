@@ -429,8 +429,10 @@ ppaPatchRegex(
 
 if(!output.includes('tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js') ||
    !output.includes("openSingleWalletModal('gramwallet')") ||
-   !output.includes("type:'gramWalletTonConnectOpen'") ||
-   !output.includes("type:'gramWalletTonConnectDisconnect'") ||
+   !output.includes("d.type==='gramWalletTonConnectOpen'") ||
+   !output.includes("d.type==='gramWalletTonConnectDisconnect'") ||
+   !output.includes(ppaEscapeSrcdocCode("type:'gramWalletTonConnectOpen'")) ||
+   !output.includes(ppaEscapeSrcdocCode("type:'gramWalletTonConnectDisconnect'")) ||
    !output.includes("manifestUrl:location.origin+'/tonconnect-manifest.json'")) {
   throw new Error('Gram Wallet TON Connect patch did not apply');
 }
