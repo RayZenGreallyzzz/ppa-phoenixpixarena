@@ -116,6 +116,27 @@
     return 'Экипировка';
   }
 
+  function entityLevel(e){
+    var lv=Math.floor(Number(e&&(e.lvl!=null?e.lvl:e.roomLevel))||0);
+    if(e&&e.isDungeon60Boss)return 60;
+    if(e&&e.isDungeon21Boss)return Math.max(40,lv||40);
+    if(e&&e.isDungeonPhoenixBoss)return Math.max(20,lv||20);
+    return Math.max(0,lv);
+  }
+
+  // Drop UI must never inherit a stale low-tier rarity label from an older
+  // mobDropInfo branch. Explicit high rarities stay untouched; only impossible
+  // gray/green/generic gear labels are promoted to the minimum legal tier for
+  // the current dungeon bracket.
+  function canonicalGearRarity(e,label){
+    var rar=rarityLabel(label),lv=entityLevel(e);
+    if(rar==='Легендарное'||rar==='Эпическое'||rar==='Синее')return rar;
+    if(lv>=21&&lv<=60)return 'Синее';
+    if(lv>=11&&lv<=20)return 'Зелёное';
+    return rar;
+  }
+  window.PPA_DUNGEON_CANONICAL_GEAR_RARITY=canonicalGearRarity;
+
   function isGearRow(label){
     var s=String(label||'').toLowerCase();
     return (s.indexOf('шмот')>=0||s.indexOf('оруж')>=0||s.indexOf('экипиров')>=0)
@@ -132,7 +153,7 @@
       }
       var total=parsePct(row[1]);
       if(total==null||!(total>0)){out.push(row);continue}
-      var rar=rarityLabel(row[0]);
+      var rar=canonicalGearRarity(e,row[0]);
       for(var j=0;j<SLOT_ORDER.length;j++){
         var slot=SLOT_ORDER[j];
         out.push([rar+' · '+SLOT_LABELS[slot],fmtProb(total*slotShare(slot))]);
@@ -251,6 +272,42 @@
     return out;
   }
 
+  function finalGearLabelGuard(e,rows){
+    if(!Array.isArray(rows))return rows;
+    var lv=entityLevel(e);
+    if(lv<11||lv>60)return rows;
+    var out=[];
+    for(var i=0;i<rows.length;i++){
+      var row=rows[i];
+      if(!Array.isArray(row)||row.length<2){out.push(row);continue}
+      var copy=row.slice(),label=String(copy[0]||'');
+      if(isGearRow(label)){
+        var wanted=canonicalGearRarity(e,label);
+        if(wanted==='Синее'&&(label.indexOf('Зелёное')===0||label.indexOf('Серое')===0||label.indexOf('Экипировка')===0)){
+          copy[0]=label.replace(/^(?:Зелёное|Серое|Экипировка)/,wanted);
+        }else if(wanted==='Зелёное'&&(label.indexOf('Серое')===0||label.indexOf('Экипировка')===0)){
+          copy[0]=label.replace(/^(?:Серое|Экипировка)/,wanted);
+        }
+      }
+      out.push(copy);
+    }
+    return out;
+  }
+
+  window.PPA_DUNGEON_DROP_TABLE_AUDIT=function(e){
+    try{
+      var rows=(typeof mobDropInfo==='function')?mobDropInfo(e):[];
+      var lv=entityLevel(e),bad=[];
+      (rows||[]).forEach(function(r){
+        if(!Array.isArray(r)||!isGearRow(r[0]))return;
+        var s=String(r[0]||'');
+        if(lv>=21&&/^(?:Зелёное|Серое|Экипировка)/.test(s))bad.push(s);
+        if(lv>=11&&lv<=20&&/^(?:Серое|Экипировка)/.test(s))bad.push(s);
+      });
+      return {ok:bad.length===0,level:lv,boss:!!(e&&(e.isBoss||e.isDungeon21Boss||e.isDungeon60Boss||e.isDungeonPhoenixBoss)),bad:bad,rows:rows};
+    }catch(err){return {ok:false,error:String(err&&err.message||err)}}
+  };
+
   function installInfo(){
     try{
       if(typeof mobDropInfo!=='function'||mobDropInfo.__ppaDungeonSlotRows)return;
@@ -258,7 +315,8 @@
       var wrapped=function(e){
         var rows=base.apply(this,arguments);
         rows=expandBookRows(e,rows);
-        return expandGearRows(e,rows);
+        rows=expandGearRows(e,rows);
+        return finalGearLabelGuard(e,rows);
       };
       wrapped.__ppaDungeonSlotRows=1;
       try{mobDropInfo=wrapped}catch(_){}
