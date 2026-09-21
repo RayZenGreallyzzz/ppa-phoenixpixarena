@@ -70,18 +70,55 @@
     }catch(_){}
   }
 
+  function phoenixBlueGear(item){
+    if(!item||typeof item!=='object')return false;
+    var raw=item.rarity!=null?item.rarity:(item.quality!=null?item.quality:item.tier);
+    var s=String(raw==null?'':raw).toLowerCase();
+    if(Number(raw)===2)return true;
+    return s==='rare'||s==='blue'||s.indexOf('син')>=0;
+  }
+
+  function removePhoenixBlueGear(start){
+    try{
+      if(typeof LOOT==='undefined'||!Array.isArray(LOOT))return;
+      start=Math.max(0,Math.min(LOOT.length,Number(start)||0));
+      for(var i=LOOT.length-1;i>=start;i--){
+        var q=LOOT[i];
+        if(!q)continue;
+        var it=q.item||q.gear||null;
+        var kind=String(q.kind||'').toLowerCase();
+        var slot=String(it&&(it.slot||it.type)||'').toLowerCase();
+        var gear=(kind==='gear'||SLOT_ORDER.indexOf(slot)>=0);
+        if(gear&&phoenixBlueGear(it))LOOT.splice(i,1);
+      }
+    }catch(_){}
+  }
+
   function installDropContext(){
     try{
       if(typeof dropLoot!=='function'||dropLoot.__ppaDungeonSlotContext)return;
       var base=dropLoot;
       var wrapped=function(e){
-        if(!dungeonGearEligible(e))return base.apply(this,arguments);
+        var isPhoenix=!!(e&&e.isDungeonPhoenixBoss);
+        var lootStart=0;
+        try{if(typeof LOOT!=='undefined'&&Array.isArray(LOOT))lootStart=LOOT.length}catch(_){}
+        if(!dungeonGearEligible(e)){
+          var plain=base.apply(this,arguments);
+          if(isPhoenix)removePhoenixBlueGear(lootStart);
+          return plain;
+        }
         var prev=window.__PPA_DUNGEON_GEAR_SLOT_WEIGHTED;
         window.__PPA_DUNGEON_GEAR_SLOT_WEIGHTED=true;
-        try{return base.apply(this,arguments)}
-        finally{window.__PPA_DUNGEON_GEAR_SLOT_WEIGHTED=prev}
+        try{
+          var result=base.apply(this,arguments);
+          if(isPhoenix)removePhoenixBlueGear(lootStart);
+          return result;
+        }finally{
+          window.__PPA_DUNGEON_GEAR_SLOT_WEIGHTED=prev;
+        }
       };
       wrapped.__ppaDungeonSlotContext=1;
+      wrapped.__ppaPhoenixNoBlueGear=1;
       try{dropLoot=wrapped}catch(_){}
       try{window.dropLoot=wrapped}catch(_){}
     }catch(_){}
