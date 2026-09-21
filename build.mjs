@@ -1957,6 +1957,18 @@ ppaPatchRegex(
 );
 
 ppaPatchRegex(
+  'hide legacy sell all slag gold button',
+  /(<button id="fartGuideSell" style=")([^"]*)(">ПРОДАТЬ ВЕСЬ ШЛАК<\/button>)/,
+  "$1display:none;$2$3"
+);
+
+ppaPatchRegex(
+  'fart npc slag info uses bag and ppa',
+  /const n=Math\.max\(0,Math\.floor\(Number\(INV\.fartJunk\)\|\|0\)\);\s*const info=shade\.querySelector\('#fartGuideJunk'\);\s*if\(info\)info\.textContent='Шлак: '\+n\+' шт\. · цена продажи: 10 золота\/шт\.';/,
+  "const _slagInfoItem=(typeof fartSlagBagItem==='function'?fartSlagBagItem():null);\n  const n=_slagInfoItem?Math.max(0,Math.floor(Number(_slagInfoItem.count||_slagInfoItem.qty||_slagInfoItem.amount)||0)):0;\n  const info=shade.querySelector('#fartGuideJunk');\n  if(info)info.textContent='Шлак: '+n+' шт. · цена продажи: 2 PPA/шт.';"
+);
+
+ppaPatchRegex(
   'add slag sale button to fart npc',
   /('<button id="fartGuideSell"[\s\S]*?<\/button>'\+)/,
   "$1\n      '<button id=\"fartGuideSlagSell\" style=\"width:100%;height:42px;margin-bottom:8px;border:1px solid #8f4a20;border-radius:8px;background:#2d160d;color:#ffad62;font-weight:bold\">♨ ПРОДАТЬ ШЛАК · 2 PPA/ШТ</button>'+"
@@ -4559,6 +4571,10 @@ if(!output.includes("var PPA_RUNE_INFO_HOLD_MS=650") ||
 }
 /* ======================================================================== */
 
+const ppaCharacterSlagImgMatch=output.match(/const FART_SLAG_IMG='(data:image\\/webp;base64,[A-Za-z0-9+/=]+)';/);
+const ppaCharacterSlagImg=ppaCharacterSlagImgMatch?ppaCharacterSlagImgMatch[1]:'';
+if(!ppaCharacterSlagImg)throw new Error('Fart slag image data not found before character inventory patch');
+
 /* === CHARACTER INVENTORY NATIVE-MENU REMOVAL + HOLD PREVIEW ============= */
 // The character iframe used real <img> elements for every item. Telegram WebView
 // can invoke a native image/link menu before JS cancellation. Render item art
@@ -4630,10 +4646,7 @@ try{
 function itemVisual(it,size){
   size=size||34;
   if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){
-    try{
-      var _ppaCharSlagArt=parent.PPA_FART_SLAG_IMG||'';
-      if(_ppaCharSlagArt)it.img=_ppaCharSlagArt;
-    }catch(_){}
+    it.img='${ppaCharacterSlagImg}';
   }
   if(it&&it.img){
     var sc=1,flt='none';
@@ -4854,6 +4867,11 @@ if(!output.includes("function fartResolveGuardCollision()") ||
   throw new Error('Fart slag icon/collision patch did not apply');
 }
 
+if(!output.includes('id="fartGuideSell" style="display:none;') ||
+   !output.includes("цена продажи: 2 PPA/шт.")) {
+  throw new Error('Fart NPC legacy slag sale cleanup did not apply');
+}
+
 if(!output.includes("const FART_SLAG_INTERVAL_MS=40000") ||
    !output.includes("const FART_SLAG_SELL_PRICE=2") ||
    !output.includes("function fartMakeSlagItem(count)") ||
@@ -4912,7 +4930,7 @@ ppaPatchRegex(
     it.kind='resource';
     it.typeName='Ресурс Фарт-зоны';
     it.useText='Можно продать только местному NPC в Фарт-зоне.';
-    try{it.img=parent.PPA_FART_SLAG_IMG||it.img||''}catch(_){}
+    it.img='${ppaCharacterSlagImg}';
   }`)
 );
 
@@ -4961,9 +4979,8 @@ ppaPatchRegex(
   "if(bagGrid)bagGrid.__ppaSelectedIndex=(_sel>=0?_sel:-1);\n  var bc=document.querySelector(&#x27;.bagCount&#x27;);"
 );
 
-if(!output.includes(ppaEscapeSrcdocCode("var _ppaCharSlagArt=parent.PPA_FART_SLAG_IMG||''")) ||
-   !output.includes(ppaEscapeSrcdocCode("if(_ppaCharSlagArt)it.img=_ppaCharSlagArt"))) {
-  throw new Error('Character slag canvas art bridge did not apply');
+if(!output.includes(ppaEscapeSrcdocCode("it.img='"+ppaCharacterSlagImg+"'"))) {
+  throw new Error('Character slag embedded canvas art did not apply');
 }
 
 if(!output.includes("function ppaSetBagVisualSelection(i)") ||
