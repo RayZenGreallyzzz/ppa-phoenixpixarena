@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v466-native-drops-fart-stability-20260922';
+const CLIENT_BUILD = 'v467-approved-drop-tables-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1320,6 +1320,35 @@ ppaPatchRegex(
   /const\s+slots=\['weapon','helmet','armor','gloves','ring','legs','boots'\];\s*const\s+slot=slots\[\(Math\.random\(\)\*slots\.length\)\|0\];/,
   "const slots=['weapon','helmet','armor','gloves','ring','legs','boots'];\n  const slot=(window.PPA_DUNGEON_PICK_GEAR_SLOT?window.PPA_DUNGEON_PICK_GEAR_SLOT():slots[(Math.random()*slots.length)|0]);"
 );
+
+/* ======================================================================== */
+
+/* === DUNGEON 41-60 APPROVED EQUIPMENT CURVE ============================= */
+ppaPatchRegex(
+  '41-60 approved epic curve helper',
+  /function\s+v271Drop4160\(e\)\s*\{/,
+  `function v467Epic4160Chance(lv){
+  lv=Math.max(41,Math.min(60,Math.floor(Number(lv)||41)));
+  return .000018+(lv-41)*((.000040-.000018)/19); // 0.0018% -> 0.0040%
+}
+function v271Drop4160(e){`
+);
+
+ppaPatchRegex(
+  '41-60 epic and 51-60 legendary gear rolls',
+  /if\(Math\.random\(\)<V271_D41_LEGENDARY_GEAR_CHANCE\)v271PushDungeon41Legendary\(e\);\s*if\(Math\.random\(\)<V271_D41_BOOK_II_III_CHANCE\)v271PushDungeon41Book\(e\);/,
+  `const _lv4160=Math.max(41,Math.min(60,Math.floor(Number(e&&e.lvl)||41)));
+  if(v232Roll(v467Epic4160Chance(_lv4160),mul))v232PushGear(e,'epic');
+  if(_lv4160>=51&&Math.random()<V271_D41_LEGENDARY_GEAR_CHANCE)v271PushDungeon41Legendary(e);
+  if(Math.random()<V271_D41_BOOK_II_III_CHANCE)v271PushDungeon41Book(e);`
+);
+
+if (!output.includes("return .000018+(lv-41)*((.000040-.000018)/19); // 0.0018% -> 0.0040%") ||
+    !output.includes("if(v232Roll(v467Epic4160Chance(_lv4160),mul))v232PushGear(e,'epic');") ||
+    !output.includes("if(_lv4160>=51&&Math.random()<V271_D41_LEGENDARY_GEAR_CHANCE)") ||
+    !output.includes("const V271_D41_LEGENDARY_GEAR_CHANCE=0.00000013;")) {
+  throw new Error('Approved 41-60 epic/legendary gear curve did not apply');
+}
 
 /* ======================================================================== */
 
@@ -5314,13 +5343,21 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
       !bossDropBoost.includes('Бонусный бросок таблицы босса')) {
     throw new Error('Boss drop boost helper incomplete');
   }
-  if (!dungeonDropSlotsAudit.includes('__ppaDungeonNativeDropRows') ||
-      !dungeonDropSlotsAudit.includes("PPA_DUNGEON_DROP_TABLE_MODE='native'") ||
+  if (!dungeonDropSlotsAudit.includes('__ppaApprovedDropRows') ||
+      !dungeonDropSlotsAudit.includes("PPA_DUNGEON_DROP_TABLE_MODE='approved-11-60'") ||
+      !dungeonDropSlotsAudit.includes("weapon:'Оружие · все классы'") ||
+      !dungeonDropSlotsAudit.includes("legs:'Поножи · все классы'") ||
+      !dungeonDropSlotsAudit.includes('function expandGearRows(e,rows)') ||
+      !dungeonDropSlotsAudit.includes('function expandBookRows(e,rows)') ||
+      !dungeonDropSlotsAudit.includes("typeof ALL_GRIMOIRES!=='undefined'") ||
+      !dungeonDropSlotsAudit.includes('var BLUE_2130=[.00002,.00004,.00006,.00009,.00012,.00015,.00019,.00023,.00026,.00030]') ||
+      !dungeonDropSlotsAudit.includes('var EPIC_3140=[.000001,.000002,.000003,.000004,.000005,.000006,.000007,.000008,.000009,.000010]') ||
+      !dungeonDropSlotsAudit.includes('var EPIC_4160_START=0.000018') ||
+      !dungeonDropSlotsAudit.includes('var EPIC_4160_END=0.000040') ||
+      !dungeonDropSlotsAudit.includes('var LEGENDARY_5160_CHANCE=0.00000013') ||
       !dungeonDropSlotsAudit.includes('__ppaPhoenixNoBlueGear') ||
-      !dungeonDropSlotsAudit.includes('removePhoenixBlueGear') ||
-      dungeonDropSlotsAudit.includes('rows=expandGearRows(e,rows)') ||
-      dungeonDropSlotsAudit.includes('rows=expandBookRows(e,rows)')) {
-    throw new Error('Native dungeon drop-table restore is incomplete');
+      !dungeonDropSlotsAudit.includes('removePhoenixBlueGear')) {
+    throw new Error('Approved 11-60 dungeon drop tables are incomplete');
   }
   if (!dungeonMobEvents.includes("rows.push(['p20',3913") ||
       !dungeonMobEvents.includes("DUNGEON21_BOSS_HP:9000)||9000)+5350") ||
