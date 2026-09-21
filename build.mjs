@@ -4883,6 +4883,39 @@ if(output.includes('Этот тип предмета сейчас не зата�
 }
 /* ======================================================================== */
 
+/* === CHARACTER INVENTORY RESOURCE KIND FIX ============================== */
+// Items physically stored in INV.bag are not always equipment. Preserve their
+// declared kind so bag resources (notably Fart slag / monster cores) open the
+// resource popup instead of the gear popup.
+ppaPatchRegex(
+  'character inventory preserves bag item kind',
+  /_bagView\.push\(\{kind:'gear',it:it,bagIndex:idx\}\);/,
+  "_bagView.push({kind:(it&&it.kind&&it.kind!=='gear'?it.kind:'gear'),it:it,bagIndex:idx});"
+);
+
+// Slag must always use the dedicated resource art in the resource card. The
+// parent window owns the canonical art constant; old saves may have empty img.
+ppaPatchRegex(
+  'slag resource popup art and metadata',
+  /function\s+openResourcePopup\(it\)\s*\{\s*if\(!it\)return;/,
+  `function openResourcePopup(it){
+  if(!it)return;
+  if(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак'){
+    it.fartSlag=true;
+    it.kind='resource';
+    it.typeName='Ресурс Фарт-зоны';
+    it.useText='Можно продать только местному NPC в Фарт-зоне.';
+    try{it.img=parent.PPA_FART_SLAG_IMG||it.img||''}catch(_){}
+  }`
+);
+
+if(!output.includes("kind:(it&&it.kind&&it.kind!=='gear'?it.kind:'gear')") ||
+   !output.includes("it.typeName='Ресурс Фарт-зоны'") ||
+   !output.includes("it.useText='Можно продать только местному NPC в Фарт-зоне.'")) {
+  throw new Error('Character bag resource-kind / slag popup patch did not apply');
+}
+/* ======================================================================== */
+
 /* === CHARACTER INVENTORY FAST SELECTION ================================= */
 // Selecting an item must not rebuild the whole 100-slot bag. Full renderBag()
 // recreates every image/canvas and caused visible blanking/jank on mobile.
