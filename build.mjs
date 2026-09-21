@@ -4817,6 +4817,12 @@ ppaPatchRegex(
 );
 
 ppaPatchRegex(
+  'character invstate hydrates slag image',
+  /(type:'invState',\s*inv:\{\s*equipped:INV\.equipped,\s*bag:)INV\.bag,/,
+  "$1(INV.bag||[]).map(function(it){if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){it.fartSlag=true;it.kind='resource';it.img=FART_SLAG_IMG;}return it}),"
+);
+
+ppaPatchRegex(
   'pickaxe npc button images',
   /const lb=shade\.querySelector\('#fartGuideLegendPickaxe'\);\s*const _hasPickaxe=fartHasPickaxe\(\);/,
   `const lb=shade.querySelector('#fartGuideLegendPickaxe');
@@ -4838,6 +4844,11 @@ ppaPatchRegex(
   }
   const _hasPickaxe=fartHasPickaxe();`
 );
+
+if(!output.includes("bag:(INV.bag||[]).map(function(it){if(it&&(it.fartSlag===true") ||
+   !output.includes("it.kind='resource';it.img=FART_SLAG_IMG")) {
+  throw new Error('Character invState slag image hydration did not apply');
+}
 
 if(!output.includes("window.PPA_FART_PICKAXE_COMMON_IMG=FART_PICKAXE_COMMON_IMG") ||
    !output.includes("it&&it.fartSlag===true") ||
