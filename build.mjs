@@ -5231,6 +5231,7 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
 {
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
   const socialUi=fs.readFileSync(path.join(ROOT,'gateway/social-ui.js'),'utf8');
+  const chatUi=fs.readFileSync(path.join(ROOT,'gateway/chat-ui.js'),'utf8');
   const realtimeClient=fs.readFileSync(path.join(ROOT,'gateway/realtime-client.js'),'utf8');
   const realtimeServer=fs.readFileSync(path.join(ROOT,'src/realtime-stable.js'),'utf8');
   const arenaPvp=fs.readFileSync(path.join(ROOT,'gateway/arena-pvp-client.js'),'utf8');
@@ -5290,6 +5291,12 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
   if (!remoteFx.includes('PPA_REMOTE_COMBAT_FX_DRAW')) {
     throw new Error('Remote projectile draw API missing');
   }
+  if (!chatUi.includes('PPA_CHAT_RECEIVE') ||
+      !chatUi.includes('ppa-chat-send') ||
+      !chatUi.includes('PPA_CHAT_PRIVATE_TO') ||
+      !chatUi.includes('ppaChatNativeInput')) {
+    throw new Error('Realtime chat UI bridge is incomplete');
+  }
 }
 
 /* ======================================================================== */
@@ -5298,6 +5305,7 @@ const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
   ['gateway/online-client.js','online-client.js','Online client bridge missing'],
   ['gateway/realtime-client.js','realtime-client.js','Realtime client bridge missing'],
+  ['gateway/chat-ui.js','chat-ui.js','Realtime chat UI missing'],
   ['gateway/arena-pvp-client.js','arena-pvp-client.js','Arena PvP client missing'],
   ['gateway/world-combat-client.js','world-combat-client.js','World combat client missing'],
   ['gateway/dungeon60-dragon.js','dungeon60-dragon.js','Dungeon 60 dragon runtime missing'],
@@ -5322,7 +5330,7 @@ for (const [srcName,dstName,err] of filesToPublish) {
 
 if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
 const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
-output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
+output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('chat-ui.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
 <script src="${js('dungeon-drop-slots.js')}"></script>
 <script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
@@ -5332,6 +5340,7 @@ console.log('Telegram bridge: /game/ppa-bridge.js');
 console.log('Telegram safe UI: /game/telegram-safe-ui.js');
 console.log('Mobile HUD tweaks: /game/mobile-hud-tweaks.js');
 console.log('Online bridge: /game/online-client.js');
+console.log('Realtime chat UI: /game/chat-ui.js');
 console.log('Realtime bridge: /game/realtime-client.js');
 console.log('Arena PvP: /game/arena-pvp-client.js');
 console.log('World combat: /game/world-combat-client.js');
