@@ -322,6 +322,56 @@ if (!output.includes('id=&quot;clanRankList&quot;')) {
   throw new Error('Clan ranking srcdoc escaping failed');
 }
 
+/* === GRAM WALLET TELEGRAM ID RELIABILITY =============================== */
+ppaPatchRegex(
+  'gram wallet telegram user uses window object',
+  /function gramWalletTelegramUser\(\)\{[\s\S]*?return \{id:'',name:'Вне Telegram',username:''\};\n\}/,
+  `function gramWalletTelegramUser(){
+  try{
+    var wa=window.Telegram&&window.Telegram.WebApp;
+    var u=wa&&wa.initDataUnsafe&&wa.initDataUnsafe.user;
+    if(u&&u.id){
+      var n=[u.first_name,u.last_name].filter(Boolean).join(' ').trim()||u.username||('ID '+u.id);
+      return {id:String(u.id),name:n,username:u.username||''};
+    }
+    // Realtime uses the same WebApp initData; some Telegram clients expose the
+    // parsed user a moment after page scripts start. Parse initData as fallback.
+    var raw=wa&&wa.initData?String(wa.initData):'';
+    if(raw){
+      var q=new URLSearchParams(raw),uj=q.get('user');
+      if(uj){
+        var p=JSON.parse(uj);
+        if(p&&p.id){
+          var pn=[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||p.username||('ID '+p.id);
+          return {id:String(p.id),name:pn,username:p.username||''};
+        }
+      }
+    }
+  }catch(_){}
+  return {id:'',name:'Вне Telegram',username:''};
+}`
+);
+
+ppaPatchRegex(
+  'gram wallet refreshes after telegram ready',
+  /window\.openGramWallet=openGramWallet;window\.closeGramWallet=closeGramWallet;/,
+  `window.openGramWallet=openGramWallet;window.closeGramWallet=closeGramWallet;
+try{
+  var _ppaGramTg=window.Telegram&&window.Telegram.WebApp;
+  if(_ppaGramTg&&typeof _ppaGramTg.ready==='function')_ppaGramTg.ready();
+  setTimeout(sendGramWalletState,120);
+  setTimeout(sendGramWalletState,600);
+  setTimeout(sendGramWalletState,1600);
+}catch(_){}`
+);
+
+if(!output.includes("var wa=window.Telegram&&window.Telegram.WebApp") ||
+   !output.includes("var q=new URLSearchParams(raw),uj=q.get('user')") ||
+   !output.includes("setTimeout(sendGramWalletState,1600)")) {
+  throw new Error('Gram Wallet Telegram identity refresh patch did not apply');
+}
+/* ======================================================================== */
+
 /* === TON CONNECT · GRAM WALLET ========================================== */
 ppaPatchRegex(
   'ton connect ui sdk script',
