@@ -593,7 +593,8 @@ async function walletSyncIncoming(env, telegramId) {
 
     let nano;
     try { nano = BigInt(String(msg.value || '0')); } catch (_) { continue; }
-    if (nano <= 0n) continue;
+    // PPA rule: future deposits below 1 TON are not credited.
+    if (nano < 1000000000n) continue;
     const messageHash = tonHashToHex(msg.hash_norm || msg.hash);
     if (!messageHash) continue;
 
@@ -628,6 +629,7 @@ async function walletDeposit(env, telegramId, body) {
   }
   if (expectedNano == null) expectedNano = tonAmountToNano(body.amount);
   if (expectedNano == null || expectedNano <= 0n) return out({ ok: false, message: 'Введите корректную сумму TON.' }, 400);
+  if (expectedNano < 1000000000n) return out({ ok: false, code: 'DEPOSIT_MIN_1_TON', message: 'Минимальное пополнение — 1 Gram (1 TON).' }, 400);
 
   const wallet = await walletState(env, telegramId);
   if (!wallet.connected || !wallet.address) return out({ ok: false, message: 'Сначала подключи TON Wallet через TON Connect.' }, 409);
@@ -730,7 +732,11 @@ export async function handleOnlineRoute(path, ctx) {
   }
   if (path === '/api/wallet/deposit') return walletDeposit(env, telegramId, body);
   if (path === '/api/wallet/withdraw') {
-    return out({ ok: false, code: 'TREASURY_SIGNER_REQUIRED', message: 'Вывод TON потребует серверной подписи казны. Секрет/seed нельзя хранить в клиенте.' }, 501);
+    const amount = Number(body && body.amount);
+    if (!Number.isFinite(amount) || amount < 15) {
+      return out({ ok: false, code: 'WITHDRAW_MIN_15_TON', message: 'Минимальный вывод — 15 Gram (15 TON).' }, 400);
+    }
+    return out({ ok: false, code: 'TREASURY_SIGNER_REQUIRED', message: 'Минимальный вывод — 15 Gram. Для реального вывода осталось подключить безопасную серверную подпись казны.' }, 501);
   }
   return null;
 }
