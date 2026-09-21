@@ -67,6 +67,10 @@
   async function ppaTonDeposit(payload){
     var amount=ppaTonDepositAmount(payload),nano=ppaTonAmountToNano(amount);
     if(!nano)throw new Error('Введите корректную сумму TON');
+    if(BigInt(nano)<1000000000n){
+      try{gramWalletResult(false,'Минимальное пополнение — 1 Gram (1 TON)')}catch(_){}
+      throw new Error('Минимальное пополнение — 1 Gram (1 TON)');
+    }
     var ui=window.PPA_TON_UI;
     var walletAddress=ppaTonConnectedAddress();
     if(!ui||!window.PPA_TON_CONNECTED||!ui.connected||!walletAddress){
@@ -239,7 +243,15 @@
     gramWalletLink=function(address){if(!PPA.ppaWalletLink){gramWalletResult(false,'Сервер Wallet недоступен');return}PPA.ppaWalletLink(address).then(function(r){applyWalletState(r);gramWalletResult(true,'TON Connect подключён · адрес синхронизирован с сервером')}).catch(function(e){gramWalletResult(false,msg(e))})};
     gramWalletUnlink=function(){if(!PPA.ppaWalletUnlink){gramWalletResult(false,'Сервер Wallet недоступен');return}PPA.ppaWalletUnlink().then(function(r){applyWalletState(r);gramWalletResult(true,r.message||'Gram Wallet отвязан')}).catch(function(e){gramWalletResult(false,msg(e))})};
     window.PPA_GRAM_WALLET_DEPOSIT_HANDLER=function(payload){return ppaTonDeposit(payload)};
-    window.PPA_GRAM_WALLET_WITHDRAW_HANDLER=function(payload){return PPA.ppaWalletWithdraw(payload)};
+    window.PPA_GRAM_WALLET_WITHDRAW_HANDLER=function(payload){
+      payload=payload||{};
+      var amount=Number(payload.amount!=null?payload.amount:(payload.value!=null?payload.value:payload.gram));
+      if(!Number.isFinite(amount)||amount<15){
+        try{gramWalletResult(false,'Минимальный вывод — 15 Gram (15 TON)')}catch(_){}
+        return Promise.reject(new Error('Минимальный вывод — 15 Gram (15 TON)'));
+      }
+      return PPA.ppaWalletWithdraw(payload);
+    };
     var _openWallet=openGramWallet;openGramWallet=function(){_openWallet();setTimeout(refreshWallet,30);setTimeout(refreshWallet,2500);setTimeout(refreshWallet,7000);setTimeout(attachGramResetGesture,120)};window.openGramWallet=openGramWallet;
     premiumWalletLink=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletDeposit=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletWithdraw=function(){try{closePremiumStore()}catch(_){};openGramWallet()};
 
