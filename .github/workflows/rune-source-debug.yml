@@ -9,59 +9,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect exact dungeon drop functions
+      - name: Inspect precise drop helpers
         shell: python
         run: |
           import gzip, pathlib, re
-          src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode("utf-8")
-
-          def function_block(name, maxlen=16000):
-              pat=re.compile(r"function\s+"+re.escape(name)+r"\s*\([^)]*\)\s*\{")
-              m=pat.search(src)
-              if not m:
-                  print("\n===== "+name+" NOT FOUND =====")
-                  return
-              i=m.start(); depth=0; end=None; quote=None; esc=False
-              for j in range(m.end()-1,min(len(src),i+maxlen)):
+          src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode('utf-8')
+          def block(name):
+              m=re.search(r"function\s+"+re.escape(name)+r"\s*\([^)]*\)\s*\{",src)
+              if not m: print('\n===== '+name+' NOT FOUND ====='); return
+              i=m.start(); depth=0; quote=None; esc=False
+              for j in range(m.end()-1,min(len(src),i+30000)):
                   ch=src[j]
                   if quote:
                       if esc: esc=False
-                      elif ch=="\\": esc=True
+                      elif ch=='\\': esc=True
                       elif ch==quote: quote=None
                       continue
                   if ch in ("'",'"',chr(96)): quote=ch; continue
-                  if ch=="{": depth+=1
-                  elif ch=="}":
+                  if ch=='{': depth+=1
+                  elif ch=='}':
                       depth-=1
                       if depth==0:
-                          end=j+1; break
-              if end is None:end=min(len(src),i+maxlen)
-              print("\n===== "+name+" =====\n"+src[i:end])
-
-          sm=src.find('<script id="v232DropLordElitePatch">')
-          se=src.find('</script>',sm)
-          block=src[sm:se] if sm>=0 and se>sm else ''
-          print('===== V232 FUNCTION NAMES =====')
-          names=re.findall(r"function\s+([A-Za-z0-9_$]+)\s*\(",block)
-          print('\n'.join(names))
-          for name in names:
-              if re.search(r"(drop|chance|gear|book|info|blue|elite|lord|mob)",name,re.I):
-                  function_block(name)
-
-          print('\n===== V271 CONSTANTS =====')
-          for m in re.finditer(r"(?:const|let|var)\s+(V271_D41_[A-Z0-9_]+)\s*=\s*([^;]+);",src):
-              print(m.group(1)+' = '+m.group(2))
-
-          print('\n===== V271 FUNCTION NAMES =====')
-          vnames=[]
-          for m in re.finditer(r"function\s+(v271[A-Za-z0-9_$]+)\s*\(",src):
-              if m.group(1) not in vnames:vnames.append(m.group(1))
-          print('\n'.join(vnames))
-          for name in vnames:
-              if re.search(r"(drop|chance|gear|book|legend|dungeon41|info|loot)",name,re.I):
-                  function_block(name)
-
-          print('\n===== EXACT DROP ROW STRINGS =====')
-          for line in block.splitlines():
-              if re.search(r"(шмот|оруж|книг|ресурс|заточ|зель|телеп|руна|PPA|Монета|Свиток)",line,re.I):
-                  print(line)
+                          print('\n===== '+name+' =====\n'+src[i:j+1]); return
+              print('\n===== '+name+' TRUNC =====\n'+src[i:i+30000])
+          for n in ['normalGearDropChances','v232Drop1to20','v232Drop2130','v232Drop3140','mobDropInfo']:
+              block(n)
+          print('\n===== ALL NORMAL GEAR CHANCE REFERENCES =====')
+          for m in re.finditer('normalGearDropChances',src):
+              print(src[max(0,m.start()-800):min(len(src),m.start()+1600)])
