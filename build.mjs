@@ -4860,7 +4860,7 @@ ppaPatchRegex(
 );
 
 if(!output.includes("bag:(INV.bag||[]).map(function(it){if(it&&(it.fartSlag===true") ||
-   !output.includes("it.kind='resource';it.img=FART_SLAG_IMG")) {
+   !output.includes("it.kind='resource';it.img='/assets/fart-slag.webp'")) {
   throw new Error('Character invState slag image hydration did not apply');
 }
 
