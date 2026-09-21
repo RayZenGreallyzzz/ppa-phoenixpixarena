@@ -163,15 +163,15 @@
           var by=bp&&Number.isFinite(Number(bp.y))?Number(bp.y):Number(DG_BOSS_IMG[1]||0)*scale;
           bx=Math.round(bx*10)/10;by=Math.round(by*10)/10;
           if(typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='1-20'){
-            rows.push(['p20',2613,bx,by,.1,150,85]);
+            rows.push(['p20',3913,bx,by,.1,150,85]);
           }else if(typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='21+'){
             rows.push(['b40',
-              Math.max(1,Number(typeof DUNGEON21_BOSS_HP!=='undefined'?DUNGEON21_BOSS_HP:9000)||9000),
+              Math.max(1,(Number(typeof DUNGEON21_BOSS_HP!=='undefined'?DUNGEON21_BOSS_HP:9000)||9000)+5350),
               bx,by,.1,150,
               Math.max(1,Number(typeof DUNGEON21_BOSS_STAFF_DMG!=='undefined'?DUNGEON21_BOSS_STAFF_DMG:190)||190)
             ]);
           }else if(typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='41-60'){
-            rows.push(['b60',27000,bx,by,1.05,180,180]);
+            rows.push(['b60',36700,bx,by,1.05,180,180]);
           }
         }
         if(rows.length){catalogCount=rows.length;return rows;}
