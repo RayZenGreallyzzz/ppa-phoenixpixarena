@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v457-rune-hold-build-audit-fix-20260921';
+const CLIENT_BUILD = 'v458-rune-hold-smith-art-race-fix-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2125,43 +2125,80 @@ function ppaSmithCanvasize(root){
     host.querySelectorAll('img').forEach(function(x){imgs.push(x)});
     imgs.forEach(function(img){
       if(!img||img.__ppaCanvasized)return;
-      img.__ppaCanvasized=true;
-      var src=img.currentSrc||img.src||'';if(!src)return;
-      var c=document.createElement('canvas');
-      c.className=img.className||'';
-      c.style.cssText=img.style.cssText||'';
-      try{
-        var cs=getComputedStyle(img);
-        if(!c.style.width)c.style.width=cs.width;
-        if(!c.style.height)c.style.height=cs.height;
-        c.style.objectFit='contain';
-      }catch(_){}
-      c.setAttribute('aria-hidden','true');
-      c.style.pointerEvents='none';
-      var rect=img.getBoundingClientRect();
-      var w=Math.max(24,Math.round(rect.width||img.width||48));
-      var h=Math.max(24,Math.round(rect.height||img.height||48));
-      var dpr=Math.min(2,window.devicePixelRatio||1);
-      c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+      var src=String(img.currentSrc||img.getAttribute('src')||img.src||'');
+      if(!src)return;
+
+      // Dynamic smith tabs hydrate rare/legendary art just after render.
+      // Never replace the image until THIS exact source has loaded successfully.
+      if(img.__ppaCanvasizingSrc===src)return;
+      img.__ppaCanvasizingSrc=src;
+
       var im=new Image();
       im.onload=function(){
         try{
+          if(!img||!img.parentNode){return}
+          var liveSrc=String(img.currentSrc||img.getAttribute('src')||img.src||'');
+          if(liveSrc!==src){
+            img.__ppaCanvasizingSrc='';
+            requestAnimationFrame(function(){ppaSmithCanvasize(img)});
+            return;
+          }
+
+          var c=document.createElement('canvas');
+          c.className=img.className||'';
+          c.style.cssText=img.style.cssText||'';
+          try{
+            var cs=getComputedStyle(img);
+            if(!c.style.width)c.style.width=cs.width;
+            if(!c.style.height)c.style.height=cs.height;
+            c.style.objectFit='contain';
+          }catch(_){}
+          c.setAttribute('aria-hidden','true');
+          c.style.pointerEvents='none';
+
+          var rect=img.getBoundingClientRect();
+          var w=Math.max(24,Math.round(rect.width||img.width||48));
+          var h=Math.max(24,Math.round(rect.height||img.height||48));
+          var dpr=Math.min(2,window.devicePixelRatio||1);
+          c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+
           var ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);
-          var iw=Math.max(1,im.naturalWidth||1),ih=Math.max(1,im.naturalHeight||1);
+          var iw=Math.max(1,im.naturalWidth||im.width||1),ih=Math.max(1,im.naturalHeight||im.height||1);
           var fit=Math.min(c.width/iw,c.height/ih),dw=iw*fit,dh=ih*fit;
           ctx.drawImage(im,(c.width-dw)/2,(c.height-dh)/2,dw,dh);
-        }catch(_){}
+
+          img.__ppaCanvasized=true;
+          if(img.parentNode)img.parentNode.replaceChild(c,img);
+        }catch(_){
+          try{img.__ppaCanvasizingSrc=''}catch(__){}
+        }
+      };
+      im.onerror=function(){
+        try{img.__ppaCanvasizingSrc=''}catch(_){}
       };
       im.src=src;
-      if(img.parentNode)img.parentNode.replaceChild(c,img);
     });
   }catch(_){}
 }
+function ppaSmithRefreshCanvasArt(){
+  requestAnimationFrame(function(){ppaSmithCanvasize(document)});
+  setTimeout(function(){ppaSmithCanvasize(document)},80);
+  setTimeout(function(){ppaSmithCanvasize(document)},240);
+}
 try{
   new MutationObserver(function(ms){
-    ms.forEach(function(m){(m.addedNodes||[]).forEach(function(n){if(n&&n.nodeType===1)requestAnimationFrame(function(){ppaSmithCanvasize(n)})})});
-  }).observe(document.documentElement,{childList:true,subtree:true});
-  requestAnimationFrame(function(){ppaSmithCanvasize(document)});
+    ms.forEach(function(m){
+      (m.addedNodes||[]).forEach(function(n){
+        if(n&&n.nodeType===1)requestAnimationFrame(function(){ppaSmithCanvasize(n)})
+      });
+      if(m.type==='attributes'&&m.target&&m.target.tagName==='IMG'){
+        try{m.target.__ppaCanvasizingSrc=''}catch(_){}
+        requestAnimationFrame(function(){ppaSmithCanvasize(m.target)});
+      }
+    });
+  }).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','srcset']});
+  document.addEventListener('click',function(){ppaSmithRefreshCanvasArt()},true);
+  ppaSmithRefreshCanvasArt();
 }catch(_){}
 function inspectSmithItem(it,context){`
 );
@@ -2717,6 +2754,12 @@ if(output.includes("document.createTreeWalker(document.body") ||
    output.includes("setTimeout(applyFartInspectName") ||
    output.includes("window.__PPA_FART_INSPECT_NAME")) {
   throw new Error('Laggy legacy Fart inspect overlay is still present');
+}
+
+if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
+   !output.includes("__ppaCanvasizingSrc===src") ||
+   !output.includes("attributeFilter:['src','srcset']")) {
+  throw new Error('Blacksmith delayed canvas art fix did not apply');
 }
 
 if(!output.includes("function ppaSmithCanvasize(root)") ||
@@ -3919,6 +3962,35 @@ if(!output.includes("function ppaCharacterRuneBridge()") ||
 }
 /* ======================================================================== */
 
+/* === EXACT CHARACTER RUNE HOLD SOURCE =================================== */
+ppaPatchRegex(
+  'exact character rune hold source',
+  /function\s+renderRunes\(rs\)\s*\{/,
+  ppaEscapeSrcdocCode(`function renderRunes(rs){
+  try{
+    var raw=rs&&rs.inventory;
+    var arr=Array.isArray(raw)?raw:(raw&&typeof raw==='object'?Object.keys(raw).map(function(k){
+      var v=raw[k];
+      if(v&&typeof v==='object')return v;
+      return {key:k,id:k,refId:k,count:Number(v)||0};
+    }):[]);
+    window.PPA_CHARACTER_AVAILABLE_RUNES=arr.map(function(x){
+      var item=(x&&(x.item||x.def||x.rune))||x;
+      var count=Math.max(0,Math.floor(Number(x&&(x.count!=null?x.count:(x.qty!=null?x.qty:x.amount)))||1));
+      var id=String((item&&(item.key||item.id||item.refId))||(x&&(x.key||x.id||x.refId))||'');
+      return {item:item,id:id,count:count,path:'runeUiState().inventory'};
+    }).filter(function(x){return x&&x.item});
+    window.PPA_LAST_RUNE_UI_STATE=rs||null;
+  }catch(_){}
+`)
+);
+
+if(!output.includes("window.PPA_LAST_RUNE_UI_STATE=rs||null") ||
+   !output.includes("path:&#x27;runeUiState().inventory&#x27;")) {
+  throw new Error('Exact character rune hold source did not apply');
+}
+/* ======================================================================== */
+
 /* === RUNE HOLD INFO WINDOW ============================================== */
 // Non-invasive: does NOT replace renderRunes(). It only listens for a long hold
 // on rune cards already rendered by Character -> RUNES -> ДОСТУПНЫЕ РУНЫ.
@@ -4033,6 +4105,17 @@ function ppaRuneInfoPool(){
       if(x&&x.item)a.push(x);
     });
   }catch(_){}
+  if(!a.length){
+    try{
+      var rs=window.PPA_LAST_RUNE_UI_STATE;
+      var raw=rs&&rs.inventory;
+      var arr=Array.isArray(raw)?raw:[];
+      arr.forEach(function(x){
+        var item=(x&&(x.item||x.def||x.rune))||x;
+        if(item)a.push({item:item,id:String(item.key||item.id||item.refId||''),count:Number(x&&x.count)||1});
+      });
+    }catch(_){}
+  }
   return a;
 }
 function ppaRuneInfoFromNode(node){
@@ -4089,6 +4172,33 @@ function ppaRuneInfoFromNode(node){
       }
     }
   }
+  // Final fallback: the rune cards are rendered in the same order as rs.inventory.
+  // Find the nearest repeated card container inside the "ДОСТУПНЫЕ РУНЫ" section
+  // and map its visual index to the exact renderRunes inventory snapshot.
+  try{
+    var el=node.nodeType===1?node:node.parentElement;
+    var candidates=[];
+    var all=Array.prototype.slice.call(document.querySelectorAll('div,button'));
+    var head=all.find(function(x){return String(x.textContent||'').trim()==='ДОСТУПНЫЕ РУНЫ'});
+    if(head){
+      var section=head.parentElement||head;
+      candidates=Array.prototype.slice.call(section.querySelectorAll('button,[data-rune-key],[data-key]'));
+      if(!candidates.length){
+        candidates=Array.prototype.slice.call(section.querySelectorAll('div')).filter(function(x){
+          try{return x.querySelector('img')||String(getComputedStyle(x).backgroundImage||'')!=='none'}catch(_){return false}
+        });
+      }
+      var card=el&&el.closest?el.closest('button,[data-rune-key],[data-key]'):null;
+      if(!card){
+        var c=el;
+        for(var z=0;c&&z<6;z++,c=c.parentElement){
+          if(candidates.indexOf(c)>=0){card=c;break}
+        }
+      }
+      var idx=card?candidates.indexOf(card):-1;
+      if(idx>=0&&pool[idx]){card.__ppaRuneInfoMeta=pool[idx];return pool[idx]}
+    }
+  }catch(_){}
   return null;
 }
 function ppaRuneInfoCancel(hide){
@@ -4143,6 +4253,11 @@ ppaInstallRuneInfoHold();
 function itemVisual(it,size){`)
 );
 
+if(!output.includes("PPA_LAST_RUNE_UI_STATE") ||
+   !output.includes("runeUiState().inventory") ||
+   !output.includes("Final fallback: the rune cards are rendered in the same order")) {
+  throw new Error('Rune hold exact-source fix did not apply');
+}
 if(!output.includes("var PPA_RUNE_INFO_HOLD_MS=650") ||
    !output.includes("function ppaRuneInfoShow(meta)") ||
    !output.includes("function ppaRuneInfoFromNode(node)") ||
