@@ -83,17 +83,17 @@
       var wrapped=function(e){
         var rows=base.apply(this,arguments);
         if(!isBoss(e)||!Array.isArray(rows))return rows;
-        var out=[];
-        for(var i=0;i<rows.length;i++){
-          var row=rows[i];
-          if(!Array.isArray(row)||row.length<2){out.push(row);continue}
-          var p=parsePct(row[1]);
-          if(p==null||p<=0||p>=1){out.push(row.slice());continue}
-          var copy=row.slice();
-          copy[1]=fmtPct(boostedAtLeastOnce(p));
-          out.push(copy);
+
+        // Keep the boss table itself exactly as configured. The old version
+        // rewrote every percentage and could make a correct table look broken.
+        var out=rows.map(function(row){return Array.isArray(row)?row.slice():row});
+        var hasBonus=false;
+        for(var i=0;i<out.length;i++){
+          if(Array.isArray(out[i])&&String(out[i][0]||'').indexOf('Бонусный бросок таблицы босса')>=0){
+            hasBonus=true;break;
+          }
         }
-        out.push(['Бонусный бросок таблицы босса','50%']);
+        if(!hasBonus)out.push(['Бонусный бросок таблицы босса','50%']);
         return out;
       };
       wrapped.__ppaBossBonusInfo=1;
