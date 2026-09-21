@@ -111,16 +111,26 @@
   }
   function syncKeyboardOffset(){
     if(!root)return;
-    var px=0;
+    if(!typing){
+      root.style.removeProperty('top');
+      root.style.removeProperty('bottom');
+      root.style.setProperty('--ppa-chat-kb','0px');
+      return;
+    }
     try{
-      if(typing&&window.visualViewport){
-        var vv=window.visualViewport;
-        var stable=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ppa-game-full-h'))||window.innerHeight||vv.height;
-        var bottom=(Number(vv.offsetTop)||0)+(Number(vv.height)||0);
-        px=Math.max(0,Math.round(stable-bottom));
-      }
+      var vv=window.visualViewport;
+      var viewTop=vv?Math.max(0,Number(vv.offsetTop)||0):0;
+      var viewH=vv?Math.max(120,Number(vv.height)||0):Math.max(120,Number(window.innerHeight)||0);
+      var boxH=box?Math.max(120,Math.ceil(box.getBoundingClientRect().height||0)):228;
+      var y=Math.max(viewTop+6,viewTop+viewH-boxH-8);
+      root.style.setProperty('top',Math.round(y)+'px','important');
+      root.style.setProperty('bottom','auto','important');
+      root.style.setProperty('--ppa-chat-kb','0px');
     }catch(_){}
-    root.style.setProperty('--ppa-chat-kb',px+'px');
+  }
+  function repinTypingChat(){
+    syncKeyboardOffset();
+    [70,160,280,450].forEach(function(ms){setTimeout(function(){if(typing)syncKeyboardOffset()},ms)});
   }
   function menuVisible(){
     var open=['#gramWalletPanel.open','#eventsPanel.open','#premiumPanel.open'];
@@ -146,12 +156,12 @@
     if(document.getElementById('ppaChatV2Style'))return;
     var st=document.createElement('style');st.id='ppaChatV2Style';st.textContent=`
       #ppaChatRoot.ppaChatV2Root{
-        position:fixed!important;left:8px!important;right:auto!important;top:auto!important;bottom:104px!important;
+        position:fixed!important;left:8px!important;right:auto!important;top:auto!important;bottom:178px!important;
         width:min(370px,calc(100vw - 16px))!important;max-width:calc(100vw - 16px)!important;
         z-index:39!important;transform:none!important;pointer-events:auto!important;display:block!important;
         --ppa-chat-kb:0px;font-family:Arial,sans-serif
       }
-      #ppaChatRoot.ppaChatV2Root.nativeTyping{bottom:calc(8px + var(--ppa-chat-kb))!important}
+      #ppaChatRoot.ppaChatV2Root.nativeTyping{bottom:auto!important}
       #ppaChatRoot.ppaChatV2Root.suppressed{display:none!important}
       #ppaChatRoot.ppaChatV2Root > :not(#ppaChatBoxV2):not(#ppaChatNativeInput):not(#ppaChatLauncher){display:none!important}
       #ppaChatBox{display:none!important;visibility:hidden!important;pointer-events:none!important}
@@ -206,7 +216,7 @@
         #ppaChatRoot.ppaChatV2Root.nativeTyping{
           left:7px!important;
           width:min(355px,calc(100vw - 14px))!important;
-          bottom:calc(6px + var(--ppa-chat-kb))!important;
+          bottom:auto!important;
         }
         #ppaChatBoxV2{height:176px}
         #ppaChatBoxV2 .ppaChatTabs{gap:2px;padding:3px 4px}
@@ -281,10 +291,10 @@
       try{e.stopPropagation()}catch(_){}
       try{nativeInput.focus({preventScroll:true})}catch(_){try{nativeInput.focus()}catch(__){}}
     });
-    nativeInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping');syncKeyboardOffset()});
+    nativeInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping');repinTypingChat()});
     nativeInput.addEventListener('blur',function(){typing=false;root.classList.remove('nativeTyping');syncKeyboardOffset()});
     nativeInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();dispatchSend()}});
-    targetInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping');syncKeyboardOffset()});
+    targetInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping');repinTypingChat()});
     targetInput.addEventListener('blur',function(){typing=false;root.classList.remove('nativeTyping');syncKeyboardOffset()});
     targetInput.addEventListener('input',function(){state.target=escText(targetInput.value).slice(0,24);save()});
     targetInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();try{nativeInput.focus({preventScroll:true})}catch(_){nativeInput.focus()}}});
