@@ -386,6 +386,58 @@ if(!output.includes("var verified=window.PPA_GRAM_WALLET_IDENTITY") ||
 }
 /* ======================================================================== */
 
+/* === GRAM WALLET DIRECT TELEGRAM AUTH ================================== */
+ppaPatchRegex(
+  'gram wallet direct telegram auth',
+  /function openGramWallet\(\)\{\n  if\(GRAM_WALLET_OPEN\)return;if\(typeof P==='undefined'\|\|P\.scene!=='safe'\|\|transitioning\)return;/,
+  `async function ppaGramWalletDirectIdentity(){
+  try{
+    var r=null;
+    if(window.PPA&&typeof window.PPA.ppaAuthTelegram==='function'){
+      try{r=await window.PPA.ppaAuthTelegram()}catch(_){}
+    }
+    if((!r||!r.user)&&window.Telegram&&window.Telegram.WebApp&&window.Telegram.WebApp.initData){
+      try{
+        var resp=await fetch('/api/auth',{
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({initData:String(window.Telegram.WebApp.initData)}),
+          credentials:'same-origin',
+          cache:'no-store'
+        });
+        if(resp.ok)r=await resp.json();
+      }catch(_){}
+    }
+    var u=r&&r.user?r.user:null,pr=r&&r.profile?r.profile:null;
+    if(u&&u.id){
+      var nm=String((pr&&pr.nickname)||[u.first_name,u.last_name].filter(Boolean).join(' ').trim()||u.username||('ID '+u.id));
+      window.PPA_GRAM_WALLET_IDENTITY={id:String(u.id),name:nm,username:String(u.username||'')};
+      try{sendGramWalletState()}catch(_){}
+      return true;
+    }
+  }catch(_){}
+  return false;
+}
+
+function openGramWallet(){
+  if(GRAM_WALLET_OPEN)return;if(typeof P==='undefined'||P.scene!=='safe'||transitioning)return;`
+);
+
+ppaPatchRegex(
+  'gram wallet direct identity refresh on open',
+  /GRAM_WALLET_OPEN=true;gramWalletBackdrop\.classList\.add\('open'\);gramWalletPanel\.classList\.add\('open'\);gramWalletPanel\.setAttribute\('aria-hidden','false'\);gramWalletSideTab\.classList\.add\('hidden'\);setTimeout\(sendGramWalletState,30\);/,
+  `GRAM_WALLET_OPEN=true;gramWalletBackdrop.classList.add('open');gramWalletPanel.classList.add('open');gramWalletPanel.setAttribute('aria-hidden','false');gramWalletSideTab.classList.add('hidden');
+  ppaGramWalletDirectIdentity().then(function(ok){if(!ok)try{sendGramWalletState()}catch(_){}});
+  setTimeout(sendGramWalletState,80);`
+);
+
+if(!output.includes('async function ppaGramWalletDirectIdentity()') ||
+   !output.includes("fetch('/api/auth'") ||
+   !output.includes('window.PPA_GRAM_WALLET_IDENTITY={id:String(u.id)')) {
+  throw new Error('Gram Wallet direct Telegram auth patch did not apply');
+}
+/* ======================================================================== */
+
 /* === TON CONNECT · GRAM WALLET ========================================== */
 ppaPatchRegex(
   'ton connect ui sdk script',
