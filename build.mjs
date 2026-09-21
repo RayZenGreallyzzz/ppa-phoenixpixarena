@@ -519,7 +519,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'gram deposit requires active direct ton connect',
   /if\(!p\.connected\|\|!p\.address\)\{gramWalletResult\(false,'Сначала привяжи Gram Wallet'\);return\}\n  if\(!\(amount>0\)\)/,
-  "if(!p.connected||!p.address){gramWalletResult(false,'Сначала привяжи TON Wallet');return}\n  if(kind==='deposit'&&typeof PPA_TON_CONNECTED!=='undefined'&&!PPA_TON_CONNECTED){gramWalletResult(false,'TON адрес привязан, но TON Connect не активен · нажми ПЕРЕПРИВЯЗАТЬ');return}\n  if(!(amount>0))"
+  "if(!p.connected||!p.address){gramWalletResult(false,'Сначала привяжи TON Wallet');return}\n  if(kind==='deposit'&&typeof PPA_TON_CONNECTED!=='undefined'&&!PPA_TON_CONNECTED){gramWalletResult(false,'TON адрес привязан, но TON Connect не активен · нажми ПЕРЕПРИВЯЗАТЬ');return}\n  if(kind==='deposit'&&amount<1){gramWalletResult(false,'Минимальное пополнение — 1 Gram (1 TON)');return}\n  if(kind==='withdraw'&&amount<15){gramWalletResult(false,'Минимальный вывод — 15 Gram (15 TON)');return}\n  if(!(amount>0))"
 );
 
 if(!output.includes('data-ppa-tonconnect="1"') ||
@@ -527,6 +527,8 @@ if(!output.includes('data-ppa-tonconnect="1"') ||
    !output.includes("twaReturnUrl:window.PPA_TWA_RETURN_URL") ||
    !output.includes("await ui.openModal()") ||
    !output.includes("gramWalletShowTonPicker") ||
+   !output.includes("Минимальное пополнение — 1 Gram (1 TON)") ||
+   !output.includes("Минимальный вывод — 15 Gram (15 TON)") ||
    !output.includes("fetch('/api/ton-balance?address='") ||
    !output.includes(ppaEscapeSrcdocCode("type:'gramWalletShowTonPicker'"))) {
   throw new Error('Official TON Connect UI flow did not apply');
