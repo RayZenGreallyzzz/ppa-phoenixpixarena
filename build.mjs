@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v463-boss-fart-hp-20260921';
+const CLIENT_BUILD = 'v464-drop-table-integrity-20260921';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5237,6 +5237,7 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
   const realtimeBase=fs.readFileSync(path.join(ROOT,'src/realtime.js'),'utf8');
   const arenaPvp=fs.readFileSync(path.join(ROOT,'gateway/arena-pvp-client.js'),'utf8');
   const dungeonMobEvents=fs.readFileSync(path.join(ROOT,'gateway/dungeon-mob-events.js'),'utf8');
+  const dungeonDropSlotsAudit=fs.readFileSync(path.join(ROOT,'gateway/dungeon-drop-slots.js'),'utf8');
   const bossDropBoost=fs.readFileSync(path.join(ROOT,'gateway/boss-drop-boost.js'),'utf8');
   const fartGuardBalance=fs.readFileSync(path.join(ROOT,'gateway/fart-guard-balance.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
@@ -5308,6 +5309,13 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
       !bossDropBoost.includes('__ppaBossBonusRoll') ||
       !bossDropBoost.includes('Бонусный бросок таблицы босса')) {
     throw new Error('Boss drop boost helper incomplete');
+  }
+  if (!dungeonDropSlotsAudit.includes('function canonicalGearRarity(e,label)') ||
+      !dungeonDropSlotsAudit.includes("if(lv>=21&&lv<=60)return 'Синее'") ||
+      !dungeonDropSlotsAudit.includes("if(lv>=11&&lv<=20)return 'Зелёное'") ||
+      !dungeonDropSlotsAudit.includes('function finalGearLabelGuard(e,rows)') ||
+      !dungeonDropSlotsAudit.includes('PPA_DUNGEON_DROP_TABLE_AUDIT')) {
+    throw new Error('Dungeon drop-table rarity guard incomplete');
   }
   if (!dungeonMobEvents.includes("rows.push(['p20',3913") ||
       !dungeonMobEvents.includes("DUNGEON21_BOSS_HP:9000)||9000)+5350") ||
