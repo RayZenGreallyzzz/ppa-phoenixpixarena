@@ -395,16 +395,20 @@ async function ppaTonInit(){
   if(PPA_TON_UI)return PPA_TON_UI;
   try{
     await ppaWaitTonSdk();
+    ppaEnsureTonButtonRoot();
     var ui=new window.TON_CONNECT_UI.TonConnectUI({
       manifestUrl:location.origin+'/tonconnect-manifest.json',
+      buttonRootId:'ppaTonConnectButtonRoot',
       analytics:{mode:'off'}
     });
     ui.uiOptions={
       language:'ru',
       uiPreferences:{theme:'DARK'},
+      // TON Connect requires twaReturnUrl at the TOP LEVEL for Telegram Mini Apps.
+      // The SDK then chooses the correct return strategy/deep-link itself.
+      twaReturnUrl:window.PPA_TWA_RETURN_URL,
       actionsConfiguration:{
-        returnStrategy:'back',
-        twaReturnUrl:window.PPA_TWA_RETURN_URL
+        returnStrategy:'back'
       }
     };
     PPA_TON_UI=ui;
@@ -436,88 +440,42 @@ async function ppaTonInit(){
   }
 }
 
-function ppaTonWalletConfig(appName){
-  var map={
-    tonhub:{name:'Tonhub',universalLink:'https://tonhub.com/ton-connect',bridgeUrl:'https://connect.tonhubapi.com/tonconnect'},
-    tonkeeper:{name:'Keeper',universalLink:'https://app.tonkeeper.com/ton-connect',bridgeUrl:'https://bridge.tonapi.io/bridge'},
-    mytonwallet:{name:'My Wallet',universalLink:'https://connect.mytonwallet.org',bridgeUrl:'https://tonconnectbridge.mytonwallet.org/bridge/'}
-  };
-  return map[String(appName||'')]||null;
-}
-
-function ppaHideTonWalletPicker(){
-  if(PPA_TON_PICKER)PPA_TON_PICKER.style.display='none';
-}
-
-async function ppaOpenTonWalletDirect(appName){
-  var cfg=ppaTonWalletConfig(appName);
-  if(!cfg){gramWalletResult(false,'Неизвестный TON-кошелёк');return}
-  if(!PPA_TON_UI){
-    gramWalletResult(false,'TON Connect ещё запускается · повтори через секунду');
-    ppaTonInit();
-    return;
-  }
-  try{
-    PPA_TON_SELECTED_WALLET=String(appName);
-    ppaHideTonWalletPicker();
-
-    // IMPORTANT: do not call connector.connect()+Telegram.WebApp.openLink() here.
-    // @tonconnect/ui has its own Android/Telegram Mini App redirect strategy
-    // (universal/deep-link + return handling). Bypassing it caused the SDK
-    // "User rejects the action" error without ever opening the wallet.
-    if(typeof PPA_TON_UI.openSingleWalletModal==='function'){
-      gramWalletResult(false,'Открываю '+cfg.name+' через TON Connect…');
-      await PPA_TON_UI.openSingleWalletModal(String(appName));
-      return;
-    }
-
-    // Compatibility fallback for an older cached SDK build.
-    gramWalletResult(false,'Открываю список TON Wallet…');
-    await PPA_TON_UI.openModal();
-  }catch(err){
-    var msg=String(err&&err.message||err||'неизвестно');
-    if(/user rejects|user declined|action declined/i.test(msg)){
-      gramWalletResult(false,'Подключение к '+cfg.name+' отменено');
-      return;
-    }
-    gramWalletResult(false,'Не удалось открыть '+cfg.name+': '+msg);
-  }
-}
-
-function ppaEnsureTonWalletPicker(){
-  if(PPA_TON_PICKER)return PPA_TON_PICKER;
-  var root=document.createElement('div');
-  root.id='ppaTonWalletPicker';
-  root.style.cssText='position:fixed;inset:0;z-index:2147483600;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.76);padding:18px';
-  root.innerHTML='<div style="width:min(92vw,440px);border:1px solid #41779b;border-radius:13px;background:#091116;padding:15px;box-shadow:0 18px 42px rgba(0,0,0,.8)">'+
-    '<div style="color:#a5dcff;font:700 18px Georgia,serif;margin-bottom:5px">ВЫБЕРИ TON WALLET</div>'+
-    '<div style="font-size:10px;color:#8da0ac;margin-bottom:12px">TON Connect уже загружен · переход сразу в выбранный кошелёк</div>'+
-    '<div style="display:grid;gap:10px">'+
-      '<button data-wallet="tonhub" style="height:52px;border:1px solid #268bc2;border-radius:10px;background:#0b3048;color:#e7f7ff;font-weight:900;font-size:14px">TONHUB</button>'+
-      '<button data-wallet="tonkeeper" style="height:52px;border:1px solid #268bc2;border-radius:10px;background:#0b3048;color:#e7f7ff;font-weight:900;font-size:14px">KEEPER</button>'+
-      '<button data-wallet="mytonwallet" style="height:52px;border:1px solid #268bc2;border-radius:10px;background:#0b3048;color:#e7f7ff;font-weight:900;font-size:14px">MY WALLET</button>'+
-      '<button data-close="1" style="height:40px;border:1px solid #764139;border-radius:9px;background:#321916;color:#ffaea3;font-weight:800">ОТМЕНА</button>'+
-    '</div></div>';
+function ppaEnsureTonButtonRoot(){
+  var root=document.getElementById('ppaTonConnectButtonRoot');
+  if(root)return root;
+  root=document.createElement('div');
+  root.id='ppaTonConnectButtonRoot';
+  // Keep the official TON Connect button mounted in the parent document.
+  // PPA's existing wallet button opens the same official SDK modal.
+  root.style.cssText='position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;overflow:hidden;pointer-events:none';
   document.body.appendChild(root);
-  root.querySelectorAll('[data-wallet]').forEach(function(btn){
-    btn.addEventListener('click',function(){
-      ppaOpenTonWalletDirect(btn.getAttribute('data-wallet'));
-    });
-  });
-  var close=root.querySelector('[data-close]');
-  if(close)close.addEventListener('click',ppaHideTonWalletPicker);
-  root.addEventListener('click',function(e){if(e.target===root)ppaHideTonWalletPicker()});
-  PPA_TON_PICKER=root;
   return root;
 }
 
-function ppaShowTonWalletPicker(){
+async function ppaShowTonWalletPicker(){
   var tg=gramWalletTelegramUser();
   if(!tg.id){gramWalletResult(false,'Откройте PPA через Telegram-бота');return}
-  var root=ppaEnsureTonWalletPicker();
-  root.style.display='flex';
-  // Init is already started on page load; this is only a safety retry.
-  if(!PPA_TON_UI)ppaTonInit();
+  try{
+    var ui=PPA_TON_UI||await ppaTonInit();
+    if(!ui){gramWalletResult(false,'TON Connect не запустился');return}
+    if(ui.connected&&ui.account&&ui.account.address){
+      PPA_TON_CONNECTED=true;
+      gramWalletLink(String(ui.account.address));
+      gramWalletResult(true,'TON Connect уже подключён');
+      return;
+    }
+    gramWalletResult(false,'Открываю TON Connect…');
+    // Official TON Connect wallet modal. No hand-written wallet links,
+    // no connector.connect(), no Telegram.WebApp.openLink().
+    await ui.openModal();
+  }catch(err){
+    var msg=String(err&&err.message||err||'неизвестно');
+    if(/user rejects|user declined|action declined|modal.*closed/i.test(msg)){
+      gramWalletResult(false,'Подключение TON Connect отменено');
+      return;
+    }
+    gramWalletResult(false,'TON Connect: '+msg);
+  }
 }
 
 async function ppaTonDisconnectAndUnlink(){
@@ -526,7 +484,7 @@ async function ppaTonDisconnectAndUnlink(){
 }
 
 function ppaPreinitTonConnect(){
-  ppaEnsureTonWalletPicker();
+  ppaEnsureTonButtonRoot();
   ppaTonInit();
 }
 if(document.readyState==='complete')setTimeout(ppaPreinitTonConnect,0);
@@ -565,12 +523,13 @@ ppaPatchRegex(
 );
 
 if(!output.includes('data-ppa-tonconnect="1"') ||
-   !output.includes("ppaOpenTonWalletDirect") ||
-   !output.includes("openSingleWalletModal(String(appName))") ||
+   !output.includes("buttonRootId:'ppaTonConnectButtonRoot'") ||
+   !output.includes("twaReturnUrl:window.PPA_TWA_RETURN_URL") ||
+   !output.includes("await ui.openModal()") ||
    !output.includes("gramWalletShowTonPicker") ||
    !output.includes("fetch('/api/ton-balance?address='") ||
    !output.includes(ppaEscapeSrcdocCode("type:'gramWalletShowTonPicker'"))) {
-  throw new Error('Parent TON Connect flow did not apply');
+  throw new Error('Official TON Connect UI flow did not apply');
 }
 /* ======================================================================== */
 
