@@ -7,8 +7,8 @@
   var STORE='ppaChatV2History';
   var TARGET_STORE='ppaChatV2PrivateTarget';
   var state={channel:'general',collapsed:true,unread:{general:0,clan:0,party:0,private:0},history:{general:[],clan:[],party:[],private:[]},target:''};
-  var root=null,box=null,nativeInput=null,msgs=null,targetRow=null,targetInput=null,collapseBtn=null,launcher=null,sendBtn=null;
-  var typing=false;
+  var root=null,box=null,nativeInput=null,visualInput=null,msgs=null,targetRow=null,targetInput=null,collapseBtn=null,launcher=null,sendBtn=null;
+  var typing=false,legacyNativeInput=false;
 
   function escText(v){return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]/g,'').slice(0,180)}
   function selfName(){
@@ -107,30 +107,14 @@
     add(state.channel,selfName(),text,{self:true,target:target});
     nativeInput.value='';
     nativeInput.dispatchEvent(new Event('input',{bubbles:true}));
+    syncVisualInput();
     try{nativeInput.focus({preventScroll:true})}catch(_){try{nativeInput.focus()}catch(__){}}
   }
-  function syncKeyboardOffset(){
-    if(!root)return;
-    if(!typing){
-      root.style.removeProperty('top');
-      root.style.removeProperty('bottom');
-      root.style.setProperty('--ppa-chat-kb','0px');
-      return;
-    }
-    try{
-      var vv=window.visualViewport;
-      var viewTop=vv?Math.max(0,Number(vv.offsetTop)||0):0;
-      var viewH=vv?Math.max(120,Number(vv.height)||0):Math.max(120,Number(window.innerHeight)||0);
-      var boxH=box?Math.max(120,Math.ceil(box.getBoundingClientRect().height||0)):228;
-      var y=Math.max(viewTop+6,viewTop+viewH-boxH-8);
-      root.style.setProperty('top',Math.round(y)+'px','important');
-      root.style.setProperty('bottom','auto','important');
-      root.style.setProperty('--ppa-chat-kb','0px');
-    }catch(_){}
-  }
-  function repinTypingChat(){
-    syncKeyboardOffset();
-    [70,160,280,450].forEach(function(ms){setTimeout(function(){if(typing)syncKeyboardOffset()},ms)});
+  function syncVisualInput(){
+    if(!visualInput||!nativeInput)return;
+    var v=String(nativeInput.value||'');
+    visualInput.textContent=v||'Сообщение…';
+    visualInput.classList.toggle('empty',!v);
   }
   function menuVisible(){
     var open=['#gramWalletPanel.open','#eventsPanel.open','#premiumPanel.open'];
@@ -156,12 +140,12 @@
     if(document.getElementById('ppaChatV2Style'))return;
     var st=document.createElement('style');st.id='ppaChatV2Style';st.textContent=`
       #ppaChatRoot.ppaChatV2Root{
-        position:fixed!important;left:8px!important;right:auto!important;top:auto!important;bottom:178px!important;
+        position:fixed!important;left:8px!important;right:auto!important;
         width:min(370px,calc(100vw - 16px))!important;max-width:calc(100vw - 16px)!important;
         z-index:39!important;transform:none!important;pointer-events:auto!important;display:block!important;
-        --ppa-chat-kb:0px;font-family:Arial,sans-serif
+        font-family:Arial,sans-serif
       }
-      #ppaChatRoot.ppaChatV2Root.nativeTyping{bottom:auto!important}
+      #ppaChatRoot.ppaChatV2Root:not(.nativeTyping){top:auto!important;bottom:178px!important}
       #ppaChatRoot.ppaChatV2Root.suppressed{display:none!important}
       #ppaChatRoot.ppaChatV2Root > :not(#ppaChatBoxV2):not(#ppaChatNativeInput):not(#ppaChatLauncher){display:none!important}
       #ppaChatBox{display:none!important;visibility:hidden!important;pointer-events:none!important}
@@ -200,30 +184,36 @@
       .ppaChatTo{color:#9ebfd1;font:700 8px monospace}
       #ppaChatComposer{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:5px;padding:5px;border-top:1px solid rgba(142,90,43,.45)}
       #ppaChatRoot.ppaChatV2Root #ppaChatNativeInput{
-        position:static!important;left:auto!important;top:auto!important;right:auto!important;bottom:auto!important;transform:none!important;
-        opacity:1!important;width:100%!important;height:31px!important;min-width:0!important;min-height:31px!important;
-        margin:0!important;padding:0 8px!important;box-sizing:border-box!important;border:1px solid #6f5337!important;border-radius:5px!important;
-        background:#0c0907!important;color:#efe0c8!important;caret-color:#ffd18d!important;font:12px/31px Arial,sans-serif!important;outline:none!important;overflow:visible!important;
-        pointer-events:auto!important;touch-action:manipulation!important;user-select:text!important;-webkit-user-select:text!important
+        position:fixed!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;
+        width:1px!important;height:1px!important;min-width:1px!important;min-height:1px!important;
+        margin:0!important;padding:0!important;border:0!important;transform:translate(-50%,-50%)!important;
+        opacity:.01!important;background:transparent!important;color:transparent!important;caret-color:transparent!important;
+        font-size:16px!important;line-height:16px!important;overflow:hidden!important;pointer-events:none!important
       }
+      #ppaChatVisualInput{
+        height:31px;box-sizing:border-box;border:1px solid #6f5337;border-radius:5px;background:#0c0907;color:#efe0c8;
+        padding:0 8px;font:12px/29px Arial,sans-serif;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+        touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none
+      }
+      #ppaChatVisualInput.empty{color:#766d63}
+      #ppaChatVisualInput.focused{border-color:#a8753f;box-shadow:0 0 0 1px rgba(168,117,63,.22) inset}
       #ppaChatSend{height:31px;border:1px solid #885f32;border-radius:5px;background:linear-gradient(#4b301c,#24170f);color:#ffe0ad;font:bold 9px Georgia,serif}
       @media (max-width:600px){
         #ppaChatRoot.ppaChatV2Root{
           width:min(330px,calc(100vw - 18px))!important;
           left:9px!important;
-          bottom:178px!important;
         }
+        #ppaChatRoot.ppaChatV2Root:not(.nativeTyping){top:auto!important;bottom:178px!important}
         #ppaChatRoot.ppaChatV2Root.nativeTyping{
           left:7px!important;
           width:min(355px,calc(100vw - 14px))!important;
-          bottom:auto!important;
         }
         #ppaChatBoxV2{height:176px}
         #ppaChatBoxV2 .ppaChatTabs{gap:2px;padding:3px 4px}
         #ppaChatBoxV2 .ppaChatTab,#ppaChatBoxV2 .ppaFriendsTab{height:23px;font-size:6.7px}
         #ppaChatBoxV2 .ppaChatTop{padding:4px 5px 3px}
         #ppaChatComposer{padding:4px}
-        #ppaChatRoot.ppaChatV2Root #ppaChatNativeInput{height:29px!important;min-height:29px!important;font-size:12px!important;line-height:29px!important}
+        #ppaChatVisualInput{height:29px;font-size:12px;line-height:27px}
         #ppaChatSend{height:29px}
       }
     `;document.head.appendChild(st);
@@ -239,21 +229,25 @@
     root.style.setProperty('pointer-events','auto','important');
 
     var oldInput=document.getElementById('ppaChatNativeInput');
-    if(oldInput&&oldInput.parentNode){try{oldInput.parentNode.removeChild(oldInput)}catch(_){}}
-    nativeInput=document.createElement('input');
-    nativeInput.id='ppaChatNativeInput';
+    if(oldInput){
+      nativeInput=oldInput;
+      legacyNativeInput=true;
+    }else{
+      nativeInput=document.createElement('input');
+      nativeInput.id='ppaChatNativeInput';
+      root.appendChild(nativeInput);
+      legacyNativeInput=false;
+    }
     nativeInput.type='text';
     nativeInput.maxLength=180;
     nativeInput.autocomplete='off';
     nativeInput.spellcheck=false;
     nativeInput.disabled=false;
     nativeInput.readOnly=false;
-    nativeInput.tabIndex=0;
+    nativeInput.tabIndex=-1;
     nativeInput.setAttribute('enterkeyhint','send');
     nativeInput.setAttribute('inputmode','text');
     nativeInput.setAttribute('autocapitalize','sentences');
-    nativeInput.placeholder='Сообщение…';
-    root.appendChild(nativeInput);
 
     box=document.createElement('div');box.id='ppaChatBoxV2';box.className='collapsed';
     box.innerHTML='<div class="ppaChatTop"><div class="ppaChatTitle">💬 PPA CHAT</div><button id="ppaChatMin" type="button">—</button></div>'+
@@ -265,12 +259,12 @@
       '</div>'+
       '<div id="ppaChatPrivateTargetRow"><span>КОМУ:</span><input id="ppaChatPrivateTarget" maxlength="24" autocomplete="off" spellcheck="false" placeholder="Ник игрока"></div>'+
       '<div id="ppaChatMessages"></div>'+
-      '<div id="ppaChatComposer"><div id="ppaChatInputSlot"></div><button id="ppaChatSend" type="button">ОТПР.</button></div>';
+      '<div id="ppaChatComposer"><div id="ppaChatVisualInput" class="empty" role="button" tabindex="0">Сообщение…</div><button id="ppaChatSend" type="button">ОТПР.</button></div>';
     root.appendChild(box);
 
     launcher=document.createElement('button');launcher.id='ppaChatLauncher';launcher.type='button';launcher.textContent='💬 ЧАТ';root.appendChild(launcher);
 
-    var slot=box.querySelector('#ppaChatInputSlot');slot.appendChild(nativeInput);
+    visualInput=box.querySelector('#ppaChatVisualInput');
     msgs=box.querySelector('#ppaChatMessages');targetRow=box.querySelector('#ppaChatPrivateTargetRow');targetInput=box.querySelector('#ppaChatPrivateTarget');
     collapseBtn=box.querySelector('#ppaChatMin');sendBtn=box.querySelector('#ppaChatSend');
     targetInput.value=state.target||'';
@@ -280,32 +274,26 @@
     collapseBtn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();setCollapsed(true)});
     sendBtn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();dispatchSend()});
 
-    nativeInput.addEventListener('pointerdown',function(e){
-      try{e.stopPropagation()}catch(_){}
+    function focusNative(){
       try{nativeInput.focus({preventScroll:true})}catch(_){try{nativeInput.focus()}catch(__){}}
-    });
-    nativeInput.addEventListener('touchstart',function(e){
-      try{e.stopPropagation()}catch(_){}
-    },{passive:true});
-    nativeInput.addEventListener('click',function(e){
-      try{e.stopPropagation()}catch(_){}
-      try{nativeInput.focus({preventScroll:true})}catch(_){try{nativeInput.focus()}catch(__){}}
-    });
-    nativeInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping');repinTypingChat()});
-    nativeInput.addEventListener('blur',function(){typing=false;root.classList.remove('nativeTyping');syncKeyboardOffset()});
-    nativeInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();dispatchSend()}});
-    targetInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping');repinTypingChat()});
-    targetInput.addEventListener('blur',function(){typing=false;root.classList.remove('nativeTyping');syncKeyboardOffset()});
+    }
+    visualInput.addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation();focusNative()});
+    visualInput.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();focusNative()});
+    visualInput.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();focusNative()}});
+    nativeInput.addEventListener('input',syncVisualInput);
+    nativeInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping');if(visualInput)visualInput.classList.add('focused')});
+    nativeInput.addEventListener('blur',function(){typing=false;root.classList.remove('nativeTyping');if(visualInput)visualInput.classList.remove('focused')});
+    nativeInput.addEventListener('keydown',function(e){
+      if(e.key==='Enter'){e.preventDefault();e.stopImmediatePropagation();dispatchSend()}
+    },true);
+    targetInput.addEventListener('focus',function(){typing=true;root.classList.add('nativeTyping')});
+    targetInput.addEventListener('blur',function(){typing=false;root.classList.remove('nativeTyping')});
     targetInput.addEventListener('input',function(){state.target=escText(targetInput.value).slice(0,24);save()});
     targetInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();try{nativeInput.focus({preventScroll:true})}catch(_){nativeInput.focus()}}});
 
     ['pointerdown','touchstart','click'].forEach(function(type){root.addEventListener(type,function(e){e.stopPropagation()},false)});
 
-    if(window.visualViewport){
-      window.visualViewport.addEventListener('resize',syncKeyboardOffset,{passive:true});
-      window.visualViewport.addEventListener('scroll',syncKeyboardOffset,{passive:true});
-    }
-    window.addEventListener('resize',syncKeyboardOffset,{passive:true});
+    syncVisualInput();
 
     window.PPA_CHAT_RECEIVE=function(channel,from,text,meta){add(channel,from,text,meta||{})};
     window.PPA_CHAT_OPEN=function(channel){setCollapsed(false);if(channel)setChannel(channel);return true};
