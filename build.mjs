@@ -326,7 +326,7 @@ if (!output.includes('id=&quot;clanRankList&quot;')) {
 ppaPatchRegex(
   'ton connect ui sdk script',
   /<\/head>/,
-  '<script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"><\/script>\n<\/head>'
+  '<script src="https://unpkg.com/@tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js"><\/script>\n<\/head>'
 );
 
 ppaPatchRegex(
@@ -427,7 +427,7 @@ ppaPatchRegex(
   'Подключение выполняется через TON Connect. Адрес Gram Wallet определяется автоматически после подтверждения в кошельке.'
 );
 
-if(!output.includes('tonconnect/ui@latest/dist/tonconnect-ui.min.js') ||
+if(!output.includes('tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js') ||
    !output.includes("openSingleWalletModal('gramwallet')") ||
    !output.includes("type:'gramWalletTonConnectOpen'") ||
    !output.includes("type:'gramWalletTonConnectDisconnect'") ||
