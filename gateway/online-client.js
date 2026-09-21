@@ -101,7 +101,7 @@
         walletAddress:walletAddress,
         messageHash:messageHash
       };
-      if(attempt===0)body.boc=result.boc;
+      if(!messageHash)body.boc=result.boc;
       var r=await PPA.ppaWalletDeposit(body);
       if(r&&r.messageHash)messageHash=String(r.messageHash);
       if(r&&r.ok){
