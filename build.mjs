@@ -4642,10 +4642,7 @@ try{
 function itemVisual(it,size){
   size=size||34;
   if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){
-    try{
-      var _ppaCharSlagArt=parent.PPA_FART_SLAG_IMG||'';
-      if(_ppaCharSlagArt)it.img=_ppaCharSlagArt;
-    }catch(_){}
+    it.img='/assets/fart-slag.webp';
   }
   if(it&&it.img){
     var sc=1,flt='none';
@@ -4746,6 +4743,23 @@ const FART_SLAG_INTERVAL_MS=40000;
 const FART_SLAG_SELL_PRICE=2;`
 );
 
+// Export slag art as a real public file. The constants patch above has already
+// inserted FART_SLAG_IMG into output, so extract and validate it here.
+{
+  const _slagPrefix="const FART_SLAG_IMG='data:image/webp;base64,";
+  const _slagStart=output.indexOf(_slagPrefix);
+  const _slagEnd=_slagStart>=0?output.indexOf("';",_slagStart+_slagPrefix.length):-1;
+  if(_slagStart<0||_slagEnd<=_slagStart)throw new Error('Fart slag source image missing after constants patch');
+  const _slagB64=output.slice(_slagStart+_slagPrefix.length,_slagEnd);
+  const _slagBuf=Buffer.from(_slagB64,'base64');
+  if(_slagBuf.length<1000||
+     _slagBuf.subarray(0,4).toString('ascii')!=='RIFF'||
+     _slagBuf.subarray(8,12).toString('ascii')!=='WEBP') {
+    throw new Error('Fart slag source image is not a valid WebP');
+  }
+  fs.writeFileSync(path.join(assetsDir,'fart-slag.webp'),_slagBuf);
+}
+
 ppaPatchRegex(
   'pickaxe factory uses real tier image',
   /icon:'⛏',\s*ic:'⛏',\s*img:'',\s*classKey:'all'/,
@@ -4819,7 +4833,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'character invstate hydrates slag image',
   /(type:'invState',\s*inv:\{\s*equipped:INV\.equipped,\s*bag:)INV\.bag,/,
-  "$1(INV.bag||[]).map(function(it){if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){it.fartSlag=true;it.kind='resource';it.img=FART_SLAG_IMG;}return it}),"
+  "$1(INV.bag||[]).map(function(it){if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){it.fartSlag=true;it.kind='resource';it.img='/assets/fart-slag.webp';}return it}),"
 );
 
 ppaPatchRegex(
@@ -4940,7 +4954,7 @@ ppaPatchRegex(
     it.kind='resource';
     it.typeName='Ресурс Фарт-зоны';
     it.useText='Можно продать только местному NPC в Фарт-зоне.';
-    try{it.img=parent.PPA_FART_SLAG_IMG||it.img||''}catch(_){}
+    it.img='/assets/fart-slag.webp';
   }`)
 );
 
@@ -4989,9 +5003,8 @@ ppaPatchRegex(
   "if(bagGrid)bagGrid.__ppaSelectedIndex=(_sel>=0?_sel:-1);\n  var bc=document.querySelector(&#x27;.bagCount&#x27;);"
 );
 
-if(!output.includes(ppaEscapeSrcdocCode("var _ppaCharSlagArt=parent.PPA_FART_SLAG_IMG||''")) ||
-   !output.includes(ppaEscapeSrcdocCode("if(_ppaCharSlagArt)it.img=_ppaCharSlagArt"))) {
-  throw new Error('Character slag canvas art bridge did not apply');
+if(!output.includes(ppaEscapeSrcdocCode("it.img='/assets/fart-slag.webp'"))) {
+  throw new Error('Character slag public asset bridge did not apply');
 }
 
 if(!output.includes("function ppaSetBagVisualSelection(i)") ||
