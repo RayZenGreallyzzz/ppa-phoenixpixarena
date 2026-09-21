@@ -34,6 +34,94 @@
     }catch(e){console.warn('Auction sync',e)}
   }
 
+  var PPA_TON_TREASURY='UQCMgQWdxCPSkC87_JTUpCLMowIr4Ol4qYg3kZBWzNcH61Dx';
+
+  function ppaTonAmountToNano(v){
+    var s=String(v==null?'':v).trim().replace(',','.');
+    if(!/^\d+(?:\.\d{1,9})?$/.test(s))return '';
+    var p=s.split('.'),whole=(p[0]||'0').replace(/^0+(?=\d)/,''),frac=((p[1]||'')+'000000000').slice(0,9);
+    try{
+      var n=BigInt(whole||'0')*1000000000n+BigInt(frac||'0');
+      return n>0n?n.toString():'';
+    }catch(_){return ''}
+  }
+
+  function ppaTonDepositAmount(payload){
+    payload=payload||{};
+    var v=payload.amount;
+    if(v==null)v=payload.value;
+    if(v==null)v=payload.gram;
+    if(v==null)v=payload.sum;
+    return v;
+  }
+
+  function ppaTonConnectedAddress(){
+    try{
+      var ui=window.PPA_TON_UI;
+      var a=ui&&ui.account&&ui.account.address;
+      if(!a&&ui&&ui.wallet&&ui.wallet.account)a=ui.wallet.account.address;
+      return String(a||'');
+    }catch(_){return ''}
+  }
+
+  async function ppaTonDeposit(payload){
+    var amount=ppaTonDepositAmount(payload),nano=ppaTonAmountToNano(amount);
+    if(!nano)throw new Error('Введите корректную сумму TON');
+    var ui=window.PPA_TON_UI;
+    var walletAddress=ppaTonConnectedAddress();
+    if(!ui||!window.PPA_TON_CONNECTED||!ui.connected||!walletAddress){
+      try{gramWalletResult(false,'Сначала подключи TON Wallet через TON Connect')}catch(_){}
+      throw new Error('TON Connect не подключён');
+    }
+
+    var result;
+    try{
+      // No await before sendTransaction: keep the original Android/Telegram click
+      // activation so the SDK can deep-link straight to the wallet.
+      result=await ui.sendTransaction({
+        validUntil:Math.floor(Date.now()/1000)+300,
+        network:'-239',
+        messages:[{address:PPA_TON_TREASURY,amount:nano}]
+      },{skipRedirectToWallet:'never'});
+    }catch(err){
+      var em=String(err&&err.message||err||'Транзакция отменена');
+      if(/reject|declin|cancel/i.test(em))em='Перевод TON отменён';
+      try{gramWalletResult(false,em)}catch(_){}
+      throw new Error(em);
+    }
+
+    if(!result||!result.boc)throw new Error('TON Connect не вернул подписанную транзакцию');
+    try{gramWalletResult(false,'TON отправлен · жду подтверждение сети…')}catch(_){}
+
+    var messageHash='';
+    for(var attempt=0;attempt<14;attempt++){
+      var body={
+        amount:String(amount).replace(',','.'),
+        nanoAmount:nano,
+        walletAddress:walletAddress,
+        messageHash:messageHash
+      };
+      if(attempt===0)body.boc=result.boc;
+      var r=await PPA.ppaWalletDeposit(body);
+      if(r&&r.messageHash)messageHash=String(r.messageHash);
+      if(r&&r.ok){
+        if(Number.isFinite(Number(r.gameGram))){
+          INV.gram=Math.max(0,Number(r.gameGram)||0);
+          try{saveGame();sendInvState();sendPremiumState();sendGramWalletState();updateUI()}catch(_){}
+        }
+        try{ppaRefreshTonBalance(walletAddress)}catch(_){}
+        try{gramWalletResult(true,r.message||('Пополнено +'+String(amount)+' Gram'))}catch(_){}
+        return r;
+      }
+      if(!(r&&r.pending))throw new Error((r&&r.message)||'Сервер не подтвердил TON-транзакцию');
+      try{gramWalletResult(false,(r&&r.message)||'Жду подтверждение TON…')}catch(_){}
+      await new Promise(function(resolve){setTimeout(resolve,1600)});
+    }
+    var pending={ok:false,pending:true,messageHash:messageHash,message:'TON отправлен. Подтверждение сети ещё ожидается — баланс зачислится после проверки.'};
+    try{gramWalletResult(false,pending.message)}catch(_){}
+    return pending;
+  }
+
   function applyWalletState(r){
     try{
       var p=gramWalletProfile();
@@ -145,7 +233,7 @@
 
     gramWalletLink=function(address){if(!PPA.ppaWalletLink){gramWalletResult(false,'Сервер Wallet недоступен');return}PPA.ppaWalletLink(address).then(function(r){applyWalletState(r);gramWalletResult(true,'TON Connect подключён · адрес синхронизирован с сервером')}).catch(function(e){gramWalletResult(false,msg(e))})};
     gramWalletUnlink=function(){if(!PPA.ppaWalletUnlink){gramWalletResult(false,'Сервер Wallet недоступен');return}PPA.ppaWalletUnlink().then(function(r){applyWalletState(r);gramWalletResult(true,r.message||'Gram Wallet отвязан')}).catch(function(e){gramWalletResult(false,msg(e))})};
-    window.PPA_GRAM_WALLET_DEPOSIT_HANDLER=function(payload){return PPA.ppaWalletDeposit(payload)};
+    window.PPA_GRAM_WALLET_DEPOSIT_HANDLER=function(payload){return ppaTonDeposit(payload)};
     window.PPA_GRAM_WALLET_WITHDRAW_HANDLER=function(payload){return PPA.ppaWalletWithdraw(payload)};
     var _openWallet=openGramWallet;openGramWallet=function(){_openWallet();setTimeout(refreshWallet,30);setTimeout(attachGramResetGesture,120)};window.openGramWallet=openGramWallet;
     premiumWalletLink=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletDeposit=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletWithdraw=function(){try{closePremiumStore()}catch(_){};openGramWallet()};
