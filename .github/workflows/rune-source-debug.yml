@@ -9,31 +9,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect precise drop helpers
+      - name: Inspect dungeon 41-60 drop source
         shell: python
         run: |
           import gzip, pathlib, re
           src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode('utf-8')
+
           def block(name):
               m=re.search(r"function\s+"+re.escape(name)+r"\s*\([^)]*\)\s*\{",src)
-              if not m: print('\n===== '+name+' NOT FOUND ====='); return
+              if not m:
+                  print("\n===== "+name+" NOT FOUND =====")
+                  return
               i=m.start(); depth=0; quote=None; esc=False
-              for j in range(m.end()-1,min(len(src),i+30000)):
+              for j in range(m.end()-1,min(len(src),i+50000)):
                   ch=src[j]
                   if quote:
                       if esc: esc=False
                       elif ch=='\\': esc=True
                       elif ch==quote: quote=None
                       continue
-                  if ch in ("'",'"',chr(96)): quote=ch; continue
+                  if ch in ("'",'"',chr(96)):
+                      quote=ch; continue
                   if ch=='{': depth+=1
                   elif ch=='}':
                       depth-=1
                       if depth==0:
-                          print('\n===== '+name+' =====\n'+src[i:j+1]); return
-              print('\n===== '+name+' TRUNC =====\n'+src[i:i+30000])
-          for n in ['normalGearDropChances','v232Drop1to20','v232Drop2130','v232Drop3140','mobDropInfo']:
+                          print("\n===== "+name+" =====\n"+src[i:j+1])
+                          return
+
+          names=sorted(set(re.findall(r"function\s+([A-Za-z0-9_]*(?:Dungeon41|D41|4160)[A-Za-z0-9_]*)\s*\(",src)))
+          print("===== FUNCTIONS MATCHING D41 / 4160 =====")
+          print("\n".join(names))
+          for n in names:
               block(n)
-          print('\n===== ALL NORMAL GEAR CHANCE REFERENCES =====')
-          for m in re.finditer('normalGearDropChances',src):
-              print(src[max(0,m.start()-800):min(len(src),m.start()+1600)])
+
+          print("\n===== V271_D41 CONSTANTS / LINES =====")
+          for line in src.splitlines():
+              if 'V271_D41_' in line or ('dungeon41' in line.lower() and ('drop' in line.lower() or 'legend' in line.lower() or 'epic' in line.lower())):
+                  print(line)
+
+          print("\n===== EPIC/LEGENDARY NEAR DUNGEON41 =====")
+          for m in re.finditer(r"(?:V271_D41_|v271[^\n]{0,80}(?:epic|legendary)|(?:epic|legendary)[^\n]{0,80}v271)",src,re.I):
+              a=max(0,m.start()-1200);b=min(len(src),m.start()+3200)
+              print("\n--- OCCURRENCE ---\n"+src[a:b])
