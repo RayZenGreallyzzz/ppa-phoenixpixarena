@@ -184,6 +184,42 @@ async function handleCallback(env, query) {
 
 export async function handleWithdrawBotRequest(request, env) {
   const url = new URL(request.url);
+
+  if (url.pathname === '/api/withdraw-bot/setup') {
+    if (request.method !== 'GET' && request.method !== 'POST') return json({ ok: false, message: 'GET or POST required' }, 405);
+    const token = String(env.WITHDRAW_BOT_TOKEN || '').trim();
+    const secret = String(env.WITHDRAW_BOT_WEBHOOK_SECRET || '').trim();
+    if (!token) return json({ ok: false, message: 'WITHDRAW_BOT_TOKEN is not configured' }, 503);
+    if (!secret) return json({ ok: false, message: 'WITHDRAW_BOT_WEBHOOK_SECRET is not configured' }, 503);
+    try {
+      const webhookUrl = url.origin + '/api/withdraw-bot/webhook';
+      const set = await tg(env, 'setWebhook', {
+        url: webhookUrl,
+        secret_token: secret,
+        allowed_updates: ['message', 'callback_query'],
+        drop_pending_updates: false
+      });
+      await tg(env, 'setMyCommands', {
+        commands: [
+          { command: 'start', description: 'Статус бота и твой доступ' },
+          { command: 'pending', description: 'Новые заявки на вывод' },
+          { command: 'approved', description: 'Одобренные заявки к выплате' }
+        ]
+      });
+      const me = await tg(env, 'getMe', {});
+      return json({
+        ok: true,
+        webhook: webhookUrl,
+        bot: me && me.username ? '@' + me.username : '',
+        webhookSet: !!set,
+        next: 'Send /start to the bot. If access is closed, copy the Telegram ID it shows into WITHDRAW_ADMIN_IDS.'
+      });
+    } catch (err) {
+      console.error('PPA withdraw bot setup:', err);
+      return json({ ok: false, message: 'Bot setup failed: ' + String(err && err.message || err) }, 502);
+    }
+  }
+
   if (url.pathname !== '/api/withdraw-bot/webhook') return null;
   if (request.method !== 'POST') return json({ ok: false, message: 'POST required' }, 405);
   const expected = String(env.WITHDRAW_BOT_WEBHOOK_SECRET || '').trim();
