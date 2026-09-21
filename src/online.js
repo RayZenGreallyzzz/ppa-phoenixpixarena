@@ -390,16 +390,28 @@ export async function handleOnlineRoute(path, ctx) {
   if (path === '/api/auction/buy') return auctionBuy(env, telegramId, body);
   if (path === '/api/auction/ack-credits') return auctionAck(env, telegramId, body);
 
-  if (path === '/api/wallet/state') return out(await walletState(env, telegramId));
+  const walletTelegram = {
+    id: telegramId,
+    name: cleanName(
+      (player && player.nickname) ||
+      [auth && auth.user && auth.user.first_name, auth && auth.user && auth.user.last_name].filter(Boolean).join(' ') ||
+      (auth && auth.user && auth.user.username) ||
+      ('ID ' + telegramId),
+      48
+    ),
+    username: String((auth && auth.user && auth.user.username) || '')
+  };
+
+  if (path === '/api/wallet/state') return out({ ...(await walletState(env, telegramId)), telegram: walletTelegram });
   if (path === '/api/wallet/link') {
     const address = String(body.address || '').trim();
     if (!validTonAddress(address)) return out({ ok: false, message: 'Введите корректный TON-адрес Gram Wallet.' }, 400);
     const s = await walletWrite(env, telegramId, true, address, 'Gram Wallet привязан к Telegram ID');
-    return out({ ...s, message: 'Gram Wallet привязан к серверу.' });
+    return out({ ...s, telegram: walletTelegram, message: 'Gram Wallet привязан к серверу.' });
   }
   if (path === '/api/wallet/unlink') {
     const s = await walletWrite(env, telegramId, false, '', 'Gram Wallet отвязан');
-    return out({ ...s, message: 'Gram Wallet отвязан.' });
+    return out({ ...s, telegram: walletTelegram, message: 'Gram Wallet отвязан.' });
   }
   if (path === '/api/wallet/deposit' || path === '/api/wallet/withdraw') {
     return out({ ok: false, code: 'TON_PROVIDER_REQUIRED', message: 'Кошелёк уже привязан к серверу. Для реального перевода Gram нужно подключить TON Connect/платёжный провайдер; баланс не изменён.' }, 501);
