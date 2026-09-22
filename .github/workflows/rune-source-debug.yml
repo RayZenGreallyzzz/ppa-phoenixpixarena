@@ -9,21 +9,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect all skill scaling
+      - name: Inspect passive skill scaling
         shell: python
         run: |
           import gzip, pathlib, re
           src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode('utf-8')
 
-          print("===== SKILL RANK CALL SITES =====")
-          for m in re.finditer(r"skillRank\(([^\)]*)\)",src):
-              i=m.start()
-              print("\n--- "+str(i)+" ---\n"+src[max(0,i-700):min(len(src),i+1800)])
+          print("===== SKILLRANK SOURCE LINES =====")
+          lines=src.splitlines()
+          for i,line in enumerate(lines):
+              if 'skillRank(' in line:
+                  print(f"{i+1}: {line[:1200]}")
 
-          print("\n===== FUNCTIONS WITH rank PARAM =====")
-          for m in re.finditer(r"function\s+([A-Za-z0-9_]+)\s*\(([^\)]*\brank\b[^\)]*)\)\s*\{",src):
-              name=m.group(1); i=m.start(); depth=0; quote=None; esc=False
-              for j in range(m.end()-1,min(len(src),i+18000)):
+          print("\n===== PASSIVE IDS / OCCURRENCES =====")
+          ids=sorted(set(re.findall(r"id:'([A-Za-z0-9_]+)'",src)))
+          pids=[x for x in ids if any(k in x for k in ['vital','pass','armor','master','focus','will','spirit','regen','crit','speed','guard','fort','rage','blood','holy','arcane','shadow','evasion','marksman','healing'])]
+          for pid in pids:
+              hits=[m.start() for m in re.finditer(re.escape(pid),src)]
+              if len(hits)>1:
+                  print("\n### "+pid+" x"+str(len(hits)))
+                  for pos in hits[1:8]:
+                      print(src[max(0,pos-650):min(len(src),pos+1300)])
+
+          print("\n===== RECOMPUTE STATS =====")
+          m=re.search(r"function\s+recomputeStats\s*\([^)]*\)\s*\{",src)
+          if m:
+              i=m.start(); depth=0; quote=None; esc=False
+              for j in range(m.end()-1,min(len(src),i+60000)):
                   ch=src[j]
                   if quote:
                       if esc: esc=False
@@ -35,8 +47,4 @@ jobs:
                   elif ch=='}':
                       depth-=1
                       if depth==0:
-                          print("\n===== "+name+" =====\n"+src[i:j+1]); break
-
-          print("\n===== GRIMOIRE CATALOG =====")
-          m=re.search(r"(?:const|let|var)\s+GRIMOIRE_CATALOG\s*=\s*\{",src)
-          if m: print(src[m.start():m.start()+26000])
+                          print(src[i:j+1]);break
