@@ -9,42 +9,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect passive skill scaling
+      - name: Inspect skill combat scaling
         shell: python
         run: |
           import gzip, pathlib, re
           src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode('utf-8')
 
-          print("===== SKILLRANK SOURCE LINES =====")
-          lines=src.splitlines()
-          for i,line in enumerate(lines):
-              if 'skillRank(' in line:
-                  print(f"{i+1}: {line[:1200]}")
+          names=sorted(set(re.findall(r"function\s+([A-Za-z0-9_]*(?:Skill|Passive)[A-Za-z0-9_]*)\s*\(",src)))
+          print("===== FUNCTION NAMES =====")
+          for n in names:
+              if re.search(r"(cast|skill|passive)",n,re.I):
+                  print(n)
 
-          print("\n===== PASSIVE IDS / OCCURRENCES =====")
-          ids=sorted(set(re.findall(r"id:'([A-Za-z0-9_]+)'",src)))
-          pids=[x for x in ids if any(k in x for k in ['vital','pass','armor','master','focus','will','spirit','regen','crit','speed','guard','fort','rage','blood','holy','arcane','shadow','evasion','marksman','healing'])]
-          for pid in pids:
-              hits=[m.start() for m in re.finditer(re.escape(pid),src)]
-              if len(hits)>1:
-                  print("\n### "+pid+" x"+str(len(hits)))
-                  for pos in hits[1:8]:
-                      print(src[max(0,pos-650):min(len(src),pos+1300)])
-
-          print("\n===== RECOMPUTE STATS =====")
-          m=re.search(r"function\s+recomputeStats\s*\([^)]*\)\s*\{",src)
-          if m:
-              i=m.start(); depth=0; quote=None; esc=False
-              for j in range(m.end()-1,min(len(src),i+60000)):
-                  ch=src[j]
-                  if quote:
-                      if esc: esc=False
-                      elif ch=='\\': esc=True
-                      elif ch==quote: quote=None
-                      continue
-                  if ch in ("'",'"',chr(96)): quote=ch; continue
-                  if ch=='{': depth+=1
-                  elif ch=='}':
-                      depth-=1
-                      if depth==0:
-                          print(src[i:j+1]);break
+          print("\n===== RANK ARRAYS AROUND SKILL FUNCTIONS =====")
+          pats=[
+            r"\[[^\]\n]{1,100}\]\[rank\]",
+            r"rank\s*\*\s*[0-9.]+",
+            r"[0-9.]+\s*\*\s*rank"
+          ]
+          seen=set()
+          for pat in pats:
+              for m in re.finditer(pat,src):
+                  a=max(0,m.start()-350);b=min(len(src),m.start()+650)
+                  chunk=src[a:b]
+                  if re.search(r"(skill|passive|cast|heal|shield|stun|slow|dodge|crit|damage|atk|def|speed|cooldown|cd)",chunk,re.I):
+                      key=m.start()
+                      if key in seen: continue
+                      seen.add(key)
+                      print("\n--- "+str(m.start())+" ---\n"+chunk)
