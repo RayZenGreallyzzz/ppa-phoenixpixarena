@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v476-dungeon-rarity-gate-20260922';
+const CLIENT_BUILD = 'v477-smith-emerald-slag-art-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -22,6 +22,19 @@ if (sourceHash !== EXPECTED_SOURCE_SHA256) {
   throw new Error(`PPA source checksum mismatch: ${sourceHash}`);
 }
 const source = sourceBuffer.toString('utf8');
+
+function ppaReadApprovedB64(name){
+  const p=path.join(ROOT,'assets-src',name);
+  if(!fs.existsSync(p))throw new Error('Approved art source missing: '+name);
+  const b64=fs.readFileSync(p,'utf8').trim();
+  const buf=Buffer.from(b64,'base64');
+  if(buf.length<500||buf.subarray(0,4).toString('ascii')!=='RIFF'||buf.subarray(8,12).toString('ascii')!=='WEBP'){
+    throw new Error('Approved art is not valid WebP: '+name);
+  }
+  return {b64:b64,buf:buf,data:'data:image/webp;base64,'+b64};
+}
+const PPA_APPROVED_SLAG_ART=ppaReadApprovedB64('fart-slag-reference.b64');
+const PPA_APPROVED_EMERALD_ART=ppaReadApprovedB64('emerald-smith-reference.b64');
 
 const publicDir = path.join(ROOT, 'public');
 const assetsDir = path.join(publicDir, 'assets');
@@ -2495,6 +2508,7 @@ ppaPatchRegex(
   el.addEventListener('pointercancel',cancel,{passive:true});
   el.addEventListener('pointerleave',cancel,{passive:true});
 }
+var PPA_SMITH_EMERALD_IMG='${PPA_APPROVED_EMERALD_ART.data}';
 function ppaSmithCanvasize(root){
   try{
     var host=root&&root.querySelectorAll?root:document;
@@ -2503,6 +2517,19 @@ function ppaSmithCanvasize(root){
     host.querySelectorAll('img').forEach(function(x){imgs.push(x)});
     imgs.forEach(function(img){
       if(!img||img.__ppaCanvasized)return;
+      var matSlot=null,matName='',isEmerald=false;
+      try{
+        matSlot=img.closest?img.closest('[data-ppa-material-name]'):null;
+        matName=String(matSlot&&matSlot.dataset&&matSlot.dataset.ppaMaterialName||'');
+        isEmerald=/изумруд/i.test(matName);
+        if(isEmerald){
+          if(String(img.getAttribute('src')||'')!==PPA_SMITH_EMERALD_IMG)img.setAttribute('src',PPA_SMITH_EMERALD_IMG);
+          img.style.setProperty('max-width','100%','important');
+          img.style.setProperty('max-height','100%','important');
+          img.style.setProperty('object-fit','contain','important');
+          if(matSlot)matSlot.style.setProperty('overflow','hidden','important');
+        }
+      }catch(_){}
       var src=String(img.currentSrc||img.getAttribute('src')||img.src||'');
       if(!src)return;
 
@@ -2537,6 +2564,18 @@ function ppaSmithCanvasize(root){
           var rect=img.getBoundingClientRect();
           var w=Math.max(24,Math.round(rect.width||img.width||48));
           var h=Math.max(24,Math.round(rect.height||img.height||48));
+          if(isEmerald&&matSlot){
+            try{
+              var mr=matSlot.getBoundingClientRect();
+              var side=Math.max(24,Math.floor(Math.min(Number(mr.width)||48,Number(mr.height)||48)-6));
+              w=Math.min(w,side);h=Math.min(h,side);
+              c.style.setProperty('width',side+'px','important');
+              c.style.setProperty('height',side+'px','important');
+              c.style.setProperty('max-width','100%','important');
+              c.style.setProperty('max-height','100%','important');
+              c.style.margin='auto';
+            }catch(_){}
+          }
           var dpr=Math.min(2,window.devicePixelRatio||1);
           c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
 
@@ -2591,7 +2630,8 @@ ppaPatchRegex(
 ppaPatchRegex(
   'blacksmith material hold inspects',
   /s\.onclick=\(\)=&gt;inspectSmithItem\(\{name:c\.name,kind:&#x27;material&#x27;,rarity:c\.rarity,count:c\.count,img:RES\[c\.name\]\|\|&#x27;&#x27;,icon:&#x27;◆&#x27;\},&#x27;Кузнец · материал&#x27;\);/,
-  `bindHoldInfo(s,function(){inspectSmithItem({name:c.name,kind:'material',rarity:c.rarity,count:c.count,img:RES[c.name]||'',icon:'◆'},'Кузнец · материал')});
+  `if(s&&s.dataset)s.dataset.ppaMaterialName=c.name;
+        bindHoldInfo(s,function(){inspectSmithItem({name:c.name,kind:'material',rarity:c.rarity,count:c.count,img:RES[c.name]||'',icon:'◆'},'Кузнец · материал')});
         s.onclick=function(){if(s.__ppaHeld)s.__ppaHeld=false};`
 );
 
@@ -3150,8 +3190,12 @@ if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
 
 if(!output.includes("function ppaSmithCanvasize(root)") ||
    !output.includes("img.parentNode.replaceChild(c,img)") ||
-   !output.includes("new MutationObserver(function(ms)")) {
-  throw new Error('Blacksmith canvas image guard did not apply');
+   !output.includes("new MutationObserver(function(ms)") ||
+   !output.includes("PPA_SMITH_EMERALD_IMG='data:image/webp;base64,") ||
+   !output.includes("s.dataset.ppaMaterialName=c.name") ||
+   !output.includes("img.closest('[data-ppa-material-name]')") ||
+   !output.includes("isEmerald=/изумруд/i.test(matName)")) {
+  throw new Error('Blacksmith canvas/emerald one-slot guard did not apply');
 }
 /* ======================================================================== */
 
@@ -5012,6 +5056,15 @@ const FART_SLAG_IMG='data:image/webp;base64,UklGRvohAABXRUJQVlA4WAoAAAAQAAAAfwAA
 const FART_SLAG_INTERVAL_MS=40000;
 const FART_SLAG_SELL_PRICE=2;`
 );
+
+// Replace the legacy/broken slag visual with the approved uploaded artwork.
+output=output.replace(
+  /const FART_SLAG_IMG='data:image\/webp;base64,[A-Za-z0-9+/=]+';/,
+  "const FART_SLAG_IMG='data:image/webp;base64,"+PPA_APPROVED_SLAG_ART.b64+"';"
+);
+if(!output.includes("const FART_SLAG_IMG='data:image/webp;base64,"+PPA_APPROVED_SLAG_ART.b64.slice(0,24))){
+  throw new Error('Approved Fart slag artwork did not apply');
+}
 
 // Export slag art as a real public file. The constants patch above has already
 // inserted FART_SLAG_IMG into output, so extract and validate it here.
