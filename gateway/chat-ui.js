@@ -383,7 +383,7 @@
     };
 
     renderUnread();renderMessages();syncSuppressed();
-    setInterval(syncSuppressed,250);
+    setInterval(syncSuppressed,750);
     return true;
   }
 
