@@ -17,12 +17,7 @@
   var animCache=typeof WeakMap!=='undefined'?new WeakMap():null;
   var imageCache=typeof WeakMap!=='undefined'?new WeakMap():null;
 
-  function factor(){
-    try{
-      var side=Math.min(window.innerWidth||9999,window.innerHeight||9999);
-      return side<=620?.36:.42;
-    }catch(_){return .42}
-  }
+  function factor(){return .5}
   function markCanvas(c){
     try{c.complete=true}catch(_){}
     try{c.naturalWidth=c.width}catch(_){}
