@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v468-book-rank-curve-20260922';
+const CLIENT_BUILD = 'v469-ranked-books-skill-iv-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5282,6 +5282,199 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
    output.includes("_sel=i;renderBag();")) {
   throw new Error('Character inventory fast selection patch did not apply');
 }
+/* ======================================================================== */
+
+
+/* === RANKED GRIMOIRES + SKILL RANK IV =================================== */
+// Progression can reach IV, while the existing combat-facing skillRank()
+// stays capped at III so old rank-indexed combat formulas cannot break.
+ppaPatchRegex(
+  'ranked grimoire progression helpers',
+  /function\s+skillRank\(id\)\{return Math\.max\(0,Math\.min\(3,\(INV\.skillRanks&&INV\.skillRanks\[id\]\)\|\|0\)\);\}\s*function\s+skillRule\(rank\)\{[\s\S]*?return null;\s*\}/,
+  `function skillRank(id){return Math.max(0,Math.min(3,(INV.skillRanks&&INV.skillRanks[id])||0));}
+function skillProgressRank(id){return Math.max(0,Math.min(4,(INV.skillRanks&&INV.skillRanks[id])||0));}
+function grimoireBookCounts(skillId){
+  const total=Math.max(0,Math.floor(Number(INV.grimoires&&INV.grimoires[skillId])||0));
+  const raw=(INV.grimoireRankDrops&&INV.grimoireRankDrops[skillId])||{};
+  const r3=Math.max(0,Math.min(total,Math.floor(Number(raw[3])||0)));
+  const r2=Math.max(0,Math.min(total-r3,Math.floor(Number(raw[2])||0)));
+  const r1=Math.max(0,total-r2-r3);
+  return {1:r1,2:r2,3:r3,total:total};
+}
+function skillRule(rank,bookRank){
+  rank=Math.max(0,Math.min(4,Math.floor(Number(rank)||0)));
+  bookRank=Math.max(1,Math.min(3,Math.floor(Number(bookRank)||1)));
+  if(rank>=4)return null;
+  const cost=rank<=0?1:(rank===1?2:4);
+  const base=rank<=0?1:(rank===1?.45:.40);
+  const chance=bookRank>=3?1:(bookRank===2?Math.min(1,base+.06):base);
+  return {cost:cost,chance:chance,next:rank+1,bookRank:bookRank};
+}
+function consumeRankedGrimoires(skillId,bookRank,cost){
+  cost=Math.max(1,Math.floor(Number(cost)||1));
+  const have=grimoireBookCounts(skillId)[bookRank]||0;
+  if(have<cost)return false;
+  INV.grimoires[skillId]=Math.max(0,(Number(INV.grimoires[skillId])||0)-cost);
+  INV.grimoireRankDrops=INV.grimoireRankDrops||{};
+  const raw=INV.grimoireRankDrops[skillId]||(INV.grimoireRankDrops[skillId]={1:0,2:0,3:0});
+  if(bookRank===2||bookRank===3)raw[bookRank]=Math.max(0,(Number(raw[bookRank])||0)-cost);
+  else if((Number(raw[1])||0)>0)raw[1]=Math.max(0,(Number(raw[1])||0)-Math.min(cost,Number(raw[1])||0));
+  return true;
+}`
+);
+
+ppaPatchRegex(
+  'ranked grimoire upgrade action',
+  /function\s+tryGrimoireUpgrade\(skillId\)\{[\s\S]*?\n\}/,
+  `function tryGrimoireUpgrade(skillId,bookRank){
+  var sk=findGrimoireSkill(skillId);if(!sk)return;
+  var ck=classKeyFromName(P.cls);
+  if(sk.classKey!==ck){showPickup('Гримуар другого класса: '+sk.className,'#ff8888');return;}
+  bookRank=Math.max(1,Math.min(3,Math.floor(Number(bookRank)||1)));
+  var rank=skillProgressRank(skillId),rule=skillRule(rank,bookRank);
+  if(!rule){showPickup(sk.n+' уже IV ранга','#ffd168');return;}
+  var counts=grimoireBookCounts(skillId),have=counts[bookRank]||0;
+  if(have<rule.cost){showPickup('Нужно '+rule.cost+' книг '+['','I','II','III'][bookRank]+' ранга · есть '+have,'#ffb36a');return;}
+  if(!consumeRankedGrimoires(skillId,bookRank,rule.cost))return;
+  var ok=Math.random()<rule.chance;
+  if(ok){
+    INV.skillRanks[skillId]=rule.next;
+    var roman=['','I','II','III','IV'][rule.next];
+    showPickup(sk.n+' · ранг '+roman+' открыт!','#8dff9a');
+  }else{
+    showPickup('Неудача · '+rule.cost+' книг '+['','I','II','III'][bookRank]+' ранга сгорели','#ff6868');
+  }
+  recomputeStats();
+  try{saveGame()}catch(_){}
+  try{sendInvState()}catch(_){}
+  try{updateSkillButtons()}catch(_){}
+}`
+);
+
+ppaPatchRegex(
+  'grimoire action carries selected book rank',
+  /else if\(d\.type===['"]grimoireAction['"]\)\{tryGrimoireUpgrade\(d\.skillId\);\}/,
+  "else if(d.type==='grimoireAction'){tryGrimoireUpgrade(d.skillId,d.bookRank);}"
+);
+
+ppaPatchRegex(
+  'skill UI ranked book counts',
+  /var rank=skillRank\(x\.id\),rule=skillRule\(rank\),count=INV\.grimoires\[x\.id\]\|\|0;\s*var va=GRIMOIRE_ART\[x\.id\]\|\|\{\};\s*return \{id:x\.id,n:x\.n,ic:x\.ic,d:x\.d,type:x\.type,rank:rank,count:count,\s*need:rule\?rule\.cost:0,chance:rule\?Math\.round\(rule\.chance\*100\):0,\s*max:!rule,classKey:ck,className:sk\?sk\.name:'',/,
+  `var rank=skillProgressRank(x.id),counts=grimoireBookCounts(x.id),count=counts.total||0;
+      var rule=skillRule(rank,1),va=GRIMOIRE_ART[x.id]||{};
+      var bookOptions=[1,2,3].map(function(br){
+        var rr=skillRule(rank,br);
+        return {bookRank:br,count:counts[br]||0,need:rr?rr.cost:0,chance:rr?Math.round(rr.chance*100):0,max:!rr};
+      });
+      return {id:x.id,n:x.n,ic:x.ic,d:x.d,type:x.type,rank:rank,count:count,
+        bookCounts:counts,bookOptions:bookOptions,
+        need:rule?rule.cost:0,chance:rule?Math.round(rule.chance*100):0,
+        max:rank>=4,classKey:ck,className:sk?sk.name:'',`
+);
+
+ppaPatchRegex(
+  'skill hud roman IV',
+  /function\s+romanRank\(n\)\{return \['','I','II','III'\]\[n\]\|\|''\}/,
+  "function romanRank(n){return ['','I','II','III','IV'][n]||''}"
+);
+ppaPatchRegex(
+  'skill hud progression rank IV',
+  /let sk=c&&c\.active\?c\.active\[i\]:null,rank=sk\?skillRank\(sk\.id\):0;/,
+  "let sk=c&&c.active?c.active[i]:null,rank=sk?skillProgressRank(sk.id):0;"
+);
+
+{
+  const oldHead=`function pips(n){
+  var s='<div class="rankPips">';for(var i=0;i<3;i++)s+='<span class="'+(i<n?'on':'')+'"></span>';return s+'</div>';
+}
+function skillBtnText(x){
+  if((x.rank||0)>=3)return 'МАКС. РАНГ III';
+  if((x.rank||0)===0)return 'ИЗУЧИТЬ · 1 ГРИМУАР · 100%';
+  if((x.rank||0)===1)return 'УЛУЧШИТЬ ДО II · 2 ГРИМУАРА · 45%';
+  return 'УЛУЧШИТЬ ДО III · 4 ГРИМУАРА · 40%';
+}
+function skillUpgrade(id){parent.postMessage({type:'grimoireAction',skillId:id},'*')}`;
+  const newHead=`function pips(n){
+  var s='<div class="rankPips">';for(var i=0;i<4;i++)s+='<span class="'+(i<n?'on':'')+'"></span>';return s+'</div>';
+}
+function skillBookOption(x,bookRank){
+  var a=Array.isArray(x.bookOptions)?x.bookOptions:[];
+  for(var i=0;i<a.length;i++)if(Number(a[i].bookRank)===bookRank)return a[i];
+  return {bookRank:bookRank,count:0,need:0,chance:0,max:true};
+}
+function skillUpgradeButtons(x){
+  if((x.rank||0)>=4)return '<div class="upgradeBtn">МАКС. РАНГ IV</div>';
+  var romans=['','I','II','III'],html='<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;margin-top:5px">';
+  for(var br=1;br<=3;br++){
+    var o=skillBookOption(x,br);
+    html+='<div class="upgradeBtn" data-book-rank="'+br+'" style="margin-top:0;height:30px;line-height:1.05;text-align:center;padding:0 2px">'+romans[br]+' ×'+(o.count||0)+'<br>'+(o.chance||0)+'%</div>';
+  }
+  return html+'</div>';
+}
+function skillUpgrade(id,bookRank){parent.postMessage({type:'grimoireAction',skillId:id,bookRank:bookRank},'*')}`;
+  const a=ppaEscapeSrcdocCode(oldHead),b=ppaEscapeSrcdocCode(newHead);
+  if(!output.includes(a))throw new Error('Ranked grimoire character UI header target not found');
+  output=output.replace(a,b);
+}
+
+{
+  const oldLine=`(rank?(label+' · ранг '+['','I','II','III'][rank]+' · '+((x.preview||[])[rank-1]||x.d||'')):
+          (label+' не изучен · Ранг I: '+((x.preview||[])[0]||x.d||'')))+
+        ' · гримуары '+(x.count||0)+`;
+  const newLine=`(rank?(label+' · ранг '+['','I','II','III','IV'][rank]+' · '+((x.preview||[])[Math.min(2,rank-1)]||x.d||'')):
+          (label+' не изучен · Ранг I: '+((x.preview||[])[0]||x.d||'')))+
+        ' · книги I×'+((x.bookCounts&&x.bookCounts[1])||0)+' II×'+((x.bookCounts&&x.bookCounts[2])||0)+' III×'+((x.bookCounts&&x.bookCounts[3])||0)+`;
+  const a=ppaEscapeSrcdocCode(oldLine),b=ppaEscapeSrcdocCode(newLine);
+  if(!output.includes(a))throw new Error('Ranked grimoire character UI description target not found');
+  output=output.replace(a,b);
+}
+
+{
+  const oldMeta=`(rank>=3?'MAX':('нужно '+(x.need||0)+' · '+(x.chance||0)+'%'))`;
+  const newMeta=`(rank>=4?'MAX':('до '+['I','II','III','IV'][rank]+' → '+['I','II','III','IV'][rank+1]+' · выбери ранг книги'))`;
+  const a=ppaEscapeSrcdocCode(oldMeta),b=ppaEscapeSrcdocCode(newMeta);
+  if(!output.includes(a))throw new Error('Ranked grimoire character UI meta target not found');
+  output=output.replace(a,b);
+}
+
+{
+  const oldBtn=`'<div class="upgradeBtn">'+skillBtnText(x)+'</div>'+`;
+  const newBtn=`skillUpgradeButtons(x)+`;
+  const a=ppaEscapeSrcdocCode(oldBtn),b=ppaEscapeSrcdocCode(newBtn);
+  if(!output.includes(a))throw new Error('Ranked grimoire character UI buttons target not found');
+  output=output.replace(a,b);
+}
+
+{
+  const oldListener=`var btn=card.querySelector('.upgradeBtn');
+  if(btn && rank<3){
+    btn.addEventListener('click',function(ev){
+      ev.preventDefault();ev.stopPropagation();
+      skillUpgrade(x.id);
+    });
+  }`;
+  const newListener=`card.querySelectorAll('.upgradeBtn[data-book-rank]').forEach(function(btn){
+    btn.addEventListener('click',function(ev){
+      ev.preventDefault();ev.stopPropagation();
+      skillUpgrade(x.id,Number(btn.getAttribute('data-book-rank'))||1);
+    });
+  });`;
+  const a=ppaEscapeSrcdocCode(oldListener),b=ppaEscapeSrcdocCode(newListener);
+  if(!output.includes(a))throw new Error('Ranked grimoire character UI listener target not found');
+  output=output.replace(a,b);
+}
+
+if (!output.includes("function skillProgressRank(id){return Math.max(0,Math.min(4") ||
+    !output.includes("bookRank===2?Math.min(1,base+.06):base") ||
+    !output.includes("bookRank>=3?1:") ||
+    !output.includes("if(rank>=4)return null;") ||
+    !output.includes("tryGrimoireUpgrade(d.skillId,d.bookRank)") ||
+    !output.includes("function consumeRankedGrimoires(skillId,bookRank,cost)") ||
+    !output.includes("function romanRank(n){return ['','I','II','III','IV'][n]||''}") ||
+    !output.includes(ppaEscapeSrcdocCode("skillUpgrade(x.id,Number(btn.getAttribute('data-book-rank'))||1)"))) {
+  throw new Error('Ranked grimoire / skill IV progression patch incomplete');
+}
+
 /* ======================================================================== */
 
 /* === RUNTIME BUILD AUDIT ================================================= */
