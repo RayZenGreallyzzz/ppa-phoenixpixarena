@@ -9,24 +9,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect skill rank usage
+      - name: Inspect grimoire persistence and UI
         shell: python
         run: |
           import gzip, pathlib, re
           src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode('utf-8')
-
           pats=[
-            r"\[[^\]\n]{1,100}\]\[rank\]",
-            r"rank\s*\*\s*[0-9.]+",
-            r"[0-9.]+\s*\*\s*rank",
-            r"rank\s*===?\s*3",
-            r"rank\s*[<>]=?\s*3"
+            r"grimoires\s*:\s*INV\.grimoires",
+            r"INV\.grimoires\s*=\s*[^;]+;",
+            r"Object\.keys\(INV\.grimoires\|\|\{\}\)",
+            r"grimoireAction",
+            r"function pips\(n\)",
+            r"function skillBtnText\(x\)",
+            r"function makeSkillCard\(x,passive\)"
           ]
-          seen=set()
           for pat in pats:
               print("\n===== "+pat+" =====")
-              for m in re.finditer(pat,src):
-                  key=(m.start(),m.group(0))
-                  if key in seen: continue
-                  seen.add(key)
-                  print("\n--- "+str(m.start())+" ---\n"+src[max(0,m.start()-800):min(len(src),m.start()+1600)])
+              for m in list(re.finditer(pat,src))[:30]:
+                  print("\n--- "+str(m.start())+" ---\n"+src[max(0,m.start()-2000):min(len(src),m.start()+6500)])
