@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v489-restore-approved-legendary-20260922';
+const CLIENT_BUILD = 'v490-restore-known-good-legendary-smith-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -70,23 +70,6 @@ fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
 fs.writeFileSync(path.join(assetsDir,'legendary-gear-atlas.webp'),PPA_LEGENDARY_GEAR_ART.buf);
-const PPA_LEGENDARY_CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
-const PPA_LEGENDARY_SLOT_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
-for(const [cls,row] of Object.entries(PPA_LEGENDARY_CLASS_ROWS)){
-  for(const [slot,col] of Object.entries(PPA_LEGENDARY_SLOT_COLS)){
-    const vx=col*48,vy=row*48;
-    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">'+
-      '<svg x="8" y="8" width="80" height="80" viewBox="'+vx+' '+vy+' 48 48" overflow="hidden">'+
-      '<image href="/assets/legendary-gear-atlas.webp" width="288" height="384" preserveAspectRatio="none"/>'+
-      '</svg></svg>';
-    fs.writeFileSync(path.join(assetsDir,'legendary-'+cls+'-'+slot+'.svg'),svg,'utf8');
-  }
-}
-for(const cls of Object.keys(PPA_LEGENDARY_CLASS_ROWS)){
-  for(const slot of Object.keys(PPA_LEGENDARY_SLOT_COLS)){
-    if(!fs.existsSync(path.join(assetsDir,'legendary-'+cls+'-'+slot+'.svg')))throw new Error('Legendary gear SVG crop generation incomplete: '+cls+' '+slot);
-  }
-}
 const fartGuardSources = [
   ['fart-tentacle.webp', 'fart-tentacle.webp'],
   ['fart-spider.webp', 'fart-spider.webp'],
@@ -700,12 +683,6 @@ ppaPatchRegex(
   /function\s+sendAuctionState\(\)\s*\{/,
   `function auctionRestoreUiArt(it){
   if(!it||typeof it!=='object')return it;
-  try{
-    if(window.PPA_LEGENDARY_GEAR_ITEM_ART){
-      var _legendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(it);
-      if(_legendArt){it.img=_legendArt;it.image=_legendArt;it.art=_legendArt;return it}
-    }
-  }catch(_){}
   if(it.img)return it;
   try{
     if(it.kind==='consumable'){
@@ -5009,12 +4986,6 @@ function itemVisual(it,size){
   if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){
     it.img='/assets/fart-slag.webp';
   }
-  try{
-    if(it&&parent.PPA_LEGENDARY_GEAR_ITEM_ART){
-      var _legendArt=parent.PPA_LEGENDARY_GEAR_ITEM_ART(it);
-      if(_legendArt)it.img=_legendArt;
-    }
-  }catch(_){}
   if(it&&it.img){
     var sc=1,flt='none';
     if(it.rarity==='epic'&&it.slot==='weapon'){
@@ -5762,13 +5733,12 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !realtimeServer.includes('maxRuriDamage')) {
     throw new Error('Great Ruri combat/render bridge incomplete');
   }
-  if (!legendaryGearArt.includes("var ART_BASE='/assets/legendary-'") ||
+  if (!legendaryGearArt.includes("ATLAS_SRC='/assets/legendary-gear-atlas.webp'") ||
+      !legendaryGearArt.includes('var CELL=48,COLS=6,ROWS=8,OUT=96,PAD=8') ||
       !legendaryGearArt.includes("var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7}") ||
-      !legendaryGearArt.includes('PPA_LEGENDARY_GEAR_ITEM_ART') ||
-      !legendaryGearArt.includes('PPA_HYDRATE_LEGENDARY_GEAR_ART') ||
-      !output.includes("var _legendArt=parent.PPA_LEGENDARY_GEAR_ITEM_ART(it)") ||
-      !output.includes("var _legendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(it)")) {
-    throw new Error('Approved legendary gear art all-UI runtime incomplete');
+      !legendaryGearArt.includes("Object.defineProperty(it,'img'") ||
+      !legendaryGearArt.includes('PPA_HYDRATE_LEGENDARY_GEAR_ART')) {
+    throw new Error('Approved legendary gear art runtime incomplete');
   }
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
       !worldCombat.includes('PPA_PK_ACTIVE') ||

@@ -1,6 +1,10 @@
 (function(){
   'use strict';
 
+  var ATLAS_SRC='/assets/legendary-gear-atlas.webp';
+  var CELL=48,COLS=6,ROWS=8,OUT=96,PAD=8;
+  var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
+  var SLOT_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
   var CLASS_ALIASES={
     tank:'tank',warrior:'tank',воин:'tank',танк:'tank',
     paladin:'paladin',паладин:'paladin',
@@ -11,12 +15,14 @@
     mage:'mage',маг:'mage',
     priest:'priest',cleric:'priest',healer:'priest',жрец:'priest',клирик:'priest'
   };
-  var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
-  var SLOT_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
-  var ART_BASE='/assets/legendary-';
+  var atlas=new Image(),ready=false,cache=Object.create(null),lastScan=0;
 
   function key(v){return String(v==null?'':v).trim().toLowerCase()}
-  function alias(v){var k=key(v);return CLASS_ALIASES[k]||''}
+
+  function alias(v){
+    var k=key(v);
+    return CLASS_ALIASES[k]||'';
+  }
 
   function playerClassKey(){
     try{
@@ -63,31 +69,41 @@
     return r==='legendary'||r==='легендарный'||r==='легендарная'||r==='легендарное'||r==='legend';
   }
 
-  function art(cls,slot){
-    cls=alias(cls)||key(cls)||playerClassKey();
-    slot=slotKey({slot:slot});
-    if(!Object.prototype.hasOwnProperty.call(CLASS_ROWS,cls)||!slot)return '';
-    return ART_BASE+cls+'-'+slot+'.svg';
+  function makeArt(cls,slot){
+    if(!ready)return '';
+    var row=CLASS_ROWS[cls],col=SLOT_COLS[slot];
+    if(row==null||col==null)return '';
+    var id=cls+':'+slot;
+    if(cache[id])return cache[id];
+    try{
+      var cv=document.createElement('canvas');
+      cv.width=OUT;cv.height=OUT;
+      var cx=cv.getContext('2d',{alpha:true});
+      cx.clearRect(0,0,OUT,OUT);
+      cx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in cx)cx.imageSmoothingQuality='high';
+      cx.drawImage(atlas,col*CELL,row*CELL,CELL,CELL,PAD,PAD,OUT-PAD*2,OUT-PAD*2);
+      cache[id]=cv.toDataURL('image/png');
+      return cache[id];
+    }catch(_){return ''}
   }
 
-  function artForItem(it){
+  function setRuntimeArt(it,src){
     try{
-      if(!isLegendary(it))return '';
-      var cls=classKey(it),slot=slotKey(it);
-      return cls&&slot?art(cls,slot):'';
-    }catch(_){return ''}
+      Object.defineProperty(it,'img',{value:src,writable:true,configurable:true,enumerable:false});
+    }catch(_){it.img=src}
+    try{Object.defineProperty(it,'ppaLegendaryReferenceArt',{value:true,writable:true,configurable:true,enumerable:false})}catch(_){}
   }
 
   function hydrate(it){
     try{
-      var src=artForItem(it);
-      if(!src)return false;
-      var changed=it.img!==src||it.image!==src||it.art!==src;
-      it.img=src;
-      it.image=src;
-      it.art=src;
-      it.ppaLegendaryReferenceArt=true;
-      return changed;
+      if(!ready||!isLegendary(it))return false;
+      var cls=classKey(it),slot=slotKey(it);
+      if(!cls||!slot)return false;
+      var src=makeArt(cls,slot);
+      if(!src||it.img===src)return false;
+      setRuntimeArt(it,src);
+      return true;
     }catch(_){return false}
   }
 
@@ -98,8 +114,8 @@
     return changed;
   }
 
-  var lastScan=0;
   function hydrateAll(force){
+    if(!ready)return false;
     var now=Date.now();
     if(!force&&now-lastScan<700)return false;
     lastScan=now;
@@ -113,25 +129,29 @@
       if(changed){
         try{if(typeof renderInventory==='function')renderInventory()}catch(_){}
         try{if(typeof renderCharacter==='function')renderCharacter()}catch(_){}
-        try{if(typeof sendAuctionState==='function')sendAuctionState()}catch(_){}
       }
     }catch(_){}
     return changed;
   }
 
-  window.PPA_LEGENDARY_GEAR_ART=art;
-  window.PPA_LEGENDARY_GEAR_ITEM_ART=artForItem;
-  window.PPA_HYDRATE_LEGENDARY_GEAR_ART=function(){return hydrateAll(true)};
-  window.PPA_LEGENDARY_GEAR_DIAG=function(){return {ready:true,mode:'svg-crop',atlas:'/assets/legendary-gear-atlas.webp',classes:8,slots:6}};
-
-  function boot(){
+  atlas.onload=function(){
+    if(atlas.naturalWidth!==COLS*CELL||atlas.naturalHeight!==ROWS*CELL){
+      console.warn('PPA legendary atlas unexpected size',atlas.naturalWidth,atlas.naturalHeight);
+      return;
+    }
+    ready=true;
     hydrateAll(true);
-    var tries=0,t=setInterval(function(){
-      hydrateAll(false);
-      if(++tries>80)clearInterval(t);
-    },750);
-    setInterval(function(){hydrateAll(false)},5000);
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
-  else boot();
+  };
+  atlas.onerror=function(){console.warn('PPA legendary gear atlas failed to load')};
+  atlas.src=ATLAS_SRC;
+
+  window.PPA_LEGENDARY_GEAR_ART=function(cls,slot){return makeArt(alias(cls)||key(cls),slotKey({slot:slot}))};
+  window.PPA_HYDRATE_LEGENDARY_GEAR_ART=function(){return hydrateAll(true)};
+  window.PPA_LEGENDARY_GEAR_DIAG=function(){return {ready:ready,atlas:ATLAS_SRC,size:atlas.naturalWidth+'x'+atlas.naturalHeight,cached:Object.keys(cache).length}};
+
+  var tries=0,t=setInterval(function(){
+    hydrateAll(false);
+    if(++tries>80)clearInterval(t);
+  },750);
+  setInterval(function(){hydrateAll(false)},5000);
 })();
