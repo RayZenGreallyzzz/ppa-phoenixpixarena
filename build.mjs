@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v472-mobile-fps-recovery-20260922';
+const CLIENT_BUILD = 'v473-grimoire-fps-cleanup-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5293,22 +5293,39 @@ ppaPatchRegex(
   /function\s+skillRank\(id\)\{return Math\.max\(0,Math\.min\(3,\(INV\.skillRanks&&INV\.skillRanks\[id\]\)\|\|0\)\);\}\s*function\s+skillRule\(rank\)\{[\s\S]*?return null;\s*\}/,
   `function skillRank(id){return Math.max(0,Math.min(3,(INV.skillRanks&&INV.skillRanks[id])||0));}
 function skillProgressRank(id){return Math.max(0,Math.min(5,(INV.skillRanks&&INV.skillRanks[id])||0));}
+const PPA_GRIMOIRE_COUNT_CACHE=Object.create(null);
 function grimoireBookCounts(skillId){
   const total=Math.max(0,Math.floor(Number(INV.grimoires&&INV.grimoires[skillId])||0));
   const raw=(INV.grimoireRankDrops&&INV.grimoireRankDrops[skillId])||{};
-  const r3=Math.max(0,Math.min(total,Math.floor(Number(raw[3])||0)));
-  const r2=Math.max(0,Math.min(total-r3,Math.floor(Number(raw[2])||0)));
-  const r1=Math.max(0,total-r2-r3);
-  return {1:r1,2:r2,3:r3,total:total};
+  const raw3=Math.max(0,Math.floor(Number(raw[3])||0));
+  const raw2=Math.max(0,Math.floor(Number(raw[2])||0));
+  const sig=total+'|'+raw2+'|'+raw3;
+  const hit=PPA_GRIMOIRE_COUNT_CACHE[skillId];
+  if(hit&&hit.sig===sig)return hit.value;
+  const r3=Math.max(0,Math.min(total,raw3));
+  const r2=Math.max(0,Math.min(total-r3,raw2));
+  const value={1:Math.max(0,total-r2-r3),2:r2,3:r3,total:total};
+  PPA_GRIMOIRE_COUNT_CACHE[skillId]={sig:sig,value:value};
+  return value;
 }
+const PPA_SKILL_RULE_CACHE=(function(){
+  const out=[];
+  for(let rank=0;rank<5;rank++){
+    out[rank]=[];
+    const cost=rank<=0?1:(rank===1?2:4);
+    const base=rank<=0?1:(rank===1?.45:.40);
+    for(let br=1;br<=3;br++){
+      const chance=br>=3?1:(br===2?Math.min(1,base+.06):base);
+      out[rank][br]={cost:cost,chance:chance,next:rank+1,bookRank:br};
+    }
+  }
+  return out;
+})();
 function skillRule(rank,bookRank){
   rank=Math.max(0,Math.min(5,Math.floor(Number(rank)||0)));
   bookRank=Math.max(1,Math.min(3,Math.floor(Number(bookRank)||1)));
   if(rank>=5)return null;
-  const cost=rank<=0?1:(rank===1?2:4);
-  const base=rank<=0?1:(rank===1?.45:.40);
-  const chance=bookRank>=3?1:(bookRank===2?Math.min(1,base+.06):base);
-  return {cost:cost,chance:chance,next:rank+1,bookRank:bookRank};
+  return PPA_SKILL_RULE_CACHE[rank][bookRank];
 }
 function consumeRankedGrimoires(skillId,bookRank,cost){
   cost=Math.max(1,Math.floor(Number(cost)||1));
@@ -5362,12 +5379,8 @@ ppaPatchRegex(
   /var rank=skillRank\(x\.id\),rule=skillRule\(rank\),count=INV\.grimoires\[x\.id\]\|\|0;\s*var va=GRIMOIRE_ART\[x\.id\]\|\|\{\};\s*return \{id:x\.id,n:x\.n,ic:x\.ic,d:x\.d,type:x\.type,rank:rank,count:count,\s*need:rule\?rule\.cost:0,chance:rule\?Math\.round\(rule\.chance\*100\):0,\s*max:!rule,classKey:ck,className:sk\?sk\.name:'',/,
   `var rank=skillProgressRank(x.id),counts=grimoireBookCounts(x.id),count=counts.total||0;
       var rule=skillRule(rank,1),va=GRIMOIRE_ART[x.id]||{};
-      var bookOptions=[1,2,3].map(function(br){
-        var rr=skillRule(rank,br);
-        return {bookRank:br,count:counts[br]||0,need:rr?rr.cost:0,chance:rr?Math.round(rr.chance*100):0,max:!rr};
-      });
       return {id:x.id,n:x.n,ic:x.ic,d:x.d,type:x.type,rank:rank,count:count,
-        bookCounts:counts,bookOptions:bookOptions,
+        book1:counts[1]||0,book2:counts[2]||0,book3:counts[3]||0,
         need:rule?rule.cost:0,chance:rule?Math.round(rule.chance*100):0,
         max:rank>=5,classKey:ck,className:sk?sk.name:'',`
 );
@@ -5398,9 +5411,13 @@ function skillUpgrade(id){parent.postMessage({type:'grimoireAction',skillId:id},
   var s='<div class="rankPips">';for(var i=0;i<5;i++)s+='<span class="'+(i<n?'on':'')+'"></span>';return s+'</div>';
 }
 function skillBookOption(x,bookRank){
-  var a=Array.isArray(x.bookOptions)?x.bookOptions:[];
-  for(var i=0;i<a.length;i++)if(Number(a[i].bookRank)===bookRank)return a[i];
-  return {bookRank:bookRank,count:0,need:0,chance:0,max:true};
+  var rank=Math.max(0,Math.min(5,Number(x&&x.rank)||0));
+  var count=bookRank===1?(Number(x&&x.book1)||0):(bookRank===2?(Number(x&&x.book2)||0):(Number(x&&x.book3)||0));
+  if(rank>=5)return {bookRank:bookRank,count:count,need:0,chance:0,max:true};
+  var need=rank<=0?1:(rank===1?2:4);
+  var base=rank<=0?100:(rank===1?45:40);
+  var chance=bookRank>=3?100:(bookRank===2?Math.min(100,base+6):base);
+  return {bookRank:bookRank,count:count,need:need,chance:chance,max:false};
 }
 function skillUpgradeButtons(x){
   if((x.rank||0)>=5)return '<div class="upgradeBtn">МАКС. РАНГ V</div>';
@@ -5423,7 +5440,7 @@ function skillUpgrade(id,bookRank){parent.postMessage({type:'grimoireAction',ski
         ' · гримуары '+(x.count||0)+`;
   const newLine=`(rank?(label+' · ранг '+['','I','II','III','IV','V'][rank]+' · '+((x.preview||[])[Math.min(2,rank-1)]||x.d||'')):
           (label+' не изучен · Ранг I: '+((x.preview||[])[0]||x.d||'')))+
-        ' · книги I×'+((x.bookCounts&&x.bookCounts[1])||0)+' II×'+((x.bookCounts&&x.bookCounts[2])||0)+' III×'+((x.bookCounts&&x.bookCounts[3])||0)+`;
+        ' · книги I×'+(x.book1||0)+' II×'+(x.book2||0)+' III×'+(x.book3||0)+`;
   const a=ppaEscapeSrcdocCode(oldLine),b=ppaEscapeSrcdocCode(newLine);
   if(!output.includes(a))throw new Error('Ranked grimoire character UI description target not found');
   output=output.replace(a,b);
@@ -5470,6 +5487,8 @@ if (!output.includes("function skillProgressRank(id){return Math.max(0,Math.min(
     !output.includes("if(rank>=5)return null;") ||
     !output.includes("tryGrimoireUpgrade(d.skillId,d.bookRank)") ||
     !output.includes("function consumeRankedGrimoires(skillId,bookRank,cost)") ||
+    !output.includes("const PPA_SKILL_RULE_CACHE=(function()") ||
+    !output.includes("book1:counts[1]||0,book2:counts[2]||0,book3:counts[3]||0") ||
     !output.includes("function romanRank(n){return ['','I','II','III','IV','V'][n]||''}") ||
     !output.includes(ppaEscapeSrcdocCode("skillUpgrade(x.id,Number(btn.getAttribute('data-book-rank'))||1)"))) {
   throw new Error('Ranked grimoire / skill V progression patch incomplete');
@@ -5487,15 +5506,14 @@ if (!output.includes("function skillProgressRank(id){return Math.max(0,Math.min(
 ppaPatchRegex(
   'V189 rank IV-V real effect helper',
   /const V189_RANK=\[0,1,2,3\];\s*const rv=\(arr,rank\)=>arr\[Math\.max\(1,Math\.min\(3,rank\|0\)\)-1\];/,
-  `const V189_RANK=[0,1,2,3,4,5];
+  `const V189_RANK=[0,1,2,3];
   const V189_IV_RATIO=160/140;
   const V189_V_RATIO=180/140;
   const rv=(arr,rank)=>{
-    const r=Math.max(1,Math.min(5,rank|0));
+    let r=rank|0;if(r<1)r=1;if(r>5)r=5;
     if(r<=3)return arr[r-1];
-    const v3=Number(arr&&arr[2]),v2=Number(arr&&arr[1]);
-    if(!Number.isFinite(v3))return arr&&arr[2];
-    if(!Number.isFinite(v2)||v3===v2)return v3;
+    const v3=arr&&arr[2],v2=arr&&arr[1];
+    if(typeof v3!=='number'||typeof v2!=='number'||v3===v2)return v3;
     const ratio=r===4?V189_IV_RATIO:V189_V_RATIO;
     return v3>v2?v3*ratio:v3/ratio;
   };`
@@ -5542,7 +5560,7 @@ ppaPatchRegex(
   `const cd=meta&&meta.cd?(rr<=3?(Number(meta.cd[Math.max(0,rr-1)])||0):(Number(rv(meta.cd,rr))||0)):0;`
 );
 
-if (!output.includes("const V189_RANK=[0,1,2,3,4,5];") ||
+if (!output.includes("const V189_RANK=[0,1,2,3];") ||
     !output.includes("const V189_IV_RATIO=160/140;") ||
     !output.includes("const V189_V_RATIO=180/140;") ||
     !output.includes("return v3>v2?v3*ratio:v3/ratio;") ||
