@@ -2,7 +2,7 @@
   'use strict';
 
   var seq=0, applying=0, lastRoom='', lastRegister=0, catalogRoom='', authReady=false, serverMode=false, worldCycle='';
-  var authority=new Map(), deadUntil=new Map(), entityCache=new Map(), entityCacheLen=-1, entityCacheAt=0, diagCache=null, diagCacheAt=0, catalogCount=0, smoothEntities=new Set(), smoothRaf=0, smoothLast=0;
+  var authority=new Map(), deadUntil=new Map(), entityCache=new Map(), entityCacheLen=-1, entityCacheAt=0, diagCache=null, diagCacheAt=0, catalogCount=0, smoothEntities=new Set(), smoothRaf=0, smoothLast=0, smoothQueuedAt=0;
 
   function rt(){try{return window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null}catch(_){return null}}
   function room(){var d=rt();return String((d&&d.room)||'')}
@@ -523,7 +523,7 @@
             e.x=x;e.y=y;e.__ppaSmoothReady=true;
           }
           e.__ppaTargetX=x;e.__ppaTargetY=y;
-          smoothEntities.add(e);
+          smoothEntities.add(e);requestSmooth();
         }
         e.aggro=aggro;
         if(Number.isFinite(dir)){
@@ -588,7 +588,7 @@
             var _tx=Number(st.x),_ty=Number(st.y),_dd=Math.hypot(_tx-Number(e.x||0),_ty-Number(e.y||0));
             e.__ppaServerX=_tx;e.__ppaServerY=_ty;
             if(_dd>150||e.__ppaSmoothReady!==true){e.x=_tx;e.y=_ty;e.__ppaSmoothReady=true}
-            else{e.__ppaTargetX=_tx;e.__ppaTargetY=_ty;smoothEntities.add(e)}
+            else{e.__ppaTargetX=_tx;e.__ppaTargetY=_ty;smoothEntities.add(e);requestSmooth()}
           }
           if(Number.isFinite(Number(st.sz))&&Number(st.sz)>0)e.sz=Number(st.sz);
           e.aggro=!!st.aggro;
@@ -769,7 +769,7 @@
               var _ax=Number(m.x),_ay=Number(m.y),_ad=Math.hypot(_ax-Number(e.x||0),_ay-Number(e.y||0));
               e.__ppaServerX=_ax;e.__ppaServerY=_ay;
               if(_ad>150||e.__ppaSmoothReady!==true){e.x=_ax;e.y=_ay;e.__ppaSmoothReady=true}
-              else{e.__ppaTargetX=_ax;e.__ppaTargetY=_ay;smoothEntities.add(e)}
+              else{e.__ppaTargetX=_ax;e.__ppaTargetY=_ay;smoothEntities.add(e);requestSmooth()}
             }
             if(Number.isFinite(dir)){var vd=visualDir(dir);e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=dir;e.__ppaVisualDir=vd;applyBossVisualDir(e,dir,false)}
             e.spiderMoving=false;e.animMoving=false;
@@ -795,17 +795,24 @@
     }catch(err){console.warn('PPA authoritative mob receive',err)}
   };
 
-  function smoothServerMovement(ts){
+  function smoothMobile(){
+    try{return Math.min(innerWidth||9999,innerHeight||9999)<=900&&(matchMedia('(pointer:coarse)').matches||innerWidth<=700)}catch(_){return false}
+  }
+  function requestSmooth(){
+    if(smoothRaf||!serverMode||!smoothEntities.size)return;
     smoothRaf=requestAnimationFrame(smoothServerMovement);
+  }
+  function smoothServerMovement(ts){
+    smoothRaf=0;
     try{
       if(serverMode&&typeof P!=='undefined'&&P&&P.scene!=='dungeon'&&P.scene!=='worldboss'){
         serverMode=false;cleanupServerEntities();
       }
     }catch(_){}
-    if(!serverMode||!smoothEntities.size){smoothLast=ts;return}
-    var dt=smoothLast?Math.max(8,Math.min(50,ts-smoothLast)):16;smoothLast=ts;
-    // Pure interpolation only. No velocity prediction/extrapolation:
-    // it removes overshoot, side-jumps and "robot" corrections on mobile.
+    if(!serverMode||!smoothEntities.size){smoothLast=0;return}
+    var minStep=smoothMobile()?30:16;
+    if(smoothLast&&ts-smoothLast<minStep){smoothRaf=requestAnimationFrame(smoothServerMovement);return}
+    var dt=smoothLast?Math.max(8,Math.min(50,ts-smoothLast)):minStep;smoothLast=ts;
     var alpha=1-Math.exp(-dt/52);
     smoothEntities.forEach(function(e){
       try{
@@ -825,6 +832,7 @@
         }
       }catch(_){smoothEntities.delete(e)}
     });
+    if(smoothEntities.size&&serverMode)smoothRaf=requestAnimationFrame(smoothServerMovement);
   }
 
   function tick(){
@@ -848,7 +856,7 @@
 
   function boot(){
     installDropGuard();
-    if(!smoothRaf){smoothLast=0;smoothRaf=requestAnimationFrame(smoothServerMovement)}
+    smoothLast=0;
     installBossRuntimeGuards();
     serverMode=active();
     setTimeout(function(){register(true)},600);
