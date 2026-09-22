@@ -1,24 +1,20 @@
 name: Rune Source Debug
-
 on:
   push:
     branches: [debug-rune-source]
-
 jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect V189 skill engine
+      - name: Inspect V189 rv usage
         shell: python
         run: |
-          import gzip, pathlib, re
+          import gzip,pathlib,re
           src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode('utf-8')
-          for term in ['V189_RANK','const ACTIVE_META','window.V189_ACTIVE_META','function v189','V189_ACTIVE_META','skillRank(sk.id)']:
-              print("\n===== "+term+" =====")
-              pos=0;n=0
-              while True:
-                  i=src.find(term,pos)
-                  if i<0 or n>=20: break
-                  print("\n--- "+str(i)+" ---\n"+src[max(0,i-2500):min(len(src),i+16000)])
-                  pos=i+len(term);n+=1
+          a=src.find('/* === V189 ALL CLASS SKILLS + MANA + PASSIVES')
+          b=src.find('</script>',a)
+          seg=src[a:b]
+          for i,line in enumerate(seg.splitlines(),1):
+              if 'rv(' in line or 'skillRank(' in line or 'passiveBonusForCatalog' in line or 'useLearnedHudSkill' in line:
+                  print(f"{i}: {line}")
