@@ -1,20 +1,25 @@
 name: Rune Source Debug
+
 on:
   push:
     branches: [debug-rune-source]
+
 jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect V189 rv usage
+      - name: Inspect rank value helper and passives
         shell: python
         run: |
-          import gzip,pathlib,re
+          import gzip, pathlib, re
           src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode('utf-8')
-          a=src.find('/* === V189 ALL CLASS SKILLS + MANA + PASSIVES')
-          b=src.find('</script>',a)
-          seg=src[a:b]
-          for i,line in enumerate(seg.splitlines(),1):
-              if 'rv(' in line or 'skillRank(' in line or 'passiveBonusForCatalog' in line or 'useLearnedHudSkill' in line:
-                  print(f"{i}: {line}")
+          print("===== RV DEFS =====")
+          for pat in [r"\brv\s*=\s*[^;\n]+",r"function\s+rv\s*\([^)]*\)\s*\{[^}]*\}",r"\brv\s*:\s*function\s*\([^)]*\)\s*\{[^}]*\}"]:
+              for m in re.finditer(pat,src):
+                  print(src[max(0,m.start()-1200):min(len(src),m.end()+2500)])
+          print("\n===== PASSIVE RANK CONSUMERS =====")
+          for m in re.finditer(r"skillRank\([^\)]*\)",src):
+              chunk=src[max(0,m.start()-1000):min(len(src),m.start()+3500)]
+              if 'passive' in chunk.lower() or 'recompute' in chunk.lower() or 'bonus' in chunk.lower():
+                  print("\n--- "+str(m.start())+" ---\n"+chunk)
