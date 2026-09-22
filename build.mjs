@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v482-ruri-fullsize-right-fix-20260922';
+const CLIENT_BUILD = 'v483-ruri-run-animation-shadow-fix-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5688,8 +5688,11 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
   }
   if (!ruriPet.includes("var NAME='Великий Рури'") ||
       !ruriPet.includes('ATTACK_COOLDOWN=2400') ||
-      !ruriPet.includes('RURI_DRAW_SIZE=76') ||
+      !ruriPet.includes('RURI_DRAW_SIZE=68') ||
       !ruriPet.includes('RURI_RENDER_INTERVAL=1000/30') ||
+      !ruriPet.includes('MOVE_FRAME_MS=120') ||
+      !ruriPet.includes('drawMoveFrame') ||
+      !ruriPet.includes('function drawShadow') ||
       !ruriPet.includes("kind:'ruri'") ||
       !ruriPet.includes('PPA_RURI_DIAG') ||
       !ruriPet.includes('a.down=a.front=a.south=a.S') ||
