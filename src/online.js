@@ -717,10 +717,16 @@ async function walletDeposit(env, telegramId, body) {
 }
 
 export async function handleOnlineRoute(path, ctx) {
-  if (!path.startsWith('/api/clan/') && !path.startsWith('/api/auction/') && !path.startsWith('/api/wallet/')) return null;
+  if (!path.startsWith('/api/clan/') && !path.startsWith('/api/auction/') && !path.startsWith('/api/wallet/') && !path.startsWith('/api/admin/')) return null;
   const { env, body, auth, player } = ctx;
   const telegramId = String(auth.user.id);
   await ensureOnlineSchema(env);
+
+  if (path === '/api/admin/event-reward-stock-access') {
+    const ids = String(env.WITHDRAW_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean);
+    if (!ids.includes(telegramId)) return out({ ok: false, code: 'ADMIN_ONLY', message: 'Admin only' }, 403);
+    return out({ ok: true, authorized: true });
+  }
 
   if (path === '/api/clan/state') return out({ ok: true, state: await clanState(env, telegramId, player) });
   if (path === '/api/clan/action') return handleClanAction(env, telegramId, player, body);
@@ -823,7 +829,7 @@ export async function handleOnlineRoute(path, ctx) {
 
 export async function handleOnlineRequest(request, env) {
   const url = new URL(request.url);
-  if (!url.pathname.startsWith('/api/clan/') && !url.pathname.startsWith('/api/auction/') && !url.pathname.startsWith('/api/wallet/')) return null;
+  if (!url.pathname.startsWith('/api/clan/') && !url.pathname.startsWith('/api/auction/') && !url.pathname.startsWith('/api/wallet/') && !url.pathname.startsWith('/api/admin/')) return null;
   if (request.method !== 'POST') return jsonResponse({ok:false,code:'METHOD_NOT_ALLOWED',message:'POST required'},405);
   try {
     let body={};try{body=await request.json()}catch(_){}
