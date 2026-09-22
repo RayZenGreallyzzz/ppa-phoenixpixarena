@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
+import sharp from 'sharp';
 
 const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v491-legendary-atlas-cache-bust-20260922';
+const CLIENT_BUILD = 'v492-legendary-real-files-all-ui-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -70,6 +71,28 @@ fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
 fs.writeFileSync(path.join(assetsDir,'legendary-gear-atlas.webp'),PPA_LEGENDARY_GEAR_ART.buf);
+const PPA_LEGENDARY_FILE_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
+const PPA_LEGENDARY_FILE_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
+const PPA_LEGENDARY_DIR=path.join(assetsDir,'legendary');
+fs.mkdirSync(PPA_LEGENDARY_DIR,{recursive:true});
+await Promise.all(Object.entries(PPA_LEGENDARY_FILE_ROWS).flatMap(([cls,row])=>
+  Object.entries(PPA_LEGENDARY_FILE_COLS).map(async([slot,col])=>{
+    const outPath=path.join(PPA_LEGENDARY_DIR,cls+'-'+slot+'.webp');
+    await sharp(PPA_LEGENDARY_GEAR_ART.buf)
+      .extract({left:col*48,top:row*48,width:48,height:48})
+      .resize(80,80,{fit:'fill',kernel:'lanczos3'})
+      .extend({top:8,bottom:8,left:8,right:8,background:{r:0,g:0,b:0,alpha:0}})
+      .webp({quality:92,alphaQuality:100,smartSubsample:true})
+      .toFile(outPath);
+  })
+));
+for(const cls of Object.keys(PPA_LEGENDARY_FILE_ROWS)){
+  for(const slot of Object.keys(PPA_LEGENDARY_FILE_COLS)){
+    const p=path.join(PPA_LEGENDARY_DIR,cls+'-'+slot+'.webp');
+    if(!fs.existsSync(p)||fs.statSync(p).size<500)throw new Error('Legendary item file missing: '+cls+' '+slot);
+  }
+}
+
 const fartGuardSources = [
   ['fart-tentacle.webp', 'fart-tentacle.webp'],
   ['fart-spider.webp', 'fart-spider.webp'],
@@ -683,6 +706,12 @@ ppaPatchRegex(
   /function\s+sendAuctionState\(\)\s*\{/,
   `function auctionRestoreUiArt(it){
   if(!it||typeof it!=='object')return it;
+  try{
+    if(window.PPA_LEGENDARY_GEAR_ITEM_ART){
+      var _ppaLegendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(it);
+      if(_ppaLegendArt){it.img=_ppaLegendArt;it.image=_ppaLegendArt;it.art=_ppaLegendArt;return it}
+    }
+  }catch(_){}
   if(it.img)return it;
   try{
     if(it.kind==='consumable'){
@@ -5184,7 +5213,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'character invstate hydrates slag image',
   /(type:'invState',\s*inv:\{\s*equipped:INV\.equipped,\s*bag:)INV\.bag,/,
-  "$1(INV.bag||[]).map(function(it){if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){it.fartSlag=true;it.kind='resource';it.img='/assets/fart-slag.webp';}return it}),"
+  "$1(INV.bag||[]).map(function(it){try{if(window.PPA_LEGENDARY_GEAR_ITEM_ART){var a=window.PPA_LEGENDARY_GEAR_ITEM_ART(it);if(a){it.img=a;it.image=a;it.art=a;}}}catch(_){}if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){it.fartSlag=true;it.kind='resource';it.img='/assets/fart-slag.webp';}return it}),"
 );
 
 ppaPatchRegex(
@@ -5733,12 +5762,14 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !realtimeServer.includes('maxRuriDamage')) {
     throw new Error('Great Ruri combat/render bridge incomplete');
   }
-  if (!legendaryGearArt.includes("ATLAS_SRC='/assets/legendary-gear-atlas.webp?v=v491'") ||
-      !legendaryGearArt.includes('var CELL=48,COLS=6,ROWS=8,OUT=96,PAD=8') ||
+  if (!legendaryGearArt.includes("var ART_BASE='/assets/legendary/'") ||
       !legendaryGearArt.includes("var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7}") ||
-      !legendaryGearArt.includes("Object.defineProperty(it,'img'") ||
-      !legendaryGearArt.includes('PPA_HYDRATE_LEGENDARY_GEAR_ART')) {
-    throw new Error('Approved legendary gear art runtime incomplete');
+      !legendaryGearArt.includes('PPA_LEGENDARY_GEAR_ITEM_ART') ||
+      !legendaryGearArt.includes("it.img=src;it.image=src;it.art=src") ||
+      !legendaryGearArt.includes('PPA_HYDRATE_LEGENDARY_GEAR_ART') ||
+      !output.includes("_ppaLegendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(it)") ||
+      !output.includes("window.PPA_LEGENDARY_GEAR_ITEM_ART){var a=window.PPA_LEGENDARY_GEAR_ITEM_ART(it)")) {
+    throw new Error('Legendary real-file all-UI runtime incomplete');
   }
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
       !worldCombat.includes('PPA_PK_ACTIVE') ||
