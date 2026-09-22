@@ -39,16 +39,26 @@
     return Number(r.__ppaRemoteDir)||0;
   }
 
-  function stampClientHit(r,sx,sy,body){
+  var hitMetrics=null,hitMetricsAt=0;
+  function canvasHitMetrics(now){
     try{
+      now=Number(now)||Date.now();
+      if(hitMetrics&&now-hitMetricsAt<120)return hitMetrics;
       var rect=cv.getBoundingClientRect(),z=Math.max(.1,Number(cameraZoom())||1);
-      var kx=rect.width/Math.max(1,cv.width),ky=rect.height/Math.max(1,cv.height);
-      r.__ppaClientX=rect.left+sx*z*kx;
-      r.__ppaClientY=rect.top+sy*z*ky;
-      var hidden=Number(r&&r.hiddenUntil)>Date.now();
-      r.__ppaClientRadius=hidden?0:Math.max(42,Math.min(82,Math.max(28,body*.78)*z*Math.max(kx,ky)*2.15));
+      hitMetrics={left:rect.left,top:rect.top,z:z,kx:rect.width/Math.max(1,cv.width),ky:rect.height/Math.max(1,cv.height)};
+      hitMetricsAt=now;return hitMetrics;
+    }catch(_){return hitMetrics}
+  }
+  function stampClientHit(r,sx,sy,body,now){
+    try{
+      now=Number(now)||Date.now();
+      var m=canvasHitMetrics(now);if(!m)return;
+      r.__ppaClientX=m.left+sx*m.z*m.kx;
+      r.__ppaClientY=m.top+sy*m.z*m.ky;
+      var hidden=Number(r&&r.hiddenUntil)>now;
+      r.__ppaClientRadius=hidden?0:Math.max(42,Math.min(82,Math.max(28,body*.78)*m.z*Math.max(m.kx,m.ky)*2.15));
       r.__ppaUntargetable=hidden;
-      r.__ppaClientAt=Date.now();
+      r.__ppaClientAt=now;
     }catch(_){}
   }
 
@@ -98,7 +108,7 @@
         r.__ppaHitY=sy;
         r.__ppaHitBody=Math.max(26,body*.72);
         r.__ppaHitAt=now;
-        stampClientHit(r,sx,sy,body);
+        stampClientHit(r,sx,sy,body,now);
 
         cx.save();
         var hidden=Number(r.hiddenUntil)>Date.now();
