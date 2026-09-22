@@ -9,21 +9,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect grimoire persistence and UI
+      - name: Inspect grimoireRankDrops
         shell: python
         run: |
-          import gzip, pathlib, re
+          import gzip, pathlib
           src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode('utf-8')
-          pats=[
-            r"grimoires\s*:\s*INV\.grimoires",
-            r"INV\.grimoires\s*=\s*[^;]+;",
-            r"Object\.keys\(INV\.grimoires\|\|\{\}\)",
-            r"grimoireAction",
-            r"function pips\(n\)",
-            r"function skillBtnText\(x\)",
-            r"function makeSkillCard\(x,passive\)"
-          ]
-          for pat in pats:
-              print("\n===== "+pat+" =====")
-              for m in list(re.finditer(pat,src))[:30]:
-                  print("\n--- "+str(m.start())+" ---\n"+src[max(0,m.start()-2000):min(len(src),m.start()+6500)])
+          term='grimoireRankDrops'
+          pos=0;n=0
+          while True:
+              i=src.find(term,pos)
+              if i<0 or n>=50: break
+              print("\n--- "+str(i)+" ---\n"+src[max(0,i-1800):min(len(src),i+4200)])
+              pos=i+len(term);n+=1
