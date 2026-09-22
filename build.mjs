@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v485-ruri-clean-sheet-size-fix-20260922';
+const CLIENT_BUILD = 'v486-approved-legendary-sets-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -50,6 +50,17 @@ function ppaReadApprovedB64Parts(names){
 const PPA_RURI_MOVE_ART=ppaReadApprovedB64Parts([
   'ruri-move-1.b64','ruri-move-2.b64','ruri-move-3.b64'
 ]);
+const PPA_LEGENDARY_GEAR_ART=ppaReadApprovedB64Parts([
+  'legendary-gear-atlas.part00.b64',
+  'legendary-gear-atlas.part01.b64',
+  'legendary-gear-atlas.part02.b64',
+  'legendary-gear-atlas.part03.b64',
+  'legendary-gear-atlas.part04.b64',
+  'legendary-gear-atlas.part05.b64',
+  'legendary-gear-atlas.part06.b64',
+  'legendary-gear-atlas.part07.b64',
+  'legendary-gear-atlas.part08.b64'
+]);
 
 const publicDir = path.join(ROOT, 'public');
 const assetsDir = path.join(publicDir, 'assets');
@@ -58,6 +69,7 @@ fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
+fs.writeFileSync(path.join(assetsDir,'legendary-gear-atlas.webp'),PPA_LEGENDARY_GEAR_ART.buf);
 const fartGuardSources = [
   ['fart-tentacle.webp', 'fart-tentacle.webp'],
   ['fart-spider.webp', 'fart-spider.webp'],
@@ -5681,6 +5693,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
   const mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');
   const remotePet=fs.readFileSync(path.join(ROOT,'gateway/remote-pet-renderer.js'),'utf8');
   const ruriPet=fs.readFileSync(path.join(ROOT,'gateway/ruri-pet-runtime.js'),'utf8');
+  const legendaryGearArt=fs.readFileSync(path.join(ROOT,'gateway/legendary-gear-art.js'),'utf8');
   const onlineClient=fs.readFileSync(path.join(ROOT,'gateway/online-client.js'),'utf8');
   const ppaBridge=fs.readFileSync(path.join(ROOT,'gateway/ppa-bridge.js'),'utf8');
 
@@ -5719,6 +5732,13 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !realtimeServer.includes("cleanPet(a.pet || '') !== 'Великий Рури'") ||
       !realtimeServer.includes('maxRuriDamage')) {
     throw new Error('Great Ruri combat/render bridge incomplete');
+  }
+  if (!legendaryGearArt.includes("ATLAS_SRC='/assets/legendary-gear-atlas.webp'") ||
+      !legendaryGearArt.includes('var CELL=48,COLS=6,ROWS=8,OUT=96,PAD=8') ||
+      !legendaryGearArt.includes("var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7}") ||
+      !legendaryGearArt.includes("Object.defineProperty(it,'img'") ||
+      !legendaryGearArt.includes('PPA_HYDRATE_LEGENDARY_GEAR_ART')) {
+    throw new Error('Approved legendary gear art runtime incomplete');
   }
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
       !worldCombat.includes('PPA_PK_ACTIVE') ||
@@ -5838,6 +5858,7 @@ const filesToPublish = [
   ['gateway/remote-combat-fx.js','remote-combat-fx.js','Remote combat FX renderer missing'],
   ['gateway/remote-pet-renderer.js','remote-pet-renderer.js','Remote pet renderer missing'],
   ['gateway/ruri-pet-runtime.js','ruri-pet-runtime.js','Great Ruri runtime missing'],
+  ['gateway/legendary-gear-art.js','legendary-gear-art.js','Legendary gear art runtime missing'],
   ['gateway/realtime-identity-sync.js','realtime-identity-sync.js','Realtime identity sync missing'],
   ['gateway/class-sync-client.js','class-sync-client.js','Realtime class sync missing'],
   ['gateway/telegram-safe-ui.js','telegram-safe-ui.js','Telegram safe UI helper missing'],
@@ -5854,7 +5875,7 @@ const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
 output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('chat-ui.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
 <script src="${js('dungeon-drop-slots.js')}"></script>
 <script src="${js('boss-drop-boost.js')}"></script>
-<script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
+<script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -5876,6 +5897,7 @@ console.log('Remote player sprites: /game/remote-sprite-renderer.js');
 console.log('Remote combat FX: /game/remote-combat-fx.js');
 console.log('Remote pet renderer: /game/remote-pet-renderer.js');
 console.log('Great Ruri runtime: /game/ruri-pet-runtime.js');
+console.log('Legendary gear art: /game/legendary-gear-art.js');
 console.log('Realtime class sync: /game/class-sync-client.js');
 console.log('Social UI: /game/social-ui.js');
 console.log('Realtime identity sync: /game/realtime-identity-sync.js');
