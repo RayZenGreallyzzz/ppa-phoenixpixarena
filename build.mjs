@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v484-ruri-animation-audit-fix-20260922';
+const CLIENT_BUILD = 'v485-ruri-clean-sheet-size-fix-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -35,6 +35,21 @@ function ppaReadApprovedB64(name){
 }
 const PPA_APPROVED_SLAG_ART=ppaReadApprovedB64('fart-slag-reference.b64');
 const PPA_APPROVED_EMERALD_ART=ppaReadApprovedB64('emerald-smith-reference.b64');
+function ppaReadApprovedB64Parts(names){
+  const b64=names.map((name)=>{
+    const p=path.join(ROOT,'assets-src',name);
+    if(!fs.existsSync(p))throw new Error('Approved art source missing: '+name);
+    return fs.readFileSync(p,'utf8').trim();
+  }).join('').replace(/\s+/g,'');
+  const buf=Buffer.from(b64,'base64');
+  if(buf.length<500||buf.subarray(0,4).toString('ascii')!=='RIFF'||buf.subarray(8,12).toString('ascii')!=='WEBP'){
+    throw new Error('Approved multipart art is not valid WebP: '+names.join(','));
+  }
+  return {b64:b64,buf:buf};
+}
+const PPA_RURI_MOVE_ART=ppaReadApprovedB64Parts([
+  'ruri-move-1.b64','ruri-move-2.b64','ruri-move-3.b64'
+]);
 
 const publicDir = path.join(ROOT, 'public');
 const assetsDir = path.join(publicDir, 'assets');
@@ -42,6 +57,7 @@ const gameDir = path.join(publicDir, 'game');
 fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
+fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
 const fartGuardSources = [
   ['fart-tentacle.webp', 'fart-tentacle.webp'],
   ['fart-spider.webp', 'fart-spider.webp'],
@@ -5688,9 +5704,10 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
   }
   if (!ruriPet.includes("var NAME='Великий Рури'") ||
       !ruriPet.includes('ATTACK_COOLDOWN=2400') ||
-      !ruriPet.includes('RURI_DRAW_SIZE=68') ||
+      !ruriPet.includes('RURI_DRAW_SIZE=62') ||
       !ruriPet.includes('RURI_RENDER_INTERVAL=1000/30') ||
       !ruriPet.includes('MOVE_FRAME_MS=120') ||
+      !ruriPet.includes("MOVE_SRC='/assets/ruri-move.webp'") ||
       !ruriPet.includes('drawMoveFrame') ||
       !ruriPet.includes('function drawShadow') ||
       !ruriPet.includes("kind:'ruri'") ||
