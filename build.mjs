@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v493-legendary-real-files-audit-fix-20260922';
+const CLIENT_BUILD = 'v494-crisp-legendary-no-inventory-flash-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -80,9 +80,8 @@ await Promise.all(Object.entries(PPA_LEGENDARY_FILE_ROWS).flatMap(([cls,row])=>
     const outPath=path.join(PPA_LEGENDARY_DIR,cls+'-'+slot+'.webp');
     await sharp(PPA_LEGENDARY_GEAR_ART.buf)
       .extract({left:col*48,top:row*48,width:48,height:48})
-      .resize(80,80,{fit:'fill',kernel:'lanczos3'})
-      .extend({top:8,bottom:8,left:8,right:8,background:{r:0,g:0,b:0,alpha:0}})
-      .webp({quality:92,alphaQuality:100,smartSubsample:true})
+      .extend({top:4,bottom:4,left:4,right:4,background:{r:0,g:0,b:0,alpha:0}})
+      .webp({lossless:true,alphaQuality:100})
       .toFile(outPath);
   })
 ));
@@ -4951,12 +4950,34 @@ if(!output.includes("var PPA_RUNE_INFO_HOLD_MS=650") ||
 ppaPatchRegex(
   'character inventory item art uses canvas',
   /function itemVisual\(it,size\)\{[\s\S]*?\n\}\nfunction enhBadge/,
-  ppaEscapeSrcdocCode(`var CHAR_ITEM_ART_SEQ=0,CHAR_ITEM_ARTS={};
+  ppaEscapeSrcdocCode(`var CHAR_ITEM_ART_SEQ=0,CHAR_ITEM_ARTS={},CHAR_ITEM_IMAGE_CACHE={};
 
 function ppaRegisterItemArt(src,scale,filter){
   var key='a'+(++CHAR_ITEM_ART_SEQ);
   CHAR_ITEM_ARTS[key]={src:String(src||''),scale:Number(scale)||1,filter:String(filter||'none')};
   return key;
+}
+
+function ppaDrawItemCanvas(c,art,im,key){
+  try{
+    var rect=c.getBoundingClientRect();
+    var dpr=Math.min(2,window.devicePixelRatio||1);
+    var w=Math.max(32,Math.round((rect.width||96)*dpr));
+    var h=Math.max(32,Math.round((rect.height||96)*dpr));
+    c.width=w;c.height=h;
+    var ctx=c.getContext('2d');
+    ctx.clearRect(0,0,w,h);
+    ctx.imageSmoothingEnabled=true;
+    try{ctx.imageSmoothingQuality='high'}catch(_){}
+    try{ctx.filter=art.filter||'none'}catch(_){}
+    var iw=Math.max(1,im.naturalWidth||im.width||1);
+    var ih=Math.max(1,im.naturalHeight||im.height||1);
+    var fit=Math.min(w/iw,h/ih)*(art.scale||1);
+    var dw=iw*fit,dh=ih*fit;
+    ctx.drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh);
+    try{ctx.filter='none'}catch(_){}
+    delete CHAR_ITEM_ARTS[key];
+  }catch(_){c.__ppaPainted=false}
 }
 
 function ppaPaintItemCanvas(c){
@@ -4965,29 +4986,30 @@ function ppaPaintItemCanvas(c){
   var art=CHAR_ITEM_ARTS[key];
   if(!art||!art.src)return;
   c.__ppaPainted=true;
-  var im=new Image();
-  im.onload=function(){
-    try{
-      var rect=c.getBoundingClientRect();
-      var dpr=Math.min(2,window.devicePixelRatio||1);
-      var w=Math.max(32,Math.round((rect.width||96)*dpr));
-      var h=Math.max(32,Math.round((rect.height||96)*dpr));
-      c.width=w;c.height=h;
-      var ctx=c.getContext('2d');
-      ctx.clearRect(0,0,w,h);
-      ctx.imageSmoothingEnabled=true;
-      try{ctx.filter=art.filter||'none'}catch(_){}
-      var iw=Math.max(1,im.naturalWidth||im.width||1);
-      var ih=Math.max(1,im.naturalHeight||im.height||1);
-      var fit=Math.min(w/iw,h/ih)*(art.scale||1);
-      var dw=iw*fit,dh=ih*fit;
-      ctx.drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh);
-      try{ctx.filter='none'}catch(_){}
-      delete CHAR_ITEM_ARTS[key];
-    }catch(_){c.__ppaPainted=false}
-  };
-  im.onerror=function(){c.__ppaPainted=false};
-  im.src=art.src;
+  var rec=CHAR_ITEM_IMAGE_CACHE[art.src];
+  if(rec&&rec.ready&&rec.im){
+    ppaDrawItemCanvas(c,art,rec.im,key);
+    return;
+  }
+  if(!rec){
+    var im=new Image();
+    rec=CHAR_ITEM_IMAGE_CACHE[art.src]={im:im,ready:false,wait:[]};
+    im.onload=function(){
+      rec.ready=true;
+      var q=rec.wait.splice(0);
+      for(var i=0;i<q.length;i++){
+        var v=q[i];
+        if(v&&v.c&&v.c.isConnected)ppaDrawItemCanvas(v.c,v.art,im,v.key);
+      }
+    };
+    im.onerror=function(){
+      var q=rec.wait.splice(0);
+      for(var i=0;i<q.length;i++)if(q[i]&&q[i].c)q[i].c.__ppaPainted=false;
+      delete CHAR_ITEM_IMAGE_CACHE[art.src];
+    };
+    im.src=art.src;
+  }
+  rec.wait.push({c:c,art:art,key:key});
 }
 
 function ppaPaintItemCanvases(root){
@@ -5004,7 +5026,7 @@ try{
     ms.forEach(function(m){
       (m.addedNodes||[]).forEach(function(n){
         if(!n||n.nodeType!==1)return;
-        requestAnimationFrame(function(){ppaPaintItemCanvases(n)});
+        ppaPaintItemCanvases(n);
       });
     });
   }).observe(document.documentElement,{childList:true,subtree:true});
@@ -5094,6 +5116,8 @@ for(var i=0;i<100;i++){
 
 if(!output.includes("ppaItemCanvas") ||
    !output.includes("var key=ppaRegisterItemArt(it.img,sc,flt)") ||
+   !output.includes("CHAR_ITEM_IMAGE_CACHE") ||
+   !output.includes("function ppaDrawItemCanvas(c,art,im,key)") ||
    !output.includes("delete CHAR_ITEM_ARTS[key]") ||
    !output.includes("function bindCharItemHold(el,getItem,context)") ||
    !output.includes("itemInspectHoldStart") ||
