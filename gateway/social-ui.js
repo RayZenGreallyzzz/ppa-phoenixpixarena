@@ -223,7 +223,7 @@
   function renderPartyHud(){
     var hud=document.getElementById('ppaPartyHud');if(!hud)return;
     var members=party&&Array.isArray(party.members)?party.members:[];
-    if(!party||!party.partyId||members.length<2){hud.classList.remove('on');hud.innerHTML='';return}
+    if(!party||!party.partyId||members.length<2){hud.classList.remove('on');if(lastPartyHudHtml){lastPartyHudHtml='';hud.innerHTML=''}return}
     var sid=selfId(),leader=partyLeaderId(),canKick=sid&&sid===leader;
     var h='<div class="ppaPartyHudTitle">ГРУППА '+members.length+'</div>';
     members.forEach(function(m){
@@ -235,8 +235,8 @@
         (canKick&&id!==sid?'<button class="ppaPartyKick" data-hud-kick="'+esc(id)+'" type="button">×</button>':'')+
         '</div><div class="ppaPartyHp"><i style="width:'+pct+'%"></i></div><div class="ppaPartyMeta">УР. '+Math.max(1,Number(m.level)||1)+' · '+Math.round(v.hp)+'/'+Math.round(v.mhp)+(near?'':' · ДАЛЕКО')+'</div></div>';
     });
-    hud.innerHTML=h;hud.classList.add('on');
-    hud.querySelectorAll('[data-hud-kick]').forEach(function(b){b.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();kickMember(b.dataset.hudKick)})});
+    if(h!==lastPartyHudHtml){lastPartyHudHtml=h;hud.innerHTML=h}hud.classList.add('on');
+    if(h===lastPartyHudHtml)hud.querySelectorAll('[data-hud-kick]').forEach(function(b){if(b.__ppaKickBound)return;b.__ppaKickBound=1;b.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();kickMember(b.dataset.hudKick)})});
   }
 
   function renderFriends(){
@@ -327,7 +327,7 @@
 
   function boot(){
     if(booted)return;booted=true;ensureUi();armCanvasTap();loadFriends();renderPartyHud();
-    setInterval(function(){ensureFriendsTab();armCanvasTap();renderPartyHud()},500);
+    setInterval(function(){ensureFriendsTab();armCanvasTap();renderPartyHud()},900);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
