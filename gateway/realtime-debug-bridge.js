@@ -1,7 +1,7 @@
 (function(){
   'use strict';
 
-  var pingSamples=[];
+  var pingSamples=[],lastHtml='';
 
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function clsPing(v){return v==null?'d':(v<=90?'g':(v<=180?'w':'b'))}
@@ -55,15 +55,15 @@
       }
       var instLine=inst?('<div class="d">INSTANCE '+inst+' · '+roomPeers+' / '+cap+'</div>'):'';
 
-      box.innerHTML='<div><span class="'+fcls+'">FPS '+fps+'</span> &nbsp; <span class="'+clsPing(ping)+'">PING '+(ping==null?'—':ping+' ms')+'</span></div>'+
+      var html='<div><span class="'+fcls+'">FPS '+fps+'</span> &nbsp; <span class="'+clsPing(ping)+'">PING '+(ping==null?'—':ping+' ms')+'</span></div>'+
         '<div class="d">PLAYERS '+players+' · ROOM '+roomPeers+' · VISIBLE '+visible+' / '+drawn+'</div>'+instLine+authLine+
         '<div class="d">WS '+(d.connected?'✓':'×')+' · RX AGE '+(age==null?'—':age+' ms')+'</div>'+
         '<div class="d">BUILD '+esc(window.PPA_CLIENT_BUILD||'—')+'</div>'+
         '<div class="d">CLIENT '+esc(room)+'</div>'+
-        '<div class="d">SERVER '+esc(serverRoom)+'</div>'+
-        '<div class="d">BUILD '+esc(window.PPA_CLIENT_BUILD||'—')+'</div>'+mobLine;
+        '<div class="d">SERVER '+esc(serverRoom)+'</div>'+mobLine;
+      if(html!==lastHtml){lastHtml=html;box.innerHTML=html}
     }catch(_){}
   }
 
-  setInterval(refresh,750);
+  setInterval(refresh,1500);
 })();
