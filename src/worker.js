@@ -319,7 +319,8 @@ async function assetResponse(request, env) {
   // realtime/game bridge JS while multiplayer is under active development.
   const noStoreHtml = url.pathname === '/' || url.pathname === '/index.html' || url.pathname.endsWith('.html');
   const noStoreBridge = url.pathname.startsWith('/game/') && url.pathname.endsWith('.js');
-  if (!noStoreHtml && !noStoreBridge) return res;
+  const noStoreApprovedArt = url.pathname === '/assets/legendary-gear-atlas.webp';
+  if (!noStoreHtml && !noStoreBridge && !noStoreApprovedArt) return res;
 
   const headers = new Headers(res.headers);
   headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');

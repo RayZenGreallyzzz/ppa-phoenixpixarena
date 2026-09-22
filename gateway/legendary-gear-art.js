@@ -1,7 +1,7 @@
 (function(){
   'use strict';
 
-  var ATLAS_SRC='/assets/legendary-gear-atlas.webp';
+  var ATLAS_SRC='/assets/legendary-gear-atlas.webp?v=v491';
   var CELL=48,COLS=6,ROWS=8,OUT=96,PAD=8;
   var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
   var SLOT_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
@@ -10,7 +10,7 @@
     paladin:'paladin',паладин:'paladin',
     barbarian:'barbarian',berserk:'barbarian',berserker:'barbarian',варвар:'barbarian',берсерк:'barbarian',берсеркер:'barbarian',
     assassin:'assassin',ассасин:'assassin',асасин:'assassin',
-    gnome:'gnome',gunner:'gnome',cannoner:'gnome',канонир:'gnome',гном:'gnome',
+    gnome:'gnome',gunner:'gnome',cannoner:'gnome',канонир:'gnome',гном:'gnome','гном-канонир':'gnome',
     archer:'archer',лучник:'archer',
     mage:'mage',маг:'mage',
     priest:'priest',cleric:'priest',healer:'priest',жрец:'priest',клирик:'priest'

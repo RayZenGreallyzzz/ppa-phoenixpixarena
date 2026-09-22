@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v490-restore-known-good-legendary-smith-20260922';
+const CLIENT_BUILD = 'v491-legendary-atlas-cache-bust-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5733,7 +5733,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !realtimeServer.includes('maxRuriDamage')) {
     throw new Error('Great Ruri combat/render bridge incomplete');
   }
-  if (!legendaryGearArt.includes("ATLAS_SRC='/assets/legendary-gear-atlas.webp'") ||
+  if (!legendaryGearArt.includes("ATLAS_SRC='/assets/legendary-gear-atlas.webp?v=v491'") ||
       !legendaryGearArt.includes('var CELL=48,COLS=6,ROWS=8,OUT=96,PAD=8') ||
       !legendaryGearArt.includes("var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7}") ||
       !legendaryGearArt.includes("Object.defineProperty(it,'img'") ||
