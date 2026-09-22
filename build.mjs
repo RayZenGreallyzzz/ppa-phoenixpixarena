@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v473-grimoire-fps-cleanup-20260922';
+const CLIENT_BUILD = 'v474-grimoire-fps-cleanup-buildfix-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5482,12 +5482,12 @@ function skillUpgrade(id,bookRank){parent.postMessage({type:'grimoireAction',ski
 }
 
 if (!output.includes("function skillProgressRank(id){return Math.max(0,Math.min(5") ||
-    !output.includes("bookRank===2?Math.min(1,base+.06):base") ||
-    !output.includes("bookRank>=3?1:") ||
+    !output.includes("const PPA_SKILL_RULE_CACHE=(function()") ||
+    !output.includes("const chance=br>=3?1:(br===2?Math.min(1,base+.06):base);") ||
+    !output.includes("var chance=bookRank>=3?100:(bookRank===2?Math.min(100,base+6):base);") ||
     !output.includes("if(rank>=5)return null;") ||
     !output.includes("tryGrimoireUpgrade(d.skillId,d.bookRank)") ||
     !output.includes("function consumeRankedGrimoires(skillId,bookRank,cost)") ||
-    !output.includes("const PPA_SKILL_RULE_CACHE=(function()") ||
     !output.includes("book1:counts[1]||0,book2:counts[2]||0,book3:counts[3]||0") ||
     !output.includes("function romanRank(n){return ['','I','II','III','IV','V'][n]||''}") ||
     !output.includes(ppaEscapeSrcdocCode("skillUpgrade(x.id,Number(btn.getAttribute('data-book-rank'))||1)"))) {
