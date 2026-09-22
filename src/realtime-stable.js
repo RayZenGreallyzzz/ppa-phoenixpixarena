@@ -1931,6 +1931,24 @@ export class RealtimeHub extends BaseRealtimeHub {
         return;
       }
 
+      if (hitKind === 'ruri') {
+        if (cleanPet(a.pet || '') !== 'Великий Рури') return;
+        if (now - Number(a.lastRuriAttack || 0) < 1700) return;
+        const ax=Number(a.x),ay=Number(a.y),mx=Number(rec.x),my=Number(rec.y);
+        if (![ax,ay,mx,my].every(Number.isFinite)) {
+          this.sendMobAuthoritySnapshot(ws, room, now);
+          return;
+        }
+        if (Math.hypot(mx-ax,my-ay) > 300) {
+          this.sendMobAuthoritySnapshot(ws, room, now);
+          return;
+        }
+        const maxRuriDamage=Math.max(1,Math.ceil((Number(a.atk)||1)*0.31)+2);
+        if (amount > maxRuriDamage) return;
+        a.lastRuriAttack=now;
+        ws.serializeAttachment(a);
+      }
+
       if (hitKind === 'basic' && arenaIsMeleeClass(a)) {
         const ax=Number(a.x),ay=Number(a.y),mx=Number(rec.x),my=Number(rec.y);
         if (![ax,ay,mx,my].every(Number.isFinite)) {
