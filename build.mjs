@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v471-skill-rank-v-real-effects-20260922';
+const CLIENT_BUILD = 'v472-mobile-fps-recovery-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5568,6 +5568,8 @@ if (!output.includes("const V189_RANK=[0,1,2,3,4,5];") ||
   const bossDropBoost=fs.readFileSync(path.join(ROOT,'gateway/boss-drop-boost.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
+  const mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');
+  const remotePet=fs.readFileSync(path.join(ROOT,'gateway/remote-pet-renderer.js'),'utf8');
 
   if (worldCombat.includes('ppaWorldPkBtn') ||
       worldCombat.includes('PPA_WORLD_PK_TRY_BASIC_ATTACK') ||
@@ -5614,6 +5616,13 @@ if (!output.includes("const V189_RANK=[0,1,2,3,4,5];") ||
   }
   if (remoteSprite.includes('forcedAttack') || remoteSprite.includes('__ppaAttackDir')) {
     throw new Error('Remote attack FX is overriding movement facing again');
+  }
+  if (!mobilePerf.includes('__PPA_MOBILE_SPRITE_PERF_V2') ||
+      !mobilePerf.includes('imageCache') ||
+      !remoteSprite.includes('canvasHitMetrics(now)') ||
+      !dungeonMobEvents.includes('function requestSmooth()') ||
+      !remotePet.includes('installedPacket&&installedDraw')) {
+    throw new Error('Mobile FPS recovery patch incomplete');
   }
   if (remoteFx.includes("__ppaAttackUntil") || remoteFx.includes("r.anim='attack'") || remoteFx.includes("r.face=")) {
     throw new Error('Remote combat FX must stay visual-only');
