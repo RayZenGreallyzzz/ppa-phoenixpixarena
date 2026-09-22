@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v480-ruri-reward-audit-fix-20260922';
+const CLIENT_BUILD = 'v481-ruri-combat-render-fix-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5635,7 +5635,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'admin event reward premium storage stock',
   /function\s+storageMove\(mode,direction,idx,source\)\s*\{/,
-  "window.PPA_ADMIN_EVENT_REWARD_STOCK=function(){\n  try{\n    if(typeof normalizeStorage==='function')normalizeStorage();\n    if(!INV.storage)INV.storage={personal:[],clan:[],premium:[]};\n    if(!Array.isArray(INV.storage.premium))INV.storage.premium=[];\n    var box=INV.storage.premium,cap=50,added=0;\n    function has(id){return box.some(function(it){return it&&String(it.eventRewardId||'')===id})}\n    function push(it){if(!it||box.length>=cap||has(String(it.eventRewardId||'')))return false;box.push(it);added++;return true}\n    function makeGnome(slot){\n      var arr=(typeof SLOTS!=='undefined'&&Array.isArray(SLOTS))?SLOTS:null,saved=arr?arr.slice():null,it=null;\n      try{if(arr){arr.length=0;arr.push(slot)}it=(typeof genItem==='function')?genItem(20,false,'legendary'):null}\n      finally{if(arr&&saved){arr.length=0;for(var i=0;i<saved.length;i++)arr.push(saved[i])}}\n      if(!it)return null;\n      var id='event_gnome_legendary_'+slot+'_v1';\n      var base=(typeof CLASS_ITEM_NAMES!=='undefined'&&CLASS_ITEM_NAMES.gnome&&CLASS_ITEM_NAMES.gnome[slot])||it.name||'Предмет канонира';\n      var pref=(typeof RPREF!=='undefined'&&RPREF.legendary)||'Легендарный · ';\n      it.uid=id;it.eventRewardId=id;it.eventRewardTemplate=true;it.eventRewardStock=true;it.rewardSource='event';\n      it.slot=slot;it.rarity='legendary';it.enh=0;it.sell=0;\n      if(slot==='ring'){it.classKey='all';it.className='Все классы'}\n      else{\n        it.classKey='gnome';it.className=(typeof CLASS_DISPLAY!=='undefined'&&CLASS_DISPLAY.gnome)||'Гном-канонир';\n        it.name=pref+base;\n        try{var art=classGearArt('legendary','gnome',slot);if(art)it.img=art}catch(_){}\n      }\n      if(typeof syncItemBM==='function')syncItemBM(it);\n      return it;\n    }\n    var existingRuri=box.find(function(it){return it&&String(it.eventRewardId||'')==='event_ruri_legendary_v1'&&it.eventRewardStock===true});\n    if(existingRuri){\n      existingRuri.enh=0;existingRuri.ruriAttackScale=.20;ppaApplyRuriEnhancement(existingRuri);\n    }else{\n      var ruri={\n        uid:'event_ruri_legendary_v1',eventRewardId:'event_ruri_legendary_v1',\n        eventRewardTemplate:true,eventRewardStock:true,rewardSource:'event',\n        name:'Великий Рури',petName:'Великий Рури',slot:'pet',rarity:'legendary',enh:0,\n        classKey:'all',className:'Все классы',icon:'🦄',ic:'🦄',\n        img:PPA_RURI_DIR_ART.E,dirSprites:PPA_RURI_DIR_ART,stats:{},sell:0,\n        ruriLegendary:true,ruriAttackType:'magic-melee',ruriAttackScale:.20,\n        createdAt:Date.now(),weight:1\n      };\n      ppaApplyRuriEnhancement(ruri);push(ruri);\n    }\n    ['weapon','helmet','armor','gloves','ring','legs','boots'].forEach(function(slot){\n      var id='event_gnome_legendary_'+slot+'_v1';\n      if(has(id))return;\n      var it=makeGnome(slot);if(it)push(it);\n    });\n    return {added:added,total:box.length};\n  }catch(e){\n    console.warn('PPA event reward stock',e);\n    return {added:0,error:String(e&&e.message||e||'error')};\n  }\n};\nfunction storageMove(mode,direction,idx,source){"
+  "window.PPA_ADMIN_EVENT_REWARD_STOCK=function(){\n  try{\n    if(typeof normalizeStorage==='function')normalizeStorage();\n    if(!INV.storage)INV.storage={personal:[],clan:[],premium:[]};\n    if(!Array.isArray(INV.storage.premium))INV.storage.premium=[];\n    var box=INV.storage.premium,cap=50,added=0;\n    function has(id){return box.some(function(it){return it&&String(it.eventRewardId||'')===id})}\n    function push(it){if(!it||box.length>=cap||has(String(it.eventRewardId||'')))return false;box.push(it);added++;return true}\n    function makeGnome(slot){\n      var arr=(typeof SLOTS!=='undefined'&&Array.isArray(SLOTS))?SLOTS:null,saved=arr?arr.slice():null,it=null;\n      try{if(arr){arr.length=0;arr.push(slot)}it=(typeof genItem==='function')?genItem(20,false,'legendary'):null}\n      finally{if(arr&&saved){arr.length=0;for(var i=0;i<saved.length;i++)arr.push(saved[i])}}\n      if(!it)return null;\n      var id='event_gnome_legendary_'+slot+'_v1';\n      var base=(typeof CLASS_ITEM_NAMES!=='undefined'&&CLASS_ITEM_NAMES.gnome&&CLASS_ITEM_NAMES.gnome[slot])||it.name||'Предмет канонира';\n      var pref=(typeof RPREF!=='undefined'&&RPREF.legendary)||'Легендарный · ';\n      it.uid=id;it.eventRewardId=id;it.eventRewardTemplate=true;it.eventRewardStock=true;it.rewardSource='event';\n      it.slot=slot;it.rarity='legendary';it.enh=0;it.sell=0;\n      if(slot==='ring'){it.classKey='all';it.className='Все классы'}\n      else{\n        it.classKey='gnome';it.className=(typeof CLASS_DISPLAY!=='undefined'&&CLASS_DISPLAY.gnome)||'Гном-канонир';\n        it.name=pref+base;\n        try{var art=classGearArt('legendary','gnome',slot);if(art)it.img=art}catch(_){}\n      }\n      if(typeof syncItemBM==='function')syncItemBM(it);\n      return it;\n    }\n    var existingRuri=box.find(function(it){return it&&String(it.eventRewardId||'')==='event_ruri_legendary_v1'&&it.eventRewardStock===true});\n    if(existingRuri){\n      existingRuri.enh=0;existingRuri.ruriAttackScale=.20;ppaApplyRuriEnhancement(existingRuri);\n    }else{\n      var ruri={\n        uid:'event_ruri_legendary_v1',eventRewardId:'event_ruri_legendary_v1',\n        eventRewardTemplate:true,eventRewardStock:true,rewardSource:'event',\n        name:'Великий Рури',petName:'Великий Рури',slot:'pet',rarity:'legendary',enh:0,\n        classKey:'all',className:'Все классы',icon:'🦄',ic:'🦄',\n        img:PPA_RURI_DIR_ART.S,dirSprites:PPA_RURI_DIR_ART,stats:{},sell:0,\n        ruriLegendary:true,ruriAttackType:'magic-melee',ruriAttackScale:.20,\n        createdAt:Date.now(),weight:1\n      };\n      ppaApplyRuriEnhancement(ruri);push(ruri);\n    }\n    ['weapon','helmet','armor','gloves','ring','legs','boots'].forEach(function(slot){\n      var id='event_gnome_legendary_'+slot+'_v1';\n      if(has(id))return;\n      var it=makeGnome(slot);if(it)push(it);\n    });\n    return {added:added,total:box.length};\n  }catch(e){\n    console.warn('PPA event reward stock',e);\n    return {added:0,error:String(e&&e.message||e||'error')};\n  }\n};\nfunction storageMove(mode,direction,idx,source){"
 );
 if(!output.includes("PPA_RURI_DIR_ART") ||
    !output.includes("ppaApplyRuriEnhancement") ||
@@ -5664,6 +5664,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
   const mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');
   const remotePet=fs.readFileSync(path.join(ROOT,'gateway/remote-pet-renderer.js'),'utf8');
+  const ruriPet=fs.readFileSync(path.join(ROOT,'gateway/ruri-pet-runtime.js'),'utf8');
   const onlineClient=fs.readFileSync(path.join(ROOT,'gateway/online-client.js'),'utf8');
   const ppaBridge=fs.readFileSync(path.join(ROOT,'gateway/ppa-bridge.js'),'utf8');
 
@@ -5684,6 +5685,16 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !onlineClient.includes('PPA_ADMIN_EVENT_REWARD_STOCK') ||
       !ppaBridge.includes('ppaAdminEventRewardStockAccess')) {
     throw new Error('Event reward stock admin bridge incomplete');
+  }
+  if (!ruriPet.includes("var NAME='Великий Рури'") ||
+      !ruriPet.includes('ATTACK_COOLDOWN=2400') ||
+      !ruriPet.includes("kind:'ruri'") ||
+      !ruriPet.includes('PPA_RURI_DIAG') ||
+      !ruriPet.includes('a.down=a.front=a.south=a.S') ||
+      !realtimeServer.includes("hitKind === 'ruri'") ||
+      !realtimeServer.includes("cleanPet(a.pet || '') !== 'Великий Рури'") ||
+      !realtimeServer.includes('maxRuriDamage')) {
+    throw new Error('Great Ruri combat/render bridge incomplete');
   }
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
       !worldCombat.includes('PPA_PK_ACTIVE') ||
@@ -5802,6 +5813,7 @@ const filesToPublish = [
   ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],
   ['gateway/remote-combat-fx.js','remote-combat-fx.js','Remote combat FX renderer missing'],
   ['gateway/remote-pet-renderer.js','remote-pet-renderer.js','Remote pet renderer missing'],
+  ['gateway/ruri-pet-runtime.js','ruri-pet-runtime.js','Great Ruri runtime missing'],
   ['gateway/realtime-identity-sync.js','realtime-identity-sync.js','Realtime identity sync missing'],
   ['gateway/class-sync-client.js','class-sync-client.js','Realtime class sync missing'],
   ['gateway/telegram-safe-ui.js','telegram-safe-ui.js','Telegram safe UI helper missing'],
@@ -5818,7 +5830,7 @@ const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
 output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('chat-ui.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
 <script src="${js('dungeon-drop-slots.js')}"></script>
 <script src="${js('boss-drop-boost.js')}"></script>
-<script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
+<script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -5839,6 +5851,7 @@ console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
 console.log('Remote combat FX: /game/remote-combat-fx.js');
 console.log('Remote pet renderer: /game/remote-pet-renderer.js');
+console.log('Great Ruri runtime: /game/ruri-pet-runtime.js');
 console.log('Realtime class sync: /game/class-sync-client.js');
 console.log('Social UI: /game/social-ui.js');
 console.log('Realtime identity sync: /game/realtime-identity-sync.js');
