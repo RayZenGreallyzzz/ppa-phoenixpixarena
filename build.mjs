@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v479-ruri-reward-plus0-20260922';
+const CLIENT_BUILD = 'v480-ruri-reward-audit-fix-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5642,7 +5642,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
    !output.includes("event_ruri_legendary_v1") ||
    !output.includes("rarity:'legendary',enh:0") ||
    !output.includes("existingRuri.enh=0") ||
-   !output.includes("event_gnome_legendary_weapon_v1") ||
+   !output.includes("var id='event_gnome_legendary_'+slot+'_v1'") ||
    !output.includes("window.PPA_ADMIN_EVENT_REWARD_STOCK")) {
   throw new Error('Great Ruri / event reward stock patch incomplete');
 }
