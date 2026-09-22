@@ -9,15 +9,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect grimoireRankDrops
+      - name: Inspect all skill scaling
         shell: python
         run: |
-          import gzip, pathlib
+          import gzip, pathlib, re
           src=gzip.decompress(b"".join(pathlib.Path(f"PPA{i:02d}.bin").read_bytes() for i in range(1,13))).decode('utf-8')
-          term='grimoireRankDrops'
-          pos=0;n=0
-          while True:
-              i=src.find(term,pos)
-              if i<0 or n>=50: break
-              print("\n--- "+str(i)+" ---\n"+src[max(0,i-1800):min(len(src),i+4200)])
-              pos=i+len(term);n+=1
+
+          print("===== SKILL RANK CALL SITES =====")
+          for m in re.finditer(r"skillRank\(([^\)]*)\)",src):
+              i=m.start()
+              print("\n--- "+str(i)+" ---\n"+src[max(0,i-700):min(len(src),i+1800)])
+
+          print("\n===== FUNCTIONS WITH rank PARAM =====")
+          for m in re.finditer(r"function\s+([A-Za-z0-9_]+)\s*\(([^\)]*\brank\b[^\)]*)\)\s*\{",src):
+              name=m.group(1); i=m.start(); depth=0; quote=None; esc=False
+              for j in range(m.end()-1,min(len(src),i+18000)):
+                  ch=src[j]
+                  if quote:
+                      if esc: esc=False
+                      elif ch=='\\': esc=True
+                      elif ch==quote: quote=None
+                      continue
+                  if ch in ("'",'"',chr(96)): quote=ch; continue
+                  if ch=='{': depth+=1
+                  elif ch=='}':
+                      depth-=1
+                      if depth==0:
+                          print("\n===== "+name+" =====\n"+src[i:j+1]); break
+
+          print("\n===== GRIMOIRE CATALOG =====")
+          m=re.search(r"(?:const|let|var)\s+GRIMOIRE_CATALOG\s*=\s*\{",src)
+          if m: print(src[m.start():m.start()+26000])
