@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect exact dungeon drop curves
+      - name: Inspect book drop functions
         shell: python
         run: |
           import gzip, pathlib, re
@@ -18,10 +18,9 @@ jobs:
           def block(name):
               m=re.search(r"function\s+"+re.escape(name)+r"\s*\([^)]*\)\s*\{",src)
               if not m:
-                  print("\n===== "+name+" NOT FOUND =====")
-                  return
+                  print("\n===== "+name+" NOT FOUND ====="); return
               i=m.start(); depth=0; quote=None; esc=False
-              for j in range(m.end()-1,min(len(src),i+20000)):
+              for j in range(m.end()-1,min(len(src),i+25000)):
                   ch=src[j]
                   if quote:
                       if esc: esc=False
@@ -37,20 +36,9 @@ jobs:
                           print("\n===== "+name+" =====\n"+src[i:j+1]); return
 
           for n in [
-              'normalGearDropChances',
-              'v232Blue2130','v232Blue3140','v232Epic3140',
-              'v232BlueRes2130','v232BlueRes3140',
+              'v232RollTypedBook','v232PushTypedBook','v232PushBook',
               'v232ActiveBookChance','v232PassiveBookChance',
-              'v271Drop4160','v271MakeDungeon41LegendaryItem'
+              'v232BookRankForLevel','v271PushDungeon41Book',
+              'v271Drop4160','pushGrimoireDrop'
           ]:
               block(n)
-
-          print("\n===== FINAL window.mobDropInfo ASSIGNMENTS =====")
-          hits=list(re.finditer(r"window\.mobDropInfo\s*=\s*function\s*\(e\)\s*\{",src))
-          for idx,m in enumerate(hits[-4:],1):
-              print("\n--- mobDropInfo assignment "+str(idx)+" ---\n"+src[m.start():min(len(src),m.start()+9000)])
-
-          print("\n===== ALL_GRIMOIRES SUMMARY =====")
-          m=re.search(r"(?:const|let|var)\s+ALL_GRIMOIRES\s*=\s*\[",src)
-          if m:
-              print(src[m.start():min(len(src),m.start()+22000)])
