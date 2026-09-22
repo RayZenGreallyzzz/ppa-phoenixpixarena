@@ -80,6 +80,42 @@
     return .007+(lv-21)*(.015/39); // 0.7% at 21 -> 2.2% at 60
   }
 
+  function activeBookChance(lv){
+    lv=clamp(Math.floor(lv),1,60);
+    if(lv<=20)return .00004; // 0.004%
+    if(lv<=30)return .00005; // 0.005%
+    if(lv<=40)return .00006; // 0.006%
+    if(lv<=50)return .00007+(lv-41)*((.00011-.00007)/9); // 0.007% -> 0.011%
+    return .00012+(lv-51)*((.00018-.00012)/9);           // 0.012% -> 0.018%
+  }
+  function passiveBookChance(lv){
+    lv=clamp(Math.floor(lv),1,60);
+    if(lv<=20)return .00003; // 0.003%
+    if(lv<=30)return .00004; // 0.004%
+    if(lv<=40)return .00005; // 0.005%
+    if(lv<=50)return .00006+(lv-41)*((.00010-.00006)/9); // 0.006% -> 0.010%
+    return .00011+(lv-51)*((.00017-.00011)/9);           // 0.011% -> 0.017%
+  }
+  function bookRankWeights(lv){
+    lv=clamp(Math.floor(lv),1,60);
+    if(lv<=30)return {r1:100,r2:0,r3:0};
+    if(lv<=40)return {r1:50,r2:50,r3:0};
+    var t;
+    if(lv<=50){
+      t=(lv-41)/9;
+      return {r1:60-15*t,r2:35+5*t,r3:5+10*t};
+    }
+    t=(lv-51)/9;
+    return {r1:40-20*t,r2:40,r3:20+20*t};
+  }
+  function bookRankText(lv){
+    var w=bookRankWeights(lv);
+    function f(n){return (Math.round(n*10)/10).toFixed(1).replace(/\.0$/,'')+'%'}
+    if(w.r3<=0&&w.r2<=0)return 'I · 100%';
+    if(w.r3<=0)return 'I '+f(w.r1)+' · II '+f(w.r2);
+    return 'I '+f(w.r1)+' · II '+f(w.r2)+' · III '+f(w.r3);
+  }
+
   function parsePct(v){
     var m=String(v==null?'':v).replace(',','.').match(/([0-9]+(?:\.[0-9]+)?)\s*%/);
     if(!m)return null;
@@ -150,8 +186,10 @@
   function appendBookType(out,type,totalChance){
     var pool=booksOfType(type);
     if(!pool.length||!(totalChance>0))return false;
-    var each=totalChance/pool.length;
-    for(var i=0;i<pool.length;i++)out.push([bookText(pool[i],type),fmtProb(each)]);
+    // The percent is the approved chance of the active/passive book roll.
+    // After that roll succeeds, one concrete title is selected from this pool.
+    // Do not divide the displayed chance by the number of book titles.
+    for(var i=0;i<pool.length;i++)out.push([bookText(pool[i],type),fmtProb(totalChance)]);
     return true;
   }
   function miniBossAtLeastOne(perPick){
@@ -165,7 +203,7 @@
     if(!Array.isArray(rows))return rows;
     var active=booksOfType('active'),passive=booksOfType('passive');
     if(!active.length||!passive.length)return rows;
-    var out=[],lv=Math.max(1,entityLevel(e)||1);
+    var out=[],lv=Math.max(1,entityLevel(e)||1),expandedPool=false;
 
     for(var i=0;i<rows.length;i++){
       var row=rows[i];
@@ -173,10 +211,10 @@
       var label=String(row[0]||''),low=label.toLowerCase(),chance=parsePct(row[1]);
 
       if(low==='активная книга'&&chance!=null){
-        appendBookType(out,'active',chance);continue;
+        appendBookType(out,'active',chance);expandedPool=true;continue;
       }
       if(low==='пассивная книга'&&chance!=null){
-        appendBookType(out,'passive',chance);continue;
+        appendBookType(out,'passive',chance);expandedPool=true;continue;
       }
 
       // Phoenix: a successful grimoire roll picks uniformly from all books.
@@ -210,6 +248,7 @@
 
       out.push(row);
     }
+    if(expandedPool)out.push(['Выбор конкретной книги','случайно из указанного пула после успешного броска']);
     return out;
   }
 
@@ -230,7 +269,7 @@
       rows.push(['Обычный ресурс',fmtProb(common)]);
       rows.push(['Зелёный ресурс',fmtProb(green)]);
       rows.push(['Обычный камень заточки','0.12%']);
-      rows.push(['Активная книга','0.004%'],['Пассивная книга','0.003%'],['Ранг книги','I']);
+      rows.push(['Активная книга',fmtProb(activeBookChance(lv))],['Пассивная книга',fmtProb(passiveBookChance(lv))],['Ранг книги',bookRankText(lv)]);
       return rows;
     }
 
@@ -238,7 +277,7 @@
       rows.push(['Синий шмот/оружие',fmtProb(blue2130(lv))]);
       rows.push(['Обычный ресурс','12%'],['Зелёный ресурс','6%'],['Синий ресурс',fmtProb(blueResource2160(lv))]);
       rows.push(['Обычный камень заточки','0.35%'],['Премиум-монета удачи','0.015%']);
-      rows.push(['Активная книга','0.006%'],['Пассивная книга','0.007%'],['Ранг книги','I']);
+      rows.push(['Активная книга',fmtProb(activeBookChance(lv))],['Пассивная книга',fmtProb(passiveBookChance(lv))],['Ранг книги',bookRankText(lv)]);
       return rows;
     }
 
@@ -248,7 +287,7 @@
       rows.push(['Обычный ресурс','18%'],['Зелёный ресурс','12%'],['Синий ресурс',fmtProb(blueResource2160(lv))]);
       rows.push(['Обычный камень заточки','1.5%'],['Премиум руна заточки','0.10%'],['Премиум камень заточки','0.03%']);
       rows.push(['Премиум-монета удачи','0.025%'],['Свиток телепорта','0.35%'],['Премиум банка HP','0.15%'],['Премиум банка MP','0.15%']);
-      rows.push(['Активная книга','0.006%'],['Пассивная книга','0.007%'],['Ранг книги','I / II · случайно']);
+      rows.push(['Активная книга',fmtProb(activeBookChance(lv))],['Пассивная книга',fmtProb(passiveBookChance(lv))],['Ранг книги',bookRankText(lv)]);
       return rows;
     }
 
@@ -259,7 +298,7 @@
     rows.push(['Обычный ресурс','18%'],['Зелёный ресурс','12%'],['Синий ресурс',fmtProb(blueResource2160(lv))]);
     rows.push(['Обычный камень заточки','1.5%'],['Премиум руна заточки','0.10%'],['Премиум камень заточки','0.03%']);
     rows.push(['Премиум-монета удачи','0.025%'],['Свиток телепорта','0.35%'],['Премиум банка HP','0.15%'],['Премиум банка MP','0.15%']);
-    rows.push(['Активная книга','0.006%'],['Пассивная книга','0.007%'],['Ранг книги','I / II / III · случайно']);
+    rows.push(['Активная книга',fmtProb(activeBookChance(lv))],['Пассивная книга',fmtProb(passiveBookChance(lv))],['Ранг книги',bookRankText(lv)]);
     return rows;
   }
 

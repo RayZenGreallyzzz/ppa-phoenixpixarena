@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v467-approved-drop-tables-20260922';
+const CLIENT_BUILD = 'v468-book-rank-curve-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1601,18 +1601,43 @@ ppaPatchRegex(
   `function v232ActiveBookChance(lv){
   lv=Math.max(1,Math.min(60,Math.floor(Number(lv)||1)));
   if(lv<=20)return .00004; // 0.004%
-  return .00006;           // 0.006% for 21-60
+  if(lv<=30)return .00005; // 0.005%
+  if(lv<=40)return .00006; // 0.006%
+  if(lv<=50)return .00007+(lv-41)*((.00011-.00007)/9); // 0.007% -> 0.011%
+  return .00012+(lv-51)*((.00018-.00012)/9);           // 0.012% -> 0.018%
 }
 function v232PassiveBookChance(lv){
   lv=Math.max(1,Math.min(60,Math.floor(Number(lv)||1)));
   if(lv<=20)return .00003; // 0.003%
-  return .00007;           // 0.007% for 21-60
+  if(lv<=30)return .00004; // 0.004%
+  if(lv<=40)return .00005; // 0.005%
+  if(lv<=50)return .00006+(lv-41)*((.00010-.00006)/9); // 0.006% -> 0.010%
+  return .00011+(lv-51)*((.00017-.00011)/9);           // 0.011% -> 0.017%
+}
+function v232BookRankWeights(lv){
+  lv=Math.max(1,Math.min(60,Math.floor(Number(lv)||1)));
+  if(lv<=30)return {r1:1,r2:0,r3:0};
+  if(lv<=40)return {r1:.50,r2:.50,r3:0};
+  let t;
+  if(lv<=50){
+    t=(lv-41)/9;
+    return {r1:.60-.15*t,r2:.35+.05*t,r3:.05+.10*t};
+  }
+  t=(lv-51)/9;
+  return {r1:.40-.20*t,r2:.40,r3:.20+.20*t};
 }
 function v232BookRankForLevel(lv){
-  lv=Math.max(1,Math.min(60,Math.floor(Number(lv)||1)));
-  if(lv<=30)return 1;
-  if(lv<=40)return Math.random()<.5?1:2;
-  return 1+Math.floor(Math.random()*3);
+  const w=v232BookRankWeights(lv),r=Math.random();
+  if(r<w.r1)return 1;
+  if(r<w.r1+w.r2)return 2;
+  return 3;
+}
+function v232BookRankInfoForLevel(lv){
+  const w=v232BookRankWeights(lv);
+  const p=n=>(Math.round(n*1000)/10).toFixed(1).replace(/\\.0$/,'')+'%';
+  if(w.r3<=0&&w.r2<=0)return 'I · 100%';
+  if(w.r3<=0)return 'I '+p(w.r1)+' / II '+p(w.r2);
+  return 'I '+p(w.r1)+' / II '+p(w.r2)+' / III '+p(w.r3);
 }`
 );
 
@@ -1635,7 +1660,7 @@ ppaPatchRegex(
 );
 
 ppaPatchRegex(
-  'books 41-60 exact active passive random rank I-III',
+  'books 41-60 progressive I-II-III ranks',
   /if\(Math\.random\(\)<V271_D41_BOOK_II_III_CHANCE\)v271PushDungeon41Book\(e\);/,
   "v232RollTypedBook(e,v232ActiveBookChance(Number(e&&e.lvl)||41),v232PassiveBookChance(Number(e&&e.lvl)||41),mul,function(){return v232BookRankForLevel(Number(e&&e.lvl)||41)});"
 );
@@ -1643,34 +1668,38 @@ ppaPatchRegex(
 ppaPatchRegex(
   'book inspect 1-20 exact chances and rank',
   /rows\.push\(\['Активная книга','0\.003%'\],\['Пассивная книга','0\.006%'\]\);/,
-  "rows.push(['Активная книга','0.004%'],['Пассивная книга','0.003%'],['Ранг книги','I']);"
+  "rows.push(['Активная книга','0.004%'],['Пассивная книга','0.003%'],['Ранг книги','I · 100%']);"
 );
 
 ppaPatchRegex(
   'book inspect 21-30 rank I',
   /(\['Активная книга',v232Pct\(v232ActiveBookChance\(lv\)\)\],\['Пассивная книга',v232Pct\(v232PassiveBookChance\(lv\)\)\])(\s*\]\s*;)/,
-  "$1,['Ранг книги','I']$2"
+  "$1,['Ранг книги',v232BookRankInfoForLevel(lv)]$2"
 );
 
 ppaPatchRegex(
   'book inspect 31-40 rank I-II',
   /(\['Активная книга',v232Pct\(v232ActiveBookChance\(lv\)\)\],\['Пассивная книга',v232Pct\(v232PassiveBookChance\(lv\)\)\])(\s*\]\s*;)/,
-  "$1,['Ранг книги','I / II · случайно']$2"
+  "$1,['Ранг книги',v232BookRankInfoForLevel(lv)]$2"
 );
 
 ppaPatchRegex(
-  'book inspect 41-60 normal',
+  'book inspect 41-60 progressive',
   /\['Книга навыка II–III','0\.016%'\],\s*\['Ранг книги','II \/ III · случайно'\]/g,
-  "['Активная книга','0.006%'],['Пассивная книга','0.007%'],['Ранг книги','I / II / III · случайно']",
+  "['Активная книга',v232Pct(v232ActiveBookChance(Number(e&&e.lvl)||41))],['Пассивная книга',v232Pct(v232PassiveBookChance(Number(e&&e.lvl)||41))],['Ранг книги',v232BookRankInfoForLevel(Number(e&&e.lvl)||41)]",
   true
 );
 
 if (!output.includes("if(lv<=20)return .00004; // 0.004%") ||
-    !output.includes("if(lv<=20)return .00003; // 0.003%") ||
-    !output.includes("return .00006;           // 0.006% for 21-60") ||
-    !output.includes("return .00007;           // 0.007% for 21-60") ||
-    !output.includes("function v232BookRankForLevel(lv)")) {
-  throw new Error('Book bracket rules did not apply');
+    !output.includes("if(lv<=30)return .00005; // 0.005%") ||
+    !output.includes("if(lv<=40)return .00006; // 0.006%") ||
+    !output.includes("if(lv<=30)return .00004; // 0.004%") ||
+    !output.includes("if(lv<=40)return .00005; // 0.005%") ||
+    !output.includes("if(lv<=50)return .00007+(lv-41)*((.00011-.00007)/9)") ||
+    !output.includes("return .00012+(lv-51)*((.00018-.00012)/9)") ||
+    !output.includes("function v232BookRankWeights(lv)") ||
+    !output.includes("function v232BookRankInfoForLevel(lv)")) {
+  throw new Error('Book bracket/rank rules did not apply');
 }
 
 /* ======================================================================== */
@@ -1679,18 +1708,13 @@ if (!output.includes("if(lv<=20)return .00004; // 0.004%") ||
 ppaPatchRegex(
   'elite book ranks obey dungeon bracket',
   /function\s+v232EliteBookRank\(lv\)\s*\{[\s\S]*?\}/,
-  `function v232EliteBookRank(lv){
-  lv=Math.max(1,Math.min(60,Math.floor(Number(lv)||1)));
-  if(lv<=30)return 1;
-  if(lv<=40)return Math.random()<.5?1:2;
-  return 1+Math.floor(Math.random()*3);
-}`
+  `function v232EliteBookRank(lv){return v232BookRankForLevel(lv)}`
 );
 
 ppaPatchRegex(
   'elite book inspect rank caps',
   /\['Ранг книги',lv<=30\?'I 70% \/ II 30%':'I 55% \/ II 35% \/ III 10%'\]/,
-  "['Ранг книги',lv<=30?'I':'I / II · случайно']"
+  "['Ранг книги',v232BookRankInfoForLevel(lv)]"
 );
 
 /* ======================================================================== */
@@ -5355,6 +5379,13 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
       !dungeonDropSlotsAudit.includes('var EPIC_4160_START=0.000018') ||
       !dungeonDropSlotsAudit.includes('var EPIC_4160_END=0.000040') ||
       !dungeonDropSlotsAudit.includes('var LEGENDARY_5160_CHANCE=0.00000013') ||
+      !dungeonDropSlotsAudit.includes("if(lv<=30)return .00005; // 0.005%") ||
+      !dungeonDropSlotsAudit.includes("if(lv<=40)return .00006; // 0.006%") ||
+      !dungeonDropSlotsAudit.includes("if(lv<=30)return .00004; // 0.004%") ||
+      !dungeonDropSlotsAudit.includes("if(lv<=40)return .00005; // 0.005%") ||
+      !dungeonDropSlotsAudit.includes('function bookRankWeights(lv)') ||
+      !dungeonDropSlotsAudit.includes('Do not divide the displayed chance by the number of book titles') ||
+      dungeonDropSlotsAudit.includes('var each=totalChance/pool.length') ||
       !dungeonDropSlotsAudit.includes('__ppaPhoenixNoBlueGear') ||
       !dungeonDropSlotsAudit.includes('removePhoenixBlueGear')) {
     throw new Error('Approved 11-60 dungeon drop tables are incomplete');
