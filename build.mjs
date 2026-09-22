@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v470-real-skill-iv-effects-20260922';
+const CLIENT_BUILD = 'v471-skill-rank-v-real-effects-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5285,14 +5285,14 @@ if(!output.includes("function ppaSetBagVisualSelection(i)") ||
 /* ======================================================================== */
 
 
-/* === RANKED GRIMOIRES + SKILL RANK IV =================================== */
-// Progression can reach IV, while the existing combat-facing skillRank()
+/* === RANKED GRIMOIRES + SKILL RANK V ==================================== */
+// Progression can reach V, while the existing combat-facing skillRank()
 // stays capped at III so old rank-indexed combat formulas cannot break.
 ppaPatchRegex(
   'ranked grimoire progression helpers',
   /function\s+skillRank\(id\)\{return Math\.max\(0,Math\.min\(3,\(INV\.skillRanks&&INV\.skillRanks\[id\]\)\|\|0\)\);\}\s*function\s+skillRule\(rank\)\{[\s\S]*?return null;\s*\}/,
   `function skillRank(id){return Math.max(0,Math.min(3,(INV.skillRanks&&INV.skillRanks[id])||0));}
-function skillProgressRank(id){return Math.max(0,Math.min(4,(INV.skillRanks&&INV.skillRanks[id])||0));}
+function skillProgressRank(id){return Math.max(0,Math.min(5,(INV.skillRanks&&INV.skillRanks[id])||0));}
 function grimoireBookCounts(skillId){
   const total=Math.max(0,Math.floor(Number(INV.grimoires&&INV.grimoires[skillId])||0));
   const raw=(INV.grimoireRankDrops&&INV.grimoireRankDrops[skillId])||{};
@@ -5302,9 +5302,9 @@ function grimoireBookCounts(skillId){
   return {1:r1,2:r2,3:r3,total:total};
 }
 function skillRule(rank,bookRank){
-  rank=Math.max(0,Math.min(4,Math.floor(Number(rank)||0)));
+  rank=Math.max(0,Math.min(5,Math.floor(Number(rank)||0)));
   bookRank=Math.max(1,Math.min(3,Math.floor(Number(bookRank)||1)));
-  if(rank>=4)return null;
+  if(rank>=5)return null;
   const cost=rank<=0?1:(rank===1?2:4);
   const base=rank<=0?1:(rank===1?.45:.40);
   const chance=bookRank>=3?1:(bookRank===2?Math.min(1,base+.06):base);
@@ -5332,14 +5332,14 @@ ppaPatchRegex(
   if(sk.classKey!==ck){showPickup('Гримуар другого класса: '+sk.className,'#ff8888');return;}
   bookRank=Math.max(1,Math.min(3,Math.floor(Number(bookRank)||1)));
   var rank=skillProgressRank(skillId),rule=skillRule(rank,bookRank);
-  if(!rule){showPickup(sk.n+' уже IV ранга','#ffd168');return;}
+  if(!rule){showPickup(sk.n+' уже V ранга','#ffd168');return;}
   var counts=grimoireBookCounts(skillId),have=counts[bookRank]||0;
   if(have<rule.cost){showPickup('Нужно '+rule.cost+' книг '+['','I','II','III'][bookRank]+' ранга · есть '+have,'#ffb36a');return;}
   if(!consumeRankedGrimoires(skillId,bookRank,rule.cost))return;
   var ok=Math.random()<rule.chance;
   if(ok){
     INV.skillRanks[skillId]=rule.next;
-    var roman=['','I','II','III','IV'][rule.next];
+    var roman=['','I','II','III','IV','V'][rule.next];
     showPickup(sk.n+' · ранг '+roman+' открыт!','#8dff9a');
   }else{
     showPickup('Неудача · '+rule.cost+' книг '+['','I','II','III'][bookRank]+' ранга сгорели','#ff6868');
@@ -5369,16 +5369,16 @@ ppaPatchRegex(
       return {id:x.id,n:x.n,ic:x.ic,d:x.d,type:x.type,rank:rank,count:count,
         bookCounts:counts,bookOptions:bookOptions,
         need:rule?rule.cost:0,chance:rule?Math.round(rule.chance*100):0,
-        max:rank>=4,classKey:ck,className:sk?sk.name:'',`
+        max:rank>=5,classKey:ck,className:sk?sk.name:'',`
 );
 
 ppaPatchRegex(
-  'skill hud roman IV',
+  'skill hud roman V',
   /function\s+romanRank\(n\)\{return \['','I','II','III'\]\[n\]\|\|''\}/,
-  "function romanRank(n){return ['','I','II','III','IV'][n]||''}"
+  "function romanRank(n){return ['','I','II','III','IV','V'][n]||''}"
 );
 ppaPatchRegex(
-  'skill hud progression rank IV',
+  'skill hud progression rank V',
   /let sk=c&&c\.active\?c\.active\[i\]:null,rank=sk\?skillRank\(sk\.id\):0;/,
   "let sk=c&&c.active?c.active[i]:null,rank=sk?skillProgressRank(sk.id):0;"
 );
@@ -5395,7 +5395,7 @@ function skillBtnText(x){
 }
 function skillUpgrade(id){parent.postMessage({type:'grimoireAction',skillId:id},'*')}`;
   const newHead=`function pips(n){
-  var s='<div class="rankPips">';for(var i=0;i<4;i++)s+='<span class="'+(i<n?'on':'')+'"></span>';return s+'</div>';
+  var s='<div class="rankPips">';for(var i=0;i<5;i++)s+='<span class="'+(i<n?'on':'')+'"></span>';return s+'</div>';
 }
 function skillBookOption(x,bookRank){
   var a=Array.isArray(x.bookOptions)?x.bookOptions:[];
@@ -5403,7 +5403,7 @@ function skillBookOption(x,bookRank){
   return {bookRank:bookRank,count:0,need:0,chance:0,max:true};
 }
 function skillUpgradeButtons(x){
-  if((x.rank||0)>=4)return '<div class="upgradeBtn">МАКС. РАНГ IV</div>';
+  if((x.rank||0)>=5)return '<div class="upgradeBtn">МАКС. РАНГ V</div>';
   var romans=['','I','II','III'],html='<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;margin-top:5px">';
   for(var br=1;br<=3;br++){
     var o=skillBookOption(x,br);
@@ -5421,7 +5421,7 @@ function skillUpgrade(id,bookRank){parent.postMessage({type:'grimoireAction',ski
   const oldLine=`(rank?(label+' · ранг '+['','I','II','III'][rank]+' · '+((x.preview||[])[rank-1]||x.d||'')):
           (label+' не изучен · Ранг I: '+((x.preview||[])[0]||x.d||'')))+
         ' · гримуары '+(x.count||0)+`;
-  const newLine=`(rank?(label+' · ранг '+['','I','II','III','IV'][rank]+' · '+((x.preview||[])[Math.min(2,rank-1)]||x.d||'')):
+  const newLine=`(rank?(label+' · ранг '+['','I','II','III','IV','V'][rank]+' · '+((x.preview||[])[Math.min(2,rank-1)]||x.d||'')):
           (label+' не изучен · Ранг I: '+((x.preview||[])[0]||x.d||'')))+
         ' · книги I×'+((x.bookCounts&&x.bookCounts[1])||0)+' II×'+((x.bookCounts&&x.bookCounts[2])||0)+' III×'+((x.bookCounts&&x.bookCounts[3])||0)+`;
   const a=ppaEscapeSrcdocCode(oldLine),b=ppaEscapeSrcdocCode(newLine);
@@ -5431,7 +5431,7 @@ function skillUpgrade(id,bookRank){parent.postMessage({type:'grimoireAction',ski
 
 {
   const oldMeta=`(rank>=3?'MAX':('нужно '+(x.need||0)+' · '+(x.chance||0)+'%'))`;
-  const newMeta=`(rank>=4?'MAX':('до '+['I','II','III','IV'][rank]+' → '+['I','II','III','IV'][rank+1]+' · выбери ранг книги'))`;
+  const newMeta=`(rank>=5?'MAX':('до '+['I','II','III','IV','V'][rank]+' → '+['I','II','III','IV','V'][rank+1]+' · выбери ранг книги'))`;
   const a=ppaEscapeSrcdocCode(oldMeta),b=ppaEscapeSrcdocCode(newMeta);
   if(!output.includes(a))throw new Error('Ranked grimoire character UI meta target not found');
   output=output.replace(a,b);
@@ -5464,87 +5464,92 @@ function skillUpgrade(id,bookRank){parent.postMessage({type:'grimoireAction',ski
   output=output.replace(a,b);
 }
 
-if (!output.includes("function skillProgressRank(id){return Math.max(0,Math.min(4") ||
+if (!output.includes("function skillProgressRank(id){return Math.max(0,Math.min(5") ||
     !output.includes("bookRank===2?Math.min(1,base+.06):base") ||
     !output.includes("bookRank>=3?1:") ||
-    !output.includes("if(rank>=4)return null;") ||
+    !output.includes("if(rank>=5)return null;") ||
     !output.includes("tryGrimoireUpgrade(d.skillId,d.bookRank)") ||
     !output.includes("function consumeRankedGrimoires(skillId,bookRank,cost)") ||
-    !output.includes("function romanRank(n){return ['','I','II','III','IV'][n]||''}") ||
+    !output.includes("function romanRank(n){return ['','I','II','III','IV','V'][n]||''}") ||
     !output.includes(ppaEscapeSrcdocCode("skillUpgrade(x.id,Number(btn.getAttribute('data-book-rank'))||1)"))) {
-  throw new Error('Ranked grimoire / skill IV progression patch incomplete');
+  throw new Error('Ranked grimoire / skill V progression patch incomplete');
 }
 
 /* ======================================================================== */
 
 
-/* === REAL SKILL RANK IV EFFECTS ========================================== */
-// Preserve every approved I-III value. Rank IV is not cosmetic: V189's common
+/* === REAL SKILL RANK IV-V EFFECTS ======================================== */
+// Preserve every approved I-III value. Ranks IV-V are not cosmetic: V189's common
 // rank-value helper extrapolates a real effect from rank III. Magnitude stats
-// grow by 160/140, while "lower is stronger" values (cooldown/slow factor)
+// use 160/140 and 180/140, while "lower is stronger" values (cooldown/slow factor)
 // shrink by the inverse ratio. This automatically covers damage, healing,
 // shields, buffs, debuffs, durations, control, target counts and passives.
 ppaPatchRegex(
-  'V189 rank IV real effect helper',
+  'V189 rank IV-V real effect helper',
   /const V189_RANK=\[0,1,2,3\];\s*const rv=\(arr,rank\)=>arr\[Math\.max\(1,Math\.min\(3,rank\|0\)\)-1\];/,
-  `const V189_RANK=[0,1,2,3,4];
+  `const V189_RANK=[0,1,2,3,4,5];
   const V189_IV_RATIO=160/140;
+  const V189_V_RATIO=180/140;
   const rv=(arr,rank)=>{
-    const r=Math.max(1,Math.min(4,rank|0));
+    const r=Math.max(1,Math.min(5,rank|0));
     if(r<=3)return arr[r-1];
     const v3=Number(arr&&arr[2]),v2=Number(arr&&arr[1]);
     if(!Number.isFinite(v3))return arr&&arr[2];
     if(!Number.isFinite(v2)||v3===v2)return v3;
-    return v3>v2?v3*V189_IV_RATIO:v3/V189_IV_RATIO;
+    const ratio=r===4?V189_IV_RATIO:V189_V_RATIO;
+    return v3>v2?v3*ratio:v3/ratio;
   };`
 );
 
-// Passives must read the progression rank (0..IV), not the old combat-safe
-// rank cap. Their actual stat values then flow through rv(), so IV changes the
+// Passives must read the progression rank (0..V), not the old combat-safe
+// rank cap. Their actual stat values then flow through rv(), so IV-V change the
 // real character stats, not only the card text.
 ppaPatchRegex(
-  'V189 passive progression rank IV',
+  'V189 passive progression rank V',
   /const meta=PASSIVE_META\[sk\.id\],rank=skillRank\(sk\.id\);/,
   "const meta=PASSIVE_META[sk.id],rank=(typeof skillProgressRank==='function'?skillProgressRank(sk.id):skillRank(sk.id));"
 );
 
 // The all-class V189 active dispatcher is already the authoritative caster.
-// Feed it rank IV; every real effect inside it uses rv().
+// Feed it rank IV-V; every real effect inside it uses rv().
 ppaPatchRegex(
-  'V189 active dispatcher progression rank IV',
+  'V189 active dispatcher progression rank V',
   /if\(!sk\)return;const rank=skillRank\(sk\.id\);/,
   "if(!sk)return;const rank=(typeof skillProgressRank==='function'?skillProgressRank(sk.id):skillRank(sk.id));"
 );
 
-// Long-press info must report IV too. For IV we keep the approved III text and
+// Long-press info must report IV-V too. We keep the approved III text and
 // explicitly state that the runtime effect is boosted; this avoids fake exact
 // numbers in descriptions while the actual mechanics are scaled by rv().
 ppaPatchRegex(
-  'skill long-press progression rank IV',
+  'skill long-press progression rank V',
   /const rank=Math\.max\(0,Number\(skillRank\(sk\.id\)\)\|\|0\);/,
   "const rank=Math.max(0,Number(typeof skillProgressRank==='function'?skillProgressRank(sk.id):skillRank(sk.id))||0);"
 );
 ppaPatchRegex(
-  'skill long-press IV effect description',
+  'skill long-press IV-V effect description',
   /let effect=\(meta&&meta\.p&&meta\.p\[rr-1\]\)\?String\(meta\.p\[rr-1\]\):String\(sk\.d\|\|''\);/,
   `let effect=(meta&&meta.p&&meta.p[Math.min(2,rr-1)])?String(meta.p[Math.min(2,rr-1)]):String(sk.d||'');
-  if(rr>=4)effect+=' · IV: реальный эффект усилен относительно III ранга';`
+  if(rr===4)effect+=' · IV: реальный эффект 160% шкалы';
+  if(rr>=5)effect+=' · V: реальный эффект 180% шкалы';`
 );
 
-// Active-skill cooldown display also needs a safe IV value instead of reading
+// Active-skill cooldown display also needs safe IV-V values instead of reading
 // past the 3-entry metadata array.
 ppaPatchRegex(
-  'skill long-press IV cooldown display',
+  'skill long-press IV-V cooldown display',
   /const cd=meta&&meta\.cd\?Number\(meta\.cd\[Math\.max\(0,rr-1\)\]\)\|\|0:0;/,
-  `const cd=meta&&meta.cd?(rr<=3?(Number(meta.cd[Math.max(0,rr-1)])||0):(Number(rv(meta.cd,4))||0)):0;`
+  `const cd=meta&&meta.cd?(rr<=3?(Number(meta.cd[Math.max(0,rr-1)])||0):(Number(rv(meta.cd,rr))||0)):0;`
 );
 
-if (!output.includes("const V189_RANK=[0,1,2,3,4];") ||
+if (!output.includes("const V189_RANK=[0,1,2,3,4,5];") ||
     !output.includes("const V189_IV_RATIO=160/140;") ||
-    !output.includes("return v3>v2?v3*V189_IV_RATIO:v3/V189_IV_RATIO;") ||
+    !output.includes("const V189_V_RATIO=180/140;") ||
+    !output.includes("return v3>v2?v3*ratio:v3/ratio;") ||
     !output.includes("typeof skillProgressRank==='function'?skillProgressRank(sk.id):skillRank(sk.id)") ||
-    !output.includes("IV: реальный эффект усилен относительно III ранга")) {
-  throw new Error('Real rank-IV skill effects did not apply');
+    !output.includes("IV: реальный эффект 160% шкалы") ||
+    !output.includes("V: реальный эффект 180% шкалы")) {
+  throw new Error('Real rank-IV/V skill effects did not apply');
 }
 
 /* ======================================================================== */
