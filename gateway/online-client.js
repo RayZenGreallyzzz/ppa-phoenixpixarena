@@ -189,6 +189,32 @@
     return pushClanState(await PPA.ppaClanAction(req));
   }
 
+  var adminRewardSeedTried=false;
+  async function seedAdminEventRewardStock(){
+    if(adminRewardSeedTried)return;
+    adminRewardSeedTried=true;
+    if(!online()||!window.PPA||!PPA.ppaAdminEventRewardStockAccess||typeof window.PPA_ADMIN_EVENT_REWARD_STOCK!=='function')return;
+    try{
+      var access=await PPA.ppaAdminEventRewardStockAccess();
+      if(!access||!access.authorized)return;
+      var seeded=window.PPA_ADMIN_EVENT_REWARD_STOCK();
+      var added=Math.max(0,Number(seeded&&seeded.added)||0);
+      if(!added)return;
+      try{saveGame()}catch(_){}
+      try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}
+      try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
+      try{if(typeof updateUI==='function')updateUI()}catch(_){}
+      try{
+        var snap=typeof window.ppaBuildSaveObject==='function'?window.ppaBuildSaveObject():null;
+        var version=window.PPA_CLOUD&&Number.isFinite(Number(PPA_CLOUD.version))?Number(PPA_CLOUD.version):null;
+        if(snap&&PPA.ppaSaveGame)await PPA.ppaSaveGame(snap,version);
+      }catch(e){console.warn('Admin reward stock cloud save',e)}
+      try{showPickup('ПРЕМИУМ ХРАНИЛИЩЕ · ДОБАВЛЕНО '+added+' НАГРАД','#ffcf63')}catch(_){}
+    }catch(e){
+      if(Number(e&&e.status)!==403)console.warn('Admin event reward stock',e);
+    }
+  }
+
   function install(){
     if(installed)return true;
     if(!online())return false;
@@ -262,7 +288,7 @@
     var _openWallet=openGramWallet;openGramWallet=function(){_openWallet();setTimeout(refreshWallet,30);setTimeout(refreshWallet,2500);setTimeout(refreshWallet,7000);setTimeout(attachGramResetGesture,120)};window.openGramWallet=openGramWallet;
     premiumWalletLink=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletDeposit=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletWithdraw=function(){try{closePremiumStore()}catch(_){};openGramWallet()};
 
-    setTimeout(function(){refreshClan();refreshAuction();refreshWallet()},200);
+    setTimeout(function(){refreshClan();refreshAuction();refreshWallet();seedAdminEventRewardStock()},200);
     setInterval(refreshAuction,15000);
     setInterval(refreshClan,30000);
     return true;
