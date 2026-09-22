@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v492-legendary-real-files-all-ui-20260922';
+const CLIENT_BUILD = 'v493-legendary-real-files-audit-fix-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5239,9 +5239,9 @@ ppaPatchRegex(
   const _hasPickaxe=fartHasPickaxe();`
 );
 
-if(!output.includes("bag:(INV.bag||[]).map(function(it){if(it&&(it.fartSlag===true") ||
+if(!output.includes("bag:(INV.bag||[]).map(function(it){try{if(window.PPA_LEGENDARY_GEAR_ITEM_ART)") ||
    !output.includes("it.kind='resource';it.img='/assets/fart-slag.webp'")) {
-  throw new Error('Character invState slag image hydration did not apply');
+  throw new Error('Character invState slag / legendary image hydration did not apply');
 }
 
 if(!output.includes("window.PPA_FART_PICKAXE_COMMON_IMG=FART_PICKAXE_COMMON_IMG") ||
