@@ -328,12 +328,54 @@
     }catch(_){}
   }
 
-  function phoenixBlueGear(item){
-    if(!item||typeof item!=='object')return false;
+  function gearRarityKey(item){
+    if(!item||typeof item!=='object')return '';
     var raw=item.rarity!=null?item.rarity:(item.quality!=null?item.quality:item.tier);
-    var s=String(raw==null?'':raw).toLowerCase();
-    if(Number(raw)===2)return true;
-    return s==='rare'||s==='blue'||s.indexOf('син')>=0;
+    var n=Number(raw),s=String(raw==null?'':raw).toLowerCase();
+    if(Number.isFinite(n)){
+      if(n===0)return 'common';
+      if(n===1)return 'uncommon';
+      if(n===2)return 'rare';
+      if(n===3)return 'epic';
+      if(n===4)return 'legendary';
+    }
+    if(s==='common'||s.indexOf('сер')>=0)return 'common';
+    if(s==='uncommon'||s==='green'||s.indexOf('зел')>=0||s.indexOf('необыч')>=0)return 'uncommon';
+    if(s==='rare'||s==='blue'||s.indexOf('син')>=0)return 'rare';
+    if(s==='epic'||s==='purple'||s.indexOf('эпич')>=0||s.indexOf('фиолет')>=0)return 'epic';
+    if(s==='legendary'||s.indexOf('легендар')>=0)return 'legendary';
+    return '';
+  }
+  function gearAllowedForLevel(lv,rarity){
+    lv=Math.max(1,Math.floor(Number(lv)||1));
+    if(lv<=10)return true;
+    if(lv<=20)return rarity==='uncommon';
+    if(lv<=30)return rarity==='rare';
+    if(lv<=40)return rarity==='rare'||rarity==='epic';
+    if(lv<=50)return rarity==='epic';
+    return rarity==='epic'||rarity==='legendary';
+  }
+  function filterIllegalDungeonGear(start,e){
+    try{
+      if(typeof LOOT==='undefined'||!Array.isArray(LOOT))return;
+      var lv=entityLevel(e);
+      if(lv<11||lv>60)return;
+      start=Math.max(0,Math.min(LOOT.length,Number(start)||0));
+      for(var i=LOOT.length-1;i>=start;i--){
+        var q=LOOT[i];if(!q)continue;
+        var it=q.item||q.gear||null;
+        var kind=String(q.kind||'').toLowerCase();
+        var slot=String(it&&(it.slot||it.type)||'').toLowerCase();
+        var isGear=(kind==='gear'||SLOT_ORDER.indexOf(slot)>=0);
+        if(!isGear||!it)continue;
+        var rarity=gearRarityKey(it);
+        if(rarity&&!gearAllowedForLevel(lv,rarity))LOOT.splice(i,1);
+      }
+    }catch(_){}
+  }
+
+  function phoenixBlueGear(item){
+    return gearRarityKey(item)==='rare';
   }
   function removePhoenixBlueGear(start){
     try{
@@ -372,6 +414,7 @@
         window.__PPA_DUNGEON_GEAR_SLOT_WEIGHTED=true;
         try{
           var result=base.apply(this,arguments);
+          filterIllegalDungeonGear(lootStart,e);
           if(isPhoenix)removePhoenixBlueGear(lootStart);
           return result;
         }finally{window.__PPA_DUNGEON_GEAR_SLOT_WEIGHTED=prev}
