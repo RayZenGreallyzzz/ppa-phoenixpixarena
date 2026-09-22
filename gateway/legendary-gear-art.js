@@ -70,29 +70,11 @@
     return ART_BASE+cls+'-'+slot+'.svg';
   }
 
-  function neutralTier(it){
-    if(!it)return false;
-    var r=key(it.rarity||it.quality||it.grade||it.r);
-    return r==='uncommon'||r==='green'||r==='rare'||r==='blue';
-  }
-
-  function neutralArt(cls,slot){
-    cls=alias(cls)||key(cls)||playerClassKey();
-    slot=slotKey({slot:slot});
-    if(!Object.prototype.hasOwnProperty.call(CLASS_ROWS,cls)||!slot)return '';
-    try{
-      if(typeof window.PPA_BASE_GEAR_ART==='function')return String(window.PPA_BASE_GEAR_ART(cls,slot)||'');
-    }catch(_){}
-    return '';
-  }
-
   function artForItem(it){
     try{
+      if(!isLegendary(it))return '';
       var cls=classKey(it),slot=slotKey(it);
-      if(!cls||!slot)return '';
-      if(isLegendary(it))return art(cls,slot);
-      if(neutralTier(it))return neutralArt(cls,slot);
-      return '';
+      return cls&&slot?art(cls,slot):'';
     }catch(_){return ''}
   }
 
@@ -138,12 +120,9 @@
   }
 
   window.PPA_LEGENDARY_GEAR_ART=art;
-  window.PPA_LEGENDARY_GEAR_ITEM_ART=function(it){return isLegendary(it)?artForItem(it):''};
-  window.PPA_GEAR_ITEM_ART=artForItem;
-  window.PPA_NEUTRAL_GEAR_ART=neutralArt;
+  window.PPA_LEGENDARY_GEAR_ITEM_ART=artForItem;
   window.PPA_HYDRATE_LEGENDARY_GEAR_ART=function(){return hydrateAll(true)};
-  window.PPA_HYDRATE_GEAR_ART=function(){return hydrateAll(true)};
-  window.PPA_LEGENDARY_GEAR_DIAG=function(){return {ready:true,mode:'svg-crop',atlas:'/assets/legendary-gear-atlas.webp',classes:8,slots:6,neutralTiers:['uncommon','rare']}};
+  window.PPA_LEGENDARY_GEAR_DIAG=function(){return {ready:true,mode:'svg-crop',atlas:'/assets/legendary-gear-atlas.webp',classes:8,slots:6}};
 
   function boot(){
     hydrateAll(true);

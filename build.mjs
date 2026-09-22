@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v488-clean-green-blue-gear-art-20260922';
+const CLIENT_BUILD = 'v489-restore-approved-legendary-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -682,20 +682,6 @@ if (!output.includes("window.PPA_TEST_ALL_DUNGEONS!==true&&!allowed")) {
   throw new Error('QA hard dungeon scene gate patch did not apply');
 }
 
-/* === CLEAN GREEN/BLUE GEAR ART SOURCE =================================== */
-ppaPatchRegex(
-  'expose transparent base gear art',
-  /function\s+genItem\(/,
-  `window.PPA_BASE_GEAR_ART=function(cls,slot){
-  try{return classGearArt('common',cls,slot)||''}catch(_){return ''}
-};
-function genItem(`
-);
-if(!output.includes("window.PPA_BASE_GEAR_ART=function(cls,slot)")){
-  throw new Error('Transparent base gear art bridge did not apply');
-}
-/* ======================================================================== */
-
 /* === V335 AUCTION PREMIUM ART ============================================ */
 ppaPatchRegex(
   'auction keep inventory art',
@@ -715,9 +701,9 @@ ppaPatchRegex(
   `function auctionRestoreUiArt(it){
   if(!it||typeof it!=='object')return it;
   try{
-    if(window.PPA_GEAR_ITEM_ART){
-      var _gearArt=window.PPA_GEAR_ITEM_ART(it);
-      if(_gearArt){it.img=_gearArt;it.image=_gearArt;it.art=_gearArt;return it}
+    if(window.PPA_LEGENDARY_GEAR_ITEM_ART){
+      var _legendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(it);
+      if(_legendArt){it.img=_legendArt;it.image=_legendArt;it.art=_legendArt;return it}
     }
   }catch(_){}
   if(it.img)return it;
@@ -5024,9 +5010,9 @@ function itemVisual(it,size){
     it.img='/assets/fart-slag.webp';
   }
   try{
-    if(it&&parent.PPA_GEAR_ITEM_ART){
-      var _gearArt=parent.PPA_GEAR_ITEM_ART(it);
-      if(_gearArt)it.img=_gearArt;
+    if(it&&parent.PPA_LEGENDARY_GEAR_ITEM_ART){
+      var _legendArt=parent.PPA_LEGENDARY_GEAR_ITEM_ART(it);
+      if(_legendArt)it.img=_legendArt;
     }
   }catch(_){}
   if(it&&it.img){
@@ -5779,13 +5765,10 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
   if (!legendaryGearArt.includes("var ART_BASE='/assets/legendary-'") ||
       !legendaryGearArt.includes("var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7}") ||
       !legendaryGearArt.includes('PPA_LEGENDARY_GEAR_ITEM_ART') ||
-      !legendaryGearArt.includes('PPA_GEAR_ITEM_ART') ||
-      !legendaryGearArt.includes("r==='uncommon'||r==='green'||r==='rare'||r==='blue'") ||
       !legendaryGearArt.includes('PPA_HYDRATE_LEGENDARY_GEAR_ART') ||
-      !output.includes("window.PPA_BASE_GEAR_ART=function(cls,slot)") ||
-      !output.includes("var _gearArt=parent.PPA_GEAR_ITEM_ART(it)") ||
-      !output.includes("var _gearArt=window.PPA_GEAR_ITEM_ART(it)")) {
-    throw new Error('Unified transparent gear art runtime incomplete');
+      !output.includes("var _legendArt=parent.PPA_LEGENDARY_GEAR_ITEM_ART(it)") ||
+      !output.includes("var _legendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(it)")) {
+    throw new Error('Approved legendary gear art all-UI runtime incomplete');
   }
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
       !worldCombat.includes('PPA_PK_ACTIVE') ||
