@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v475-grimoire-build-audit-fix-20260922';
+const CLIENT_BUILD = 'v476-dungeon-rarity-gate-20260922';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5684,7 +5684,11 @@ if (!output.includes("const V189_RANK=[0,1,2,3];") ||
       !dungeonDropSlotsAudit.includes('Do not divide the displayed chance by the number of book titles') ||
       dungeonDropSlotsAudit.includes('var each=totalChance/pool.length') ||
       !dungeonDropSlotsAudit.includes('__ppaPhoenixNoBlueGear') ||
-      !dungeonDropSlotsAudit.includes('removePhoenixBlueGear')) {
+      !dungeonDropSlotsAudit.includes('removePhoenixBlueGear') ||
+      !dungeonDropSlotsAudit.includes("if(lv<=30)return rarity==='rare';") ||
+      !dungeonDropSlotsAudit.includes("if(lv<=40)return rarity==='rare'||rarity==='epic';") ||
+      !dungeonDropSlotsAudit.includes("if(lv<=50)return rarity==='epic';") ||
+      !dungeonDropSlotsAudit.includes('filterIllegalDungeonGear(lootStart,e);')) {
     throw new Error('Approved 11-60 dungeon drop tables are incomplete');
   }
   if (!dungeonMobEvents.includes("rows.push(['p20',3913") ||
