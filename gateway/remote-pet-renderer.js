@@ -132,7 +132,7 @@
     installPacketHook();installDrawHook();sendPet(true);
     var tries=0,t=setInterval(function(){
       installPacketHook();installDrawHook();sendPet(false);
-      if(++tries>80&&installedPacket&&installedDraw)clearInterval(t);
+      tries++;if((installedPacket&&installedDraw)||tries>80)clearInterval(t);
     },250);
     setInterval(function(){sendPet(false)},1000);
     document.addEventListener('visibilitychange',function(){if(!document.hidden)setTimeout(function(){sendPet(true)},180)},{passive:true});
