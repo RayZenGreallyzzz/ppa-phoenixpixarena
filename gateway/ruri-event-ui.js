@@ -95,8 +95,17 @@
     try{grid.insertBefore(tile,grid.firstChild)}catch(_){grid.appendChild(tile)}
     return true;
   }
-  var mo=new MutationObserver(function(){install()});
-  try{mo.observe(document.documentElement,{childList:true,subtree:true})}catch(_){}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
-  setInterval(install,900);
+  function scheduleInstall(){
+    setTimeout(install,40);
+    setTimeout(install,220);
+  }
+  document.addEventListener('click',function(e){
+    var n=e&&e.target,t='';
+    try{t=String(n&&n.textContent||'').trim().toUpperCase()}catch(_){}
+    if(t.indexOf('СОБЫТ')>=0||t.indexOf('EVENT')>=0)scheduleInstall();
+  },true);
+  window.PPA_REFRESH_RURI_EVENT_UI=scheduleInstall;
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',function(){setTimeout(install,250)},{once:true});
+  }else setTimeout(install,250);
 })();
