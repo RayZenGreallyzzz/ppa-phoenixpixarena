@@ -12,23 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Fast scan Ruri resource stems
+      - name: Inspect dropLoot helpers
         shell: bash
         run: |
           node <<'NODE'
           const fs=require('fs'),zlib=require('zlib');
           const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
           const src=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
-          const low=src.toLowerCase();
-          const terms=['кристалл','оскол','кров','демон','blood','demon','crystal','shard','ruri','рури'];
-          const hits=[];
+          const terms=['function dropLoot','function mobDropInfo','materials[','INV.materials','addMaterial','giveMaterial','pushMat','pickup','showPickup'];
           for(const term of terms){
             let p=0,n=0;
-            while((p=low.indexOf(term,p))>=0&&n<60){
-              hits.push({term,p,ctx:src.slice(Math.max(0,p-1800),Math.min(src.length,p+3600))});
+            while((p=src.indexOf(term,p))>=0&&n<12){
+              let s=src.slice(Math.max(0,p-4500),Math.min(src.length,p+14000));
+              s=s.replace(/data:image\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g,'data:image/REMOVED;base64,REMOVED');
+              console.log('\n===== '+term+' @ '+p+' =====\n'+s);
               p+=term.length;n++;
             }
           }
-          console.log('HIT_COUNT='+hits.length);
-          for(const h of hits)console.log('\n===== '+h.term+' @ '+h.p+' =====\n'+h.ctx);
           NODE
