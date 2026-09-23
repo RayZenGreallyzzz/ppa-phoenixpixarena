@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v541-elite-authoritative-router-20260924';
+const CLIENT_BUILD = 'v542-elite-audit-fix-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6520,7 +6520,10 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
     throw new Error('Boss drop boost helper incomplete');
   }
   if (!dungeonDropSlotsAudit.includes('__ppaApprovedDropRows') ||
-      !dungeonDropSlotsAudit.includes("PPA_DUNGEON_DROP_TABLE_MODE='approved-11-60'") ||
+      !dungeonDropSlotsAudit.includes("PPA_DUNGEON_DROP_TABLE_MODE='approved-11-60+elite-authoritative'") ||
+      !dungeonDropSlotsAudit.includes('function eliteRows(e)') ||
+      !dungeonDropSlotsAudit.includes("if(!e||e.isDungeonElite!==true)return null;") ||
+      !dungeonDropSlotsAudit.includes("if(e&&e.isDungeonElite===true){") ||
       !dungeonDropSlotsAudit.includes("weapon:'Оружие · все классы'") ||
       !dungeonDropSlotsAudit.includes("legs:'Поножи · все классы'") ||
       !dungeonDropSlotsAudit.includes('function expandGearRows(e,rows)') ||
