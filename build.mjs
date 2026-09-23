@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v529-ruri-full-resource-icons-20260923';
+const CLIENT_BUILD = 'v530-ruri-card-smith-legendary-safe-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -229,7 +229,7 @@ function ppaEscapeSrcdocCode(code) {
   if(!eventsFrameMatches.length)throw new Error('Native Events iframe target not found');
   output=output.replace(eventsFrameRe,'<iframe id="eventsMenuFrame" title="События" srcdoc="'+nativeEventsEscaped+'"></iframe>');
   console.log('[PPA BUILD] Native Events iframe instances replaced: '+eventsFrameMatches.length);
-  if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('data-cat=&quot;game&quot;')){
+  if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('ruriCrystalPatch')||!output.includes('data-cat=&quot;game&quot;')){
     throw new Error('Native tabbed Events replacement incomplete');
   }
   console.log('[PPA BUILD] Native Events iframe replaced: Игровые / Клановые / Война / Обновления');
@@ -5866,6 +5866,33 @@ if (!output.includes("const V189_RANK=[0,1,2,3];") ||
 /* ======================================================================== */
 
 
+/* === LEGENDARY / RURI BLACKSMITH SAFETY ================================= */
+ppaPatchRegex(
+  'Great Ruri explicit blacksmith sharpenability',
+  /function\s+isSharpenable\(it\)\{return !!\(it&amp;&amp;SHARPENABLE_SLOTS\.includes\(it\.slot\)\);\}/,
+  "function isSharpenable(it){return !!(it&amp;&amp;(SHARPENABLE_SLOTS.includes(it.slot)||it.ruriLegendary===true||it.petName===&#x27;Великий Рури&#x27;));}"
+);
+ppaPatchRegex(
+  'legendary and Great Ruri never burn on sharpening failure',
+  /}else if\(it\.rarity==='epic'\)\{\s*it\.enh=Math\.max\(0,it\.enh-1\);\s*applyEnhancementStats\(it\);\s*smithNotify\('НЕУДАЧА · эпик не сгорел, откат до \+'\+it\.enh\+' · характеристики и БМ пересчитаны','#d69cff'\);\s*}else\{\s*var nm=it\.name;\s*INV\.bag\.splice\(idx,1\);\s*smithNotify\('НЕУДАЧА · '\+nm\+' СГОРЕЛ','#ff5a4f'\);\s*}/,
+  `}else if(it.rarity==='epic'||it.rarity==='legendary'||it.ruriLegendary===true||it.petName==='Великий Рури'){
+    it.enh=Math.max(0,it.enh-1);
+    applyEnhancementStats(it);
+    var _ppaSafeName=(it.ruriLegendary===true||it.petName==='Великий Рури')?'Великий Рури':(it.rarity==='legendary'?'легендарный предмет':'эпик');
+    smithNotify('НЕУДАЧА · '+_ppaSafeName+' не сгорел, откат до +'+it.enh+' · характеристики и БМ пересчитаны','#d69cff');
+  }else{
+    var nm=it.name;
+    INV.bag.splice(idx,1);
+    smithNotify('НЕУДАЧА · '+nm+' СГОРЕЛ','#ff5a4f');
+  }`
+);
+if(!output.includes("_ppaSafeName") ||
+   !output.includes("it.petName===&#x27;Великий Рури&#x27;") ||
+   output.includes("}else if(it.rarity==='epic'){\n    it.enh=Math.max(0,it.enh-1);")){
+  throw new Error('Legendary / Great Ruri blacksmith safety patch incomplete');
+}
+/* ======================================================================== */
+
 /* === GREAT RURI LEGENDARY PET / EVENT REWARD STOCK ====================== */
 ppaPatchRegex(
   'Great Ruri sharpening profile',
@@ -5875,7 +5902,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'admin event reward premium storage stock',
   /function\s+storageMove\(mode,direction,idx,source\)\s*\{/,
-  "window.PPA_ADMIN_EVENT_REWARD_STOCK=function(){\n  try{\n    if(typeof normalizeStorage==='function')normalizeStorage();\n    if(!INV.storage)INV.storage={personal:[],clan:[],premium:[]};\n    if(!Array.isArray(INV.storage.premium))INV.storage.premium=[];\n    var box=INV.storage.premium,cap=50,added=0;\n    function has(id){return box.some(function(it){return it&&String(it.eventRewardId||'')===id})}\n    function push(it){if(!it||box.length>=cap||has(String(it.eventRewardId||'')))return false;box.push(it);added++;return true}\n    function makeGnome(slot){\n      var arr=(typeof SLOTS!=='undefined'&&Array.isArray(SLOTS))?SLOTS:null,saved=arr?arr.slice():null,it=null;\n      try{if(arr){arr.length=0;arr.push(slot)}it=(typeof genItem==='function')?genItem(20,false,'legendary'):null}\n      finally{if(arr&&saved){arr.length=0;for(var i=0;i<saved.length;i++)arr.push(saved[i])}}\n      if(!it)return null;\n      var id='event_gnome_legendary_'+slot+'_v1';\n      var base=(typeof CLASS_ITEM_NAMES!=='undefined'&&CLASS_ITEM_NAMES.gnome&&CLASS_ITEM_NAMES.gnome[slot])||it.name||'Предмет канонира';\n      var pref=(typeof RPREF!=='undefined'&&RPREF.legendary)||'Легендарный · ';\n      it.uid=id;it.eventRewardId=id;it.eventRewardTemplate=true;it.eventRewardStock=true;it.rewardSource='event';\n      it.slot=slot;it.rarity='legendary';it.enh=0;it.sell=0;\n      if(slot==='ring'){it.classKey='all';it.className='Все классы'}\n      else{\n        it.classKey='gnome';it.className=(typeof CLASS_DISPLAY!=='undefined'&&CLASS_DISPLAY.gnome)||'Гном-канонир';\n        it.name=pref+base;\n        try{var art=classGearArt('legendary','gnome',slot);if(art)it.img=art}catch(_){}\n      }\n      if(typeof syncItemBM==='function')syncItemBM(it);\n      return it;\n    }\n    var existingRuri=box.find(function(it){return it&&String(it.eventRewardId||'')==='event_ruri_legendary_v1'&&it.eventRewardStock===true});\n    if(existingRuri){\n      existingRuri.enh=0;existingRuri.ruriAttackScale=.20;ppaApplyRuriEnhancement(existingRuri);\n    }else{\n      var ruri={\n        uid:'event_ruri_legendary_v1',eventRewardId:'event_ruri_legendary_v1',\n        eventRewardTemplate:true,eventRewardStock:true,rewardSource:'event',\n        name:'Великий Рури',petName:'Великий Рури',slot:'pet',rarity:'legendary',enh:0,\n        classKey:'all',className:'Все классы',icon:'🦄',ic:'🦄',\n        img:PPA_RURI_DIR_ART.S,dirSprites:PPA_RURI_DIR_ART,stats:{},sell:0,\n        ruriLegendary:true,ruriAttackType:'magic-melee',ruriAttackScale:.20,\n        createdAt:Date.now(),weight:1\n      };\n      ppaApplyRuriEnhancement(ruri);push(ruri);\n    }\n    ['weapon','helmet','armor','gloves','ring','legs','boots'].forEach(function(slot){\n      var id='event_gnome_legendary_'+slot+'_v1';\n      if(has(id))return;\n      var it=makeGnome(slot);if(it)push(it);\n    });\n    return {added:added,total:box.length};\n  }catch(e){\n    console.warn('PPA event reward stock',e);\n    return {added:0,error:String(e&&e.message||e||'error')};\n  }\n};\nfunction storageMove(mode,direction,idx,source){"
+  "window.PPA_ADMIN_EVENT_REWARD_STOCK=function(){\n  try{\n    if(typeof normalizeStorage==='function')normalizeStorage();\n    if(!INV.storage)INV.storage={personal:[],clan:[],premium:[]};\n    if(!Array.isArray(INV.storage.premium))INV.storage.premium=[];\n    var box=INV.storage.premium,cap=50,added=0;\n    function has(id){id=String(id||'');var all=[];try{if(Array.isArray(INV.bag))all=all.concat(INV.bag);if(INV.storage){['personal','clan','premium'].forEach(function(k){if(Array.isArray(INV.storage[k]))all=all.concat(INV.storage[k])})}if(INV.equipped)Object.keys(INV.equipped).forEach(function(k){if(INV.equipped[k])all.push(INV.equipped[k])});(INV.auctionLots||[]).forEach(function(l){var x=l&&l.item&&(l.item.gear||l.item);if(x)all.push(x)})}catch(_){}return all.some(function(it){return it&&String(it.eventRewardId||'')===id})}\n    function push(it){if(!it||box.length>=cap||has(String(it.eventRewardId||'')))return false;box.push(it);added++;return true}\n    function makeGnome(slot){\n      var arr=(typeof SLOTS!=='undefined'&&Array.isArray(SLOTS))?SLOTS:null,saved=arr?arr.slice():null,it=null;\n      try{if(arr){arr.length=0;arr.push(slot)}it=(typeof genItem==='function')?genItem(20,false,'legendary'):null}\n      finally{if(arr&&saved){arr.length=0;for(var i=0;i<saved.length;i++)arr.push(saved[i])}}\n      if(!it)return null;\n      var id='event_gnome_legendary_'+slot+'_v1';\n      var base=(typeof CLASS_ITEM_NAMES!=='undefined'&&CLASS_ITEM_NAMES.gnome&&CLASS_ITEM_NAMES.gnome[slot])||it.name||'Предмет канонира';\n      var pref=(typeof RPREF!=='undefined'&&RPREF.legendary)||'Легендарный · ';\n      it.uid=id;it.eventRewardId=id;it.eventRewardTemplate=true;it.eventRewardStock=true;it.rewardSource='event';\n      it.slot=slot;it.rarity='legendary';it.enh=0;it.sell=0;\n      if(slot==='ring'){it.classKey='all';it.className='Все классы'}\n      else{\n        it.classKey='gnome';it.className=(typeof CLASS_DISPLAY!=='undefined'&&CLASS_DISPLAY.gnome)||'Гном-канонир';\n        it.name=pref+base;\n        try{var art=classGearArt('legendary','gnome',slot);if(art)it.img=art}catch(_){}\n      }\n      if(typeof syncItemBM==='function')syncItemBM(it);\n      return it;\n    }\n    var existingRuri=box.find(function(it){return it&&String(it.eventRewardId||'')==='event_ruri_legendary_v1'&&it.eventRewardStock===true});\n    if(existingRuri){\n      existingRuri.enh=0;existingRuri.ruriAttackScale=.20;ppaApplyRuriEnhancement(existingRuri);\n    }else{\n      var ruri={\n        uid:'event_ruri_legendary_v1',eventRewardId:'event_ruri_legendary_v1',\n        eventRewardTemplate:true,eventRewardStock:true,rewardSource:'event',\n        name:'Великий Рури',petName:'Великий Рури',slot:'pet',rarity:'legendary',enh:0,\n        classKey:'all',className:'Все классы',icon:'🦄',ic:'🦄',\n        img:PPA_RURI_DIR_ART.S,dirSprites:PPA_RURI_DIR_ART,stats:{},sell:0,\n        ruriLegendary:true,ruriAttackType:'magic-melee',ruriAttackScale:.20,\n        createdAt:Date.now(),weight:1\n      };\n      ppaApplyRuriEnhancement(ruri);push(ruri);\n    }\n    ['weapon','helmet','armor','gloves','ring','legs','boots'].forEach(function(slot){\n      var id='event_gnome_legendary_'+slot+'_v1';\n      if(has(id))return;\n      var it=makeGnome(slot);if(it)push(it);\n    });\n    return {added:added,total:box.length};\n  }catch(e){\n    console.warn('PPA event reward stock',e);\n    return {added:0,error:String(e&&e.message||e||'error')};\n  }\n};\nfunction storageMove(mode,direction,idx,source){"
 );
 if(!output.includes("PPA_RURI_DIR_ART") ||
    !output.includes("ppaApplyRuriEnhancement") ||
@@ -5883,6 +5910,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
    !output.includes("rarity:'legendary',enh:0") ||
    !output.includes("existingRuri.enh=0") ||
    !output.includes("var id='event_gnome_legendary_'+slot+'_v1'") ||
+   !output.includes("all=all.concat(INV.bag)") ||
    !output.includes("window.PPA_ADMIN_EVENT_REWARD_STOCK")) {
   throw new Error('Great Ruri / event reward stock patch incomplete');
 }

@@ -27,6 +27,12 @@ button{font:inherit}
 #view{overflow:auto;padding:12px 12px 30px}
 .hero{display:grid;grid-template-columns:minmax(220px,42%) minmax(0,1fr);gap:14px;align-items:start}
 .poster{display:block;width:100%;max-height:68vh;object-fit:contain;border:1px solid #70481f;border-radius:8px;background:#080706}
+.posterWrap{position:relative;width:100%;overflow:hidden;border-radius:8px;background:#080706}
+.posterWrap .poster{border:1px solid #70481f;border-radius:8px}
+.ruriCrystalPatch{position:absolute;z-index:3;display:grid;place-items:center;pointer-events:none;background:radial-gradient(circle at 50% 50%,#11191b 0,#070909 66%,rgba(5,6,6,.96) 100%);border-radius:10px}
+.ruriCrystalPatch img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 5px rgba(156,226,255,.72))}
+.ruriCrystalDrop{left:56.7%;top:58.0%;width:12.8%;height:10.8%;padding:1.1%}
+.ruriCrystalCraft{left:66.2%;top:83.0%;width:8.1%;height:7.0%;padding:.6%}
 .iconArt{min-height:270px;display:grid;place-items:center;border:1px solid #70481f;border-radius:8px;background:radial-gradient(circle,#3b160d 0,#0a0807 67%);font-size:92px}
 .info{padding:12px;border:1px solid #57391f;border-radius:8px;background:rgba(18,13,9,.96)}
 .info h2{margin:0 0 7px;color:#f2c36c;font-size:22px}
@@ -62,6 +68,7 @@ button{font:inherit}
   #view{padding:6px 6px 24px}
   .hero{grid-template-columns:1fr;gap:7px}
   .poster{max-width:240px;max-height:35vh;margin:auto}
+  .posterWrap{max-width:240px;margin:auto}
   .iconArt{min-height:150px;font-size:64px}
   .info{padding:7px}
   .info h2{font-size:15px}.info h3{font-size:10px;margin-top:8px}.info p{font-size:8px;line-height:1.4}.status{font-size:8px}.recipe{font-size:9px}
@@ -156,6 +163,13 @@ function artBlock(src,icon,label){
   if(src)return '<img class="poster" src="'+src+'" alt="'+label+'">';
   return '<div class="iconArt">'+icon+'</div>';
 }
+function ruriArtBlock(src){
+  if(!src)return artBlock(src,'🔥','Великий Рури');
+  const crystal='/assets/ruri-crystal.webp?v=v530';
+  return '<div class="posterWrap"><img class="poster" src="'+src+'" alt="Великий Рури">'+
+    '<span class="ruriCrystalPatch ruriCrystalDrop"><img src="'+crystal+'" alt=""></span>'+
+    '<span class="ruriCrystalPatch ruriCrystalCraft"><img src="'+crystal+'" alt=""></span></div>';
+}
 function render(){
   setActive();
   const v=document.getElementById('view');
@@ -164,7 +178,7 @@ function render(){
     return;
   }
   if(currentEvent==='ruri'){
-    v.innerHTML='<div class="hero">'+artBlock(RURI_ART,'🔥','Великий Рури')+'<div class="info"><h2>🔥 Великий Рури</h2><div class="status">● АКТИВНО · ТЕСТОВЫЙ ЗАПУСК</div><p>Ограниченное событие длится 10 дней каждый месяц. Собранные ресурсы после окончания не исчезают и сохраняются до следующего запуска.</p><p><b>Великий Рури сам атакует врагов хозяина огненной магией. Урон питомца — 20% от силы атаки хозяина.</b></p><h3>ДРОП РЕСУРСОВ</h3><p>Демонический кристалл — обычные мобы 1–60 · 0,05%</p><p>Огненные осколки — элита 1–60 · 0,8%</p><p>Кровь монстра — боссы 20 / 40 / 60 · 1,5% / 2,5% / 4%</p><p>Хрустальный кристалл — мировой босс · 8%</p><h3>КРАФТ ВЕЛИКОГО РУРИ</h3><div class="recipe">72 Демонических + 10 Огненных + 7 Крови монстра + 11 Хрустальных</div><p>Ресурсы постоянные и смогут продаваться на аукционе круглый год.</p></div></div>';
+    v.innerHTML='<div class="hero">'+ruriArtBlock(RURI_ART)+'<div class="info"><h2>🔥 Великий Рури</h2><div class="status">● АКТИВНО · ТЕСТОВЫЙ ЗАПУСК</div><p>Ограниченное событие длится 10 дней каждый месяц. Собранные ресурсы после окончания не исчезают и сохраняются до следующего запуска.</p><p><b>Великий Рури сам атакует врагов хозяина огненной магией. Урон питомца — 20% от силы атаки хозяина.</b></p><h3>ДРОП РЕСУРСОВ</h3><p>Демонический кристалл — обычные мобы 1–60 · 0,05%</p><p>Огненные осколки — элита 1–60 · 0,8%</p><p>Кровь монстра — боссы 20 / 40 / 60 · 1,5% / 2,5% / 4%</p><p>Хрустальный кристалл — мировой босс · 8%</p><h3>КРАФТ ВЕЛИКОГО РУРИ</h3><div class="recipe">72 Демонических + 10 Огненных + 7 Крови монстра + 11 Хрустальных</div><p>Ресурсы постоянные и смогут продаваться на аукционе круглый год.</p></div></div>';
     return;
   }
   if(currentEvent==='titan'){
