@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v505-v504-audit-fix-20260923';
+const CLIENT_BUILD = 'v506-unified-legendary-ui-source-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -739,7 +739,7 @@ ppaPatchRegex(
   if(!cls){
     try{cls=a(P&&(P.classKey||P.classId||P.class||P.cls||P.className||P.profession||P.job))}catch(_){}
   }
-  return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v504'):'';
+  return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v506'):'';
 }
 function auctionSourceInventoryItem(it){
   try{
@@ -814,7 +814,7 @@ ppaPatchRegex(
 if(!output.includes("function auctionCanonicalLegendaryArt(it)") ||
    !output.includes("function auctionSourceInventoryItem(it)") ||
    !output.includes("srcItem&&String(srcItem.img||'').indexOf('/assets/legendary/')>=0") ||
-   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v504") ||
+   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v506") ||
    !output.includes("items:auctionItemsForUi().map(auctionAttachMinPrices).map(auctionRestoreUiArt)") ||
    !output.includes("marketLots:(PPA_AUCTION_MARKET_CACHE||[]).slice(0,100).map(auctionRestoreLotArt)")) {
   throw new Error('Auction canonical legendary art path incomplete');
@@ -2844,6 +2844,66 @@ if(output.includes("inspectMarketItem&#x27;).forEach(el=&gt;el.onclick") ||
 }
 /* ======================================================================== */
 
+/* === SELF-CONTAINED CANONICAL LEGENDARY UI ART ========================= */
+ppaPatchRegex(
+  'canonical legendary art inside sandboxed itemVisual renderers',
+  /function itemVisual\(it,size\)\{/g,
+  `function itemVisual(it,size){
+  try{
+    if(it&&typeof it==='object'){
+      var _pr=it.rarity!=null?it.rarity:(it.quality!=null?it.quality:(it.grade!=null?it.grade:it.r));
+      var _rk=String(_pr==null?'':_pr).trim().toLowerCase();
+      var _txt=String((it.name||'')+' '+(it.title||'')+' '+(it.qualityName||'')+' '+(it.desc||'')).toLowerCase();
+      var _isLeg=(_pr===4||_pr===5||_rk==='4'||_rk==='5'||_rk==='legendary'||_rk==='legend'||_rk==='orange'||_rk==='gold'||/легендар|оранж|legendary/.test(_rk+' '+_txt));
+      if(_isLeg){
+        var _slot=String(it.slot||it.type||it.equipSlot||'').trim().toLowerCase();
+        var _sa={pants:'legs',leggings:'legs',leg:'legs','поножи':'legs',helm:'helmet',head:'helmet','шлем':'helmet',chest:'armor',body:'armor','броня':'armor',glove:'gloves',hands:'gloves','перчатки':'gloves',boot:'boots',feet:'boots','сапоги':'boots','оружие':'weapon'};
+        _slot=_sa[_slot]||_slot;
+        if(!/^(weapon|helmet|armor|legs|gloves|boots)$/.test(_slot)){
+          if(/шлем|helm|helmet/.test(_txt))_slot='helmet';
+          else if(/брон|доспех|кирас|armor|chest/.test(_txt))_slot='armor';
+          else if(/понож|штаны|брюки|legs|pants|leggings/.test(_txt))_slot='legs';
+          else if(/перчат|рукавиц|glove|hands/.test(_txt))_slot='gloves';
+          else if(/сапог|ботин|boots|feet/.test(_txt))_slot='boots';
+          else if(/оруж|меч|клинок|кинжал|топор|лук|арбалет|посох|жезл|пушк|мушкет|молот|булав|weapon|sword|dagger|axe|bow|staff|cannon|gun/.test(_txt))_slot='weapon';
+          else _slot='';
+        }
+        var _al={tank:'tank',warrior:'tank','воин':'tank','танк':'tank',paladin:'paladin','паладин':'paladin',barbarian:'barbarian',berserk:'barbarian',berserker:'barbarian','варвар':'barbarian','берсерк':'barbarian','берсеркер':'barbarian',assassin:'assassin','ассасин':'assassin','асасин':'assassin',gnome:'gnome',gunner:'gnome',cannoner:'gnome','канонир':'gnome','гном':'gnome','гном-канонир':'gnome',archer:'archer','лучник':'archer',mage:'mage','маг':'mage',priest:'priest',cleric:'priest',healer:'priest','жрец':'priest','клирик':'priest'};
+        function _pa(v){return _al[String(v==null?'':v).trim().toLowerCase()]||''}
+        var _vals=[it.classKey,it.classId,it.class,it.cls,it.ownerClass,it.reqClass,it.className,it.profession,it.job],_cls='';
+        for(var _i=0;_i<_vals.length&&!_cls;_i++)_cls=_pa(_vals[_i]);
+        if(!_cls){
+          var _tests=[['paladin',/паладин|paladin/],['barbarian',/берсерк|берсеркер|варвар|barbarian|berserk/],['assassin',/ассасин|асасин|assassin/],['gnome',/гном|канонир|gnome|gunner|cannoner/],['archer',/лучник|archer/],['mage',/маг|mage/],['priest',/жрец|клирик|priest|cleric|healer/],['tank',/танк|воин|tank|warrior/]];
+          for(var _j=0;_j<_tests.length&&!_cls;_j++)if(_tests[_j][1].test(_txt))_cls=_tests[_j][0];
+        }
+        if(!_cls){
+          try{
+            var _st=(typeof STATE!=='undefined'&&STATE)||{};
+            var _sv=[_st.classKey,_st.classId,_st.class,_st.cls,_st.className,_st.profession,_st.job];
+            for(var _k=0;_k<_sv.length&&!_cls;_k++)_cls=_pa(_sv[_k]);
+          }catch(_){}
+        }
+        if(!_cls){
+          try{
+            var _pp=(typeof P!=='undefined'&&P)||{};
+            var _pv=[_pp.classKey,_pp.classId,_pp.class,_pp.cls,_pp.className,_pp.profession,_pp.job];
+            for(var _m=0;_m<_pv.length&&!_cls;_m++)_cls=_pa(_pv[_m]);
+          }catch(_){}
+        }
+        if(_cls&&_slot){
+          var _src='/assets/legendary/'+_cls+'-'+_slot+'.webp?v=v506';
+          it.img=_src;it.image=_src;it.art=_src;it.cardArt=_src;it.iconArt=_src;it.iconImg=_src;it.src=_src;
+        }
+      }
+    }
+  }catch(_){}`,
+  true
+);
+if((output.match(/\/assets\/legendary\/'\+_cls\+'-'\+_slot\+'\.webp\?v=v506/g)||[]).length<2){
+  throw new Error('Sandboxed legendary itemVisual coverage incomplete');
+}
+/* ======================================================================== */
+
 /* === HOLD PREVIEW RELEASE + WEBVIEW LONGPRESS =========================== */
 // Hold preview lifecycle:
 //  - item card hold start -> parent marks preview mode
@@ -3317,6 +3377,7 @@ if(output.includes("function fixGuardMenu(e)") ||
 if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
    !output.includes("__ppaCanvasizingSrc===src") ||
    !output.includes("attributeFilter:['src','srcset']") ||
+   !output.includes("function _ppaSmithHydrateLegendary(it)") ||
    !output.includes("s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}if(sharpenable)selectSmithGear(c.idx)};")) {
   throw new Error('Blacksmith pre-legend stable selection / delayed art fix did not apply');
 }
@@ -4222,7 +4283,18 @@ ppaPatchRegex(
   'rune fusion lexical bridge on blacksmith state',
   /function\s+sendBlacksmithState\(\)\s*\{/,
   `function sendBlacksmithState(){
-  try{ppaInstallRuneFusionLexical()}catch(_){}`
+  try{ppaInstallRuneFusionLexical()}catch(_){}
+  try{
+    if(window.PPA_LEGENDARY_GEAR_ITEM_ART&&typeof INV!=='undefined'&&INV){
+      function _ppaSmithHydrateLegendary(it){
+        if(!it||typeof it!=='object')return;
+        var a=window.PPA_LEGENDARY_GEAR_ITEM_ART(it);
+        if(a){it.img=a;it.image=a;it.art=a;it.cardArt=a;it.iconArt=a;it.iconImg=a;it.src=a;}
+      }
+      if(Array.isArray(INV.bag))for(var _bi=0;_bi<INV.bag.length;_bi++)_ppaSmithHydrateLegendary(INV.bag[_bi]);
+      if(INV.equipped)Object.keys(INV.equipped).forEach(function(k){_ppaSmithHydrateLegendary(INV.equipped[k])});
+    }
+  }catch(_){}`
 );
 
 if(!output.includes("function ppaInstallRuneFusionLexical()") ||
@@ -5865,7 +5937,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
   }
   if (legendaryGearArt.includes("sendBlacksmithState") ||
       !legendaryGearArt.includes("var ART_BASE='/assets/legendary/'") ||
-      !legendaryGearArt.includes("var ART_VER='v504'") ||
+      !legendaryGearArt.includes("var ART_VER='v506'") ||
       !legendaryGearArt.includes("var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7}") ||
       !legendaryGearArt.includes('PPA_LEGENDARY_GEAR_ITEM_ART') ||
       !legendaryGearArt.includes("it.img=src;it.image=src;it.art=src") ||
