@@ -37,3 +37,5 @@ jobs:
           console.log(checks);
           if(checks.some(x=>!x[1]))process.exit(1);
           NODE
+
+# verify v526
