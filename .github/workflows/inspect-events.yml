@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect native events iframe
+      - name: Extract native Events script
         shell: bash
         run: |
           node <<'NODE'
@@ -20,24 +20,19 @@ jobs:
           const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
           const source=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
           const anchor=source.indexOf('id="eventsMenuFrame"');
-          if(anchor<0) throw new Error('eventsMenuFrame not found');
-          const a=Math.max(0,anchor-12000), b=Math.min(source.length,anchor+900000);
-          const chunk=source.slice(a,b);
-          const terms=['postMessage','worldboss','clanSiege','citadel','eventsMenu','eventsClose','eventsSideTab','openEvents','go.onclick','shardShop'];
-          const out=['ANCHOR='+anchor];
-          for(const term of terms){
-            let p=0,n=0;
-            while((p=chunk.indexOf(term,p))>=0&&n<30){
-              out.push('\n===== '+term+' local '+p+' abs '+(a+p)+' =====\n'+chunk.slice(Math.max(0,p-1800),Math.min(chunk.length,p+4200)));
-              p+=term.length;n++;
-            }
-          }
-          fs.writeFileSync('event-targets.txt',out.join('\n'));
-          console.log('EVENT_TARGETS_START');
-          console.log(out.join('\n'));
-          console.log('EVENT_TARGETS_END');
+          const s=source.indexOf('const events=[{',anchor);
+          if(anchor<0||s<0) throw new Error('native events anchors missing');
+          let e=source.indexOf('&lt;/script&gt;',s);
+          if(e<0)e=Math.min(source.length,s+2000000);
+          let chunk=source.slice(s,e);
+          chunk=chunk.replace(/data:image\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g,'data:image/REMOVED;base64,REMOVED');
+          chunk=chunk.replace(/&quot;/g,'"').replace(/&#x27;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+          fs.writeFileSync('event-script.txt',chunk);
+          console.log('EVENT_SCRIPT_START');
+          console.log(chunk);
+          console.log('EVENT_SCRIPT_END');
           NODE
       - uses: actions/upload-artifact@v4
         with:
-          name: event-targets
-          path: event-targets.txt
+          name: event-script
+          path: event-script.txt
