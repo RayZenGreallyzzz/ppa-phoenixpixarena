@@ -27,12 +27,6 @@ button{font:inherit}
 #view{overflow:auto;padding:12px 12px 30px}
 .hero{display:grid;grid-template-columns:minmax(220px,42%) minmax(0,1fr);gap:14px;align-items:start}
 .poster{display:block;width:100%;max-height:68vh;object-fit:contain;border:1px solid #70481f;border-radius:8px;background:#080706}
-.posterWrap{position:relative;width:100%;overflow:hidden;border-radius:8px;background:#080706}
-.posterWrap .poster{border:1px solid #70481f;border-radius:8px}
-.ruriCrystalPatch{position:absolute;z-index:3;display:grid;place-items:center;pointer-events:none;background:radial-gradient(circle at 50% 50%,#11191b 0,#070909 66%,rgba(5,6,6,.96) 100%);border-radius:10px}
-.ruriCrystalPatch img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 5px rgba(156,226,255,.72))}
-.ruriCrystalDrop{left:56.7%;top:58.0%;width:12.8%;height:10.8%;padding:1.1%}
-.ruriCrystalCraft{left:66.2%;top:83.0%;width:8.1%;height:7.0%;padding:.6%}
 .iconArt{min-height:270px;display:grid;place-items:center;border:1px solid #70481f;border-radius:8px;background:radial-gradient(circle,#3b160d 0,#0a0807 67%);font-size:92px}
 .info{padding:12px;border:1px solid #57391f;border-radius:8px;background:rgba(18,13,9,.96)}
 .info h2{margin:0 0 7px;color:#f2c36c;font-size:22px}
@@ -41,6 +35,11 @@ button{font:inherit}
 .status{margin-bottom:8px;color:var(--green);font:bold 10px monospace}
 .status.locked{color:var(--red)}
 .recipe{color:#ffd078;font:bold 12px/1.55 monospace}
+.ruriMatGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:8px 0}
+.ruriMat{display:grid;grid-template-columns:34px minmax(0,1fr);gap:5px;align-items:center;padding:5px;border:1px solid #4e3420;border-radius:6px;background:#0c0a08}
+.ruriMat img{width:32px;height:32px;object-fit:contain}.ruriMat b{display:block;color:#f0c66f;font:9px monospace}.ruriMat span{display:block;color:#9f8a6c;font:7px monospace}
+.ruriMat.ok{border-color:#426d38}.ruriMat.ok b{color:#83ff7d}
+.ruriCraftNote{margin-top:6px;color:#9d896c;font:8px/1.4 monospace}
 .action{width:100%;min-height:42px;margin-top:10px;border:1px solid #a45a24;border-radius:7px;background:linear-gradient(#4a2512,#27150d);color:#f6cb79;font-weight:bold;font-size:11px}
 .action:disabled{opacity:.45}
 .secondary{border-color:#3f6a85;background:linear-gradient(#15384d,#102432);color:#9dd9ff}
@@ -68,11 +67,11 @@ button{font:inherit}
   #view{padding:6px 6px 24px}
   .hero{grid-template-columns:1fr;gap:7px}
   .poster{max-width:240px;max-height:35vh;margin:auto}
-  .posterWrap{max-width:240px;margin:auto}
   .iconArt{min-height:150px;font-size:64px}
   .info{padding:7px}
   .info h2{font-size:15px}.info h3{font-size:10px;margin-top:8px}.info p{font-size:8px;line-height:1.4}.status{font-size:8px}.recipe{font-size:9px}
   .action{min-height:35px;font-size:8px;margin-top:7px}
+  .ruriMatGrid{grid-template-columns:1fr 1fr}.ruriMat{grid-template-columns:28px minmax(0,1fr)}.ruriMat img{width:26px;height:26px}
   #shopGrid{grid-template-columns:1fr}.offer{grid-template-columns:30px minmax(0,1fr) auto;padding:6px}.offerIcon{font-size:20px}
 }
 </style>
@@ -117,7 +116,7 @@ button{font:inherit}
 <script>
 const RURI_ART='__PPA_RURI_CARD__';
 const TITAN_ART='__PPA_TITAN_ART__';
-const state={titanShards:0,worldBoss:{available:true,killedThisCycle:false,nextResetAt:0,resetHour:18},clanSiege:{ready:true,nextAt:0,remainingMs:0,text:'ОСАДА ДОСТУПНА'}};
+const state={titanShards:0,ruri:{resources:{demonic:0,fire:0,blood:0,crystal:0},need:{demonic:72,fire:10,blood:7,crystal:11},owned:false,bagFull:false,canCraft:false},worldBoss:{available:true,killedThisCycle:false,nextResetAt:0,resetHour:18},clanSiege:{ready:true,nextAt:0,remainingMs:0,text:'ОСАДА ДОСТУПНА'}};
 let currentCat='game',currentEvent='ruri',toastTimer=0;
 
 const offers=[
@@ -163,13 +162,6 @@ function artBlock(src,icon,label){
   if(src)return '<img class="poster" src="'+src+'" alt="'+label+'">';
   return '<div class="iconArt">'+icon+'</div>';
 }
-function ruriArtBlock(src){
-  if(!src)return artBlock(src,'🔥','Великий Рури');
-  const crystal='/assets/ruri-crystal.webp?v=v530';
-  return '<div class="posterWrap"><img class="poster" src="'+src+'" alt="Великий Рури">'+
-    '<span class="ruriCrystalPatch ruriCrystalDrop"><img src="'+crystal+'" alt=""></span>'+
-    '<span class="ruriCrystalPatch ruriCrystalCraft"><img src="'+crystal+'" alt=""></span></div>';
-}
 function render(){
   setActive();
   const v=document.getElementById('view');
@@ -178,7 +170,18 @@ function render(){
     return;
   }
   if(currentEvent==='ruri'){
-    v.innerHTML='<div class="hero">'+ruriArtBlock(RURI_ART)+'<div class="info"><h2>🔥 Великий Рури</h2><div class="status">● АКТИВНО · ТЕСТОВЫЙ ЗАПУСК</div><p>Ограниченное событие длится 10 дней каждый месяц. Собранные ресурсы после окончания не исчезают и сохраняются до следующего запуска.</p><p><b>Великий Рури сам атакует врагов хозяина огненной магией. Урон питомца — 20% от силы атаки хозяина.</b></p><h3>ДРОП РЕСУРСОВ</h3><p>Демонический кристалл — обычные мобы 1–60 · 0,05%</p><p>Огненные осколки — элита 1–60 · 0,8%</p><p>Кровь монстра — боссы 20 / 40 / 60 · 1,5% / 2,5% / 4%</p><p>Хрустальный кристалл — мировой босс · 8%</p><h3>КРАФТ ВЕЛИКОГО РУРИ</h3><div class="recipe">72 Демонических + 10 Огненных + 7 Крови монстра + 11 Хрустальных</div><p>Ресурсы постоянные и смогут продаваться на аукционе круглый год.</p></div></div>';
+    const rs=state.ruri||{resources:{},need:{demonic:72,fire:10,blood:7,crystal:11},owned:false,bagFull:false,canCraft:false};
+    const h=rs.resources||{},n=rs.need||{demonic:72,fire:10,blood:7,crystal:11};
+    function mat(src,label,key){const have=Math.max(0,Number(h[key])||0),need=Math.max(0,Number(n[key])||0);return '<div class="ruriMat '+(have>=need?'ok':'')+'"><img src="'+src+'" alt=""><div><b>'+have+' / '+need+'</b><span>'+label+'</span></div></div>'}
+    const craftLabel=rs.owned?'РУРИ УЖЕ ПОЛУЧЕН':(rs.bagFull?'НЕТ МЕСТА В СУМКЕ':(rs.canCraft?'СОЗДАТЬ ВЕЛИКОГО РУРИ':'НЕ ХВАТАЕТ РЕСУРСОВ'));
+    v.innerHTML='<div class="hero">'+artBlock(RURI_ART,'🔥','Великий Рури')+'<div class="info"><h2>🔥 Великий Рури</h2><div class="status">● АКТИВНО · ТЕСТОВЫЙ ЗАПУСК</div><p>Ограниченное событие длится 10 дней каждый месяц. Собранные ресурсы после окончания не исчезают и сохраняются до следующего запуска.</p><p><b>Великий Рури сам атакует врагов хозяина огненной магией. Урон питомца — 20% от силы атаки хозяина.</b></p><h3>ДРОП РЕСУРСОВ</h3><p>Демонический кристалл — обычные мобы 1–60 · 0,05%</p><p>Огненные осколки — элита 1–60 · 0,8%</p><p>Кровь монстра — боссы 20 / 40 / 60 · 1,5% / 2,5% / 4%</p><p>Хрустальный кристалл — мировой босс · 8%</p><h3>КРАФТ ВЕЛИКОГО РУРИ</h3><div class="recipe">72 Демонических + 10 Огненных + 7 Крови монстра + 11 Хрустальных</div><div class="ruriMatGrid">'+
+      mat('/assets/ruri-demonic-crystal.webp?v=v531','Демонич.','demonic')+
+      mat('/assets/ruri-fire-shards.webp?v=v531','Огненные','fire')+
+      mat('/assets/ruri-monster-blood.webp?v=v531','Кровь','blood')+
+      mat('/assets/ruri-crystal.webp?v=v531','Хрусталь','crystal')+
+      '</div><button class="action" id="craftRuri" '+(rs.canCraft?'':'disabled')+'>'+craftLabel+'</button><div class="ruriCraftNote">Ресурсы списываются только после успешного создания. Великий Рури добавляется в сумку +0.</div></div></div>';
+    const cb=document.getElementById('craftRuri');
+    if(cb)cb.onclick=()=>{if(!state.ruri||!state.ruri.canCraft)return;cb.disabled=true;cb.textContent='СОЗДАНИЕ…';parent.postMessage({type:'ruriCraft'},'*')};
     return;
   }
   if(currentEvent==='titan'){
@@ -238,10 +241,15 @@ window.addEventListener('message',e=>{
   const d=e.data||{};
   if(d.type==='eventsState'){
     state.titanShards=Math.max(0,Number(d.titanShards)||0);
+    if(d.ruri&&typeof d.ruri==='object')state.ruri=d.ruri;
     if(d.worldBoss&&typeof d.worldBoss==='object')state.worldBoss=d.worldBoss;
     if(d.clanSiege&&typeof d.clanSiege==='object')state.clanSiege=d.clanSiege;
     render();
     if(document.getElementById('shop').classList.contains('on'))openShop();
+  }else if(d.type==='ruriCraftResult'){
+    if(d.ruri&&typeof d.ruri==='object')state.ruri=d.ruri;
+    showToast(d.message||'Готово');
+    render();
   }else if(d.type==='titanShardShopResult'){
     state.titanShards=Math.max(0,Number(d.titanShards)||0);
     showToast(d.message||'Готово');

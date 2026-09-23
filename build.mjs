@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v530-ruri-card-smith-legendary-safe-20260923';
+const CLIENT_BUILD = 'v531-ruri-real-card-direct-craft-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -83,10 +83,46 @@ const gameDir = path.join(publicDir, 'game');
 fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
-fs.writeFileSync(path.join(assetsDir,'ruri-event-card.webp'),PPA_RURI_EVENT_CARD_ART.buf);
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
 for(const name of PPA_RURI_RESOURCE_FILES){
   fs.copyFileSync(path.join(ROOT,'assets-src',name),path.join(assetsDir,name));
+}
+
+// V531: canonical Great Ruri poster file itself gets the approved current crystal.
+// No CSS/DOM marker or overlay is needed in the Events UI.
+{
+  const cardMeta=await sharp(PPA_RURI_EVENT_CARD_ART.buf).metadata();
+  const cw=Number(cardMeta.width)||1197,ch=Number(cardMeta.height)||1314;
+  const sx=cw/1197,sy=ch/1314;
+  const crystalSrc=path.join(ROOT,'assets-src','ruri-crystal.webp');
+  function sc(v,s){return Math.max(1,Math.round(v*s))}
+  function softPatch(w,h){
+    return Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'">'+
+      '<defs><radialGradient id="g" cx="50%" cy="50%" r="50%">'+
+      '<stop offset="0%" stop-color="#07090a" stop-opacity="1"/>'+
+      '<stop offset="72%" stop-color="#07090a" stop-opacity=".99"/>'+
+      '<stop offset="91%" stop-color="#07090a" stop-opacity=".82"/>'+
+      '<stop offset="100%" stop-color="#07090a" stop-opacity="0"/>'+
+      '</radialGradient></defs><ellipse cx="'+(w/2)+'" cy="'+(h/2)+'" rx="'+(w/2)+'" ry="'+(h/2)+'" fill="url(#g)"/></svg>'
+    );
+  }
+  const dropW=sc(132,sx),dropH=sc(138,sy);
+  const craftW=sc(82,sx),craftH=sc(86,sy);
+  const dropCrystal=await sharp(crystalSrc).resize({width:dropW,height:dropH,fit:'contain'}).webp({quality:96,alphaQuality:100}).toBuffer();
+  const craftCrystal=await sharp(crystalSrc).resize({width:craftW,height:craftH,fit:'contain'}).webp({quality:96,alphaQuality:100}).toBuffer();
+  const comps=[
+    {input:softPatch(sc(185,sx),sc(158,sy)),left:sc(647,sx),top:sc(753,sy)},
+    {input:dropCrystal,left:sc(674,sx),top:sc(767,sy)},
+    {input:softPatch(sc(118,sx),sc(105,sy)),left:sc(785,sx),top:sc(1085,sy)},
+    {input:craftCrystal,left:sc(802,sx),top:sc(1095,sy)}
+  ];
+  await sharp(PPA_RURI_EVENT_CARD_ART.buf)
+    .composite(comps)
+    .webp({quality:94,alphaQuality:100,effort:5})
+    .toFile(path.join(assetsDir,'ruri-event-card.webp'));
+  const outMeta=await sharp(path.join(assetsDir,'ruri-event-card.webp')).metadata();
+  if(outMeta.width!==cw||outMeta.height!==ch)throw new Error('Great Ruri poster output size changed unexpectedly');
 }
 const PPA_LEGENDARY_FILE_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
 const PPA_LEGENDARY_FILE_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
@@ -229,7 +265,7 @@ function ppaEscapeSrcdocCode(code) {
   if(!eventsFrameMatches.length)throw new Error('Native Events iframe target not found');
   output=output.replace(eventsFrameRe,'<iframe id="eventsMenuFrame" title="События" srcdoc="'+nativeEventsEscaped+'"></iframe>');
   console.log('[PPA BUILD] Native Events iframe instances replaced: '+eventsFrameMatches.length);
-  if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('ruriCrystalPatch')||!output.includes('data-cat=&quot;game&quot;')){
+  if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('craftRuri')||!output.includes('data-cat=&quot;game&quot;')){
     throw new Error('Native tabbed Events replacement incomplete');
   }
   console.log('[PPA BUILD] Native Events iframe replaced: Игровые / Клановые / Война / Обновления');
@@ -5890,6 +5926,93 @@ if(!output.includes("_ppaSafeName") ||
    !output.includes("it.petName===&#x27;Великий Рури&#x27;") ||
    output.includes("}else if(it.rarity==='epic'){\n    it.enh=Math.max(0,it.enh-1);")){
   throw new Error('Legendary / Great Ruri blacksmith safety patch incomplete');
+}
+/* ======================================================================== */
+
+/* === GREAT RURI DIRECT EVENT CRAFT ======================================= */
+ppaPatchRegex(
+  'Great Ruri direct craft state and handler',
+  /function\s+sendEventsState\(\)\s*\{/,
+  `function ppaRuriFindOwned(){
+  var found=null;
+  function scan(a){if(found||!Array.isArray(a))return;for(var i=0;i<a.length;i++){var x=a[i];if(x&&(x.ruriLegendary===true||x.petName==='Великий Рури'||x.name==='Великий Рури')){found=x;return}}}
+  try{
+    scan(INV.bag);
+    if(INV.storage){scan(INV.storage.personal);scan(INV.storage.clan);scan(INV.storage.premium)}
+    if(!found&&INV.equipped&&INV.equipped.pet&&(INV.equipped.pet.ruriLegendary===true||INV.equipped.pet.petName==='Великий Рури'||INV.equipped.pet.name==='Великий Рури'))found=INV.equipped.pet;
+    if(!found&&Array.isArray(INV.auctionLots)){for(var j=0;j<INV.auctionLots.length;j++){var l=INV.auctionLots[j],g=l&&l.item&&(l.item.gear||l.item);if(g&&(g.ruriLegendary===true||g.petName==='Великий Рури'||g.name==='Великий Рури')){found=g;break}}}
+  }catch(_){}
+  return found;
+}
+function ppaRuriCraftState(){
+  var m=(INV&&INV.materials&&typeof INV.materials==='object')?INV.materials:{};
+  var have={
+    demonic:Math.max(0,Math.floor(Number(m['Демонический кристалл'])||0)),
+    fire:Math.max(0,Math.floor(Number(m['Огненные осколки'])||0)),
+    blood:Math.max(0,Math.floor(Number(m['Кровь монстра'])||0)),
+    crystal:Math.max(0,Math.floor(Number(m['Хрустальный кристалл'])||0))
+  };
+  var owned=!!ppaRuriFindOwned();
+  var bagFull=!Array.isArray(INV.bag)||INV.bag.length>=100;
+  var enough=have.demonic>=72&&have.fire>=10&&have.blood>=7&&have.crystal>=11;
+  return {resources:have,need:{demonic:72,fire:10,blood:7,crystal:11},owned:owned,bagFull:bagFull,canCraft:(!owned&&!bagFull&&enough)};
+}
+function ppaRuriCraftResult(ok,msg){
+  try{if(eventsMenuFrame&&eventsMenuFrame.contentWindow)eventsMenuFrame.contentWindow.postMessage({type:'ruriCraftResult',ok:!!ok,message:String(msg||''),ruri:ppaRuriCraftState()},'*')}catch(_){}
+}
+function ppaRuriCraftFromEvent(){
+  try{
+    var st=ppaRuriCraftState();
+    if(st.owned){ppaRuriCraftResult(false,'Великий Рури уже есть у персонажа');return false}
+    if(st.bagFull){ppaRuriCraftResult(false,'Освободи место в сумке');return false}
+    if(!st.canCraft){ppaRuriCraftResult(false,'Не хватает ресурсов для Великого Рури');return false}
+    INV.materials['Демонический кристалл']=st.resources.demonic-72;
+    INV.materials['Огненные осколки']=st.resources.fire-10;
+    INV.materials['Кровь монстра']=st.resources.blood-7;
+    INV.materials['Хрустальный кристалл']=st.resources.crystal-11;
+    var uid='crafted_ruri_'+Date.now()+'_'+Math.floor(Math.random()*1000000);
+    var ruri={
+      uid:uid,eventRewardId:'crafted_ruri_legendary_v1',eventRewardTemplate:false,eventRewardStock:false,rewardSource:'great_ruri_craft',
+      name:'Великий Рури',petName:'Великий Рури',slot:'pet',rarity:'legendary',enh:0,
+      classKey:'all',className:'Все классы',icon:'🦄',ic:'🦄',
+      img:PPA_RURI_DIR_ART.S,dirSprites:PPA_RURI_DIR_ART,stats:{},sell:0,
+      ruriLegendary:true,ruriAttackType:'magic-melee',ruriAttackScale:.20,
+      createdAt:Date.now(),weight:1
+    };
+    if(typeof ppaApplyRuriEnhancement==='function')ppaApplyRuriEnhancement(ruri);
+    INV.bag.push(ruri);
+    try{if(typeof saveGame==='function')saveGame()}catch(_){}
+    try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
+    try{if(typeof showPickup==='function')showPickup('🔥 ВЕЛИКИЙ РУРИ СОЗДАН','#ffd36d')}catch(_){}
+    ppaRuriCraftResult(true,'Великий Рури создан и добавлен в сумку');
+    try{sendEventsState()}catch(_){}
+    return true;
+  }catch(e){
+    console.warn('PPA Great Ruri craft',e);
+    ppaRuriCraftResult(false,'Не удалось создать Великого Рури');
+    return false;
+  }
+}
+window.PPA_RURI_CRAFT_STATE=ppaRuriCraftState;
+window.PPA_RURI_CRAFT=ppaRuriCraftFromEvent;
+
+function sendEventsState(){`
+);
+ppaPatchRegex(
+  'Great Ruri state in Events payload',
+  /titanShards:titanShardCount\(\),\s*worldBoss:worldBossDailyStatus\(\),/,
+  "titanShards:titanShardCount(),\n        ruri:(typeof ppaRuriCraftState==='function'?ppaRuriCraftState():null),\n        worldBoss:worldBossDailyStatus(),"
+);
+ppaPatchRegex(
+  'Great Ruri craft message route',
+  /if\(d\.type==='titanShardBuy'\)\{titanShardExchange\(d\.id\);return;\}/,
+  "if(d.type==='titanShardBuy'){titanShardExchange(d.id);return;}\n  if(d.type==='ruriCraft'){ppaRuriCraftFromEvent();return;}"
+);
+if(!output.includes('function ppaRuriCraftFromEvent()')||
+   !output.includes("d.type==='ruriCraft'")||
+   !output.includes("Демонический кристалл']=st.resources.demonic-72")||
+   !output.includes("eventRewardId:'crafted_ruri_legendary_v1'")){
+  throw new Error('Great Ruri direct craft patch incomplete');
 }
 /* ======================================================================== */
 
