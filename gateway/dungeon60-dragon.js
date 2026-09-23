@@ -261,10 +261,13 @@
             if(Math.random()<.12)pushStoneDrop(e,'rune',1);
           }
           if(typeof genItem==='function'&&typeof LOOT!=='undefined'&&Array.isArray(LOOT)){
-            var roll=Math.random(),rar=roll<.02?'epic':(roll<.16?'rare':null);
-            if(rar){
-              var it=genItem(60,true,rar);
-              LOOT.push({x:e.x+(Math.random()-.5)*42,y:e.y+(Math.random()-.5)*42,kind:'gear',item:it,gear:it,bob:Math.random()*6});
+            if(Math.random()<.02){
+              var epicIt=genItem(60,true,'epic');
+              LOOT.push({x:e.x+(Math.random()-.5)*42,y:e.y+(Math.random()-.5)*42,kind:'gear',item:epicIt,gear:epicIt,bob:Math.random()*6});
+            }
+            if(Math.random()<.0000012){
+              var legendaryIt=genItem(60,true,'legendary');
+              LOOT.push({x:e.x+(Math.random()-.5)*42,y:e.y+(Math.random()-.5)*42,kind:'gear',item:legendaryIt,gear:legendaryIt,bob:Math.random()*6});
             }
           }
         }catch(_){}
@@ -285,8 +288,8 @@
       var wrapped=function(e){
         if(e&&e.isDungeon60Boss)return [
           ['Золото','100%'],
-          ['Синий шмот/оружие','14%'],
           ['Фиолетовый шмот/оружие','2%'],
+          ['Легендарный шмот/оружие','0.00012%'],
           ['Обычный ресурс ×4–7','100%'],
           ['Зелёный ресурс ×2–4','80%'],
           ['Синий ресурс ×1–2','50%'],
