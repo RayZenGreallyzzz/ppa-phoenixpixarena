@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v532-ruri-square-craft-smith-fix-20260923';
+const CLIENT_BUILD = 'v533-ruri-smith-build-fix-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2847,8 +2847,14 @@ function inspectSmithItem(it,context){`
 
 ppaPatchRegex(
   'blacksmith legendary rarity option',
-  /<option value=&quot;epic&quot;>Эпический<\/option>/,
-  '<option value="epic">Эпический</option><option value="legendary">Легендарный</option>'
+  /const\s+enhRarity=document\.getElementById\(&#x27;enhRarity&#x27;\);/,
+  `const enhRarity=document.getElementById(&#x27;enhRarity&#x27;);
+if(enhRarity&&!enhRarity.querySelector(&#x27;option[value=legendary]&#x27;)){
+  const _ppaLegendOpt=document.createElement(&#x27;option&#x27;);
+  _ppaLegendOpt.value=&#x27;legendary&#x27;;
+  _ppaLegendOpt.textContent=&#x27;Легендарный&#x27;;
+  enhRarity.appendChild(_ppaLegendOpt);
+}`
 );
 
 ppaPatchRegex(
@@ -3456,7 +3462,7 @@ if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
    !output.includes("__ppaCanvasizingSrc===src") ||
    !output.includes("if(src.indexOf('/assets/legendary/')>=0)") ||
    !output.includes("img.id==='enhSrcImg'||img.id==='enhDstImg'") ||
-   !output.includes('value="legendary">Легендарный') ||
+   !output.includes("_ppaLegendOpt.textContent=&#x27;Легендарный&#x27;") ||
    !output.includes("if(rarity==='legendary') return 'откат −1, легендарный не сгорает'") ||
    !output.includes("it.petName==='Великий Рури'||it.name==='Великий Рури'") ||
    !output.includes("attributeFilter:['src','srcset']") ||
