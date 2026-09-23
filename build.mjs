@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v509-legendary-rarity-normalization-20260923';
+const CLIENT_BUILD = 'v510-legendary-guard-order-fix-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2928,10 +2928,9 @@ ppaPatchRegex(
   }catch(_){}`,
   true
 );
-if((output.match(/\/assets\/legendary\/'\+_cls\+'-'\+_slot\+'\.webp\?v=v506/g)||[]).length<1 ||
-   !output.includes("function _ppaSmithHydrateLegendary(it)") ||
-   !output.includes("function auctionSourceInventoryItem(it)")){
-  throw new Error('Unified legendary smith/auction art coverage incomplete');
+if((output.match(/\/assets\/legendary\/'\+_cls\+'-'\+_slot\+'\.webp\?v=v509/g)||[]).length<1 ||
+   !output.includes("it.rarity='legendary';it.ppaLegendaryReferenceArt=true")){
+  throw new Error('Canonical legendary itemVisual patch incomplete');
 }
 /* ======================================================================== */
 
