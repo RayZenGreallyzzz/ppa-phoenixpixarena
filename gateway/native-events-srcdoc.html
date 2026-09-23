@@ -35,10 +35,13 @@ button{font:inherit}
 .status{margin-bottom:8px;color:var(--green);font:bold 10px monospace}
 .status.locked{color:var(--red)}
 .recipe{color:#ffd078;font:bold 12px/1.55 monospace}
-.ruriMatGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:8px 0}
-.ruriMat{display:grid;grid-template-columns:34px minmax(0,1fr);gap:5px;align-items:center;padding:5px;border:1px solid #4e3420;border-radius:6px;background:#0c0a08}
-.ruriMat img{width:32px;height:32px;object-fit:contain}.ruriMat b{display:block;color:#f0c66f;font:9px monospace}.ruriMat span{display:block;color:#9f8a6c;font:7px monospace}
-.ruriMat.ok{border-color:#426d38}.ruriMat.ok b{color:#83ff7d}
+.ruriMatGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:8px 0 12px}
+.ruriMatWrap{min-width:0;text-align:center}
+.ruriMat{width:100%;aspect-ratio:1/1;display:grid;place-items:center;padding:3px;border:1px solid #4e3420;border-radius:6px;background:#0c0a08;overflow:hidden}
+.ruriMat img{display:block;width:88%;height:88%;object-fit:contain}
+.ruriMatCount{margin-top:4px;color:#f0c66f;font:bold 8px/1 monospace;white-space:nowrap}
+.ruriMatWrap.ok .ruriMat{border-color:#426d38;box-shadow:inset 0 0 0 1px rgba(131,255,125,.08)}
+.ruriMatWrap.ok .ruriMatCount{color:#83ff7d}
 .ruriCraftNote{margin-top:6px;color:#9d896c;font:8px/1.4 monospace}
 .action{width:100%;min-height:42px;margin-top:10px;border:1px solid #a45a24;border-radius:7px;background:linear-gradient(#4a2512,#27150d);color:#f6cb79;font-weight:bold;font-size:11px}
 .action:disabled{opacity:.45}
@@ -71,7 +74,7 @@ button{font:inherit}
   .info{padding:7px}
   .info h2{font-size:15px}.info h3{font-size:10px;margin-top:8px}.info p{font-size:8px;line-height:1.4}.status{font-size:8px}.recipe{font-size:9px}
   .action{min-height:35px;font-size:8px;margin-top:7px}
-  .ruriMatGrid{grid-template-columns:1fr 1fr}.ruriMat{grid-template-columns:28px minmax(0,1fr)}.ruriMat img{width:26px;height:26px}
+  .ruriMatGrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.ruriMat{padding:2px}.ruriMatCount{font-size:7px;margin-top:3px}
   #shopGrid{grid-template-columns:1fr}.offer{grid-template-columns:30px minmax(0,1fr) auto;padding:6px}.offerIcon{font-size:20px}
 }
 </style>
@@ -172,7 +175,7 @@ function render(){
   if(currentEvent==='ruri'){
     const rs=state.ruri||{resources:{},need:{demonic:72,fire:10,blood:7,crystal:11},owned:false,bagFull:false,canCraft:false};
     const h=rs.resources||{},n=rs.need||{demonic:72,fire:10,blood:7,crystal:11};
-    function mat(src,label,key){const have=Math.max(0,Number(h[key])||0),need=Math.max(0,Number(n[key])||0);return '<div class="ruriMat '+(have>=need?'ok':'')+'"><img src="'+src+'" alt=""><div><b>'+have+' / '+need+'</b><span>'+label+'</span></div></div>'}
+    function mat(src,label,key){const have=Math.max(0,Number(h[key])||0),need=Math.max(0,Number(n[key])||0),ok=have>=need;return '<div class="ruriMatWrap '+(ok?'ok':'')+'" title="'+label+'"><div class="ruriMat"><img src="'+src+'" alt="'+label+'"></div><div class="ruriMatCount">'+have+' / '+need+'</div></div>'}
     const craftLabel=rs.owned?'РУРИ УЖЕ ПОЛУЧЕН':(rs.bagFull?'НЕТ МЕСТА В СУМКЕ':(rs.canCraft?'СОЗДАТЬ ВЕЛИКОГО РУРИ':'НЕ ХВАТАЕТ РЕСУРСОВ'));
     v.innerHTML='<div class="hero">'+artBlock(RURI_ART,'🔥','Великий Рури')+'<div class="info"><h2>🔥 Великий Рури</h2><div class="status">● АКТИВНО · ТЕСТОВЫЙ ЗАПУСК</div><p>Ограниченное событие длится 10 дней каждый месяц. Собранные ресурсы после окончания не исчезают и сохраняются до следующего запуска.</p><p><b>Великий Рури сам атакует врагов хозяина огненной магией. Урон питомца — 20% от силы атаки хозяина.</b></p><h3>ДРОП РЕСУРСОВ</h3><p>Демонический кристалл — обычные мобы 1–60 · 0,05%</p><p>Огненные осколки — элита 1–60 · 0,8%</p><p>Кровь монстра — боссы 20 / 40 / 60 · 1,5% / 2,5% / 4%</p><p>Хрустальный кристалл — мировой босс · 8%</p><h3>КРАФТ ВЕЛИКОГО РУРИ</h3><div class="recipe">72 Демонических + 10 Огненных + 7 Крови монстра + 11 Хрустальных</div><div class="ruriMatGrid">'+
       mat('/assets/ruri-demonic-crystal.webp?v=v531','Демонич.','demonic')+

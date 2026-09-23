@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v531-ruri-real-card-direct-craft-20260923';
+const CLIENT_BUILD = 'v532-ruri-square-craft-smith-fix-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2727,6 +2727,12 @@ function ppaSmithCanvasize(root){
     host.querySelectorAll('img').forEach(function(x){imgs.push(x)});
     imgs.forEach(function(img){
       if(!img||img.__ppaCanvasized)return;
+      if(img.id==='enhSrcImg'||img.id==='enhDstImg'){
+        img.__ppaCanvasizingSrc=String(img.currentSrc||img.getAttribute('src')||img.src||'');
+        img.style.setProperty('object-fit','contain','important');
+        img.style.setProperty('image-rendering','auto','important');
+        return;
+      }
       var matSlot=null,matName='',isEmerald=false;
       try{
         matSlot=img.closest?img.closest('[data-ppa-material-name]'):null;
@@ -2837,6 +2843,24 @@ try{
   ppaSmithRefreshCanvasArt();
 }catch(_){}
 function inspectSmithItem(it,context){`
+);
+
+ppaPatchRegex(
+  'blacksmith legendary rarity option',
+  /<option value=&quot;epic&quot;>Эпический<\/option>/,
+  '<option value="epic">Эпический</option><option value="legendary">Легендарный</option>'
+);
+
+ppaPatchRegex(
+  'blacksmith legendary failure label',
+  /if\(rarity===&#x27;epic&#x27;\) return &#x27;откат −1, эпик не сгорает&#x27;;/,
+  "if(rarity==='epic') return 'откат −1, эпик не сгорает';\n  if(rarity==='legendary') return 'откат −1, легендарный не сгорает';"
+);
+
+ppaPatchRegex(
+  'blacksmith Ruri rarity selection',
+  /enhRarity\.value=it\.rarity\|\|&#x27;common&#x27;;/,
+  "enhRarity.value=(it.ruriLegendary===true||it.petName==='Великий Рури'||it.name==='Великий Рури')?'legendary':(it.rarity||'common');"
 );
 
 ppaPatchRegex(
@@ -3431,6 +3455,10 @@ if(output.includes("function fixGuardMenu(e)") ||
 if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
    !output.includes("__ppaCanvasizingSrc===src") ||
    !output.includes("if(src.indexOf('/assets/legendary/')>=0)") ||
+   !output.includes("img.id==='enhSrcImg'||img.id==='enhDstImg'") ||
+   !output.includes('value="legendary">Легендарный') ||
+   !output.includes("if(rarity==='legendary') return 'откат −1, легендарный не сгорает'") ||
+   !output.includes("it.petName==='Великий Рури'||it.name==='Великий Рури'") ||
    !output.includes("attributeFilter:['src','srcset']") ||
    !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v514'") ||
    !output.includes("s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}if(sharpenable)selectSmithGear(c.idx)};")) {
