@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v495-hd-legendary-8classes-ready-20260923';
+const CLIENT_BUILD = 'v496-canonical-hd-legendary-only-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -51,34 +51,20 @@ function ppaReadApprovedB64Parts(names){
 const PPA_RURI_MOVE_ART=ppaReadApprovedB64Parts([
   'ruri-move-1.b64','ruri-move-2.b64','ruri-move-3.b64'
 ]);
-const PPA_LEGENDARY_GEAR_ART=ppaReadApprovedB64Parts([
-  'legendary-gear-atlas.part00.b64',
-  'legendary-gear-atlas.part01.b64',
-  'legendary-gear-atlas.part02.b64',
-  'legendary-gear-atlas.part03.b64',
-  'legendary-gear-atlas.part04.b64',
-  'legendary-gear-atlas.part05.b64',
-  'legendary-gear-atlas.part06.b64',
-  'legendary-gear-atlas.part07.b64',
-  'legendary-gear-atlas.part08.b64'
-]);
-
 // Canonical HD legendary source for ALL 8 classes.
 // Layout: 6 columns x 8 rows, 256x256 per cell.
 // Rows: tank, paladin, barbarian, assassin, gnome, archer, mage, priest.
 // Cols: weapon, helmet, armor, legs, gloves, boots.
 const PPA_LEGENDARY_HD_PATH=path.join(ROOT,'assets-src','legendary-gear-hd-approved-8classes.png');
-let PPA_LEGENDARY_HD_BUF=null;
-if(fs.existsSync(PPA_LEGENDARY_HD_PATH)){
-  PPA_LEGENDARY_HD_BUF=fs.readFileSync(PPA_LEGENDARY_HD_PATH);
-  const _hdMeta=await sharp(PPA_LEGENDARY_HD_BUF).metadata();
-  if(_hdMeta.width!==1536||_hdMeta.height!==2048){
-    throw new Error('Legendary HD master must be exactly 1536x2048 (6x8 cells of 256px)');
-  }
-  console.log('PPA legendary gear: canonical HD 256px source enabled for all 8 classes.');
-}else{
-  console.warn('PPA legendary gear: HD master not uploaded yet; keeping legacy 48px source until assets-src/legendary-gear-hd-approved-8classes.png is present.');
+if(!fs.existsSync(PPA_LEGENDARY_HD_PATH)){
+  throw new Error('Canonical legendary HD master is required: assets-src/legendary-gear-hd-approved-8classes.png');
 }
+const PPA_LEGENDARY_HD_BUF=fs.readFileSync(PPA_LEGENDARY_HD_PATH);
+const PPA_LEGENDARY_HD_META=await sharp(PPA_LEGENDARY_HD_BUF).metadata();
+if(PPA_LEGENDARY_HD_META.format!=='png'||PPA_LEGENDARY_HD_META.width!==1536||PPA_LEGENDARY_HD_META.height!==2048||!PPA_LEGENDARY_HD_META.hasAlpha){
+  throw new Error('Legendary HD master must be transparent PNG 1536x2048 (6x8 cells of 256px)');
+}
+console.log('PPA legendary gear: canonical HD-only 256px source enabled for all 8 classes.');
 
 const publicDir = path.join(ROOT, 'public');
 const assetsDir = path.join(publicDir, 'assets');
@@ -87,31 +73,20 @@ fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
-fs.writeFileSync(path.join(assetsDir,'legendary-gear-atlas.webp'),PPA_LEGENDARY_GEAR_ART.buf);
 const PPA_LEGENDARY_FILE_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
 const PPA_LEGENDARY_FILE_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
 const PPA_LEGENDARY_DIR=path.join(assetsDir,'legendary');
 fs.mkdirSync(PPA_LEGENDARY_DIR,{recursive:true});
-const PPA_LEGENDARY_RENDER_BUF=PPA_LEGENDARY_HD_BUF||PPA_LEGENDARY_GEAR_ART.buf;
-const PPA_LEGENDARY_CELL=PPA_LEGENDARY_HD_BUF?256:48;
+const PPA_LEGENDARY_CELL=256;
 await Promise.all(Object.entries(PPA_LEGENDARY_FILE_ROWS).flatMap(([cls,row])=>
   Object.entries(PPA_LEGENDARY_FILE_COLS).map(async([slot,col])=>{
     const outPath=path.join(PPA_LEGENDARY_DIR,cls+'-'+slot+'.webp');
-    const img=sharp(PPA_LEGENDARY_RENDER_BUF)
-      .extract({
-        left:col*PPA_LEGENDARY_CELL,
-        top:row*PPA_LEGENDARY_CELL,
-        width:PPA_LEGENDARY_CELL,
-        height:PPA_LEGENDARY_CELL
-      });
-    if(PPA_LEGENDARY_HD_BUF){
-      await img.webp({lossless:true,alphaQuality:100,effort:4}).toFile(outPath);
-    }else{
-      await img
-        .extend({top:4,bottom:4,left:4,right:4,background:{r:0,g:0,b:0,alpha:0}})
-        .webp({lossless:true,alphaQuality:100,effort:4})
-        .toFile(outPath);
-    }
+    await sharp(PPA_LEGENDARY_HD_BUF)
+      .extract({left:col*256,top:row*256,width:256,height:256})
+      .webp({lossless:true,alphaQuality:100,effort:4})
+      .toFile(outPath);
+    const meta=await sharp(outPath).metadata();
+    if(meta.width!==256||meta.height!==256||!meta.hasAlpha)throw new Error('Legendary HD item output invalid: '+cls+' '+slot);
   })
 ));
 for(const cls of Object.keys(PPA_LEGENDARY_FILE_ROWS)){
