@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v511-smith-audit-order-fix-20260923';
+const CLIENT_BUILD = 'v512-restore-classgearart-function-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2848,7 +2848,7 @@ if(output.includes("inspectMarketItem&#x27;).forEach(el=&gt;el.onclick") ||
 ppaPatchRegex(
   'blacksmith legendary craft canonical classGearArt source',
   /function\s+classGearArt\s*\([^)]*\)\s*\{/,
-  `/* === SELF-CONTAINED CANONICAL LEGENDARY UI ART ========================= */
+  `$&
   try{
     var _ppaR=String(arguments[0]==null?'':arguments[0]).trim().toLowerCase();
     if(_ppaR==='legendary'||_ppaR==='legend'||_ppaR==='orange'||_ppaR==='gold'||/легендар/.test(_ppaR)){
@@ -2865,9 +2865,9 @@ ppaPatchRegex(
   }catch(_){}`
 );
 
-if(!output.includes("blacksmith legendary craft canonical classGearArt source") &&
+if(!/function\s+classGearArt\s*\([^)]*\)\s*\{/.test(output) ||
    !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v509'")){
-  throw new Error('Blacksmith canonical legendary craft art patch missing');
+  throw new Error('Blacksmith canonical legendary craft art/function header missing');
 }
 /* ======================================================================== */
 
