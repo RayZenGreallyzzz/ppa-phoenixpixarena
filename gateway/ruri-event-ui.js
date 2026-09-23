@@ -20,6 +20,7 @@ window.PPA_RURI_EVENT_ACTIVE=true;
 window.PPA_RURI_EVENT_IS_ACTIVE=function(){return window.PPA_RURI_EVENT_ACTIVE===true};
 
 var LAST={modal:null,titan:null,citadel:null};
+var suppressUntil=0;
 function txt(n){try{return String(n&&n.textContent||'').trim()}catch(_){return ''}}
 function exact(label){
  var nodes=document.querySelectorAll('div,span,b,strong,h1,h2,h3,h4,p,button');
@@ -56,10 +57,12 @@ function imgFrom(node){
 }
 function clickOriginal(kind){
  var node=kind==='titan'?LAST.titan:LAST.citadel;
+ suppressUntil=Date.now()+900;
  hideHub(false);
  if(node){try{node.click()}catch(_){}}
 }
 function closeOriginal(){
+ suppressUntil=Date.now()+900;
  var modal=LAST.modal;if(!modal)return;
  var bs=modal.querySelectorAll('button');
  for(var i=0;i<bs.length;i++){
@@ -155,7 +158,9 @@ window.PPA_OPEN_RURI_EVENT=function(){if(!showHub()){ensureHub().classList.add('
 window.PPA_REFRESH_RURI_EVENT_UI=function(){setTimeout(showHub,80)};
 
 var pending=0;
-document.addEventListener('click',function(){
+document.addEventListener('click',function(e){
+ var h=document.getElementById('ppaEventHub');
+ if((h&&e&&e.target&&h.contains(e.target))||Date.now()<suppressUntil)return;
  if(pending)clearTimeout(pending);
  pending=setTimeout(function(){pending=0;showHub()},120);
 },true);
