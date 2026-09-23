@@ -19,34 +19,54 @@ window.PPA_RURI_EVENT_CONFIG=CFG;
 window.PPA_RURI_EVENT_ACTIVE=true;
 window.PPA_RURI_EVENT_IS_ACTIVE=function(){return window.PPA_RURI_EVENT_ACTIVE===true};
 
-var LAST={modal:null,titan:null,citadel:null};
+var LAST={modal:null,titan:null,citadel:null,doc:null};
 var suppressUntil=0;
 function txt(n){try{return String(n&&n.textContent||'').trim()}catch(_){return ''}}
-function exact(label){
- var nodes=document.querySelectorAll('div,span,b,strong,h1,h2,h3,h4,p,button');
+function docs(){
+ var out=[document],seen=[document],ifs=document.querySelectorAll('iframe');
+ for(var i=0;i<ifs.length;i++){
+  try{
+   var d=ifs[i].contentDocument;
+   if(d&&seen.indexOf(d)<0){seen.push(d);out.push(d)}
+  }catch(_){}
+ }
+ return out;
+}
+function exactIn(doc,label){
+ if(!doc)return null;
+ var nodes=doc.querySelectorAll('div,span,b,strong,h1,h2,h3,h4,p,button');
  for(var i=0;i<nodes.length;i++)if(txt(nodes[i])===label)return nodes[i];
  return null;
 }
-function cardFor(label){
- var n=exact(label); if(!n)return null;
+function cardFor(doc,label){
+ var n=exactIn(doc,label); if(!n)return null;
  var cur=n;
- for(var i=0;i<9&&cur;i++,cur=cur.parentElement){
+ for(var i=0;i<10&&cur;i++,cur=cur.parentElement){
    var t=txt(cur);
-   if(t.indexOf(label)>=0 && (cur.onclick||cur.querySelector('button')||cur.querySelector('img,canvas')))return cur;
+   if(t.indexOf(label)>=0 && (cur.onclick||(cur.querySelector&&cur.querySelector('button'))||(cur.querySelector&&cur.querySelector('img,canvas'))))return cur;
  }
  return n.parentElement||n;
 }
 function eventModal(){
- var title=exact('СОБЫТИЯ')||exact('События');
- var titan=exact('Кристальный Титан');
- var cit=exact('Цитадель Феникса');
- if(!title||(!titan&&!cit))return null;
- var a=[],n=title,d=0;
- while(n&&d++<18){a.push(n);n=n.parentElement}
- n=titan||cit;d=0;
- while(n&&d++<18){
-   if(a.indexOf(n)>=0){LAST.modal=n;LAST.titan=cardFor('Кристальный Титан');LAST.citadel=cardFor('Цитадель Феникса');return n}
+ var roots=docs();
+ for(var r=0;r<roots.length;r++){
+  var doc=roots[r];
+  var title=exactIn(doc,'СОБЫТИЯ')||exactIn(doc,'События');
+  var titan=exactIn(doc,'Кристальный Титан');
+  var cit=exactIn(doc,'Цитадель Феникса');
+  if(!title||(!titan&&!cit))continue;
+  var a=[],n=title,d=0;
+  while(n&&d++<20){a.push(n);n=n.parentElement}
+  n=titan||cit;d=0;
+  while(n&&d++<20){
+   if(a.indexOf(n)>=0){
+    LAST.modal=n;LAST.doc=doc;
+    LAST.titan=cardFor(doc,'Кристальный Титан');
+    LAST.citadel=cardFor(doc,'Цитадель Феникса');
+    return n;
+   }
    n=n.parentElement;
+  }
  }
  return null;
 }
@@ -163,5 +183,6 @@ document.addEventListener('click',function(e){
  if((h&&e&&e.target&&h.contains(e.target))||Date.now()<suppressUntil)return;
  if(pending)clearTimeout(pending);
  pending=setTimeout(function(){pending=0;showHub()},120);
+ setTimeout(showHub,360);
 },true);
 })();
