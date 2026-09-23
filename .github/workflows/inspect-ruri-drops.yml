@@ -1,0 +1,45 @@
+name: Inspect Ruri Drops
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-ruri-drops.yml'
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect packed Ruri resource drops
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),zlib=require('zlib');
+          const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
+          const src=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
+          const terms=[
+            'Демонический кристалл','Демонический Кристалл','демонический кристалл',
+            'Огненные осколки','Огненные Осколки','огненные осколки',
+            'Кровь монстра','Кровь Монстра','кровь монстра',
+            'Хрустальный кристалл','Хрустальный Кристалл','хрустальный кристалл',
+            'Великий Рури','Рури','event_ruri_legendary_v1'
+          ];
+          const out=[];
+          for(const term of terms){
+            let p=0,n=0;
+            while((p=src.indexOf(term,p))>=0&&n<40){
+              out.push('\n===== '+term+' @ '+p+' =====\n'+src.slice(Math.max(0,p-3500),Math.min(src.length,p+7000)));
+              p+=term.length;n++;
+            }
+          }
+          fs.writeFileSync('ruri-drops.txt',out.join('\n'));
+          console.log('RURI_DROP_SCAN_START');
+          console.log(out.join('\n'));
+          console.log('RURI_DROP_SCAN_END');
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ruri-drops
+          path: ruri-drops.txt
