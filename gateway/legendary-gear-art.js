@@ -2,7 +2,7 @@
   'use strict';
 
   var ART_BASE='/assets/legendary/';
-  var ART_VER='v499';
+  var ART_VER='v500';
   var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
   var SLOT_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
   var CLASS_ALIASES={
@@ -56,13 +56,23 @@
     if(s==='glove'||s==='hands'||s==='перчатки')s='gloves';
     if(s==='boot'||s==='feet'||s==='сапоги')s='boots';
     if(s==='оружие')s='weapon';
-    return Object.prototype.hasOwnProperty.call(SLOT_COLS,s)?s:'';
+    if(Object.prototype.hasOwnProperty.call(SLOT_COLS,s))return s;
+    var text=key((it&&it.name)||'');
+    if(/шлем|helm|helmet/.test(text))return 'helmet';
+    if(/брон|доспех|кирас|armor|chest/.test(text))return 'armor';
+    if(/понож|штаны|брюки|legs|pants|leggings/.test(text))return 'legs';
+    if(/перчат|рукавиц|glove|hands/.test(text))return 'gloves';
+    if(/сапог|ботин|boots|feet/.test(text))return 'boots';
+    if(/оруж|меч|клинок|кинжал|топор|лук|арбалет|посох|жезл|пушк|мушкет|молот|булав|weapon|sword|dagger|axe|bow|staff|cannon|gun/.test(text))return 'weapon';
+    return '';
   }
 
   function isLegendary(it){
     if(!it)return false;
     var r=key(it.rarity||it.quality||it.grade||it.r);
-    return r==='legendary'||r==='легендарный'||r==='легендарная'||r==='легендарное'||r==='legend';
+    if(r==='legendary'||r==='легендарный'||r==='легендарная'||r==='легендарное'||r==='legend')return true;
+    var text=key((it.name||'')+' '+(it.title||'')+' '+(it.qualityName||''));
+    return /легендар|legendary/.test(text);
   }
 
   function art(cls,slot){

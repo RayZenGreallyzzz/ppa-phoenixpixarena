@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v499-final-smith-auction-hd-20260923';
+const CLIENT_BUILD = 'v500-smith-touch-auction-final-art-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -713,7 +713,7 @@ ppaPatchRegex(
   `function auctionCanonicalLegendaryArt(it){
   if(!it||typeof it!=='object')return '';
   var rarity=String(it.rarity||it.quality||it.grade||it.r||'').trim().toLowerCase();
-  if(!(rarity==='legendary'||rarity==='legend'||/легендар/.test(rarity)))return '';
+  if(!(rarity==='legendary'||rarity==='legend'||/легендар/.test(rarity)||/легендар|legendary/.test(String((it.name||'')+' '+(it.title||'')).toLowerCase())))return '';
   var slot=String(it.slot||it.type||it.equipSlot||'').trim().toLowerCase();
   var slotAlias={pants:'legs',leggings:'legs',leg:'legs','поножи':'legs',helm:'helmet',head:'helmet','шлем':'helmet',chest:'armor',body:'armor','броня':'armor',glove:'gloves',hands:'gloves','перчатки':'gloves',boot:'boots',feet:'boots','сапоги':'boots','оружие':'weapon'};
   slot=slotAlias[slot]||slot;
@@ -730,7 +730,7 @@ ppaPatchRegex(
   if(!cls){
     try{cls=a(P&&(P.classKey||P.classId||P.class||P.cls||P.className||P.profession||P.job))}catch(_){}
   }
-  return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v499'):'';
+  return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v500'):'';
 }
 function auctionRestoreUiArt(it){
   if(!it||typeof it!=='object')return it;
@@ -783,7 +783,7 @@ ppaPatchRegex(
 );
 
 if(!output.includes("function auctionCanonicalLegendaryArt(it)") ||
-   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v499") ||
+   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v500") ||
    !output.includes("items:auctionItemsForUi().map(auctionAttachMinPrices).map(auctionRestoreUiArt)") ||
    !output.includes("marketLots:(PPA_AUCTION_MARKET_CACHE||[]).slice(0,100).map(auctionRestoreLotArt)")) {
   throw new Error('Auction canonical legendary art path incomplete');
@@ -2579,6 +2579,26 @@ ppaPatchRegex(
   el.addEventListener('pointercancel',cancel,{passive:true});
   el.addEventListener('pointerleave',cancel,{passive:true});
 }
+function ppaAuctionForceItemArt(el,it){
+  try{
+    if(!el||!it||it.ppaLegendaryReferenceArt!==true)return;
+    var src=String(it.img||it.cardArt||it.iconArt||it.iconImg||it.image||it.art||it.src||'');
+    if(!src||src.indexOf('/assets/legendary/')<0)return;
+    var imgs=el.querySelectorAll?el.querySelectorAll('img'):[];
+    for(var i=0;i<imgs.length;i++){
+      imgs[i].src=src;
+      try{imgs[i].removeAttribute('srcset')}catch(_){}
+      imgs[i].style.backgroundImage='none';
+    }
+    var nodes=el.querySelectorAll?el.querySelectorAll('*'):[];
+    for(var j=0;j<nodes.length;j++){
+      var n=nodes[j],bg='';
+      try{bg=String(n.style&&n.style.backgroundImage||'')}catch(_){}
+      if(bg&&bg!=='none'&&/url\(/i.test(bg))n.style.backgroundImage='url("'+src+'")';
+    }
+    el.setAttribute('data-ppa-canonical-legendary','1');
+  }catch(_){}
+}
 function inspectAuctionItem(it,context){`
 );
 
@@ -2587,6 +2607,7 @@ ppaPatchRegex(
   /d\.onclick=\(\)=&gt;\{selectItem\(it\.ref\);inspectAuctionItem\(it,&#x27;Аукцион · выставление&#x27;\);\};sellGrid\.appendChild\(d\)/,
   `bindHoldInfo(d,function(){inspectAuctionItem(it,'Аукцион · выставление')});
     d.onclick=function(){if(d.__ppaHeld){d.__ppaHeld=false;return}selectItem(it.ref)};
+    ppaAuctionForceItemArt(d,it);
     sellGrid.appendChild(d)`
 );
 
@@ -2718,6 +2739,35 @@ try{
   document.addEventListener('click',function(){ppaSmithRefreshCanvasArt()},true);
   ppaSmithRefreshCanvasArt();
 }catch(_){}
+function ppaSmithInstallTouchActionFallback(){
+  if(document.__ppaSmithTouchActionFallback)return;
+  document.__ppaSmithTouchActionFallback=true;
+  document.addEventListener('pointerup',function(ev){
+    try{
+      var btn=ev&&ev.target&&ev.target.closest?ev.target.closest('button'):null;
+      if(!btn||btn.disabled)return;
+      var txt=String(btn.textContent||'').trim().toUpperCase();
+      if(txt.indexOf('ЗАТОЧИТЬ')!==0)return;
+      if(ev.preventDefault)ev.preventDefault();
+      if(ev.stopImmediatePropagation)ev.stopImmediatePropagation();
+      btn.__ppaSmithSyntheticAt=Date.now();
+      setTimeout(function(){try{btn.click()}catch(_){}},0);
+    }catch(_){}
+  },true);
+  document.addEventListener('click',function(ev){
+    try{
+      var btn=ev&&ev.target&&ev.target.closest?ev.target.closest('button'):null;
+      if(!btn)return;
+      var txt=String(btn.textContent||'').trim().toUpperCase();
+      if(txt.indexOf('ЗАТОЧИТЬ')!==0)return;
+      if(ev.isTrusted&&Date.now()-Number(btn.__ppaSmithSyntheticAt||0)<650){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+      }
+    }catch(_){}
+  },true);
+}
+ppaSmithInstallTouchActionFallback();
 function inspectSmithItem(it,context){`
 );
 
@@ -2725,10 +2775,18 @@ ppaPatchRegex(
   'blacksmith gear tap selects hold inspects',
   /s\.onclick=\(\)=&gt;\{if\(sharpenable\)selectSmithGear\(c\.idx\);inspectSmithItem\(it,sharpenable\?&#x27;Кузнец · можно выбрать для заточки&#x27;:&#x27;Кузнец · просмотр предмета&#x27;\);\};/,
   `bindHoldInfo(s,function(){inspectSmithItem(it,sharpenable?'Кузнец · можно выбрать для заточки':'Кузнец · просмотр предмета')});
-        s.onclick=function(ev){
+        s.addEventListener('pointerup',function(ev){
           if(s.__ppaHeld){s.__ppaHeld=false;return}
           if(!sharpenable)return;
           try{if(ev&&ev.preventDefault)ev.preventDefault()}catch(_){}
+          try{if(ev&&ev.stopPropagation)ev.stopPropagation()}catch(_){}
+          s.__ppaSmithPointerSelectAt=Date.now();
+          try{selectSmithGear(c.idx)}catch(_){}
+        },{passive:false});
+        s.onclick=function(ev){
+          if(s.__ppaHeld){s.__ppaHeld=false;return}
+          if(!sharpenable)return;
+          if(Date.now()-Number(s.__ppaSmithPointerSelectAt||0)<650)return;
           try{selectSmithGear(c.idx)}catch(_){}
         };`
 );
@@ -2794,7 +2852,7 @@ ppaPatchRegex(
   `buyTable.querySelectorAll('.inspectMarketItem').forEach(function(el){
     bindHoldInfo(el,function(){
       let l=(STATE.marketLots||[]).find(function(x){return String(x.id)===String(el.dataset.inspect)});
-      if(l)inspectAuctionItem(l.item||{},'Аукцион · покупка');
+      if(l){ppaAuctionForceItemArt(el,l.item||{});inspectAuctionItem(l.item||{},'Аукцион · покупка')};
     });
     el.onclick=function(){if(el.__ppaHeld)el.__ppaHeld=false};
   });`
@@ -2806,15 +2864,18 @@ ppaPatchRegex(
   `lotsTable.querySelectorAll('.inspectOwnLot').forEach(function(el){
     bindHoldInfo(el,function(){
       let l=(STATE.lots||[]).find(function(x){return String(x.id)===String(el.dataset.inspect)});
-      if(l)inspectAuctionItem(l.item||{},'Аукцион · мой лот');
+      if(l){ppaAuctionForceItemArt(el,l.item||{});inspectAuctionItem(l.item||{},'Аукцион · мой лот')};
     });
     el.onclick=function(){if(el.__ppaHeld)el.__ppaHeld=false};
   });`
 );
 
 if(output.includes("inspectMarketItem&#x27;).forEach(el=&gt;el.onclick") ||
-   output.includes("inspectOwnLot&#x27;).forEach(el=&gt;el.onclick")) {
-  throw new Error('Auction hold-inspect completion did not apply');
+   output.includes("inspectOwnLot&#x27;).forEach(el=&gt;el.onclick") ||
+   !output.includes("function ppaAuctionForceItemArt(el,it)") ||
+   !output.includes("data-ppa-canonical-legendary") ||
+   !output.includes("ppaAuctionForceItemArt(d,it)")) {
+  throw new Error('Auction hold-inspect / canonical final-card art did not apply');
 }
 /* ======================================================================== */
 
@@ -3315,9 +3376,11 @@ if(output.includes("function fixGuardMenu(e)") ||
 if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
    !output.includes("__ppaCanvasizingSrc===src") ||
    !output.includes("attributeFilter:['src','srcset']") ||
-   !output.includes("if(!sharpenable)return;") ||
-   !output.includes("selectSmithGear(c.idx)")) {
-  throw new Error('Blacksmith direct gear selection / delayed art fix did not apply');
+   !output.includes("__ppaSmithPointerSelectAt") ||
+   !output.includes("selectSmithGear(c.idx)") ||
+   !output.includes("function ppaSmithInstallTouchActionFallback()") ||
+   !output.includes("txt.indexOf('ЗАТОЧИТЬ')!==0")) {
+  throw new Error('Blacksmith touch selection/sharpen action fix did not apply');
 }
 
 if(!output.includes("function ppaSmithCanvasize(root)") ||
@@ -5863,7 +5926,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
     throw new Error('Great Ruri combat/render bridge incomplete');
   }
   if (!legendaryGearArt.includes("var ART_BASE='/assets/legendary/'") ||
-      !legendaryGearArt.includes("var ART_VER='v499'") ||
+      !legendaryGearArt.includes("var ART_VER='v500'") ||
       !legendaryGearArt.includes("var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7}") ||
       !legendaryGearArt.includes('PPA_LEGENDARY_GEAR_ITEM_ART') ||
       !legendaryGearArt.includes("it.img=src;it.image=src;it.art=src") ||
