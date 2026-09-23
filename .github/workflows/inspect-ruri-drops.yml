@@ -12,32 +12,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Scan resource stems and drop hooks
+      - name: Fast scan Ruri resource stems
         shell: bash
         run: |
           node <<'NODE'
           const fs=require('fs'),zlib=require('zlib');
           const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
           const src=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
-          const regs=[
-            /[А-Яа-яЁёA-Za-z0-9_ -]{0,50}кристалл[А-Яа-яЁёA-Za-z0-9_ -]{0,50}/giu,
-            /[А-Яа-яЁёA-Za-z0-9_ -]{0,50}оскол[А-Яа-яЁёA-Za-z0-9_ -]{0,50}/giu,
-            /[А-Яа-яЁёA-Za-z0-9_ -]{0,50}кров[А-Яа-яЁёA-Za-z0-9_ -]{0,50}/giu,
-            /[А-Яа-яЁёA-Za-z0-9_ -]{0,50}демон[А-Яа-яЁёA-Za-z0-9_ -]{0,50}/giu,
-            /[A-Za-z0-9_ -]{0,50}blood[A-Za-z0-9_ -]{0,50}/giu,
-            /[A-Za-z0-9_ -]{0,50}demon[A-Za-z0-9_ -]{0,50}/giu,
-            /[A-Za-z0-9_ -]{0,50}crystal[A-Za-z0-9_ -]{0,50}/giu,
-            /[A-Za-z0-9_ -]{0,50}shard[A-Za-z0-9_ -]{0,50}/giu
-          ];
-          const seen=new Set(), hits=[];
-          for(const re of regs){
-            let m;
-            while((m=re.exec(src))&&hits.length<500){
-              const key=m.index+':'+m[0];
-              if(seen.has(key))continue; seen.add(key);
-              hits.push({i:m.index,s:m[0],ctx:src.slice(Math.max(0,m.index-1300),Math.min(src.length,m.index+2600))});
+          const low=src.toLowerCase();
+          const terms=['кристалл','оскол','кров','демон','blood','demon','crystal','shard','ruri','рури'];
+          const hits=[];
+          for(const term of terms){
+            let p=0,n=0;
+            while((p=low.indexOf(term,p))>=0&&n<60){
+              hits.push({term,p,ctx:src.slice(Math.max(0,p-1800),Math.min(src.length,p+3600))});
+              p+=term.length;n++;
             }
           }
           console.log('HIT_COUNT='+hits.length);
-          for(const h of hits)console.log('\n===== '+h.i+' :: '+h.s+' =====\n'+h.ctx);
+          for(const h of hits)console.log('\n===== '+h.term+' @ '+h.p+' =====\n'+h.ctx);
           NODE
