@@ -6,13 +6,13 @@
   // TEST PHASE: enabled deliberately so the drop tables and real farming can be verified.
   // After the active/inactive test this flag will be replaced by the monthly server window.
   var TEST_ACTIVE=true;
-  var CARD_SRC='/assets/ruri-event-card.webp';
-
+  // Canonical full-size transparent event resources supplied for Great Ruri.
+  // Dedicated files are used directly; do not crop them out of the poster.
   var RES={
-    demonic:{name:'Демонический кристалл',chance:0.0005,rarity:'legendary',src:'',crop:[70,730,210,175]},
-    fire:{name:'Огненные осколки',chance:0.008,rarity:'legendary',src:'',crop:[365,730,210,175]},
-    crystal:{name:'Хрустальный кристалл',chance:0.08,rarity:'legendary',src:'',crop:[635,720,230,185]},
-    blood:{name:'Кровь монстра',chance:0,rarity:'legendary',src:'',crop:[960,720,170,185]}
+    demonic:{name:'Демонический кристалл',chance:0.0005,rarity:'legendary',src:'/assets/ruri-demonic-crystal.webp?v=ruri-icons-v1'},
+    fire:{name:'Огненные осколки',chance:0.008,rarity:'legendary',src:'/assets/ruri-fire-shards.webp?v=ruri-icons-v1'},
+    crystal:{name:'Хрустальный кристалл',chance:0.08,rarity:'legendary',src:'/assets/ruri-crystal.webp?v=ruri-icons-v1'},
+    blood:{name:'Кровь монстра',chance:0,rarity:'legendary',src:'/assets/ruri-monster-blood.webp?v=ruri-icons-v1'}
   };
   var BY_NAME={};
   Object.keys(RES).forEach(function(k){BY_NAME[RES[k].name]=RES[k]});
@@ -48,50 +48,6 @@
           if(d.src)MAT_IMG[d.name].src=d.src;
         }
       });
-    }catch(_){}
-  }
-
-  // The approved Ruri poster already contains the user's four resource arts.
-  // Crop those exact arts into transparent runtime icons; no generated replacement art.
-  function prepareResourceArt(){
-    try{
-      var im=new Image();
-      im.onload=function(){
-        var sx=im.naturalWidth/1197,sy=im.naturalHeight/1314;
-        Object.keys(RES).forEach(function(k){
-          try{
-            var d=RES[k],r=d.crop;
-            var x=Math.round(r[0]*sx),y=Math.round(r[1]*sy),w=Math.round(r[2]*sx),h=Math.round(r[3]*sy);
-            var tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
-            var tc=tmp.getContext('2d',{willReadFrequently:true});
-            tc.drawImage(im,x,y,w,h,0,0,w,h);
-            var id=tc.getImageData(0,0,w,h),a=id.data;
-            for(var p=0;p<a.length;p+=4){
-              var rr=a[p],gg=a[p+1],bb=a[p+2],mx=Math.max(rr,gg,bb),mn=Math.min(rr,gg,bb);
-              // Remove only the near-black neutral card background.
-              if(mx<48&&(mx-mn)<14)a[p+3]=0;
-            }
-            tc.putImageData(id,0,0);
-            // Tight alpha bounds.
-            var px=tc.getImageData(0,0,w,h).data,minX=w,minY=h,maxX=-1,maxY=-1;
-            for(var yy=0;yy<h;yy++)for(var xx=0;xx<w;xx++){
-              if(px[(yy*w+xx)*4+3]>10){
-                if(xx<minX)minX=xx;if(xx>maxX)maxX=xx;if(yy<minY)minY=yy;if(yy>maxY)maxY=yy;
-              }
-            }
-            if(maxX<minX||maxY<minY)return;
-            var bw=maxX-minX+1,bh=maxY-minY+1,side=Math.max(bw,bh)+12;
-            var out=document.createElement('canvas');out.width=side;out.height=side;
-            out.getContext('2d').drawImage(tmp,minX,minY,bw,bh,Math.floor((side-bw)/2),Math.floor((side-bh)/2),bw,bh);
-            d.src=out.toDataURL('image/png');
-            if(typeof MATERIAL_DB==='object'&&MATERIAL_DB[d.name])MATERIAL_DB[d.name].src=d.src;
-            if(typeof MAT_IMG==='object'&&MAT_IMG){
-              var mi=MAT_IMG[d.name]||new Image();mi.src=d.src;MAT_IMG[d.name]=mi;
-            }
-          }catch(_){}
-        });
-      };
-      im.src=CARD_SRC+'?v=ruri-drop-art-v1';
     }catch(_){}
   }
 
@@ -255,7 +211,6 @@
   }
 
   registerMaterials();
-  prepareResourceArt();
   install();
   setTimeout(install,250);
   setTimeout(install,900);

@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v528-ruri-event-drop-test-active-20260923';
+const CLIENT_BUILD = 'v529-ruri-full-resource-icons-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -52,6 +52,16 @@ function ppaReadApprovedB64Parts(names){
 const PPA_RURI_MOVE_ART=ppaReadApprovedB64Parts([
   'ruri-move-1.b64','ruri-move-2.b64','ruri-move-3.b64'
 ]);
+const PPA_RURI_RESOURCE_FILES=[
+  'ruri-demonic-crystal.webp',
+  'ruri-fire-shards.webp',
+  'ruri-crystal.webp',
+  'ruri-monster-blood.webp'
+];
+for(const name of PPA_RURI_RESOURCE_FILES){
+  const p=path.join(ROOT,'assets-src',name);
+  if(!fs.existsSync(p)||fs.statSync(p).size<500)throw new Error('Approved Ruri resource art missing/invalid: '+name);
+}
 // Canonical HD legendary source for ALL 8 classes.
 // Layout: 6 columns x 8 rows, 256x256 per cell.
 // Rows: tank, paladin, barbarian, assassin, gnome, archer, mage, priest.
@@ -75,6 +85,9 @@ fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
 fs.writeFileSync(path.join(assetsDir,'ruri-event-card.webp'),PPA_RURI_EVENT_CARD_ART.buf);
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
+for(const name of PPA_RURI_RESOURCE_FILES){
+  fs.copyFileSync(path.join(ROOT,'assets-src',name),path.join(assetsDir,name));
+}
 const PPA_LEGENDARY_FILE_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
 const PPA_LEGENDARY_FILE_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
 const PPA_LEGENDARY_DIR=path.join(assetsDir,'legendary');
