@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Центр событий</title>
+<style>
+:root{--gold:#f4c76b;--gold2:#c48132;--bg:#090706;--panel:#120c09;--line:#5a3a21;--text:#dbc393;--muted:#9d896c;--green:#83ff7d;--red:#ff7b68}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#090706;color:var(--text);font-family:Georgia,"Times New Roman",serif}
+button{font:inherit}
+#hub{height:100%;display:grid;grid-template-columns:172px minmax(0,1fr);background:radial-gradient(circle at 76% 12%,#27130c 0,#100b08 38%,#080706 100%)}
+#nav{min-width:0;overflow:auto;padding:10px 8px;border-right:1px solid var(--line);background:linear-gradient(180deg,#170e09,#0d0907)}
+.cat{width:100%;min-height:42px;margin:0 0 6px;padding:7px 8px;border:1px solid #523720;border-radius:7px;background:#17100c;color:#c4a979;text-align:left;font-weight:bold;font-size:11px}
+.cat.on{border-color:#bd6828;background:linear-gradient(90deg,#4a190d,#24130c);color:#ffd27b}
+.sub{display:none;margin:-2px 0 8px;padding-left:5px}
+.sub.on{display:block}
+.evt{width:100%;min-height:34px;margin:4px 0;padding:6px 7px;border:1px solid #44301e;border-radius:6px;background:#0f0c09;color:#aa916b;text-align:left;font:9px/1.25 monospace}
+.evt.on{border-color:#9c5625;background:#27140c;color:#f1c16c}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#76ff6d;margin-right:5px;vertical-align:1px;box-shadow:0 0 6px #5cff53}
+.emptyNav{display:none;padding:7px;color:#806d55;font:8px/1.4 monospace}
+.emptyNav.on{display:block}
+#main{min-width:0;height:100%;overflow:hidden;display:grid;grid-template-rows:44px minmax(0,1fr)}
+#head{display:flex;align-items:center;padding:0 12px;border-bottom:1px solid #4b311e;background:#120c09;color:#efc273;font-weight:bold;font-size:16px;letter-spacing:.05em}
+#view{overflow:auto;padding:12px 12px 30px}
+.hero{display:grid;grid-template-columns:minmax(220px,42%) minmax(0,1fr);gap:14px;align-items:start}
+.poster{display:block;width:100%;max-height:68vh;object-fit:contain;border:1px solid #70481f;border-radius:8px;background:#080706}
+.iconArt{min-height:270px;display:grid;place-items:center;border:1px solid #70481f;border-radius:8px;background:radial-gradient(circle,#3b160d 0,#0a0807 67%);font-size:92px}
+.info{padding:12px;border:1px solid #57391f;border-radius:8px;background:rgba(18,13,9,.96)}
+.info h2{margin:0 0 7px;color:#f2c36c;font-size:22px}
+.info h3{margin:12px 0 6px;color:#e6b35a;font-size:13px}
+.info p{margin:5px 0;color:#cbb58d;font:10px/1.55 monospace}
+.status{margin-bottom:8px;color:var(--green);font:bold 10px monospace}
+.status.locked{color:var(--red)}
+.recipe{color:#ffd078;font:bold 12px/1.55 monospace}
+.action{width:100%;min-height:42px;margin-top:10px;border:1px solid #a45a24;border-radius:7px;background:linear-gradient(#4a2512,#27150d);color:#f6cb79;font-weight:bold;font-size:11px}
+.action:disabled{opacity:.45}
+.secondary{border-color:#3f6a85;background:linear-gradient(#15384d,#102432);color:#9dd9ff}
+.placeholder{min-height:260px;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;border:1px dashed #4e3522;border-radius:8px;color:#917b5f;font:10px/1.6 monospace}
+#shop{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:12px;background:rgba(0,0,0,.82)}
+#shop.on{display:flex}
+#shopBox{width:min(620px,96vw);max-height:88vh;overflow:auto;padding:12px;border:1px solid #3f6a85;border-radius:9px;background:#0d1115}
+#shopHead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px;color:#9dd9ff}
+#shopClose{width:34px;height:34px;border:1px solid #5d87a0;border-radius:6px;background:#112b3a;color:#bfe8ff}
+#shopGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.offer{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:7px;align-items:center;padding:8px;border:1px solid #284456;border-radius:7px;background:#0b151c}
+.offerIcon{font-size:24px;text-align:center}.offerName{color:#c7eaff;font:10px Georgia,serif}.offerCost,.offerDesc{color:#7598ad;font:8px/1.35 monospace}.buy{min-height:31px;border:1px solid #4b7893;border-radius:5px;background:#123247;color:#a8ddfb;font:8px monospace}
+.buy:disabled{opacity:.4}
+#toast{position:fixed;left:50%;bottom:18px;z-index:80;transform:translateX(-50%);max-width:80%;padding:8px 11px;border:1px solid #76502b;border-radius:6px;background:#17100c;color:#f1cb84;font:9px monospace;opacity:0;pointer-events:none;transition:opacity .18s}
+#toast.on{opacity:1}
+@media(max-width:600px),(max-height:720px){
+  #hub{grid-template-columns:92px minmax(0,1fr)}
+  #nav{padding:6px 4px}
+  .cat{min-height:34px;padding:5px;font-size:8px;margin-bottom:4px}
+  .evt{min-height:28px;padding:4px 5px;font-size:7px;line-height:1.2}
+  .emptyNav{font-size:7px;padding:4px}
+  #main{grid-template-rows:34px minmax(0,1fr)}
+  #head{padding:0 7px;font-size:11px}
+  #view{padding:6px 6px 24px}
+  .hero{grid-template-columns:1fr;gap:7px}
+  .poster{max-width:240px;max-height:35vh;margin:auto}
+  .iconArt{min-height:150px;font-size:64px}
+  .info{padding:7px}
+  .info h2{font-size:15px}.info h3{font-size:10px;margin-top:8px}.info p{font-size:8px;line-height:1.4}.status{font-size:8px}.recipe{font-size:9px}
+  .action{min-height:35px;font-size:8px;margin-top:7px}
+  #shopGrid{grid-template-columns:1fr}.offer{grid-template-columns:30px minmax(0,1fr) auto;padding:6px}.offerIcon{font-size:20px}
+}
+</style>
+</head>
+<body>
+<div id="hub">
+  <aside id="nav">
+    <button class="cat on" data-cat="game">🎮 ИГРОВЫЕ</button>
+    <div class="sub on" data-sub="game">
+      <button class="evt on" data-evt="ruri"><span class="dot"></span>Великий Рури</button>
+      <button class="evt" data-evt="titan">💎 Кристальный Титан</button>
+    </div>
+
+    <button class="cat" data-cat="clan">🛡 КЛАНОВЫЕ</button>
+    <div class="sub" data-sub="clan"><div class="emptyNav">Пока нет отдельных событий</div></div>
+
+    <button class="cat" data-cat="war">⚔ ВОЙНА</button>
+    <div class="sub" data-sub="war">
+      <button class="evt" data-evt="citadel">🏰 Цитадель Феникса</button>
+    </div>
+
+    <button class="cat" data-cat="updates">📜 ОБНОВЛЕНИЯ</button>
+    <div class="sub" data-sub="updates">
+      <button class="evt" data-evt="updates">Последнее</button>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div id="head">ЦЕНТР СОБЫТИЙ</div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<div id="shop">
+  <div id="shopBox">
+    <div id="shopHead"><b>💠 ОБМЕН ОСКОЛКОВ ТИТАНА · <span id="shards">0</span></b><button id="shopClose">×</button></div>
+    <div id="shopGrid"></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const RURI_ART='__PPA_RURI_CARD__';
+const TITAN_ART='__PPA_TITAN_ART__';
+const state={titanShards:0,worldBoss:{available:true,killedThisCycle:false,nextResetAt:0,resetHour:18},clanSiege:{ready:true,nextAt:0,remainingMs:0,text:'ОСАДА ДОСТУПНА'}};
+let currentCat='game',currentEvent='ruri',toastTimer=0;
+
+const offers=[
+ {id:'normalStone',icon:'◆',name:'Обычная заточка ×3',cost:1,desc:'Камни заточки до +5.'},
+ {id:'hpRegen',icon:'❤',name:'Премиум-реген HP ×3',cost:2,desc:'+5 HP/сек на 15 минут.'},
+ {id:'portal',icon:'📜',name:'Свиток телепорта ×2',cost:3,desc:'Телепорт к открытой точке.'},
+ {id:'rareMat',icon:'✦',name:'Редкий материал ×1',cost:4,desc:'Случайный редкий материал.'},
+ {id:'premiumStone',icon:'💎',name:'Премиум-заточка ×1',cost:6,desc:'Безопасная заточка до +7.'},
+ {id:'rune',icon:'ᚱ',name:'Премиум руна ×1',cost:12,desc:'+12–16 п.п. к шансу заточки.'}
+];
+
+function two(n){return String(n).padStart(2,'0')}
+function timeLeft(ms){
+  let sec=Math.max(0,Math.ceil(ms/1000)),d=Math.floor(sec/86400);sec%=86400;
+  let h=Math.floor(sec/3600);sec%=3600;let m=Math.floor(sec/60);
+  return (d?d+' д. ':'')+(h?h+' ч. ':'')+m+' мин.';
+}
+function timeClock(ms){
+  let sec=Math.max(0,Math.ceil(ms/1000)),h=Math.floor(sec/3600);sec%=3600;
+  const m=Math.floor(sec/60),s=sec%60;
+  return two(h)+':'+two(m)+':'+two(s);
+}
+function titanStatus(){
+  const w=state.worldBoss||{},now=Date.now(),reset=Number(w.nextResetAt)||0;
+  const available=!!w.available||(reset>0&&now>=reset);
+  return available?{label:'АКТИВНО',timer:'Доступен · ежедневный откат в 18:00',locked:false}:{label:'ОТКАТ',timer:'До отката 18:00: '+timeClock(reset-now),locked:true};
+}
+function citadelStatus(){
+  const z=state.clanSiege||{},now=Date.now(),next=Number(z.nextAt)||0;
+  const ready=!!z.ready||!next||now>=next;
+  return ready?{label:'ДОСТУПНО',timer:'Осада доступна · цикл 3 дня',locked:false}:{label:'ОТКАТ',timer:'Следующая осада через '+timeLeft(next-now),locked:true};
+}
+function setActive(){
+  document.querySelectorAll('.cat').forEach(b=>b.classList.toggle('on',b.dataset.cat===currentCat));
+  document.querySelectorAll('.sub').forEach(x=>x.classList.toggle('on',x.dataset.sub===currentCat));
+  document.querySelectorAll('.evt').forEach(b=>b.classList.toggle('on',b.dataset.evt===currentEvent));
+}
+function showToast(msg){
+  const el=document.getElementById('toast');el.textContent=msg;el.classList.add('on');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('on'),2200);
+}
+function artBlock(src,icon,label){
+  if(src)return '<img class="poster" src="'+src+'" alt="'+label+'">';
+  return '<div class="iconArt">'+icon+'</div>';
+}
+function render(){
+  setActive();
+  const v=document.getElementById('view');
+  if(currentCat==='clan'){
+    v.innerHTML='<div class="placeholder"><div><b style="color:#d8b16b;font-size:16px">🛡 КЛАНОВЫЕ СОБЫТИЯ</b><br><br>Здесь будут появляться отдельные события для кланов.</div></div>';
+    return;
+  }
+  if(currentEvent==='ruri'){
+    v.innerHTML='<div class="hero">'+artBlock(RURI_ART,'🔥','Великий Рури')+'<div class="info"><h2>🔥 Великий Рури</h2><div class="status">● АКТИВНО · ТЕСТОВЫЙ ЗАПУСК</div><p>Ограниченное событие длится 10 дней каждый месяц. Собранные ресурсы после окончания не исчезают и сохраняются до следующего запуска.</p><p><b>Великий Рури сам атакует врагов хозяина огненной магией. Урон питомца — 20% от силы атаки хозяина.</b></p><h3>ДРОП РЕСУРСОВ</h3><p>Демонический кристалл — обычные мобы 1–60 · 0,05%</p><p>Огненные осколки — элита 1–60 · 0,8%</p><p>Кровь монстра — боссы 20 / 40 / 60 · 1,5% / 2,5% / 4%</p><p>Хрустальный кристалл — мировой босс · 8%</p><h3>КРАФТ ВЕЛИКОГО РУРИ</h3><div class="recipe">72 Демонических + 10 Огненных + 7 Крови монстра + 11 Хрустальных</div><p>Ресурсы постоянные и смогут продаваться на аукционе круглый год.</p></div></div>';
+    return;
+  }
+  if(currentEvent==='titan'){
+    const st=titanStatus();
+    v.innerHTML='<div class="hero">'+artBlock(TITAN_ART,'💎','Кристальный Титан')+'<div class="info"><h2>💎 Кристальный Титан</h2><div class="status'+(st.locked?' locked':'')+'" id="liveStatus">'+st.label+' · '+st.timer+'</div><p>Мировой босс: 70 000 HP. Каждые 5 секунд бросает кристалл; топот запускает AOE через случайные 7 / 12 / 16 секунд.</p><p>После победы каждый участник получает Осколок Кристального Титана и может забрать один персональный сундук.</p><button class="action secondary" id="openShop">💠 ОБМЕН ОСКОЛКОВ · '+Math.max(0,Number(state.titanShards)||0)+'</button><button class="action" id="enterTitan" '+(st.locked?'disabled':'')+'>'+(st.locked?'ПОБЕЖДЁН · ОТКАТ 18:00':'УЧАСТВОВАТЬ')+'</button></div></div>';
+    document.getElementById('openShop').onclick=openShop;
+    document.getElementById('enterTitan').onclick=()=>{const s=titanStatus();if(s.locked){showToast(s.timer);return}parent.postMessage({type:'eventsEnter',action:'worldboss',id:'worldboss_crystal_titan_001'},'*')};
+    return;
+  }
+  if(currentEvent==='citadel'){
+    const st=citadelStatus();
+    v.innerHTML='<div class="hero">'+artBlock('', '🏰','Цитадель Феникса')+'<div class="info"><h2>🏰 Цитадель Феникса</h2><div class="status'+(st.locked?' locked':'')+'" id="liveStatus">'+st.label+' · '+st.timer+'</div><p>4 сильнейших клана по 8 игроков. Сначала уничтожьте 4 кристалла, затем удерживайте край замка 60 секунд.</p><p>Соклановцев атаковать нельзя. Владение замком — 3 дня.</p><h3>НАГРАДЫ ПОБЕДИТЕЛЯМ</h3><p>XP +5% · золото +5% · ресурсы +5% · скорость +3% всему клану.</p><button class="action" id="enterCitadel" '+(st.locked?'disabled':'')+'>'+(st.locked?'ОСАДА НА ОТКАТЕ':'ВОЙТИ В ОСАДУ')+'</button></div></div>';
+    document.getElementById('enterCitadel').onclick=()=>{const s=citadelStatus();if(s.locked){showToast(s.timer);return}parent.postMessage({type:'eventsEnter',action:'clansiege',id:'clan_siege_phoenix_001'},'*')};
+    return;
+  }
+  v.innerHTML='<div class="hero">'+artBlock('', '📜','Обновления')+'<div class="info"><h2>📜 Обновления</h2><div class="status">НОВЫЙ ЦЕНТР СОБЫТИЙ</div><p>События теперь разделены на игровые, клановые, войны и обновления. Новые активности можно будет добавлять в нужную вкладку, не переделывая всё меню.</p></div></div>';
+}
+function openShop(){
+  document.getElementById('shards').textContent=Math.max(0,Number(state.titanShards)||0);
+  const have=Math.max(0,Number(state.titanShards)||0),grid=document.getElementById('shopGrid');
+  grid.innerHTML=offers.map(x=>'<div class="offer"><div class="offerIcon">'+x.icon+'</div><div><div class="offerName">'+x.name+'</div><div class="offerCost">💠 '+x.cost+' оск.</div><div class="offerDesc">'+x.desc+'</div></div><button class="buy" data-id="'+x.id+'" '+(have<x.cost?'disabled':'')+'>ОБМЕН</button></div>').join('');
+  grid.querySelectorAll('.buy').forEach(b=>b.onclick=e=>{e.stopPropagation();parent.postMessage({type:'titanShardBuy',id:b.dataset.id},'*')});
+  document.getElementById('shop').classList.add('on');
+  parent.postMessage({type:'eventsRequestState'},'*');
+}
+function closeShop(){document.getElementById('shop').classList.remove('on')}
+
+document.querySelectorAll('.cat').forEach(b=>b.onclick=()=>{
+  currentCat=b.dataset.cat;
+  if(currentCat==='game')currentEvent='ruri';
+  else if(currentCat==='war')currentEvent='citadel';
+  else if(currentCat==='updates')currentEvent='updates';
+  else currentEvent='';
+  render();
+});
+document.querySelectorAll('.evt').forEach(b=>b.onclick=()=>{
+  currentEvent=b.dataset.evt;
+  if(currentEvent==='ruri'||currentEvent==='titan')currentCat='game';
+  else if(currentEvent==='citadel')currentCat='war';
+  else if(currentEvent==='updates')currentCat='updates';
+  render();
+});
+document.getElementById('shopClose').onclick=closeShop;
+document.getElementById('shop').onclick=e=>{if(e.target.id==='shop')closeShop()};
+
+window.addEventListener('message',e=>{
+  const d=e.data||{};
+  if(d.type==='eventsState'){
+    state.titanShards=Math.max(0,Number(d.titanShards)||0);
+    if(d.worldBoss&&typeof d.worldBoss==='object')state.worldBoss=d.worldBoss;
+    if(d.clanSiege&&typeof d.clanSiege==='object')state.clanSiege=d.clanSiege;
+    render();
+    if(document.getElementById('shop').classList.contains('on'))openShop();
+  }else if(d.type==='titanShardShopResult'){
+    state.titanShards=Math.max(0,Number(d.titanShards)||0);
+    showToast(d.message||'Готово');
+    if(document.getElementById('shop').classList.contains('on'))openShop();
+    else render();
+  }
+});
+setInterval(()=>{
+  if(document.hidden)return;
+  if(currentEvent==='titan'||currentEvent==='citadel'){
+    const el=document.getElementById('liveStatus');if(!el)return;
+    const st=currentEvent==='titan'?titanStatus():citadelStatus();
+    el.className='status'+(st.locked?' locked':'');
+    el.textContent=st.label+' · '+st.timer;
+  }
+},1000);
+
+render();
+try{parent.postMessage({type:'eventsRequestState'},'*')}catch(_){}
+</script>
+</body>
+</html>
