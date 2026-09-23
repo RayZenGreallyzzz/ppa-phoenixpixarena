@@ -69,18 +69,22 @@
   window.PPA_OPEN_RURI_EVENT=open;
 
   function findGrid(){
-    var all=document.querySelectorAll('*');
-    for(var i=0;i<all.length;i++){
-      var el=all[i],t='';
+    var nodes=document.querySelectorAll('div,span,b,strong,h1,h2,h3,h4,p');
+    var titan=null,citadel=null;
+    for(var i=0;i<nodes.length;i++){
+      var el=nodes[i],t='';
       try{t=String(el.textContent||'').trim()}catch(_){}
-      if(t!=='Кристальный Титан')continue;
-      var n=el;
-      for(var d=0;d<7&&n&&n.parentElement;d++,n=n.parentElement){
-        var p=n.parentElement,tx=String(p.textContent||'');
-        if(tx.indexOf('Кристальный Титан')>=0&&tx.indexOf('Цитадель Феникса')>=0){
-          return p;
-        }
-      }
+      if(!titan&&t==='Кристальный Титан')titan=el;
+      if(!citadel&&t==='Цитадель Феникса')citadel=el;
+      if(titan&&citadel)break;
+    }
+    if(!titan||!citadel)return null;
+    var seen=[],n=titan,depth=0;
+    while(n&&depth++<16){seen.push(n);n=n.parentElement}
+    n=citadel;depth=0;
+    while(n&&depth++<16){
+      if(seen.indexOf(n)>=0)return n;
+      n=n.parentElement;
     }
     return null;
   }
@@ -95,15 +99,13 @@
     try{grid.insertBefore(tile,grid.firstChild)}catch(_){grid.appendChild(tile)}
     return true;
   }
+  var installTimer=0;
   function scheduleInstall(){
-    setTimeout(install,40);
-    setTimeout(install,220);
+    if(installTimer)clearTimeout(installTimer);
+    installTimer=setTimeout(function(){installTimer=0;install()},80);
+    setTimeout(install,260);
   }
-  document.addEventListener('click',function(e){
-    var n=e&&e.target,t='';
-    try{t=String(n&&n.textContent||'').trim().toUpperCase()}catch(_){}
-    if(t.indexOf('СОБЫТ')>=0||t.indexOf('EVENT')>=0)scheduleInstall();
-  },true);
+  document.addEventListener('click',function(){scheduleInstall()},true);
   window.PPA_REFRESH_RURI_EVENT_UI=scheduleInstall;
   if(document.readyState==='loading'){
     document.addEventListener('DOMContentLoaded',function(){setTimeout(install,250)},{once:true});
