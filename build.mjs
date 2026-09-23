@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v501-smith-auction-self-contained-fix-20260923';
+const CLIENT_BUILD = 'v502-auction-recovery-smith-touch-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2588,58 +2588,6 @@ ppaPatchRegex(
   el.addEventListener('pointercancel',cancel,{passive:true});
   el.addEventListener('pointerleave',cancel,{passive:true});
 }
-function ppaAuctionCanonicalSrc(it){
-  try{
-    if(!it||typeof it!=='object')return '';
-    var text=String((it.name||'')+' '+(it.title||'')+' '+(it.qualityName||'')).toLowerCase();
-    var rarity=String(it.rarity||it.quality||it.grade||it.r||'').toLowerCase();
-    if(!(rarity==='legendary'||rarity==='legend'||/легендар|legendary/.test(rarity+' '+text)))return '';
-    var slot=String(it.slot||it.type||it.equipSlot||'').toLowerCase();
-    var sa={pants:'legs',leggings:'legs',leg:'legs','поножи':'legs',helm:'helmet',head:'helmet','шлем':'helmet',chest:'armor',body:'armor','броня':'armor',glove:'gloves',hands:'gloves','перчатки':'gloves',boot:'boots',feet:'boots','сапоги':'boots','оружие':'weapon'};
-    slot=sa[slot]||slot;
-    if(!/^(weapon|helmet|armor|legs|gloves|boots)$/.test(slot)){
-      if(/шлем|helm|helmet/.test(text))slot='helmet';
-      else if(/брон|доспех|кирас|armor|chest/.test(text))slot='armor';
-      else if(/понож|штаны|брюки|legs|pants|leggings/.test(text))slot='legs';
-      else if(/перчат|рукавиц|glove|hands/.test(text))slot='gloves';
-      else if(/сапог|ботин|boots|feet/.test(text))slot='boots';
-      else if(/оруж|меч|клинок|кинжал|топор|лук|арбалет|посох|жезл|пушк|мушкет|молот|булав|weapon|sword|dagger|axe|bow|staff|cannon|gun/.test(text))slot='weapon';
-      else return '';
-    }
-    var al={tank:'tank',warrior:'tank','воин':'tank','танк':'tank',paladin:'paladin','паладин':'paladin',barbarian:'barbarian',berserk:'barbarian',berserker:'barbarian','варвар':'barbarian','берсерк':'barbarian','берсеркер':'barbarian',assassin:'assassin','ассасин':'assassin','асасин':'assassin',gnome:'gnome',gunner:'gnome',cannoner:'gnome','канонир':'gnome','гном':'gnome','гном-канонир':'gnome',archer:'archer','лучник':'archer',mage:'mage','маг':'mage',priest:'priest',cleric:'priest',healer:'priest','жрец':'priest','клирик':'priest'};
-    function a(v){return al[String(v==null?'':v).trim().toLowerCase()]||''}
-    var vals=[it.classKey,it.classId,it.class,it.cls,it.ownerClass,it.reqClass,it.className,it.profession,it.job],cls='';
-    for(var i=0;i<vals.length&&!cls;i++)cls=a(vals[i]);
-    if(!cls){
-      var tests=[['paladin',/паладин|paladin/],['barbarian',/берсерк|берсеркер|варвар|barbarian|berserk/],['assassin',/ассасин|асасин|assassin/],['gnome',/гном|канонир|gnome|gunner|cannoner/],['archer',/лучник|archer/],['mage',/маг|mage/],['priest',/жрец|клирик|priest|cleric|healer/],['tank',/танк|воин|tank|warrior/]];
-      for(var j=0;j<tests.length&&!cls;j++)if(tests[j][1].test(text))cls=tests[j][0];
-    }
-    return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v501'):'';
-  }catch(_){return ''}
-}
-function ppaAuctionForceItemArt(el,it){
-  try{
-    if(!el||!it)return;
-    var src=ppaAuctionCanonicalSrc(it);
-    if(!src){
-      src=String(it.img||it.cardArt||it.iconArt||it.iconImg||it.image||it.art||it.src||'');
-      if(src.indexOf('/assets/legendary/')<0)return;
-    }
-    var imgs=el.querySelectorAll?el.querySelectorAll('img'):[];
-    for(var i=0;i<imgs.length;i++){
-      imgs[i].src=src;
-      try{imgs[i].removeAttribute('srcset')}catch(_){}
-      imgs[i].style.backgroundImage='none';
-    }
-    var nodes=el.querySelectorAll?el.querySelectorAll('*'):[];
-    for(var j=0;j<nodes.length;j++){
-      var n=nodes[j],bg='';
-      try{bg=String(n.style&&n.style.backgroundImage||'')}catch(_){}
-      if(bg&&bg!=='none'&&/url\(/i.test(bg))n.style.backgroundImage='url("'+src+'")';
-    }
-    el.setAttribute('data-ppa-canonical-legendary','1');
-  }catch(_){}
-}
 function inspectAuctionItem(it,context){`
 );
 
@@ -2648,7 +2596,6 @@ ppaPatchRegex(
   /d\.onclick=\(\)=&gt;\{selectItem\(it\.ref\);inspectAuctionItem\(it,&#x27;Аукцион · выставление&#x27;\);\};sellGrid\.appendChild\(d\)/,
   `bindHoldInfo(d,function(){inspectAuctionItem(it,'Аукцион · выставление')});
     d.onclick=function(){if(d.__ppaHeld){d.__ppaHeld=false;return}selectItem(it.ref)};
-    ppaAuctionForceItemArt(d,it);
     sellGrid.appendChild(d)`
 );
 
@@ -2891,8 +2838,6 @@ ppaPatchRegex(
   'auction market item hold inspect',
   /buyTable\.querySelectorAll\(&#x27;\.inspectMarketItem&#x27;\)\.forEach\(el=&gt;el\.onclick=\(\)=&gt;\{let l=\(STATE\.marketLots\|\|\[\]\)\.find\(x=&gt;String\(x\.id\)===String\(el\.dataset\.inspect\)\);if\(l\)inspectAuctionItem\(l\.item\|\|\{\},&#x27;Аукцион · покупка&#x27;\);\}\);/,
   `buyTable.querySelectorAll('.inspectMarketItem').forEach(function(el){
-    let currentLot=(STATE.marketLots||[]).find(function(x){return String(x.id)===String(el.dataset.inspect)});
-    if(currentLot)ppaAuctionForceItemArt(el,currentLot.item||{});
     bindHoldInfo(el,function(){
       let l=(STATE.marketLots||[]).find(function(x){return String(x.id)===String(el.dataset.inspect)});
       if(l)inspectAuctionItem(l.item||{},'Аукцион · покупка');
@@ -2905,8 +2850,6 @@ ppaPatchRegex(
   'auction own lot hold inspect',
   /lotsTable\.querySelectorAll\(&#x27;\.inspectOwnLot&#x27;\)\.forEach\(el=&gt;el\.onclick=\(\)=&gt;\{let l=\(STATE\.lots\|\|\[\]\)\.find\(x=&gt;String\(x\.id\)===String\(el\.dataset\.inspect\)\);if\(l\)inspectAuctionItem\(l\.item\|\|\{\},&#x27;Аукцион · мой лот&#x27;\);\}\);/,
   `lotsTable.querySelectorAll('.inspectOwnLot').forEach(function(el){
-    let currentLot=(STATE.lots||[]).find(function(x){return String(x.id)===String(el.dataset.inspect)});
-    if(currentLot)ppaAuctionForceItemArt(el,currentLot.item||{});
     bindHoldInfo(el,function(){
       let l=(STATE.lots||[]).find(function(x){return String(x.id)===String(el.dataset.inspect)});
       if(l)inspectAuctionItem(l.item||{},'Аукцион · мой лот');
@@ -2916,14 +2859,8 @@ ppaPatchRegex(
 );
 
 if(output.includes("inspectMarketItem&#x27;).forEach(el=&gt;el.onclick") ||
-   output.includes("inspectOwnLot&#x27;).forEach(el=&gt;el.onclick") ||
-   !output.includes("function ppaAuctionCanonicalSrc(it)") ||
-   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v501") ||
-   !output.includes("function ppaAuctionForceItemArt(el,it)") ||
-   !output.includes("data-ppa-canonical-legendary") ||
-   !output.includes("ppaAuctionForceItemArt(d,it)") ||
-   !output.includes("if(currentLot)ppaAuctionForceItemArt(el,currentLot.item||{})")) {
-  throw new Error('Auction hold-inspect / canonical final-card art did not apply');
+   output.includes("inspectOwnLot&#x27;).forEach(el=&gt;el.onclick")) {
+  throw new Error('Auction hold-inspect completion did not apply');
 }
 /* ======================================================================== */
 
