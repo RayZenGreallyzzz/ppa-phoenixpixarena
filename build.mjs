@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v503-smith-stable-auction-orange-legendary-20260923';
+const CLIENT_BUILD = 'v504-prelegend-smith-restore-auction-source-art-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -739,13 +739,33 @@ ppaPatchRegex(
   if(!cls){
     try{cls=a(P&&(P.classKey||P.classId||P.class||P.cls||P.className||P.profession||P.job))}catch(_){}
   }
-  return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v503'):'';
+  return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v504'):'';
+}
+function auctionSourceInventoryItem(it){
+  try{
+    if(!it||typeof it!=='object'||typeof INV==='undefined'||!INV||!Array.isArray(INV.bag))return it;
+    var ref=it.ref;
+    var n=Number(ref);
+    if(Number.isFinite(n)&&n>=0&&n<INV.bag.length&&INV.bag[n])return INV.bag[n];
+    var uid=String(it.uid||it.itemUid||it.itemId||'');
+    var rid=String(it.refId||it.id||'');
+    for(var i=0;i<INV.bag.length;i++){
+      var x=INV.bag[i];
+      if(!x)continue;
+      if(uid&&String(x.uid||x.itemUid||x.itemId||'')===uid)return x;
+      if(rid&&String(x.refId||x.id||'')===rid)return x;
+    }
+  }catch(_){}
+  return it;
 }
 function auctionRestoreUiArt(it){
   if(!it||typeof it!=='object')return it;
   try{
-    var _ppaLegendArt=auctionCanonicalLegendaryArt(it);
-    if(!_ppaLegendArt&&window.PPA_LEGENDARY_GEAR_ITEM_ART)_ppaLegendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(it);
+    var srcItem=auctionSourceInventoryItem(it);
+    var _ppaLegendArt='';
+    if(srcItem&&String(srcItem.img||'').indexOf('/assets/legendary/')>=0)_ppaLegendArt=String(srcItem.img);
+    if(!_ppaLegendArt&&window.PPA_LEGENDARY_GEAR_ITEM_ART)_ppaLegendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(srcItem||it);
+    if(!_ppaLegendArt)_ppaLegendArt=auctionCanonicalLegendaryArt(srcItem||it);
     if(_ppaLegendArt){
       it.img=_ppaLegendArt;
       it.image=_ppaLegendArt;
@@ -792,8 +812,9 @@ ppaPatchRegex(
 );
 
 if(!output.includes("function auctionCanonicalLegendaryArt(it)") ||
-   !output.includes("rarity==='orange'") ||
-   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v503") ||
+   !output.includes("function auctionSourceInventoryItem(it)") ||
+   !output.includes("srcItem&&String(srcItem.img||'').indexOf('/assets/legendary/')>=0") ||
+   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v504") ||
    !output.includes("items:auctionItemsForUi().map(auctionAttachMinPrices).map(auctionRestoreUiArt)") ||
    !output.includes("marketLots:(PPA_AUCTION_MARKET_CACHE||[]).slice(0,100).map(auctionRestoreLotArt)")) {
   throw new Error('Auction canonical legendary art path incomplete');
@@ -2735,10 +2756,7 @@ ppaPatchRegex(
   'blacksmith gear tap selects hold inspects',
   /s\.onclick=\(\)=&gt;\{if\(sharpenable\)selectSmithGear\(c\.idx\);inspectSmithItem\(it,sharpenable\?&#x27;Кузнец · можно выбрать для заточки&#x27;:&#x27;Кузнец · просмотр предмета&#x27;\);\};/,
   `bindHoldInfo(s,function(){inspectSmithItem(it,sharpenable?'Кузнец · можно выбрать для заточки':'Кузнец · просмотр предмета')});
-        s.onclick=function(){
-          if(s.__ppaHeld){s.__ppaHeld=false;return}
-          if(sharpenable)selectSmithGear(c.idx);
-        };`
+        s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}if(sharpenable)selectSmithGear(c.idx)};`
 );
 
 ppaPatchRegex(
@@ -2823,30 +2841,6 @@ ppaPatchRegex(
 if(output.includes("inspectMarketItem&#x27;).forEach(el=&gt;el.onclick") ||
    output.includes("inspectOwnLot&#x27;).forEach(el=&gt;el.onclick")) {
   throw new Error('Auction hold-inspect completion did not apply');
-}
-/* ======================================================================== */
-
-/* === CANONICAL LEGENDARY ART IN EVERY ITEM RENDERER ===================== */
-// Stale saved item.img values must never resurrect the retired legendary set.
-// Resolve the canonical 256px file again at the final draw boundary in every
-// inventory-like iframe (auction, smith, storage, character, etc.).
-ppaPatchRegex(
-  'force canonical legendary art in every itemVisual renderer',
-  /function itemVisual\(it,size\)\{/g,
-  `function itemVisual(it,size){
-  try{
-    if(it&&parent&&typeof parent.PPA_LEGENDARY_GEAR_ITEM_ART==='function'){
-      var _ppaCanonicalLegendArt=parent.PPA_LEGENDARY_GEAR_ITEM_ART(it);
-      if(_ppaCanonicalLegendArt){
-        it.img=_ppaCanonicalLegendArt;it.image=_ppaCanonicalLegendArt;it.art=_ppaCanonicalLegendArt;
-        it.cardArt=_ppaCanonicalLegendArt;it.iconArt=_ppaCanonicalLegendArt;it.iconImg=_ppaCanonicalLegendArt;it.src=_ppaCanonicalLegendArt;
-      }
-    }
-  }catch(_){}`,
-  true
-);
-if((output.match(/_ppaCanonicalLegendArt/g)||[]).length<2){
-  throw new Error('Canonical legendary itemVisual coverage incomplete');
 }
 /* ======================================================================== */
 
@@ -3323,10 +3317,8 @@ if(output.includes("function fixGuardMenu(e)") ||
 if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
    !output.includes("__ppaCanvasizingSrc===src") ||
    !output.includes("attributeFilter:['src','srcset']") ||
-   !output.includes("if(sharpenable)selectSmithGear(c.idx);") ||
-   output.includes("s.__ppaSmithPointerSelectAt=Date.now()") ||
-   output.includes("function ppaSmithInstallTouchActionFallback(){")) {
-  throw new Error('Blacksmith stable direct selection fix did not apply');
+   !output.includes("s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}if(sharpenable)selectSmithGear(c.idx)};")) {
+  throw new Error('Blacksmith pre-legend stable selection / delayed art fix did not apply');
 }
 
 if(!output.includes("function ppaSmithCanvasize(root)") ||
@@ -5871,8 +5863,9 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !realtimeServer.includes('maxRuriDamage')) {
     throw new Error('Great Ruri combat/render bridge incomplete');
   }
-  if (!legendaryGearArt.includes("var ART_BASE='/assets/legendary/'") ||
-      !legendaryGearArt.includes("var ART_VER='v503'") ||
+  if (legendaryGearArt.includes("sendBlacksmithState") ||
+      !legendaryGearArt.includes("var ART_BASE='/assets/legendary/'") ||
+      !legendaryGearArt.includes("var ART_VER='v504'") ||
       !legendaryGearArt.includes("var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7}") ||
       !legendaryGearArt.includes('PPA_LEGENDARY_GEAR_ITEM_ART') ||
       !legendaryGearArt.includes("it.img=src;it.image=src;it.art=src") ||

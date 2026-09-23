@@ -2,7 +2,7 @@
   'use strict';
 
   var ART_BASE='/assets/legendary/';
-  var ART_VER='v503';
+  var ART_VER='v504';
   var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
   var SLOT_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
   var CLASS_ALIASES={
@@ -132,7 +132,6 @@
         try{if(typeof renderInventory==='function')renderInventory()}catch(_){}
         try{if(typeof renderCharacter==='function')renderCharacter()}catch(_){}
         try{if(typeof sendAuctionState==='function')sendAuctionState()}catch(_){}
-        try{if(typeof sendBlacksmithState==='function')sendBlacksmithState()}catch(_){}
       }
     }catch(_){}
     return changed;
