@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v540-elite-final-loot-20260923';
+const CLIENT_BUILD = 'v541-elite-authoritative-router-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1742,6 +1742,29 @@ function v271Drop4160(e){
   if(e&&e.isDungeonElite)return ppaEliteDrop4160(e);`
 );
 
+
+
+ppaPatchRegex(
+  'elite authoritative early drop router',
+  /const v232OldDropLoot=window\.dropLoot;\s*window\.dropLoot=function\(e\)\{\s*if\(e&&e\.isDungeonPhoenixBoss\)return v232OldDropLoot\.apply\(this,arguments\);\s*\/\/ 41–60:[\s\S]*?if\(e&&e\.dungeon41\)return v271Drop4160\(e\);\s*if\(e&&e\.isDungeonElite\)return v232DropElite\(e\);/,
+  `const v232OldDropLoot=window.dropLoot;
+window.dropLoot=function(e){
+  // ELITE ROUTER FIRST: only dungeon elites 1–60 enter these functions.
+  // Bosses and ordinary mobs can never fall through into elite loot.
+  if(e&&e.isDungeonElite){
+    const _eliteLv=Math.max(1,Math.min(60,Math.floor(Number(e.lvl||e.roomLevel)||1)));
+    return _eliteLv>=41?ppaEliteDrop4160(e):v232DropElite(e);
+  }
+  if(e&&e.isDungeonPhoenixBoss)return v232OldDropLoot.apply(this,arguments);
+  if(e&&e.dungeon41)return v271Drop4160(e);`
+);
+
+ppaPatchRegex(
+  'mob inspect uses latest runtime drop-info chain',
+  /var drops=mobDropInfo\(e\)\.map\(function\(r\)\{/,
+  "var _ppaDropInfo=(window.mobDropInfo&&typeof window.mobDropInfo==='function')?window.mobDropInfo:mobDropInfo;\\n  var drops=_ppaDropInfo(e).map(function(r){"
+);
+
 ppaPatchRegex(
   'elite inspect 41-60 final table',
   /if\(e\.dungeon41&&e\.isDungeonElite\)return\s*\[[\s\S]*?\n\s*\];/,
@@ -1846,7 +1869,9 @@ if(!_ppaEliteAudit.drop1_40||!_ppaEliteAudit.drop41_60||!_ppaEliteAudit.info1_40
    !output.includes("if(Math.random()<.25*scale)pushStoneDrop(e,'normal',1+Math.floor(Math.random()*4));")||
    !output.includes("if(Math.random()<.30*scale)")||
    !output.includes("v232RollTypedBook(e,.00004*scale,.00003*scale,1")||
-   !output.includes("['Ядро монстра','8%']")){
+   !output.includes("['Ядро монстра','8%']")||
+   !output.includes("ELITE ROUTER FIRST: only dungeon elites 1–60 enter these functions.")||
+   !output.includes("var _ppaDropInfo=(window.mobDropInfo&&typeof window.mobDropInfo==='function')?window.mobDropInfo:mobDropInfo;")){
   throw new Error('Final isolated elite loot tables did not apply');
 }
 

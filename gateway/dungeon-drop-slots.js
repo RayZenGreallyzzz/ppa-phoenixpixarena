@@ -116,6 +116,69 @@
     return 'I '+f(w.r1)+' · II '+f(w.r2)+' · III '+f(w.r3);
   }
 
+
+  // -----------------------------------------------------------------------
+  // AUTHORITATIVE ELITE INSPECT TABLE
+  // -----------------------------------------------------------------------
+  // Never call legacy mobDropInfo for dungeon elites: it clamps level to 20.
+  // Elite rows are selected only by the explicit elite flag + real mob level.
+  function eliteGreenGearBase(lv){
+    lv=clamp(Math.floor(Number(lv)||1),1,20);
+    if(lv<=10)return 0;
+    if(lv<=15)return .006;
+    return .009;
+  }
+
+  function eliteRows(e){
+    if(!e||e.isDungeonElite!==true)return null;
+    var lv=clamp(entityLevel(e),1,60);
+    var scale=lv<=20?1:(lv<=40?2:3);
+    var rows=[
+      ['ЭЛИТА · HP',lv<=20?'×7':'×8'],
+      ['Бонус к урону',lv<=20?'+12':'+14'],
+      ['Бонус к защите',lv<=20?'+2':'+3'],
+      ['Золото','×2'],
+      ['PPA ×1','1%'],
+      ['Перо Феникса','0.01%']
+    ];
+
+    if(lv<=20){
+      rows.push(['Зелёный шмот / оружие',fmtProb(Math.min(1,eliteGreenGearBase(lv)+.02))]);
+      var common=Math.min(.12,.0675+lv*.002625);
+      var green=lv<11?0:Math.min(.022,.004+lv*.0009);
+      if(lv>=11){common*=.80;green*=.75}
+      rows.push(['Обычный ресурс',fmtProb(Math.min(1,common+.02))]);
+      if(green>0)rows.push(['Зелёный ресурс',fmtProb(Math.min(1,green+.02))]);
+    }else if(lv<=40){
+      var blue=lv<=30?blue2130(lv):blue3140(lv);
+      var commonBase=lv<=30?.12:.18;
+      var greenBase=lv<=30?.06:.12;
+      rows.push(['Синий шмот / оружие',fmtProb(Math.min(1,blue+.011))]);
+      rows.push(['Обычный ресурс',fmtProb(Math.min(1,commonBase+.02))]);
+      rows.push(['Зелёный ресурс',fmtProb(Math.min(1,greenBase+.02))]);
+      rows.push(['Синий ресурс',fmtProb(Math.min(1,blueResource2160(lv)+.02))]);
+    }else{
+      rows.push(['Фиолетовый шмот / оружие','1%']);
+      rows.push(['Обычный ресурс','20%']);
+      rows.push(['Зелёный ресурс','14%']);
+      rows.push(['Синий ресурс',fmtProb(Math.min(1,blueResource2160(lv)+.02))]);
+    }
+
+    rows.push(['Ядро монстра','8%']);
+    rows.push(['Обычный камень заточки ×1–4',(25*scale)+'%']);
+    rows.push(['Премиум камень заточки ×1',(10*scale)+'%']);
+    rows.push(['Премиум руна заточки ×1',(1*scale)+'%']);
+    rows.push(['Обычная / зелёная универсальная руна ×1',(2*scale)+'%']);
+    rows.push(['Премиум HP или MP ×2–3',(1*scale)+'%']);
+    rows.push(['Свиток телепорта ×1–3',(30*scale)+'%']);
+    rows.push(['Премиум-монета удачи ×1',(0.9*scale).toFixed(1).replace(/\.0$/,'')+'%']);
+    rows.push(['Активная книга',fmtProb(.00004*scale)]);
+    rows.push(['Пассивная книга',fmtProb(.00003*scale)]);
+    rows.push(['Ранг книги',bookRankText(lv)]);
+    rows.push(['Ресурсы событий','шанс без изменений']);
+    return rows;
+  }
+
   function parsePct(v){
     var m=String(v==null?'':v).replace(',','.').match(/([0-9]+(?:\.[0-9]+)?)\s*%/);
     if(!m)return null;
@@ -432,7 +495,10 @@
       var base=mobDropInfo;
       var wrapped=function(e){
         var rows;
-        if(ordinaryDungeonMob(e)){
+        // ELITE FIRST: never let an elite reach legacy/ordinary/boss info code.
+        if(e&&e.isDungeonElite===true){
+          rows=eliteRows(e);
+        }else if(ordinaryDungeonMob(e)){
           rows=approvedNormalRows(e);
         }else{
           rows=base.apply(this,arguments);
@@ -455,7 +521,8 @@
       wrapped.__ppaDungeonNativeBase=base;
       try{mobDropInfo=wrapped}catch(_){}
       try{window.mobDropInfo=wrapped}catch(_){}
-      window.PPA_DUNGEON_DROP_TABLE_MODE='approved-11-60';
+      window.PPA_DUNGEON_DROP_TABLE_MODE='approved-11-60+elite-authoritative';
+      window.PPA_ELITE_DROP_INFO=function(e){var r=eliteRows(e);if(!Array.isArray(r))return r;r=expandBookRows(e,r);r=expandGearRows(e,r);return r;};
     }catch(_){}
   }
 
