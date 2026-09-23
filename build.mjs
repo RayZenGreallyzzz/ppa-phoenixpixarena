@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v496-canonical-hd-legendary-only-20260923';
+const CLIENT_BUILD = 'v497-auction-canonical-hd-legendary-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -698,13 +698,13 @@ if (!output.includes("window.PPA_TEST_ALL_DUNGEONS!==true&&!allowed")) {
 ppaPatchRegex(
   'auction keep inventory art',
   /items:auctionItemsForUi\(\)\.map\(auctionAttachMinPrices\)\.map\(function\(x\)\{var y=Object\.assign\(\{\},x\);delete y\.img;delete y\.cardArt;delete y\.iconArt;return y\}\),/,
-  "items:auctionItemsForUi().map(auctionAttachMinPrices),"
+  "items:auctionItemsForUi().map(auctionAttachMinPrices).map(auctionRestoreUiArt),"
 );
 
 ppaPatchRegex(
   'auction keep own lot art',
   /lots:\(INV\.auctionLots\|\|\[\]\)\.map\(auctionLotForUi\)\.map\(function\(l\)\{if\(l&&l\.item\)\{l=Object\.assign\(\{\},l,\{item:Object\.assign\(\{\},l\.item\)\}\);delete l\.item\.img;\}return l\}\),/,
-  "lots:(INV.auctionLots||[]).map(auctionLotForUi),"
+  "lots:(INV.auctionLots||[]).map(auctionLotForUi).map(auctionRestoreLotArt),"
 );
 
 ppaPatchRegex(
@@ -715,7 +715,17 @@ ppaPatchRegex(
   try{
     if(window.PPA_LEGENDARY_GEAR_ITEM_ART){
       var _ppaLegendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(it);
-      if(_ppaLegendArt){it.img=_ppaLegendArt;it.image=_ppaLegendArt;it.art=_ppaLegendArt;return it}
+      if(_ppaLegendArt){
+        it.img=_ppaLegendArt;
+        it.image=_ppaLegendArt;
+        it.art=_ppaLegendArt;
+        it.cardArt=_ppaLegendArt;
+        it.iconArt=_ppaLegendArt;
+        it.iconImg=_ppaLegendArt;
+        it.src=_ppaLegendArt;
+        it.ppaLegendaryReferenceArt=true;
+        return it
+      }
     }
   }catch(_){}
   if(it.img)return it;
@@ -5799,6 +5809,9 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !legendaryGearArt.includes("it.img=src;it.image=src;it.art=src") ||
       !legendaryGearArt.includes('PPA_HYDRATE_LEGENDARY_GEAR_ART') ||
       !output.includes("_ppaLegendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(it)") ||
+      !output.includes("it.cardArt=_ppaLegendArt") ||
+      !output.includes("items:auctionItemsForUi().map(auctionAttachMinPrices).map(auctionRestoreUiArt)") ||
+      !output.includes("lots:(INV.auctionLots||[]).map(auctionLotForUi).map(auctionRestoreLotArt)") ||
       !output.includes("window.PPA_LEGENDARY_GEAR_ITEM_ART){var a=window.PPA_LEGENDARY_GEAR_ITEM_ART(it)")) {
     throw new Error('Legendary real-file all-UI runtime incomplete');
   }
