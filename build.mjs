@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v524-stable-tabbed-events-replacement-20260923';
+const CLIENT_BUILD = 'v525-native-tabbed-events-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -36,6 +36,7 @@ function ppaReadApprovedB64(name){
 }
 const PPA_APPROVED_SLAG_ART=ppaReadApprovedB64('fart-slag-reference.b64');
 const PPA_APPROVED_EMERALD_ART=ppaReadApprovedB64('emerald-smith-reference.b64');
+const PPA_RURI_EVENT_CARD_ART=ppaReadApprovedB64('ruri-event-card-approved.b64');
 function ppaReadApprovedB64Parts(names){
   const b64=names.map((name)=>{
     const p=path.join(ROOT,'assets-src',name);
@@ -72,6 +73,7 @@ const gameDir = path.join(publicDir, 'game');
 fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
+fs.writeFileSync(path.join(assetsDir,'ruri-event-card.webp'),PPA_RURI_EVENT_CARD_ART.buf);
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
 const PPA_LEGENDARY_FILE_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
 const PPA_LEGENDARY_FILE_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
@@ -195,6 +197,29 @@ function ppaEscapeSrcdocCode(code) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;');
 }
+
+/* === NATIVE TABBED EVENTS CENTER ======================================== */
+// Replace the legacy events iframe at build time instead of trying to overlay it
+// at runtime. Parent-side event mechanics/messages remain unchanged.
+{
+  const nativeEventsSrcPath=path.join(ROOT,'gateway','native-events-srcdoc.html');
+  if(!fs.existsSync(nativeEventsSrcPath))throw new Error('Native Events srcdoc missing');
+  const titanArtMatch=output.match(/id:&#x27;worldboss_crystal_titan_001&#x27;[\s\S]{0,1600}?bossArt:&#x27;([^&]+?)&#x27;/);
+  const titanArt=titanArtMatch?String(titanArtMatch[1]).replace(/^\.\//,'/'):'';
+  const ruriArt='/assets/ruri-event-card.webp?v='+CLIENT_BUILD;
+  let nativeEventsHtml=fs.readFileSync(nativeEventsSrcPath,'utf8')
+    .replace(/__PPA_RURI_CARD__/g,ruriArt)
+    .replace(/__PPA_TITAN_ART__/g,titanArt);
+  const nativeEventsEscaped=ppaEscapeSrcdocCode(nativeEventsHtml);
+  const eventsFrameRe=/<iframe id="eventsMenuFrame" title="События" srcdoc="[\s\S]*?"><\/iframe>/;
+  if(!eventsFrameRe.test(output))throw new Error('Native Events iframe target not found');
+  output=output.replace(eventsFrameRe,'<iframe id="eventsMenuFrame" title="События" srcdoc="'+nativeEventsEscaped+'"></iframe>');
+  if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('data-cat=&quot;game&quot;')){
+    throw new Error('Native tabbed Events replacement incomplete');
+  }
+  console.log('[PPA BUILD] Native Events iframe replaced: Игровые / Клановые / Война / Обновления');
+}
+/* ======================================================================== */
 
 /* === TIGHT MELEE BASIC RANGES =========================================== */
 // Basic melee is intentionally short. These values are center-to-center
@@ -6041,7 +6066,6 @@ const filesToPublish = [
   ['gateway/remote-combat-fx.js','remote-combat-fx.js','Remote combat FX renderer missing'],
   ['gateway/remote-pet-renderer.js','remote-pet-renderer.js','Remote pet renderer missing'],
   ['gateway/ruri-pet-runtime.js','ruri-pet-runtime.js','Great Ruri runtime missing'],
-  ['gateway/ruri-event-ui.js','ruri-event-ui.js','Great Ruri event UI missing'],
   ['gateway/legendary-gear-art.js','legendary-gear-art.js','Legendary gear art runtime missing'],
   ['gateway/realtime-identity-sync.js','realtime-identity-sync.js','Realtime identity sync missing'],
   ['gateway/class-sync-client.js','class-sync-client.js','Realtime class sync missing'],
@@ -6082,7 +6106,6 @@ console.log('Remote player sprites: /game/remote-sprite-renderer.js');
 console.log('Remote combat FX: /game/remote-combat-fx.js');
 console.log('Remote pet renderer: /game/remote-pet-renderer.js');
 console.log('Great Ruri runtime: /game/ruri-pet-runtime.js');
-console.log('Great Ruri event UI: /game/ruri-event-ui.js');
 console.log('Legendary gear art: /game/legendary-gear-art.js');
 console.log('Realtime class sync: /game/class-sync-client.js');
 console.log('Social UI: /game/social-ui.js');
