@@ -7,9 +7,10 @@
 <style>
 :root{--gold:#f4c76b;--gold2:#c48132;--bg:#090706;--panel:#120c09;--line:#5a3a21;--text:#dbc393;--muted:#9d896c;--green:#83ff7d;--red:#ff7b68}
 *{box-sizing:border-box}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#090706;color:var(--text);font-family:Georgia,"Times New Roman",serif}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;color:var(--text);font-family:Georgia,"Times New Roman",serif}
+body{background:rgba(3,3,3,.62)}
 button{font:inherit}
-#hub{height:100%;display:grid;grid-template-columns:172px minmax(0,1fr);background:radial-gradient(circle at 76% 12%,#27130c 0,#100b08 38%,#080706 100%)}
+#hub{position:fixed;inset:14px;display:grid;grid-template-columns:172px minmax(0,1fr);overflow:hidden;border:1px solid #7b4b25;border-radius:10px;background:radial-gradient(circle at 76% 12%,rgba(39,19,12,.96) 0,rgba(16,11,8,.94) 38%,rgba(8,7,6,.93) 100%);box-shadow:0 16px 52px rgba(0,0,0,.72)}
 #nav{min-width:0;overflow:auto;padding:10px 8px;border-right:1px solid var(--line);background:linear-gradient(180deg,#170e09,#0d0907)}
 .cat{width:100%;min-height:42px;margin:0 0 6px;padding:7px 8px;border:1px solid #523720;border-radius:7px;background:#17100c;color:#c4a979;text-align:left;font-weight:bold;font-size:11px}
 .cat.on{border-color:#bd6828;background:linear-gradient(90deg,#4a190d,#24130c);color:#ffd27b}
@@ -21,7 +22,8 @@ button{font:inherit}
 .emptyNav{display:none;padding:7px;color:#806d55;font:8px/1.4 monospace}
 .emptyNav.on{display:block}
 #main{min-width:0;height:100%;overflow:hidden;display:grid;grid-template-rows:44px minmax(0,1fr)}
-#head{display:flex;align-items:center;padding:0 12px;border-bottom:1px solid #4b311e;background:#120c09;color:#efc273;font-weight:bold;font-size:16px;letter-spacing:.05em}
+#head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 8px 0 12px;border-bottom:1px solid #4b311e;background:rgba(18,12,9,.92);color:#efc273;font-weight:bold;font-size:16px;letter-spacing:.05em}
+#menuClose{width:34px;height:34px;flex:0 0 34px;border:1px solid #8d4829;border-radius:7px;background:#43160f;color:#ffd39b;font:700 20px/1 Georgia,serif}
 #view{overflow:auto;padding:12px 12px 30px}
 .hero{display:grid;grid-template-columns:minmax(220px,42%) minmax(0,1fr);gap:14px;align-items:start}
 .poster{display:block;width:100%;max-height:68vh;object-fit:contain;border:1px solid #70481f;border-radius:8px;background:#080706}
@@ -49,13 +51,14 @@ button{font:inherit}
 #toast{position:fixed;left:50%;bottom:18px;z-index:80;transform:translateX(-50%);max-width:80%;padding:8px 11px;border:1px solid #76502b;border-radius:6px;background:#17100c;color:#f1cb84;font:9px monospace;opacity:0;pointer-events:none;transition:opacity .18s}
 #toast.on{opacity:1}
 @media(max-width:600px),(max-height:720px){
-  #hub{grid-template-columns:92px minmax(0,1fr)}
+  #hub{inset:7px;grid-template-columns:92px minmax(0,1fr);border-radius:7px}
   #nav{padding:6px 4px}
   .cat{min-height:34px;padding:5px;font-size:8px;margin-bottom:4px}
   .evt{min-height:28px;padding:4px 5px;font-size:7px;line-height:1.2}
   .emptyNav{font-size:7px;padding:4px}
   #main{grid-template-rows:34px minmax(0,1fr)}
-  #head{padding:0 7px;font-size:11px}
+  #head{padding:0 5px 0 7px;font-size:11px}
+  #menuClose{width:28px;height:28px;flex-basis:28px;font-size:17px;border-radius:6px}
   #view{padding:6px 6px 24px}
   .hero{grid-template-columns:1fr;gap:7px}
   .poster{max-width:240px;max-height:35vh;margin:auto}
@@ -91,7 +94,7 @@ button{font:inherit}
   </aside>
 
   <main id="main">
-    <div id="head">ЦЕНТР СОБЫТИЙ</div>
+    <div id="head"><span>ЦЕНТР СОБЫТИЙ</span><button id="menuClose" aria-label="Закрыть">×</button></div>
     <div id="view"></div>
   </main>
 </div>
@@ -188,6 +191,9 @@ function openShop(){
   parent.postMessage({type:'eventsRequestState'},'*');
 }
 function closeShop(){document.getElementById('shop').classList.remove('on')}
+function closeMenu(){
+  try{parent.postMessage({type:'eventsMenuClose'},'*')}catch(_){}
+}
 
 document.querySelectorAll('.cat').forEach(b=>b.onclick=()=>{
   currentCat=b.dataset.cat;
@@ -206,6 +212,13 @@ document.querySelectorAll('.evt').forEach(b=>b.onclick=()=>{
 });
 document.getElementById('shopClose').onclick=closeShop;
 document.getElementById('shop').onclick=e=>{if(e.target.id==='shop')closeShop()};
+document.getElementById('menuClose').onclick=e=>{e.stopPropagation();closeMenu()};
+document.addEventListener('pointerdown',e=>{
+  const hub=document.getElementById('hub');
+  const shop=document.getElementById('shop');
+  if(shop.classList.contains('on'))return;
+  if(hub&&!hub.contains(e.target))closeMenu();
+},{passive:true});
 
 window.addEventListener('message',e=>{
   const d=e.data||{};
