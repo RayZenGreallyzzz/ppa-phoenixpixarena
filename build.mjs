@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v515-character-clone-audit-fix-20260923';
+const CLIENT_BUILD = 'v516-final-legendary-audit-clone-fix-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5917,7 +5917,10 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !output.includes("it.cardArt=_ppaLegendArt") ||
       !output.includes("items:auctionItemsForUi().map(auctionAttachMinPrices).map(auctionRestoreUiArt)") ||
       !output.includes("lots:(INV.auctionLots||[]).map(auctionLotForUi).map(auctionRestoreLotArt)") ||
-      !output.includes("window.PPA_LEGENDARY_GEAR_ITEM_ART){var a=window.PPA_LEGENDARY_GEAR_ITEM_ART(it)")) {
+      !output.includes("var o=(it&&typeof it==='object')?Object.assign({},it):it") ||
+      !output.includes("window.PPA_LEGENDARY_GEAR_ITEM_ART&&o") ||
+      !output.includes("PPA_LEGENDARY_GEAR_ITEM_ART(o)") ||
+      !output.includes("o.img=a;o.image=a;o.art=a")) {
     throw new Error('Legendary real-file all-UI runtime incomplete');
   }
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
