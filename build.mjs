@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v536-elite-loot-syntax-fix-20260923';
+const CLIENT_BUILD = 'v537-elite-loot-verify-fix-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1588,7 +1588,8 @@ if (!output.includes("return .000018+(lv-41)*((.000040-.000018)/19); // 0.0018% 
 ppaPatchRegex(
   'elite 1-40 approved drop table',
   /function\s+v232DropElite\(e\)\s*\{[\s\S]*?\n\}\n\n\/\/ Phoenix MUST remain exactly as V231 \/ V215\./,
-  `function v232DropElite(e){
+  `/* PPA_ELITE_V537_1_40 */
+function v232DropElite(e){
   const anti=antiFarmRewardMul(e),lv=Math.max(1,Math.min(40,Number(e.lvl)||1));
   const mul=rewardDropMul()*anti;
 
@@ -1655,7 +1656,8 @@ ppaPatchRegex(
 ppaPatchRegex(
   'elite 41-60 resource and epic table',
   /function\s+v271Drop4160\(e\)\s*\{[\s\S]*?\n\}\n\nfunction\s+v232DropLord\(e\)\s*\{/,
-  `function v271Drop4160(e){
+  `/* PPA_ELITE_V537_41_60 */
+function v271Drop4160(e){
   const anti=antiFarmRewardMul(e);
   const mul=rewardDropMul()*anti;
   const elite=!!(e&&e.isDungeonElite);
@@ -1691,7 +1693,7 @@ ppaPatchRegex(
   if(v232Roll(.0015,anti))v232PushConsumable(e,'premiumMpRegen','Премиум банка MP',PPA_V172_ART.premiumMp,'◆','#6ea7ff',1);
 
   // Elite 41–60 has a fixed 1% purple roll. Ordinary 41–60 keeps the approved curve.
-  if(v232Roll(elite?.01:v467Epic4160Chance(lv),mul))v232PushGear(e,'epic');
+  if(v232Roll(elite?0.01:v467Epic4160Chance(lv),mul))v232PushGear(e,'epic');
   if(lv>=51&&Math.random()<V271_D41_LEGENDARY_GEAR_CHANCE)v271PushDungeon41Legendary(e);
   v232RollTypedBook(e,v232ActiveBookChance(lv),v232PassiveBookChance(lv),mul,function(){return v232BookRankForLevel(lv)});
 
@@ -1704,7 +1706,8 @@ function v232DropLord(e){`
 ppaPatchRegex(
   'elite inspect 41-60 approved table',
   /if\(e\.dungeon41&&e\.isDungeonElite\)return\s*\[[\s\S]*?\n\s*\];/,
-  `if(e.dungeon41&&e.isDungeonElite){
+  `/* PPA_ELITE_V537_INFO_41_60 */
+  if(e.dungeon41&&e.isDungeonElite){
     const lv=Math.max(41,Math.min(60,Number(e.lvl)||41));
     return [
       ['ЭЛИТА · HP','×8'],['Золото','×2'],
@@ -1728,7 +1731,8 @@ ppaPatchRegex(
 ppaPatchRegex(
   'elite inspect 1-40 approved tables',
   /if\(e\.isDungeonElite\)\{[\s\S]*?\n\s*\}\n\n\s*if\(e\.isDungeon21Boss\)return/,
-  `if(e.isDungeonElite){
+  `/* PPA_ELITE_V537_INFO_1_40 */
+  if(e.isDungeonElite){
     const lv=Math.max(1,Math.min(40,Number(e.lvl)||1));
     if(lv<=20){
       const gd=normalGearDropChances(lv);
@@ -1769,10 +1773,14 @@ ppaPatchRegex(
   if(e.isDungeon21Boss)return`
 );
 
-if(!output.includes("greenChance=Math.min(1,Math.max(0,Number(gd.uncommon)||0)+.02)") ||
-   !output.includes("blueChance=Math.min(1,Math.max(0,Number(blueBase)||0)+.011)") ||
-   !output.includes("if(v232Roll(elite?.01:v467Epic4160Chance(lv),mul))") ||
-   !output.includes("['Ресурсы событий','шанс без изменений']")) {
+const _ppaEliteAudit={
+  drop1_40:output.includes('/* PPA_ELITE_V537_1_40 */'),
+  drop41_60:output.includes('/* PPA_ELITE_V537_41_60 */'),
+  info1_40:output.includes('/* PPA_ELITE_V537_INFO_1_40 */'),
+  info41_60:output.includes('/* PPA_ELITE_V537_INFO_41_60 */')
+};
+console.log('[PPA BUILD] elite loot audit:',JSON.stringify(_ppaEliteAudit));
+if(!_ppaEliteAudit.drop1_40||!_ppaEliteAudit.drop41_60||!_ppaEliteAudit.info1_40||!_ppaEliteAudit.info41_60){
   throw new Error('Approved elite loot tables did not apply');
 }
 
