@@ -12,34 +12,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect packed Ruri resource drops
+      - name: Scan resource stems and drop hooks
         shell: bash
         run: |
           node <<'NODE'
           const fs=require('fs'),zlib=require('zlib');
           const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
           const src=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
-          const terms=[
-            'Демонический кристалл','Демонический Кристалл','демонический кристалл',
-            'Огненные осколки','Огненные Осколки','огненные осколки',
-            'Кровь монстра','Кровь Монстра','кровь монстра',
-            'Хрустальный кристалл','Хрустальный Кристалл','хрустальный кристалл',
-            'Великий Рури','Рури','event_ruri_legendary_v1'
+          const regs=[
+            /[А-Яа-яЁёA-Za-z0-9_ -]{0,50}кристалл[А-Яа-яЁёA-Za-z0-9_ -]{0,50}/giu,
+            /[А-Яа-яЁёA-Za-z0-9_ -]{0,50}оскол[А-Яа-яЁёA-Za-z0-9_ -]{0,50}/giu,
+            /[А-Яа-яЁёA-Za-z0-9_ -]{0,50}кров[А-Яа-яЁёA-Za-z0-9_ -]{0,50}/giu,
+            /[А-Яа-яЁёA-Za-z0-9_ -]{0,50}демон[А-Яа-яЁёA-Za-z0-9_ -]{0,50}/giu,
+            /[A-Za-z0-9_ -]{0,50}blood[A-Za-z0-9_ -]{0,50}/giu,
+            /[A-Za-z0-9_ -]{0,50}demon[A-Za-z0-9_ -]{0,50}/giu,
+            /[A-Za-z0-9_ -]{0,50}crystal[A-Za-z0-9_ -]{0,50}/giu,
+            /[A-Za-z0-9_ -]{0,50}shard[A-Za-z0-9_ -]{0,50}/giu
           ];
-          const out=[];
-          for(const term of terms){
-            let p=0,n=0;
-            while((p=src.indexOf(term,p))>=0&&n<40){
-              out.push('\n===== '+term+' @ '+p+' =====\n'+src.slice(Math.max(0,p-3500),Math.min(src.length,p+7000)));
-              p+=term.length;n++;
+          const seen=new Set(), hits=[];
+          for(const re of regs){
+            let m;
+            while((m=re.exec(src))&&hits.length<500){
+              const key=m.index+':'+m[0];
+              if(seen.has(key))continue; seen.add(key);
+              hits.push({i:m.index,s:m[0],ctx:src.slice(Math.max(0,m.index-1300),Math.min(src.length,m.index+2600))});
             }
           }
-          fs.writeFileSync('ruri-drops.txt',out.join('\n'));
-          console.log('RURI_DROP_SCAN_START');
-          console.log(out.join('\n'));
-          console.log('RURI_DROP_SCAN_END');
+          console.log('HIT_COUNT='+hits.length);
+          for(const h of hits)console.log('\n===== '+h.i+' :: '+h.s+' =====\n'+h.ctx);
           NODE
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ruri-drops
-          path: ruri-drops.txt
