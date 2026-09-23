@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v537-elite-loot-verify-fix-20260923';
+const CLIENT_BUILD = 'v538-elite-inspect-scope-fix-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1668,9 +1668,9 @@ function v271Drop4160(e){
   maybeDropStatRune(e,anti);
 
   // Elite material resources: +2 percentage points. Event resources are separate.
-  const commonRes=.18+(elite?.02:0);
-  const greenRes=.12+(elite?.02:0);
-  const blueRes=v232BlueResourceChance(lv)+(elite?.02:0);
+  const commonRes=.18+(elite?0.02:0);
+  const greenRes=.12+(elite?0.02:0);
+  const blueRes=v232BlueResourceChance(lv)+(elite?0.02:0);
   if(v232Roll(commonRes,mul*clanCastleResourceMul()))pushMaterialDrop(e,'common',1);
   if(v232Roll(greenRes,mul*clanCastleResourceMul()))pushMaterialDrop(e,'uncommon',1);
   if(v232Roll(Math.min(1,blueRes),mul*luckCoinRareDropMul()*clanCastleResourceMul()))pushMaterialDrop(e,'rare',1);
@@ -1730,7 +1730,7 @@ ppaPatchRegex(
 
 ppaPatchRegex(
   'elite inspect 1-40 approved tables',
-  /if\(e\.isDungeonElite\)\{[\s\S]*?\n\s*\}\n\n\s*if\(e\.isDungeon21Boss\)return/,
+  /if\(e\.isDungeonElite\)\{\s*const lv=Math\.max\(1,Math\.min\(40,Number\(e\.lvl\)\|\|1\)\);[\s\S]*?\n\s*\}\n\n\s*if\(e\.isDungeon21Boss\)return/,
   `/* PPA_ELITE_V537_INFO_1_40 */
   if(e.isDungeonElite){
     const lv=Math.max(1,Math.min(40,Number(e.lvl)||1));
@@ -1780,7 +1780,9 @@ const _ppaEliteAudit={
   info41_60:output.includes('/* PPA_ELITE_V537_INFO_41_60 */')
 };
 console.log('[PPA BUILD] elite loot audit:',JSON.stringify(_ppaEliteAudit));
-if(!_ppaEliteAudit.drop1_40||!_ppaEliteAudit.drop41_60||!_ppaEliteAudit.info1_40||!_ppaEliteAudit.info41_60){
+if(!_ppaEliteAudit.drop1_40||!_ppaEliteAudit.drop41_60||!_ppaEliteAudit.info1_40||!_ppaEliteAudit.info41_60||
+   !output.includes('function v232DropElite(e){')||
+   !output.includes('function v271Drop4160(e){')){
   throw new Error('Approved elite loot tables did not apply');
 }
 
