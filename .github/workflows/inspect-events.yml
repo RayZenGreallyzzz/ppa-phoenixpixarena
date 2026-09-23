@@ -12,32 +12,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect packed event source
+      - name: Inspect native events iframe
         shell: bash
         run: |
           node <<'NODE'
-          const fs=require('fs');
-          const zlib=require('zlib');
+          const fs=require('fs'),zlib=require('zlib');
           const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-          const packed=Buffer.concat(parts.map(p=>fs.readFileSync(p)));
-          const source=zlib.gunzipSync(packed).toString('utf8');
-          const terms=['СОБЫТИЯ','События','Все события','Кристальный Титан','Цитадель Феникса','Мировой босс','Клановое событие'];
-          const out=[];
+          const source=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
+          const anchor=source.indexOf('id="eventsMenuFrame"');
+          if(anchor<0) throw new Error('eventsMenuFrame not found');
+          const a=Math.max(0,anchor-12000), b=Math.min(source.length,anchor+900000);
+          const chunk=source.slice(a,b);
+          const terms=['postMessage','worldboss','clanSiege','citadel','eventsMenu','eventsClose','eventsSideTab','openEvents','go.onclick','shardShop'];
+          const out=['ANCHOR='+anchor];
           for(const term of terms){
-            let pos=0,n=0;
-            while((pos=source.indexOf(term,pos))>=0&&n<12){
-              const a=Math.max(0,pos-5000),b=Math.min(source.length,pos+9000);
-              out.push('\n===== '+term+' @ '+pos+' =====\n'+source.slice(a,b));
-              pos+=term.length;n++;
+            let p=0,n=0;
+            while((p=chunk.indexOf(term,p))>=0&&n<30){
+              out.push('\n===== '+term+' local '+p+' abs '+(a+p)+' =====\n'+chunk.slice(Math.max(0,p-1800),Math.min(chunk.length,p+4200)));
+              p+=term.length;n++;
             }
           }
-          fs.writeFileSync('event-context.txt',out.join('\n'));
-          console.log('SOURCE_LENGTH='+source.length);
-          console.log('EVENT_CONTEXT_START');
+          fs.writeFileSync('event-targets.txt',out.join('\n'));
+          console.log('EVENT_TARGETS_START');
           console.log(out.join('\n'));
-          console.log('EVENT_CONTEXT_END');
+          console.log('EVENT_TARGETS_END');
           NODE
       - uses: actions/upload-artifact@v4
         with:
-          name: event-context
-          path: event-context.txt
+          name: event-targets
+          path: event-targets.txt
