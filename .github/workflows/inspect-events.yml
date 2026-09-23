@@ -1,4 +1,4 @@
-name: Inspect Events Source
+name: Verify Native Events Build
 
 on:
   push:
@@ -8,31 +8,32 @@ on:
   workflow_dispatch:
 
 jobs:
-  inspect:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extract native Events script
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install
+        run: npm install
+      - name: Build
+        run: npm run build
+      - name: Verify generated Events
         shell: bash
         run: |
           node <<'NODE'
-          const fs=require('fs'),zlib=require('zlib');
-          const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-          const source=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
-          const anchor=source.indexOf('id="eventsMenuFrame"');
-          const s=source.indexOf('const events=[{',anchor);
-          if(anchor<0||s<0) throw new Error('native events anchors missing');
-          let e=source.indexOf('&lt;/script&gt;',s);
-          if(e<0)e=Math.min(source.length,s+2000000);
-          let chunk=source.slice(s,e);
-          chunk=chunk.replace(/data:image\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g,'data:image/REMOVED;base64,REMOVED');
-          chunk=chunk.replace(/&quot;/g,'"').replace(/&#x27;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
-          fs.writeFileSync('event-script.txt',chunk);
-          console.log('EVENT_SCRIPT_START');
-          console.log(chunk);
-          console.log('EVENT_SCRIPT_END');
+          const fs=require('fs');
+          const p='public/index.html';
+          const s=fs.readFileSync(p,'utf8');
+          const checks=[
+            ['native center',s.includes('ЦЕНТР СОБЫТИЙ')],
+            ['ruri event',s.includes('Великий Рури')],
+            ['game tab',s.includes('data-cat=&quot;game&quot;')],
+            ['war tab',s.includes('data-cat=&quot;war&quot;')],
+            ['old all-events removed',!s.includes('data-cat=&quot;all&quot;')],
+            ['old overlay runtime removed',!s.includes('ruri-event-ui.js')]
+          ];
+          console.log(checks);
+          if(checks.some(x=>!x[1]))process.exit(1);
           NODE
-      - uses: actions/upload-artifact@v4
-        with:
-          name: event-script
-          path: event-script.txt
