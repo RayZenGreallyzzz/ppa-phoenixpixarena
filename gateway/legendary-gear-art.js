@@ -2,7 +2,7 @@
   'use strict';
 
   var ART_BASE='/assets/legendary/';
-  var ART_VER='v501';
+  var ART_VER='v503';
   var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
   var SLOT_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
   var CLASS_ALIASES={
@@ -69,8 +69,11 @@
 
   function isLegendary(it){
     if(!it)return false;
-    var r=key(it.rarity||it.quality||it.grade||it.r);
-    if(r==='legendary'||r==='легендарный'||r==='легендарная'||r==='легендарное'||r==='legend')return true;
+    var raw=(it.rarity!=null?it.rarity:(it.quality!=null?it.quality:(it.grade!=null?it.grade:it.r)));
+    var r=key(raw);
+    if(typeof raw==='number'&&isFinite(raw)&&(raw===4||raw===5))return true;
+    if(r==='legendary'||r==='легендарный'||r==='легендарная'||r==='легендарное'||r==='legend'||r==='orange'||r==='gold'||r==='4'||r==='5')return true;
+    if(/легендар|оранж/.test(r))return true;
     var text=key((it.name||'')+' '+(it.title||'')+' '+(it.qualityName||''));
     return /легендар|legendary/.test(text);
   }
