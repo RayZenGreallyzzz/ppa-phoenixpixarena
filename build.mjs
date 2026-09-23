@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v507-v506-coverage-guard-fix-20260923';
+const CLIENT_BUILD = 'v508-canonical-legendary-craft-only-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -739,7 +739,7 @@ ppaPatchRegex(
   if(!cls){
     try{cls=a(P&&(P.classKey||P.classId||P.class||P.cls||P.className||P.profession||P.job))}catch(_){}
   }
-  return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v506'):'';
+  return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v508'):'';
 }
 function auctionSourceInventoryItem(it){
   try{
@@ -814,7 +814,7 @@ ppaPatchRegex(
 if(!output.includes("function auctionCanonicalLegendaryArt(it)") ||
    !output.includes("function auctionSourceInventoryItem(it)") ||
    !output.includes("srcItem&&String(srcItem.img||'').indexOf('/assets/legendary/')>=0") ||
-   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v506") ||
+   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v508") ||
    !output.includes("items:auctionItemsForUi().map(auctionAttachMinPrices).map(auctionRestoreUiArt)") ||
    !output.includes("marketLots:(PPA_AUCTION_MARKET_CACHE||[]).slice(0,100).map(auctionRestoreLotArt)")) {
   throw new Error('Auction canonical legendary art path incomplete');
@@ -2844,6 +2844,33 @@ if(output.includes("inspectMarketItem&#x27;).forEach(el=&gt;el.onclick") ||
 }
 /* ======================================================================== */
 
+/* === BLACKSMITH LEGENDARY CRAFT = CANONICAL HD ONLY ===================== */
+ppaPatchRegex(
+  'blacksmith legendary craft canonical classGearArt source',
+  /function\s+classGearArt\s*\([^)]*\)\s*\{/,
+  `/* === SELF-CONTAINED CANONICAL LEGENDARY UI ART ========================= */
+  try{
+    var _ppaR=String(arguments[0]==null?'':arguments[0]).trim().toLowerCase();
+    if(_ppaR==='legendary'||_ppaR==='legend'||_ppaR==='orange'||_ppaR==='gold'||/легендар/.test(_ppaR)){
+      var _ppaC=String(arguments[1]==null?'':arguments[1]).trim().toLowerCase();
+      var _ppaS=String(arguments[2]==null?'':arguments[2]).trim().toLowerCase();
+      var _ppaCA={tank:'tank',warrior:'tank','воин':'tank','танк':'tank',paladin:'paladin','паладин':'paladin',barbarian:'barbarian',berserk:'barbarian',berserker:'barbarian','варвар':'barbarian','берсерк':'barbarian','берсеркер':'barbarian',assassin:'assassin','ассасин':'assassin','асасин':'assassin',gnome:'gnome',gunner:'gnome',cannoner:'gnome','канонир':'gnome','гном':'gnome','гном-канонир':'gnome',archer:'archer','лучник':'archer',mage:'mage','маг':'mage',priest:'priest',cleric:'priest',healer:'priest','жрец':'priest','клирик':'priest'};
+      var _ppaSA={pants:'legs',leggings:'legs',leg:'legs','поножи':'legs',helm:'helmet',head:'helmet','шлем':'helmet',chest:'armor',body:'armor','броня':'armor',glove:'gloves',hands:'gloves','перчатки':'gloves',boot:'boots',feet:'boots','сапоги':'boots','оружие':'weapon'};
+      _ppaC=_ppaCA[_ppaC]||_ppaC;
+      _ppaS=_ppaSA[_ppaS]||_ppaS;
+      if(/^(tank|paladin|barbarian|assassin|gnome|archer|mage|priest)$/.test(_ppaC)&&/^(weapon|helmet|armor|legs|gloves|boots)$/.test(_ppaS)){
+        return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v508';
+      }
+    }
+  }catch(_){}`
+);
+
+if(!output.includes("blacksmith legendary craft canonical classGearArt source") &&
+   !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v508'")){
+  throw new Error('Blacksmith canonical legendary craft art patch missing');
+}
+/* ======================================================================== */
+
 /* === SELF-CONTAINED CANONICAL LEGENDARY UI ART ========================= */
 ppaPatchRegex(
   'canonical legendary art inside sandboxed itemVisual renderers',
@@ -2891,7 +2918,7 @@ ppaPatchRegex(
           }catch(_){}
         }
         if(_cls&&_slot){
-          var _src='/assets/legendary/'+_cls+'-'+_slot+'.webp?v=v506';
+          var _src='/assets/legendary/'+_cls+'-'+_slot+'.webp?v=v508';
           it.img=_src;it.image=_src;it.art=_src;it.cardArt=_src;it.iconArt=_src;it.iconImg=_src;it.src=_src;
         }
       }
@@ -3380,6 +3407,7 @@ if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
    !output.includes("__ppaCanvasizingSrc===src") ||
    !output.includes("attributeFilter:['src','srcset']") ||
    !output.includes("function _ppaSmithHydrateLegendary(it)") ||
+   !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v508'") ||
    !output.includes("s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}if(sharpenable)selectSmithGear(c.idx)};")) {
   throw new Error('Blacksmith pre-legend stable selection / delayed art fix did not apply');
 }
