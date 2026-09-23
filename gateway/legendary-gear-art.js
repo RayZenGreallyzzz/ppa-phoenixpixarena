@@ -2,7 +2,7 @@
   'use strict';
 
   var ART_BASE='/assets/legendary/';
-  var ART_VER='v513';
+  var ART_VER='v514';
   var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
   var SLOT_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
   var CLASS_ALIASES={
@@ -49,7 +49,9 @@
   }
 
   function slotKey(it){
-    var s=key(it&&(it.slot||it.type||it.equipSlot));
+    var explicit=key(it&&(it.slot||it.equipSlot));
+    if(/^(ring|necklace|amulet|кольцо|ожерелье|амулет)$/.test(explicit))return '';
+    var s=key(it&&(it.slot||it.equipSlot||it.type));
     if(s==='pants'||s==='leggings'||s==='leg'||s==='поножи')s='legs';
     if(s==='helm'||s==='head'||s==='шлем')s='helmet';
     if(s==='chest'||s==='body'||s==='броня')s='armor';

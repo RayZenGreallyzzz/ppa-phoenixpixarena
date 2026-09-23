@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v513-smith-prelegend-behavior-canonical-art-only-20260923';
+const CLIENT_BUILD = 'v514-smith-live-img-ring-guard-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -714,7 +714,9 @@ ppaPatchRegex(
   if(!it||typeof it!=='object')return '';
   var rarity=String(it.rarity||it.quality||it.grade||it.r||'').trim().toLowerCase();
   if(!(rarity==='legendary'||rarity==='legend'||rarity==='orange'||rarity==='gold'||rarity==='4'||rarity==='5'||/легендар|оранж/.test(rarity)||/легендар|legendary/.test(String((it.name||'')+' '+(it.title||'')).toLowerCase())))return '';
-  var slot=String(it.slot||it.type||it.equipSlot||'').trim().toLowerCase();
+  var explicitSlot=String(it.slot||it.equipSlot||'').trim().toLowerCase();
+  if(/^(ring|necklace|amulet|кольцо|ожерелье|амулет)$/.test(explicitSlot))return '';
+  var slot=String(it.slot||it.equipSlot||it.type||'').trim().toLowerCase();
   var slotAlias={pants:'legs',leggings:'legs',leg:'legs','поножи':'legs',helm:'helmet',head:'helmet','шлем':'helmet',chest:'armor',body:'armor','броня':'armor',glove:'gloves',hands:'gloves','перчатки':'gloves',boot:'boots',feet:'boots','сапоги':'boots','оружие':'weapon'};
   slot=slotAlias[slot]||slot;
   if(!/^(weapon|helmet|armor|legs|gloves|boots)$/.test(slot)){
@@ -739,7 +741,7 @@ ppaPatchRegex(
   if(!cls){
     try{cls=a(P&&(P.classKey||P.classId||P.class||P.cls||P.className||P.profession||P.job))}catch(_){}
   }
-  return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v513'):'';
+  return cls?('/assets/legendary/'+cls+'-'+slot+'.webp?v=v514'):'';
 }
 function auctionSourceInventoryItem(it){
   try{
@@ -814,7 +816,7 @@ ppaPatchRegex(
 if(!output.includes("function auctionCanonicalLegendaryArt(it)") ||
    !output.includes("function auctionSourceInventoryItem(it)") ||
    !output.includes("srcItem&&String(srcItem.img||'').indexOf('/assets/legendary/')>=0") ||
-   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v513") ||
+   !output.includes("/assets/legendary/'+cls+'-'+slot+'.webp?v=v514") ||
    !output.includes("items:auctionItemsForUi().map(auctionAttachMinPrices).map(auctionRestoreUiArt)") ||
    !output.includes("marketLots:(PPA_AUCTION_MARKET_CACHE||[]).slice(0,100).map(auctionRestoreLotArt)")) {
   throw new Error('Auction canonical legendary art path incomplete');
@@ -2665,6 +2667,15 @@ function ppaSmithCanvasize(root){
       var src=String(img.currentSrc||img.getAttribute('src')||img.src||'');
       if(!src)return;
 
+      // Canonical legendary art is a live 256px file. Keep it as <img> so
+      // blacksmith selection can freely change src on every rerender.
+      if(src.indexOf('/assets/legendary/')>=0){
+        img.__ppaCanvasizingSrc=src;
+        img.style.setProperty('object-fit','contain','important');
+        img.style.setProperty('image-rendering','auto','important');
+        return;
+      }
+
       // Dynamic smith tabs hydrate rare/legendary art just after render.
       // Never replace the image until THIS exact source has loaded successfully.
       if(img.__ppaCanvasizingSrc===src)return;
@@ -2859,14 +2870,14 @@ ppaPatchRegex(
       _ppaC=_ppaCA[_ppaC]||_ppaC;
       _ppaS=_ppaSA[_ppaS]||_ppaS;
       if(/^(tank|paladin|barbarian|assassin|gnome|archer|mage|priest)$/.test(_ppaC)&&/^(weapon|helmet|armor|legs|gloves|boots)$/.test(_ppaS)){
-        return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v513';
+        return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v514';
       }
     }
   }catch(_){}`
 );
 
 if(!/function\s+classGearArt\s*\([^)]*\)\s*\{/.test(output) ||
-   !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v513'")){
+   !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v514'")){
   throw new Error('Blacksmith canonical legendary craft art/function header missing');
 }
 /* ======================================================================== */
@@ -3343,8 +3354,9 @@ if(output.includes("function fixGuardMenu(e)") ||
 
 if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
    !output.includes("__ppaCanvasizingSrc===src") ||
+   !output.includes("if(src.indexOf('/assets/legendary/')>=0)") ||
    !output.includes("attributeFilter:['src','srcset']") ||
-   !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v513'") ||
+   !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v514'") ||
    !output.includes("s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}if(sharpenable)selectSmithGear(c.idx)};")) {
   throw new Error('Blacksmith pre-legend stable selection / canonical craft art fix did not apply');
 }
@@ -5342,7 +5354,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'character invstate hydrates slag image',
   /(type:'invState',\s*inv:\{\s*equipped:INV\.equipped,\s*bag:)INV\.bag,/,
-  "$1(INV.bag||[]).map(function(it){try{if(window.PPA_LEGENDARY_GEAR_ITEM_ART){var a=window.PPA_LEGENDARY_GEAR_ITEM_ART(it);if(a){it.img=a;it.image=a;it.art=a;}}}catch(_){}if(it&&(it.fartSlag===true||it.uid==='fart_slag'||it.refId==='fart_slag'||String(it.name||'')==='Шлак')){it.fartSlag=true;it.kind='resource';it.img='/assets/fart-slag.webp';}return it}),"
+  "$1(INV.bag||[]).map(function(it){var o=(it&&typeof it==='object')?Object.assign({},it):it;try{if(window.PPA_LEGENDARY_GEAR_ITEM_ART&&o){var a=window.PPA_LEGENDARY_GEAR_ITEM_ART(o);if(a){o.img=a;o.image=a;o.art=a;}}}catch(_){}if(o&&(o.fartSlag===true||o.uid==='fart_slag'||o.refId==='fart_slag'||String(o.name||'')==='Шлак')){o.fartSlag=true;o.kind='resource';o.img='/assets/fart-slag.webp';}return o}),"
 );
 
 ppaPatchRegex(
@@ -5368,7 +5380,7 @@ ppaPatchRegex(
   const _hasPickaxe=fartHasPickaxe();`
 );
 
-if(!output.includes("bag:(INV.bag||[]).map(function(it){try{if(window.PPA_LEGENDARY_GEAR_ITEM_ART)") ||
+if(!output.includes("bag:(INV.bag||[]).map(function(it){var o=(it&&typeof it==='object')?Object.assign({},it):it;try{if(window.PPA_LEGENDARY_GEAR_ITEM_ART") ||
    !output.includes("it.kind='resource';it.img='/assets/fart-slag.webp'")) {
   throw new Error('Character invState slag / legendary image hydration did not apply');
 }
@@ -5893,7 +5905,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
   }
   if (legendaryGearArt.includes("sendBlacksmithState") ||
       !legendaryGearArt.includes("var ART_BASE='/assets/legendary/'") ||
-      !legendaryGearArt.includes("var ART_VER='v513'") ||
+      !legendaryGearArt.includes("var ART_VER='v514'") ||
       !legendaryGearArt.includes("var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7}") ||
       !legendaryGearArt.includes('PPA_LEGENDARY_GEAR_ITEM_ART') ||
       !legendaryGearArt.includes("it.img=src;it.image=src;it.art=src") ||
