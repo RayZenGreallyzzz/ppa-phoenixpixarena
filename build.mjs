@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v510-legendary-guard-order-fix-20260923';
+const CLIENT_BUILD = 'v511-smith-audit-order-fix-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3407,12 +3407,9 @@ if(output.includes("function fixGuardMenu(e)") ||
 if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
    !output.includes("__ppaCanvasizingSrc===src") ||
    !output.includes("attributeFilter:['src','srcset']") ||
-   !output.includes("function _ppaSmithHydrateLegendary(it)") ||
-   !output.includes("if(_oldArt.indexOf('/assets/legendary/')>=0)it.rarity='legendary'") ||
-   !output.includes("it.rarity='legendary';") ||
    !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v509'") ||
    !output.includes("s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}if(sharpenable)selectSmithGear(c.idx)};")) {
-  throw new Error('Blacksmith pre-legend stable selection / delayed art fix did not apply');
+  throw new Error('Blacksmith pre-legend stable selection / canonical craft art fix did not apply');
 }
 
 if(!output.includes("function ppaSmithCanvasize(root)") ||
@@ -5981,6 +5978,8 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !legendaryGearArt.includes('PPA_LEGENDARY_GEAR_ITEM_ART') ||
       !legendaryGearArt.includes("it.img=src;it.image=src;it.art=src") ||
       !legendaryGearArt.includes('PPA_HYDRATE_LEGENDARY_GEAR_ART') ||
+      !output.includes("function _ppaSmithHydrateLegendary(it)") ||
+      !output.includes("if(_oldArt.indexOf('/assets/legendary/')>=0)it.rarity='legendary'") ||
       !output.includes("_ppaLegendArt=window.PPA_LEGENDARY_GEAR_ITEM_ART(srcItem||it)") ||
       !output.includes("function auctionSourceInventoryItem(it)") ||
       !output.includes("it.cardArt=_ppaLegendArt") ||
