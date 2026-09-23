@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v497-auction-canonical-hd-legendary-20260923';
+const CLIENT_BUILD = 'v498-smith-sharpen-selection-fix-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2696,8 +2696,23 @@ function inspectSmithItem(it,context){`
 ppaPatchRegex(
   'blacksmith gear tap selects hold inspects',
   /s\.onclick=\(\)=&gt;\{if\(sharpenable\)selectSmithGear\(c\.idx\);inspectSmithItem\(it,sharpenable\?&#x27;Кузнец · можно выбрать для заточки&#x27;:&#x27;Кузнец · просмотр предмета&#x27;\);\};/,
-  `bindHoldInfo(s,function(){inspectSmithItem(it,sharpenable?'Кузнец · можно выбрать для заточки':'Кузнец · просмотр предмета')});
-        s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}if(sharpenable)selectSmithGear(c.idx)};`
+  `if(s&&s.dataset){
+          s.dataset.ppaSmithGearIdx=String(c.idx);
+          s.dataset.ppaSmithSharpenable=sharpenable?'1':'0';
+        }
+        bindHoldInfo(s,function(){inspectSmithItem(it,sharpenable?'Кузнец · можно выбрать для заточки':'Кузнец · просмотр предмета')});
+        s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}};
+        if(!window.__ppaSmithGearSelectCapture){
+          window.__ppaSmithGearSelectCapture=true;
+          document.addEventListener('click',function(ev){
+            try{
+              var card=ev&&ev.target&&ev.target.closest?ev.target.closest('[data-ppa-smith-gear-idx]'):null;
+              if(!card||card.dataset.ppaSmithSharpenable!=='1'||card.__ppaHeld)return;
+              var idx=Number(card.dataset.ppaSmithGearIdx);
+              if(Number.isFinite(idx)&&typeof selectSmithGear==='function')selectSmithGear(idx);
+            }catch(_){}
+          },true);
+        }`
 );
 
 ppaPatchRegex(
@@ -3257,8 +3272,10 @@ if(output.includes("function fixGuardMenu(e)") ||
 
 if(!output.includes("function ppaSmithRefreshCanvasArt()") ||
    !output.includes("__ppaCanvasizingSrc===src") ||
-   !output.includes("attributeFilter:['src','srcset']")) {
-  throw new Error('Blacksmith delayed canvas art fix did not apply');
+   !output.includes("attributeFilter:['src','srcset']") ||
+   !output.includes("data-ppa-smith-gear-idx") ||
+   !output.includes("__ppaSmithGearSelectCapture")) {
+  throw new Error('Blacksmith gear selection / delayed art fix did not apply');
 }
 
 if(!output.includes("function ppaSmithCanvasize(root)") ||
