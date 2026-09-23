@@ -10,10 +10,11 @@
 
   function isBoss(e){
     if(!e)return false;
+    // Dungeon elites have their own isolated loot table and NEVER receive the boss bonus roll.
+    if(e.isDungeonElite)return false;
     if(e.__ppaArenaPlayer||e.isAiFighter||e.isClanSiegeCrystal)return false;
     return !!(
       e.isBoss||
-      e.isDungeonElite||
       e.isClanBoss||
       e.isWorldCrystalBoss||
       e.isDungeonPhoenixBoss||

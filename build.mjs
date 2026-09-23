@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v539-elite-live-test-20260923';
+const CLIENT_BUILD = 'v540-elite-final-loot-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -996,7 +996,8 @@ function ppaTryMonsterCore(e){
   e.__ppaMonsterCoreRolled=true;
   if(!P||P.scene!=='dungeon')return 0;
   if(e.isFartGuard||e.isClanBoss||e.isWorldCrystalBoss||e.isClanSiegeCrystal||e.isAiFighter||e.__ppaArenaPlayer)return 0;
-  if(Math.random()>=PPA_MONSTER_CORE_CHANCE)return 0;
+  const _ppaCoreChance=e&&e.isDungeonElite?0.08:PPA_MONSTER_CORE_CHANCE;
+  if(Math.random()>=_ppaCoreChance)return 0;
   return ppaGiveMonsterCore(1);
 }
 function basicAttackRoll(target){`
@@ -1576,40 +1577,74 @@ if (!output.includes("return .000018+(lv-41)*((.000040-.000018)/19); // 0.0018% 
 /* ======================================================================== */
 
 
-/* === APPROVED ELITE LOOT TABLES ==========================================
-   1–20:  green gear = current green chance + 2 percentage points
-   21–40: blue gear  = current blue chance  + 1.1 percentage points
-   41–60: epic gear  = 1%
-   Existing non-event material resources on elites: +2 percentage points.
-   Event resources are intentionally untouched; their own event scripts keep
-   the exact approved chances (e.g. Great Ruri Fire Shards remain 0.8%).
+
+/* === FINAL ELITE LOOT TABLES · DUNGEONS 1–60 =============================
+   STRICT ISOLATION:
+   - this table is entered only when e.isDungeonElite === true;
+   - bosses never use it;
+   - ordinary mobs never use it;
+   - boss 50% bonus roll is disabled separately for elites;
+   - event resources keep their own scripts/chances unchanged.
+
+   Final approved elite chances:
+   1–20  special scale ×1:
+     normal sharpen 25% (1–4), premium sharpen 10%, sharpen rune 1%,
+     common/green stat rune 2%, premium HP/MP 1% (2–3),
+     teleport 30% (1–3), luck coin 0.9%,
+     active/passive book 0.004% / 0.003%.
+   21–40 special scale ×2:
+     50%, 20%, 2%, 4%, 2%, 60%, 1.8%,
+     books 0.008% / 0.006%.
+   41–60 special scale ×3:
+     75%, 30%, 3%, 6%, 3%, 90%, 2.7%,
+     books 0.012% / 0.009%.
+
+   Gear/resources:
+   1–20 green gear = current green chance +2 percentage points.
+   21–40 blue gear = current blue chance +1.1 percentage points.
+   41–60 purple gear = exactly 1%.
+   Existing non-event material resources = current chance +2 percentage points.
+   Monster Core = 8% on elites (normal dungeon mobs remain 6%).
    ======================================================================== */
 
 ppaPatchRegex(
-  'elite 1-40 approved drop table',
+  'elite 1-40 final isolated drop table',
   /function\s+v232DropElite\(e\)\s*\{[\s\S]*?\n\}\n\n\/\/ Phoenix MUST remain exactly as V231 \/ V215\./,
-  `/* PPA_ELITE_V537_1_40 */
-function v232DropElite(e){
-  const anti=antiFarmRewardMul(e),lv=Math.max(1,Math.min(40,Number(e.lvl)||1));
-  const mul=rewardDropMul()*anti;
+  `/* PPA_ELITE_V540_1_40 */
+function ppaElitePushCommonGreenRune(e){
+  const types=Object.keys(RUNE_TYPES||{});
+  if(!types.length)return false;
+  const rarity=Math.random()<.5?'common':'uncommon';
+  const type=types[(Math.random()*types.length)|0];
+  const d=runeDefByKey(runeKey(type,rarity));
+  if(!d)return false;
+  LOOT.push({
+    x:e.x+(Math.random()-.5)*34,
+    y:e.y+(Math.random()-.5)*34,
+    kind:'statRune',
+    runeKey:d.key,name:d.name,icon:d.icon,img:d.img,
+    rarity:d.rarity,amount:1,bob:Math.random()*6
+  });
+  return true;
+}
 
-  // Elite gold stays ×2. Event resources are NOT handled here.
+function v232DropElite(e){
+  // This function is called ONLY by the explicit isDungeonElite route below.
+  const anti=antiFarmRewardMul(e);
+  const lv=Math.max(1,Math.min(40,Number(e.lvl)||1));
+  const mul=rewardDropMul()*anti;
+  const scale=lv<=20?1:2;
+
+  // Keep normal elite currency/feather behavior, but do not inherit ordinary
+  // mob stat-rune rolls. The rune line below is the one approved elite roll.
   v232BaseCurrency(e,anti,0,2);
   v232MaybeFeather(e,anti);
-  maybeDropStatRune(e,anti);
 
   if(lv<=20){
     const gd=normalGearDropChances(lv);
-    const greenChance=Math.min(1,Math.max(0,Number(gd.uncommon)||0)+.02); // +2 pp
-    const grayChance=Math.max(0,Number(gd.common)||0);
-    const dm=rewardDropMul()*anti;
-    const x=Math.random();
+    const greenChance=Math.min(1,Math.max(0,Number(gd.uncommon)||0)+.02);
+    if(v232Roll(greenChance,mul))v232PushGear(e,'uncommon');
 
-    // One equipment roll, preserving gray when the bracket still allows it.
-    if(x<greenChance*dm)v232PushGear(e,'uncommon');
-    else if(x<(greenChance+grayChance)*dm)v232PushGear(e,'common');
-
-    // Resource tiers already available at this level get +2 pp.
     let common=Math.min(.12,.0675+lv*.002625);
     let green=lv<11?0:Math.min(.022,.004+lv*.0009);
     if(lv>=11){common*=.80;green*=.75}
@@ -1617,35 +1652,40 @@ function v232DropElite(e){
     if(green>0)green=Math.min(1,green+.02);
     if(v232Roll(common,mul*clanCastleResourceMul()))pushMaterialDrop(e,'common',1);
     if(green&&v232Roll(green,mul*clanCastleResourceMul()))pushMaterialDrop(e,'uncommon',1);
-
-    // Other approved ordinary drops stay unchanged.
-    if(v232Roll(lv>=11?.0012:.0015,mul))pushStoneDrop(e,'normal',1);
-    v232RollTypedBook(e,v232ActiveBookChance(lv),v232PassiveBookChance(lv),mul,function(){return v232EliteBookRank(lv)});
   }else{
     const blueBase=lv<=30?v232Blue2130(lv):v232Blue3140(lv);
-    const blueChance=Math.min(1,Math.max(0,Number(blueBase)||0)+.011); // +1.1 pp
+    const blueChance=Math.min(1,Math.max(0,Number(blueBase)||0)+.011);
     if(v232Roll(blueChance,mul))v232PushGear(e,'rare');
-
-    // 31–40 keeps its ordinary purple chance; only blue receives the elite +1.1 pp.
-    if(lv>=31&&v232Roll(v232Epic3140(lv),mul))v232PushGear(e,'epic');
 
     const commonBase=lv<=30?.12:.18;
     const greenBase=lv<=30?.06:.12;
-    const blueResBase=v232BlueResourceChance(lv);
+    const blueBaseRes=v232BlueResourceChance(lv);
     if(v232Roll(Math.min(1,commonBase+.02),mul*clanCastleResourceMul()))pushMaterialDrop(e,'common',1);
     if(v232Roll(Math.min(1,greenBase+.02),mul*clanCastleResourceMul()))pushMaterialDrop(e,'uncommon',1);
-    if(v232Roll(Math.min(1,blueResBase+.02),mul*luckCoinRareDropMul()*clanCastleResourceMul()))pushMaterialDrop(e,'rare',1);
-
-    // Stones / consumables / books keep the normal bracket chances.
-    if(v232Roll(lv<=30?.0035:.015,mul))pushStoneDrop(e,'normal',1);
-    if(lv>=31&&v232Roll(.0010,mul))pushStoneDrop(e,'rune',1);
-    if(lv>=31&&v232Roll(.0003,mul))pushStoneDrop(e,'premium',1);
-    if(v232Roll(lv<=30?.00015:.00025,anti))v232PushConsumable(e,'luckCoin','Премиум-монета удачи',PPA_V172_ART.luckCoin,'🍀','#d69cff',1);
-    if(lv>=31&&v232Roll(.0035,anti))v232PushConsumable(e,'portalStone','Свиток телепорта',PPA_TELEPORT_SCROLL_IMG,'📜','#77b8ff',1);
-    if(lv>=31&&v232Roll(.0015,anti))v232PushConsumable(e,'premiumHpRegen','Премиум банка HP',PPA_V172_ART.premiumHp,'❤','#ff6a72',1);
-    if(lv>=31&&v232Roll(.0015,anti))v232PushConsumable(e,'premiumMpRegen','Премиум банка MP',PPA_V172_ART.premiumMp,'◆','#6ea7ff',1);
-    v232RollTypedBook(e,v232ActiveBookChance(lv),v232PassiveBookChance(lv),mul,function(){return v232EliteBookRank(lv)});
+    if(v232Roll(Math.min(1,blueBaseRes+.02),mul*luckCoinRareDropMul()*clanCastleResourceMul()))pushMaterialDrop(e,'rare',1);
   }
+
+  // Approved elite-only utility table. The ×2 for 21–40 changes CHANCE,
+  // never item quantity.
+  if(Math.random()<.25*scale)pushStoneDrop(e,'normal',1+Math.floor(Math.random()*4));
+  if(Math.random()<.10*scale)pushStoneDrop(e,'premium',1);
+  if(Math.random()<.01*scale)pushStoneDrop(e,'rune',1);
+  if(Math.random()<.02*scale)ppaElitePushCommonGreenRune(e);
+
+  if(Math.random()<.01*scale){
+    const qty=2+Math.floor(Math.random()*2);
+    if(Math.random()<.5)v232PushConsumable(e,'premiumHpRegen','Премиум банка HP',PPA_V172_ART.premiumHp,'❤','#ff6a72',qty);
+    else v232PushConsumable(e,'premiumMpRegen','Премиум банка MP',PPA_V172_ART.premiumMp,'◆','#6ea7ff',qty);
+  }
+  if(Math.random()<.30*scale){
+    v232PushConsumable(e,'portalStone','Свиток телепорта',PPA_TELEPORT_SCROLL_IMG,'📜','#77b8ff',1+Math.floor(Math.random()*3));
+  }
+  if(Math.random()<.009*scale){
+    v232PushConsumable(e,'luckCoin','Премиум-монета удачи',PPA_V172_ART.luckCoin,'🍀','#d69cff',1);
+  }
+
+  // Exact elite book chances approved above; one book on a successful roll.
+  v232RollTypedBook(e,.00004*scale,.00003*scale,1,function(){return v232BookRankForLevel(lv)});
 
   v232MarkEliteKilled(e);
 }
@@ -1654,74 +1694,76 @@ function v232DropElite(e){
 );
 
 ppaPatchRegex(
-  'elite 41-60 resource and epic table',
-  /function\s+v271Drop4160\(e\)\s*\{[\s\S]*?\n\}\n\nfunction\s+v232DropLord\(e\)\s*\{/,
-  `/* PPA_ELITE_V537_41_60 */
-function v271Drop4160(e){
+  'elite 41-60 final isolated branch',
+  /function\s+v271Drop4160\(e\)\s*\{/,
+  `/* PPA_ELITE_V540_41_60 */
+function ppaEliteDrop4160(e){
+  // Completely separate 41–60 elite table. Ordinary mobs and bosses never
+  // enter this function.
   const anti=antiFarmRewardMul(e);
   const mul=rewardDropMul()*anti;
-  const elite=!!(e&&e.isDungeonElite);
   const lv=Math.max(41,Math.min(60,Math.floor(Number(e&&e.lvl)||41)));
+  const scale=3;
 
-  v232BaseCurrency(e,anti,0,elite?2:1);
+  v232BaseCurrency(e,anti,0,2);
   v232MaybeFeather(e,anti);
-  maybeDropStatRune(e,anti);
 
-  // Elite material resources: +2 percentage points. Event resources are separate.
-  const commonRes=.18+(elite?0.02:0);
-  const greenRes=.12+(elite?0.02:0);
-  const blueRes=v232BlueResourceChance(lv)+(elite?0.02:0);
-  if(v232Roll(commonRes,mul*clanCastleResourceMul()))pushMaterialDrop(e,'common',1);
-  if(v232Roll(greenRes,mul*clanCastleResourceMul()))pushMaterialDrop(e,'uncommon',1);
-  if(v232Roll(Math.min(1,blueRes),mul*luckCoinRareDropMul()*clanCastleResourceMul()))pushMaterialDrop(e,'rare',1);
+  // Resources: current 41–60 rates +2 percentage points.
+  if(v232Roll(.20,mul*clanCastleResourceMul()))pushMaterialDrop(e,'common',1);
+  if(v232Roll(.14,mul*clanCastleResourceMul()))pushMaterialDrop(e,'uncommon',1);
+  if(v232Roll(Math.min(1,v232BlueResourceChance(lv)+.02),mul*luckCoinRareDropMul()*clanCastleResourceMul()))pushMaterialDrop(e,'rare',1);
 
-  if(elite){
-    // Keep the already approved 41–60 elite utility bonus table.
-    if(Math.random()<V272_D41_MINIBOSS_NORMAL_STONES_CHANCE)pushStoneDrop(e,'normal',10);
-    if(Math.random()<V272_D41_MINIBOSS_PREMIUM_STONE_CHANCE)pushStoneDrop(e,'premium',1);
-    if(Math.random()<V272_D41_MINIBOSS_SHARPEN_RUNE_CHANCE)pushStoneDrop(e,'rune',1);
-    if(Math.random()<V272_D41_MINIBOSS_LEGEND_RUNE_CHANCE)v272PushLegendaryRune(e);
-  }else{
-    if(v232Roll(.015,mul))pushStoneDrop(e,'normal',1);
-    if(v232Roll(.0010,mul))pushStoneDrop(e,'rune',1);
-    if(v232Roll(.0003,mul))pushStoneDrop(e,'premium',1);
+  // Purple gear is exactly 1% for elite 41–60. No ordinary/blue/legendary
+  // equipment is inherited into this elite branch.
+  if(Math.random()<.01)v232PushGear(e,'epic');
+
+  if(Math.random()<.25*scale)pushStoneDrop(e,'normal',1+Math.floor(Math.random()*4));
+  if(Math.random()<.10*scale)pushStoneDrop(e,'premium',1);
+  if(Math.random()<.01*scale)pushStoneDrop(e,'rune',1);
+  if(Math.random()<.02*scale)ppaElitePushCommonGreenRune(e);
+
+  if(Math.random()<.01*scale){
+    const qty=2+Math.floor(Math.random()*2);
+    if(Math.random()<.5)v232PushConsumable(e,'premiumHpRegen','Премиум банка HP',PPA_V172_ART.premiumHp,'❤','#ff6a72',qty);
+    else v232PushConsumable(e,'premiumMpRegen','Премиум банка MP',PPA_V172_ART.premiumMp,'◆','#6ea7ff',qty);
+  }
+  if(Math.random()<.30*scale){
+    v232PushConsumable(e,'portalStone','Свиток телепорта',PPA_TELEPORT_SCROLL_IMG,'📜','#77b8ff',1+Math.floor(Math.random()*3));
+  }
+  if(Math.random()<.009*scale){
+    v232PushConsumable(e,'luckCoin','Премиум-монета удачи',PPA_V172_ART.luckCoin,'🍀','#d69cff',1);
   }
 
-  if(v232Roll(.00025,anti))v232PushConsumable(e,'luckCoin','Премиум-монета удачи',PPA_V172_ART.luckCoin,'🍀','#d69cff',1);
-  if(v232Roll(.0035,anti))v232PushConsumable(e,'portalStone','Свиток телепорта',PPA_TELEPORT_SCROLL_IMG,'📜','#77b8ff',1);
-  if(v232Roll(.0015,anti))v232PushConsumable(e,'premiumHpRegen','Премиум банка HP',PPA_V172_ART.premiumHp,'❤','#ff6a72',1);
-  if(v232Roll(.0015,anti))v232PushConsumable(e,'premiumMpRegen','Премиум банка MP',PPA_V172_ART.premiumMp,'◆','#6ea7ff',1);
-
-  // Elite 41–60 has a fixed 1% purple roll. Ordinary 41–60 keeps the approved curve.
-  if(v232Roll(elite?0.01:v467Epic4160Chance(lv),mul))v232PushGear(e,'epic');
-  if(lv>=51&&Math.random()<V271_D41_LEGENDARY_GEAR_CHANCE)v271PushDungeon41Legendary(e);
-  v232RollTypedBook(e,v232ActiveBookChance(lv),v232PassiveBookChance(lv),mul,function(){return v232BookRankForLevel(lv)});
-
-  if(elite)v232MarkEliteKilled(e);
+  v232RollTypedBook(e,.00004*scale,.00003*scale,1,function(){return v232BookRankForLevel(lv)});
+  v232MarkEliteKilled(e);
 }
 
-function v232DropLord(e){`
+function v271Drop4160(e){
+  if(e&&e.isDungeonElite)return ppaEliteDrop4160(e);`
 );
 
 ppaPatchRegex(
-  'elite inspect 41-60 approved table',
+  'elite inspect 41-60 final table',
   /if\(e\.dungeon41&&e\.isDungeonElite\)return\s*\[[\s\S]*?\n\s*\];/,
-  `/* PPA_ELITE_V537_INFO_41_60 */
+  `/* PPA_ELITE_V540_INFO_41_60 */
   if(e.dungeon41&&e.isDungeonElite){
     const lv=Math.max(41,Math.min(60,Number(e.lvl)||41));
     return [
-      ['ЭЛИТА · HP','×8'],['Золото','×2'],
+      ['ЭЛИТА · HP','×8'],['Бонус к урону','+14'],['Бонус к защите','+3'],['Золото','×2'],
+      ['PPA ×1','1%'],['Перо Феникса','0.01%'],
       ['Фиолетовый шмот / оружие','1%'],
-      ['Легендарный шмот / оружие / кольцо',lv>=51?'0.000013%':'не выпадает'],
-      ['Обычный ресурс','20%'],
-      ['Зелёный ресурс','14%'],
+      ['Обычный ресурс','20%'],['Зелёный ресурс','14%'],
       ['Синий ресурс',v232Pct(Math.min(1,v232BlueResourceChance(lv)+.02))],
-      ['Обычный камень заточки ×10','10%'],
-      ['Премиум камень заточки','1%'],
-      ['Премиум руна заточки','2%'],
-      ['Легендарная универсальная руна','1%'],
-      ['Активная книга',v232Pct(v232ActiveBookChance(lv))],
-      ['Пассивная книга',v232Pct(v232PassiveBookChance(lv))],
+      ['Ядро монстра','8%'],
+      ['Обычный камень заточки ×1–4','75%'],
+      ['Премиум камень заточки ×1','30%'],
+      ['Премиум руна заточки ×1','3%'],
+      ['Обычная / зелёная универсальная руна ×1','6%'],
+      ['Премиум HP или MP ×2–3','3%'],
+      ['Свиток телепорта ×1–3','90%'],
+      ['Премиум-монета удачи ×1','2.7%'],
+      ['Активная книга',v232Pct(.00012)],
+      ['Пассивная книга',v232Pct(.00009)],
       ['Ранг книги',v232BookRankInfoForLevel(lv)],
       ['Ресурсы событий','шанс без изменений']
     ];
@@ -1729,11 +1771,12 @@ ppaPatchRegex(
 );
 
 ppaPatchRegex(
-  'elite inspect 1-40 approved tables',
+  'elite inspect 1-40 final tables',
   /if\(e\.isDungeonElite\)\{\s*const lv=Math\.max\(1,Math\.min\(40,Number\(e\.lvl\)\|\|1\)\);[\s\S]*?\n\s*\}\n\n\s*if\(e\.isDungeon21Boss\)return/,
-  `/* PPA_ELITE_V537_INFO_1_40 */
+  `/* PPA_ELITE_V540_INFO_1_40 */
   if(e.isDungeonElite){
     const lv=Math.max(1,Math.min(40,Number(e.lvl)||1));
+    const scale=lv<=20?1:2;
     if(lv<=20){
       const gd=normalGearDropChances(lv);
       let commonRes=Math.min(.12,.0675+lv*.002625);
@@ -1741,49 +1784,70 @@ ppaPatchRegex(
       if(lv>=11){commonRes*=.80;greenRes*=.75}
       const rows=[
         ['ЭЛИТА · HP','×7'],['Бонус к урону','+12'],['Бонус к защите','+2'],['Золото','×2'],
-        ['Зелёный шмот / оружие',v232Pct(Math.min(1,(Number(gd.uncommon)||0)+.02))]
+        ['PPA ×1','1%'],['Перо Феникса','0.01%'],
+        ['Зелёный шмот / оружие',v232Pct(Math.min(1,(Number(gd.uncommon)||0)+.02))],
+        ['Обычный ресурс',v232Pct(Math.min(1,commonRes+.02))]
       ];
-      if(gd.common)rows.push(['Серый шмот / оружие',v232Pct(gd.common)]);
-      rows.push(['Обычный ресурс',v232Pct(Math.min(1,commonRes+.02))]);
       if(greenRes>0)rows.push(['Зелёный ресурс',v232Pct(Math.min(1,greenRes+.02))]);
-      rows.push(['Обычный камень заточки',lv>=11?'0.12%':'0.15%']);
-      rows.push(['Активная книга',v232Pct(v232ActiveBookChance(lv))],['Пассивная книга',v232Pct(v232PassiveBookChance(lv))],['Ранг книги',v232BookRankInfoForLevel(lv)]);
-      rows.push(['Ресурсы событий','шанс без изменений']);
+      rows.push(
+        ['Ядро монстра','8%'],
+        ['Обычный камень заточки ×1–4','25%'],
+        ['Премиум камень заточки ×1','10%'],
+        ['Премиум руна заточки ×1','1%'],
+        ['Обычная / зелёная универсальная руна ×1','2%'],
+        ['Премиум HP или MP ×2–3','1%'],
+        ['Свиток телепорта ×1–3','30%'],
+        ['Премиум-монета удачи ×1','0.9%'],
+        ['Активная книга',v232Pct(.00004)],
+        ['Пассивная книга',v232Pct(.00003)],
+        ['Ранг книги',v232BookRankInfoForLevel(lv)],
+        ['Ресурсы событий','шанс без изменений']
+      );
       return rows;
     }
 
     const blueBase=lv<=30?v232Blue2130(lv):v232Blue3140(lv);
     const commonBase=lv<=30?.12:.18;
     const greenBase=lv<=30?.06:.12;
-    const rows=[
+    return [
       ['ЭЛИТА · HP','×8'],['Бонус к урону','+14'],['Бонус к защите','+3'],['Золото','×2'],
-      ['Синий шмот / оружие',v232Pct(Math.min(1,blueBase+.011))]
+      ['PPA ×1','1%'],['Перо Феникса','0.01%'],
+      ['Синий шмот / оружие',v232Pct(Math.min(1,blueBase+.011))],
+      ['Обычный ресурс',v232Pct(Math.min(1,commonBase+.02))],
+      ['Зелёный ресурс',v232Pct(Math.min(1,greenBase+.02))],
+      ['Синий ресурс',v232Pct(Math.min(1,v232BlueResourceChance(lv)+.02))],
+      ['Ядро монстра','8%'],
+      ['Обычный камень заточки ×1–4','50%'],
+      ['Премиум камень заточки ×1','20%'],
+      ['Премиум руна заточки ×1','2%'],
+      ['Обычная / зелёная универсальная руна ×1','4%'],
+      ['Премиум HP или MP ×2–3','2%'],
+      ['Свиток телепорта ×1–3','60%'],
+      ['Премиум-монета удачи ×1','1.8%'],
+      ['Активная книга',v232Pct(.00008)],
+      ['Пассивная книга',v232Pct(.00006)],
+      ['Ранг книги',v232BookRankInfoForLevel(lv)],
+      ['Ресурсы событий','шанс без изменений']
     ];
-    if(lv>=31)rows.push(['Фиолетовый шмот / оружие',v232Pct(v232Epic3140(lv))]);
-    rows.push(['Обычный ресурс',v232Pct(Math.min(1,commonBase+.02))]);
-    rows.push(['Зелёный ресурс',v232Pct(Math.min(1,greenBase+.02))]);
-    rows.push(['Синий ресурс',v232Pct(Math.min(1,v232BlueResourceChance(lv)+.02))]);
-    rows.push(['Обычный камень заточки',lv<=30?'0.35%':'1.5%']);
-    if(lv>=31)rows.push(['Премиум руна заточки','0.10%'],['Премиум камень заточки','0.03%']);
-    rows.push(['Активная книга',v232Pct(v232ActiveBookChance(lv))],['Пассивная книга',v232Pct(v232PassiveBookChance(lv))],['Ранг книги',v232BookRankInfoForLevel(lv)]);
-    rows.push(['Ресурсы событий','шанс без изменений']);
-    return rows;
   }
 
   if(e.isDungeon21Boss)return`
 );
 
 const _ppaEliteAudit={
-  drop1_40:output.includes('/* PPA_ELITE_V537_1_40 */'),
-  drop41_60:output.includes('/* PPA_ELITE_V537_41_60 */'),
-  info1_40:output.includes('/* PPA_ELITE_V537_INFO_1_40 */'),
-  info41_60:output.includes('/* PPA_ELITE_V537_INFO_41_60 */')
+  drop1_40:output.includes('/* PPA_ELITE_V540_1_40 */'),
+  drop41_60:output.includes('/* PPA_ELITE_V540_41_60 */'),
+  info1_40:output.includes('/* PPA_ELITE_V540_INFO_1_40 */'),
+  info41_60:output.includes('/* PPA_ELITE_V540_INFO_41_60 */')
 };
-console.log('[PPA BUILD] elite loot audit:',JSON.stringify(_ppaEliteAudit));
+console.log('[PPA BUILD] final elite loot audit:',JSON.stringify(_ppaEliteAudit));
 if(!_ppaEliteAudit.drop1_40||!_ppaEliteAudit.drop41_60||!_ppaEliteAudit.info1_40||!_ppaEliteAudit.info41_60||
-   !output.includes('function v232DropElite(e){')||
-   !output.includes('function v271Drop4160(e){')){
-  throw new Error('Approved elite loot tables did not apply');
+   !output.includes("if(e&&e.isDungeonElite)return ppaEliteDrop4160(e);")||
+   !output.includes("if(Math.random()<.25*scale)pushStoneDrop(e,'normal',1+Math.floor(Math.random()*4));")||
+   !output.includes("if(Math.random()<.30*scale)")||
+   !output.includes("v232RollTypedBook(e,.00004*scale,.00003*scale,1")||
+   !output.includes("['Ядро монстра','8%']")){
+  throw new Error('Final isolated elite loot tables did not apply');
 }
 
 /* ======================================================================== */
@@ -3641,7 +3705,7 @@ const monsterCoreDropPanelRuntime = "<script id='ppaMonsterCoreDropPanel'>\n"+
 "      if(e&&!e.isFartGuard&&typeof P!=='undefined'&&P&&P.scene==='dungeon'){\n"+
 "        rows=Array.isArray(rows)?rows.slice():[];\n"+
 "        var has=false;for(var i=0;i<rows.length;i++)if(rows[i]&&String(rows[i][0]||'')==='Ядро монстра')has=true;\n"+
-"        if(!has)rows.push(['Ядро монстра','6%']);\n"+
+"        if(!has)rows.push(['Ядро монстра',e&&e.isDungeonElite?'8%':'6%']);\n"+
 "      }\n"+
 "    }catch(_){}\n"+
 "    return rows;\n"+
@@ -3655,7 +3719,7 @@ ppaPatchRegex(
 );
 
 if(!output.includes("id='ppaMonsterCoreDropPanel'") ||
-   !output.includes("rows.push(['Ядро монстра','6%'])")) {
+   !output.includes("e&&e.isDungeonElite?'8%':'6%'")) {
   throw new Error('Monster Core drop panel row did not apply');
 }
 
