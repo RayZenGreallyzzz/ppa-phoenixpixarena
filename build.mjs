@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v514-smith-live-img-ring-guard-20260923';
+const CLIENT_BUILD = 'v515-character-clone-audit-fix-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5380,9 +5380,11 @@ ppaPatchRegex(
   const _hasPickaxe=fartHasPickaxe();`
 );
 
-if(!output.includes("bag:(INV.bag||[]).map(function(it){var o=(it&&typeof it==='object')?Object.assign({},it):it;try{if(window.PPA_LEGENDARY_GEAR_ITEM_ART") ||
-   !output.includes("it.kind='resource';it.img='/assets/fart-slag.webp'")) {
-  throw new Error('Character invState slag / legendary image hydration did not apply');
+if(!output.includes("var o=(it&&typeof it==='object')?Object.assign({},it):it") ||
+   !output.includes("window.PPA_LEGENDARY_GEAR_ITEM_ART&&o") ||
+   !output.includes("o.img=a;o.image=a;o.art=a") ||
+   !output.includes("o.kind='resource';o.img='/assets/fart-slag.webp'")) {
+  throw new Error('Character cloned invState slag / legendary image hydration did not apply');
 }
 
 if(!output.includes("window.PPA_FART_PICKAXE_COMMON_IMG=FART_PICKAXE_COMMON_IMG") ||
