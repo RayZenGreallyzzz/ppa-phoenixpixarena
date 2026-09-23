@@ -2,7 +2,7 @@
   'use strict';
 
   var ART_BASE='/assets/legendary/';
-  var ART_VER='v497';
+  var ART_VER='v499';
   var CLASS_ROWS={tank:0,paladin:1,barbarian:2,assassin:3,gnome:4,archer:5,mage:6,priest:7};
   var SLOT_COLS={weapon:0,helmet:1,armor:2,legs:3,gloves:4,boots:5};
   var CLASS_ALIASES={
@@ -84,8 +84,8 @@
     try{
       var src=artForItem(it);
       if(!src)return false;
-      var changed=it.img!==src||it.image!==src||it.art!==src;
-      it.img=src;it.image=src;it.art=src;
+      var changed=it.img!==src||it.image!==src||it.art!==src||it.cardArt!==src||it.iconArt!==src||it.iconImg!==src||it.src!==src;
+      it.img=src;it.image=src;it.art=src;it.cardArt=src;it.iconArt=src;it.iconImg=src;it.src=src;
       it.ppaLegendaryReferenceArt=true;
       return changed;
     }catch(_){return false}
@@ -109,6 +109,12 @@
       changed=scanArray(INV.items)||changed;
       if(INV.equipped)Object.keys(INV.equipped).forEach(function(k){if(hydrate(INV.equipped[k]))changed=true});
       if(INV.storage)Object.keys(INV.storage).forEach(function(k){changed=scanArray(INV.storage[k])||changed});
+      if(Array.isArray(INV.auctionLots)){
+        for(var ai=0;ai<INV.auctionLots.length;ai++){
+          var lot=INV.auctionLots[ai];
+          if(lot&&lot.item&&hydrate(lot.item))changed=true;
+        }
+      }
       if(changed){
         try{if(typeof renderInventory==='function')renderInventory()}catch(_){}
         try{if(typeof renderCharacter==='function')renderCharacter()}catch(_){}
