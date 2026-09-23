@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v506-unified-legendary-ui-source-20260923';
+const CLIENT_BUILD = 'v507-v506-coverage-guard-fix-20260923';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2899,8 +2899,10 @@ ppaPatchRegex(
   }catch(_){}`,
   true
 );
-if((output.match(/\/assets\/legendary\/'\+_cls\+'-'\+_slot\+'\.webp\?v=v506/g)||[]).length<2){
-  throw new Error('Sandboxed legendary itemVisual coverage incomplete');
+if((output.match(/\/assets\/legendary\/'\+_cls\+'-'\+_slot\+'\.webp\?v=v506/g)||[]).length<1 ||
+   !output.includes("function _ppaSmithHydrateLegendary(it)") ||
+   !output.includes("function auctionSourceInventoryItem(it)")){
+  throw new Error('Unified legendary smith/auction art coverage incomplete');
 }
 /* ======================================================================== */
 
