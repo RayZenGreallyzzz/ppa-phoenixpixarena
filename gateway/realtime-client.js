@@ -178,6 +178,44 @@
       });
     }catch(_){return false}
   }
+  function clanBossRewardIds(){
+    try{
+      var a=JSON.parse(localStorage.getItem('ppaClanBossRewardIdsV1')||'[]');
+      return Array.isArray(a)?a:[];
+    }catch(_){return []}
+  }
+  function clanBossRewardSeen(id){
+    id=String(id||'');if(!id)return false;
+    return clanBossRewardIds().indexOf(id)>=0;
+  }
+  function clanBossRewardRemember(id){
+    id=String(id||'');if(!id)return;
+    try{
+      var a=clanBossRewardIds().filter(function(x){return String(x)!==id});
+      a.unshift(id);if(a.length>120)a.length=120;
+      localStorage.setItem('ppaClanBossRewardIdsV1',JSON.stringify(a));
+    }catch(_){}
+  }
+  function clanBossApplyRewardPacket(reward,attempt){
+    reward=reward&&typeof reward==='object'?reward:null;
+    if(!reward||!reward.rewardId)return false;
+    var id=String(reward.rewardId||'');
+    if(clanBossRewardSeen(id)){
+      send({type:'clan-boss-reward-ack',rewardId:id});
+      return true;
+    }
+    if(!window.PPA_CLAN_BOSS_SPAWN_REWARD){
+      if((attempt||0)<10)setTimeout(function(){clanBossApplyRewardPacket(reward,(attempt||0)+1)},180);
+      return false;
+    }
+    var ok=false;
+    try{ok=window.PPA_CLAN_BOSS_SPAWN_REWARD(reward)!==false}catch(e){console.warn('Clan boss reward apply',e)}
+    if(!ok)return false;
+    clanBossRewardRemember(id);
+    send({type:'clan-boss-reward-ack',rewardId:id});
+    return true;
+  }
+
   function clanBossTick(){
     try{
       var now=Date.now(),sceneNow=(typeof P!=='undefined'&&P)?String(P.scene||''):'';
@@ -418,6 +456,10 @@
     if(m.type==='clan-boss-state'){
       if(m.room&&RT.clanBossRoom&&canonicalRoom(m.room)!==canonicalRoom(RT.clanBossRoom))return;
       clanBossApplyState(m.bossState||{});
+      return;
+    }
+    if(m.type==='clan-boss-reward'){
+      clanBossApplyRewardPacket(m.reward||{},0);
       return;
     }
     if(m.type==='clan-boss-defeated'){
