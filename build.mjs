@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v561-ruri-remote-full-sprite-20260924';
+const CLIENT_BUILD = 'v562-realtime-clan-name-sync-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6792,6 +6792,13 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !worldCombat.includes('z-index:40!important') ||
       !worldCombat.includes('z-index:41!important')) {
     throw new Error('PK/AUTO HUD layer must stay below menus');
+  }
+  if (!realtimeServer.includes("cn: String(a.clanName || '').trim().slice(0, 24)") ||
+      !realtimeServer.includes("request.headers.get('x-ppa-clan-name')") ||
+      !realtimeBase.includes("c.name AS clan_name") ||
+      !realtimeBase.includes("h.set('x-ppa-clan-name', p.clanName || '')") ||
+      !realtimeClient.includes("if(p.cn!==undefined)r.clanName=")) {
+    throw new Error('Realtime clan name sync patch missing');
   }
   if (!remotePet.includes('__PPA_REMOTE_PET_DRAW') ||
       !remotePet.includes("RURI_MOVE_SRC='/assets/ruri-move.webp'") ||

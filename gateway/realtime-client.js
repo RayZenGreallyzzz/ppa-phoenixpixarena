@@ -144,6 +144,8 @@
           if(Number.isFinite(bm))r.bm=Math.max(0,Math.round(bm));
           if(Number.isFinite(face))r.face=face;
           if(p.c!==undefined&&String(p.c||''))r.cls=String(p.c||'');
+          if(p.g!==undefined)r.clanId=String(p.g||'').slice(0,80);
+          if(p.cn!==undefined)r.clanName=String(p.cn||'').trim().slice(0,24);
           if(p.p!==undefined)r.partyId=String(p.p||'');
           if(p.av!==undefined)r.arenaSide=String(p.av||'');
           if(p.am!==undefined)r.arenaMatchId=String(p.am||'');

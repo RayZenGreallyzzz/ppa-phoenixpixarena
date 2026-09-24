@@ -95,13 +95,16 @@ function cleanClass(v) {
 async function playerIdentity(env, user) {
   const id = String(user.id);
   const player = await env.DB.prepare('SELECT nickname,class_key,telegram_first_name,telegram_username FROM players WHERE telegram_id=?1').bind(id).first();
-  const member = await env.DB.prepare('SELECT clan_id FROM clan_members WHERE telegram_id=?1').bind(id).first();
+  const member = await env.DB.prepare(
+    'SELECT cm.clan_id,c.name AS clan_name FROM clan_members cm LEFT JOIN clans c ON c.id=cm.clan_id WHERE cm.telegram_id=?1'
+  ).bind(id).first();
   return {
     telegramId: id,
     pid: 'tg:' + id,
     name: cleanName((player && player.nickname) || user.first_name || user.username || ('TG ' + id)),
     classKey: String((player && player.class_key) || '').slice(0, 24),
     clanId: member ? String(member.clan_id || '').slice(0, 80) : '',
+    clanName: member ? String(member.clan_name || '').trim().slice(0, 24) : '',
   };
 }
 
@@ -115,7 +118,7 @@ function attOf(ws) {
 
 function packetFromAtt(a) {
   return {
-    i: a.pid, n: a.name, c: a.classKey || 'ГЕРОЙ', g: a.clanId || '', cn: '',
+    i: a.pid, n: a.name, c: a.classKey || 'ГЕРОЙ', g: a.clanId || '', cn: String(a.clanName || '').slice(0, 24),
     x: Number(a.x) || 0, y: Number(a.y) || 0,
     h: Math.max(0, Number(a.h) || 0), m: Math.max(1, Number(a.m) || 1),
     f: Number.isFinite(Number(a.f)) ? Number(a.f) : 1, a: String(a.a || 'idle').slice(0, 12),
@@ -472,6 +475,7 @@ export async function handleRealtimeRequest(request, env) {
       h.set('x-ppa-telegram-id', p.telegramId);
       h.set('x-ppa-player-name', p.name);
       h.set('x-ppa-clan-id', p.clanId || '');
+      h.set('x-ppa-clan-name', p.clanName || '');
       h.set('x-ppa-class-key', p.classKey || '');
       return stub.fetch(new Request(request, { headers: h }));
     } catch (e) {

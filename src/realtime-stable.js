@@ -120,7 +120,7 @@ function packetFromAtt(a) {
     n: cleanName(a.name || 'Игрок'),
     c: String(a.classKey || 'ГЕРОЙ').slice(0, 24),
     g: String(a.clanId || '').slice(0, 80),
-    cn: '',
+    cn: String(a.clanName || '').trim().slice(0, 24),
     r: cleanRoom(a.room),
     x: Number(a.x) || 0,
     y: Number(a.y) || 0,
@@ -1360,6 +1360,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     const telegramId = String(request.headers.get('x-ppa-telegram-id') || '');
     const name = cleanName(request.headers.get('x-ppa-player-name') || 'Игрок');
     const clanId = String(request.headers.get('x-ppa-clan-id') || '').slice(0, 80);
+    const clanName = String(request.headers.get('x-ppa-clan-name') || '').trim().slice(0, 24);
     const classKey = String(request.headers.get('x-ppa-class-key') || '').slice(0, 24);
     if (!pid || !telegramId) return new Response('Unauthorized', { status: 401 });
 
@@ -1374,7 +1375,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     const client = pair[0], server = pair[1];
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({
-      pid, telegramId, name, clanId, classKey,
+      pid, telegramId, name, clanId, clanName, classKey,
       room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
       lastSeenAt: Date.now(), lastSnapshotPush: 0, lastMobSnapshotAt: 0, hiddenUntil: 0,
       atk: 1, def: 0, attackRange: 60, crit: 0, critDmg: 180, atkSpd: 1,
@@ -1385,7 +1386,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     });
     this.indexAdd(server, 'safe');
 
-    wsJson(server, { type: 'hello', pid, name, clanId, serverRoom: 'safe', ts: Date.now() });
+    wsJson(server, { type: 'hello', pid, name, clanId, clanName, serverRoom: 'safe', ts: Date.now() });
 
     for (const old of oldSockets) {
       try { old.close(4001, 'Reconnected'); } catch (_) {}
