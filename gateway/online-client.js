@@ -275,9 +275,20 @@
           try{if(typeof closeClanPanel==='function')closeClanPanel()}catch(_){}
           setTimeout(function(){
             try{
-              if(typeof changeScene==='function'){changeScene('clanboss1');return}
-              if(typeof window.changeScene==='function'){window.changeScene('clanboss1');return}
-              if(typeof P!=='undefined'&&P)P.scene='clanboss1';
+              if(typeof changeScene==='function'){
+                changeScene('clanboss1');
+                try{if(window.PPA_CLAN_BOSS_RT_START)window.PPA_CLAN_BOSS_RT_START(bs)}catch(_){}
+                return
+              }
+              if(typeof window.changeScene==='function'){
+                window.changeScene('clanboss1');
+                try{if(window.PPA_CLAN_BOSS_RT_START)window.PPA_CLAN_BOSS_RT_START(bs)}catch(_){}
+                return
+              }
+              if(typeof P!=='undefined'&&P){
+                P.scene='clanboss1';
+                try{if(window.PPA_CLAN_BOSS_RT_START)window.PPA_CLAN_BOSS_RT_START(bs)}catch(_){}
+              }
             }catch(e){console.warn('Clan boss enter scene',e)}
           },30);
         }
