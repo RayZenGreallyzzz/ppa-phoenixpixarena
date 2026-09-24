@@ -260,12 +260,32 @@
     };
     window.PPA_CLAN_BOSS_HANDLER=async function(req){
       req=Object.assign({},req||{});
+      var originalAction=String(req.action||'');
+      if(['enterRaid','joinRaid','enterBoss','bossEnter','startBoss'].indexOf(originalAction)>=0)req.action='startRaid';
       var r=await clanCall(req);
       var bs=r&&r.bossState?r.bossState:(r&&r.state&&r.state.bossState?r.state.bossState:null);
       if(bs&&window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(bs);
       if(bs&&window.PPA_CLAN_BOSS_RT_APPLY_STATE)window.PPA_CLAN_BOSS_RT_APPLY_STATE(bs);
-      if(String(req.action||'')==='startRaid'&&bs&&window.PPA_CLAN_BOSS_RT_START)window.PPA_CLAN_BOSS_RT_START(bs);
+      if(String(req.action||'')==='startRaid'&&bs){
+        if(window.PPA_CLAN_BOSS_RT_START)window.PPA_CLAN_BOSS_RT_START(bs);
+        var canEnter=bs.active===true||String(bs.status||'')==='fighting'||String(bs.status||'')==='active';
+        if(canEnter){
+          try{if(typeof closeClanMenu==='function')closeClanMenu()}catch(_){}
+          try{if(typeof closeClan==='function')closeClan()}catch(_){}
+          try{if(typeof closeClanPanel==='function')closeClanPanel()}catch(_){}
+          setTimeout(function(){
+            try{
+              if(typeof changeScene==='function'){changeScene('clanboss1');return}
+              if(typeof window.changeScene==='function'){window.changeScene('clanboss1');return}
+              if(typeof P!=='undefined'&&P)P.scene='clanboss1';
+            }catch(e){console.warn('Clan boss enter scene',e)}
+          },30);
+        }
+      }
       return r
+    };
+    window.PPA_CLAN_BOSS_ENTER=function(){
+      return window.PPA_CLAN_BOSS_HANDLER({action:'startRaid'});
     };
     window.PPA_CLAN_SIEGE_HANDLER=clanCall;
     window.PPA_CLAN_TRADE_HANDLER=async function(req){
