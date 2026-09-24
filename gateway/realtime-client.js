@@ -37,6 +37,10 @@
         if(DUNGEON_MODE==='21+')return 'dungeon-21-40';
         if(DUNGEON_MODE==='1-20')return 'dungeon-1-20';
       }
+      if(typeof P!=='undefined'&&P&&P.scene==='clanboss1'){
+        var cs=window.PPA_SERVER_CLAN_STATE,cid=cs&&cs.clan&&String(cs.clan.id||'');
+        return cid?canonicalRoom('clanboss-'+cid):'safe';
+      }
       return canonicalRoom(typeof ppaOnlineRoomKey==='function'?ppaOnlineRoomKey():'safe');
     }catch(_){return RT.lastRoom||'safe'}
   }
@@ -505,6 +509,10 @@
     if(m.type==='move'){if(m.player)applyPlayer(m.player,false);return}
     if(m.type==='join'){if(m.player)applyPlayer(m.player,true);return}
     if(m.type==='leave'){deleteRemote(m.id);return}
+    if(String(m.type||'').indexOf('clan-boss-')===0){
+      try{if(window.PPA_CLAN_BOSS_RT_RECEIVE)window.PPA_CLAN_BOSS_RT_RECEIVE(m)}catch(_){}
+      return;
+    }
     if(m.type==='mob-hit-event'||m.type==='mob-authority'||m.type==='mob-authority-snapshot'||m.type==='mob-position'||m.type==='mob-attack'||m.type==='boss-special'){
       try{if(window.PPA_DUNGEON_MOB_EVENT_RECEIVE)window.PPA_DUNGEON_MOB_EVENT_RECEIVE(m)}catch(_){}
       return;
