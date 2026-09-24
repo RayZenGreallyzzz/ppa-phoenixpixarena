@@ -33,15 +33,6 @@ function finite(v, min, max, fallback = 0) {
   return Math.max(min, Math.min(max, v));
 }
 
-function objJson(v){try{const x=JSON.parse(String(v||'{}'));return x&&typeof x==='object'&&!Array.isArray(x)?x:{}}catch(_){return{}}}
-const CLAN_BOSS_COOLDOWN_MS=6*60*60*1000;
-function clanBossRoomFor(a){
-  const cid=String(a&&a.clanId||'').trim();
-  return cid?cleanRoom('clanboss-'+cid):'';
-}
-function isClanBossRoom(v){return cleanRoom(v).startsWith('clanboss-')}
-function clanBossRoomAllowed(a,v){const want=clanBossRoomFor(a);return !!want&&want===cleanRoom(v)}
-
 const DUNGEON_CAPACITY = 40;
 const DUNGEON_RESERVE_MS = 90_000;
 const DUNGEON_MOB_RESPAWN_MS = 14_000;
@@ -119,7 +110,7 @@ function playerPkRoomAllowed(v){
   if(!room||room==='safe')return false;
   if(room.startsWith('pvp1-')||room.startsWith('pvpteam-'))return false;
   if(room==='pvp1'||room==='pvpteam')return false;
-  if(room.startsWith('clansiege')||room.startsWith('clanboss-'))return false;
+  if(room.startsWith('clansiege'))return false;
   return true;
 }
 
@@ -257,76 +248,6 @@ export class RealtimeHub extends BaseRealtimeHub {
       players,
       ts: Date.now(),
     });
-  }
-
-  clanBossEvents(){
-    if(!this._clanBossEvents)this._clanBossEvents=new Map();
-    const now=Date.now();for(const [k,t] of this._clanBossEvents)if(now-Number(t||0)>15000)this._clanBossEvents.delete(k);
-    return this._clanBossEvents;
-  }
-
-  async clanBossRow(clanId){
-    clanId=String(clanId||'');
-    if(!clanId||!this.env||!this.env.DB)return null;
-    return this.env.DB.prepare('SELECT * FROM clan_boss_raids WHERE clan_id=?1').bind(clanId).first();
-  }
-
-  async refreshClanIdentity(ws,a){
-    if(!a||!this.env||!this.env.DB)return a;
-    const tid=String(a.telegramId||'');
-    if(!tid)return a;
-    const row=await this.env.DB.prepare(
-      'SELECT cm.clan_id,c.name AS clan_name FROM clan_members cm LEFT JOIN clans c ON c.id=cm.clan_id WHERE cm.telegram_id=?1'
-    ).bind(tid).first();
-    const cid=row?String(row.clan_id||'').slice(0,80):'';
-    const cname=row?String(row.clan_name||'').trim().slice(0,24):'';
-    if(String(a.clanId||'')!==cid||String(a.clanName||'')!==cname){
-      a.clanId=cid;a.clanName=cname;a.lastSeenAt=Date.now();
-      try{ws.serializeAttachment(a)}catch(_){}
-    }
-    return a;
-  }
-
-  clanBossState(row,room,recipient,now=Date.now()){
-    if(!row)return null;
-    room=cleanRoom(room);
-    const dmg=objJson(row.damage_json||'{}');
-    let partySize=0,aliveCount=0;
-    for(const peer of this.roomSockets(room)){
-      const pa=attOf(peer);
-      if(String(pa.clanId||'')!==String(row.clan_id||''))continue;
-      if(!pa.pid)continue;
-      partySize++;
-      if(!pa.deadLocked&&Number(pa.h)>0)aliveCount++;
-    }
-    const hp=Math.max(0,Number(row.hp)||0),mhp=Math.max(1,Number(row.mhp)||1),cool=Math.max(0,Number(row.cooldown_until)||0);
-    const active=String(row.status)==='active'&&hp>0;
-    let status=active?'fighting':(cool>now?'cooldown':'ready');
-    if(String(row.status)==='defeated'&&cool>now)status='defeated';
-    const pid=String(recipient&&recipient.pid||'');
-    return{active,bossId:String(row.boss_id||'clan_boss_1'),bossHp:hp,bossMaxHp:mhp,status,
-      partySize,aliveCount,playerDamage:Math.max(0,Number(dmg[pid])||0),
-      totalDamage:Object.values(dmg).reduce((a,v)=>a+Math.max(0,Number(v)||0),0),
-      rewardedDamage:0,earnedCoins:0,startedAt:Number(row.started_at)||0,updatedAt:Number(row.updated_at)||0,
-      defeatedAt:Number(row.defeated_at)||0,cooldownUntil:cool,bossReadyAt:cool,
-      lastEvent:active?'Рейд идёт':(cool>now?'Босс повержен · откат 6 часов':'Босс готов'),enterScene:'clanboss1'};
-  }
-
-  async sendClanBossState(ws,a,row=null,now=Date.now()){
-    const room=cleanRoom(a&&a.room);
-    if(!clanBossRoomAllowed(a,room))return false;
-    row=row||await this.clanBossRow(a.clanId);
-    wsJson(ws,{type:'clan-boss-state',room,bossState:this.clanBossState(row,room,a,now),ts:now});
-    return true;
-  }
-
-  async broadcastClanBossState(room,row,now=Date.now()){
-    room=cleanRoom(room);
-    for(const peer of this.roomSockets(room)){
-      const pa=attOf(peer);
-      if(String(pa.clanId||'')!==String(row&&row.clan_id||''))continue;
-      wsJson(peer,{type:'clan-boss-state',room,bossState:this.clanBossState(row,room,pa,now),ts:now});
-    }
   }
 
   dungeonReservations() {
@@ -1484,69 +1405,6 @@ export class RealtimeHub extends BaseRealtimeHub {
     const a = attOf(ws);
     const now = Date.now();
 
-    if (m.type === 'clan-boss-state-request') {
-      await this.refreshClanIdentity(ws,a);
-      if(!clanBossRoomAllowed(a,a.room)){
-        wsJson(ws,{type:'clan-boss-reject',reason:'Клановый рейд доступен только в комнате своего клана.',ts:now});
-        return;
-      }
-      await this.sendClanBossState(ws,a,null,now);
-      return;
-    }
-
-    if (m.type === 'clan-boss-hit') {
-      await this.refreshClanIdentity(ws,a);
-      const room=cleanRoom(a.room);
-      const hpKnown=Number.isFinite(Number(a.h));
-      if(!clanBossRoomAllowed(a,room)||a.deadLocked||(hpKnown&&Number(a.h)<=0)){
-        wsJson(ws,{type:'clan-boss-reject',reason:'Удар по клановому боссу отклонён.',ts:now});
-        return;
-      }
-      const event=String(m.event||'').slice(0,96),events=this.clanBossEvents(),ek=event?(room+'|'+event):'';
-      if(ek&&events.has(ek))return;
-      if(ek)events.set(ek,now);
-      if(now-Number(a.lastClanBossHit||0)<20)return;
-      const atk=Math.max(1,Number(a.atk)||1),critDmg=Math.max(100,Number(a.critDmg)||180);
-      const maxHit=Math.max(500,Math.min(250000,Math.ceil(atk*30+critDmg*20+5000)));
-      const requested=finite(m.amount,0,maxHit,0);
-      if(!(requested>0))return;
-      const row=await this.clanBossRow(a.clanId);
-      if(!row||String(row.status)!=='active'||!(Number(row.hp)>0)){
-        await this.sendClanBossState(ws,a,row,now);
-        return;
-      }
-      const bossId=String(m.bossId||row.boss_id||'');
-      if(bossId&&bossId!==String(row.boss_id||'')){
-        wsJson(ws,{type:'clan-boss-reject',reason:'Состояние босса изменилось. Обновляем рейд.',ts:now});
-        await this.sendClanBossState(ws,a,row,now);
-        return;
-      }
-      const before=Math.max(0,Number(row.hp)||0),damage=Math.min(before,requested),hp=Math.max(0,before-damage);
-      const dmg=objJson(row.damage_json||'{}'),pid=String(a.pid||'');
-      dmg[pid]=Math.round((Math.max(0,Number(dmg[pid])||0)+damage)*100)/100;
-      a.lastClanBossHit=now;ws.serializeAttachment(a);
-      let cooldown=0,status='active',defeatedAt=0;
-      if(hp<=0){status='defeated';defeatedAt=now;cooldown=now+CLAN_BOSS_COOLDOWN_MS}
-      await this.env.DB.prepare("UPDATE clan_boss_raids SET hp=?1,status=?2,updated_at=?3,defeated_at=?4,cooldown_until=?5,damage_json=?6 WHERE clan_id=?7")
-        .bind(hp,status,now,defeatedAt,cooldown,JSON.stringify(dmg),String(a.clanId||'')).run();
-
-      if(hp<=0){
-        const mr=await this.env.DB.prepare('SELECT progress_json,events_json FROM clan_meta WHERE clan_id=?1').bind(String(a.clanId||'')).first();
-        if(mr){
-          const progress=objJson(mr.progress_json||'{}');progress.bossReadyAt=cooldown;
-          let eventsJson=[];try{eventsJson=JSON.parse(String(mr.events_json||'[]'));if(!Array.isArray(eventsJson))eventsJson=[]}catch(_){eventsJson=[]}
-          eventsJson.unshift({id:'ce_'+crypto.randomUUID(),type:'clanBossDefeated',playerId:String(a.telegramId||''),playerName:cleanName(a.name||'Игрок'),text:'Клановый босс повержен · откат 6 часов',ts:now});
-          await this.env.DB.prepare('UPDATE clan_meta SET progress_json=?1,events_json=?2,updated_at=?3 WHERE clan_id=?4')
-            .bind(JSON.stringify(progress),JSON.stringify(eventsJson.slice(0,300)),now,String(a.clanId||'')).run();
-        }
-      }
-
-      const fresh=await this.clanBossRow(a.clanId);
-      await this.broadcastClanBossState(room,fresh,now);
-      if(hp<=0)this.roomBroadcast(room,{type:'clan-boss-defeated',room,bossId:String(row.boss_id||''),cooldownUntil:cooldown,killer:String(a.pid||''),ts:now},null);
-      return;
-    }
-
     if (m.type === 'player-respawn-confirm') {
       if(a.arenaMatchId)return;
       if(!a.deadLocked&&Number(a.h)>0&&!m.wasDead){
@@ -2351,10 +2209,6 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.lastSeenAt = now;
       {
         const pingRoom = cleanRoom(a.room);
-        if(isClanBossRoom(pingRoom)&&clanBossRoomAllowed(a,pingRoom)&&now-Number(a.lastClanBossStateAt||0)>=5000){
-          a.lastClanBossStateAt=now;
-          await this.sendClanBossState(ws,a,null,now);
-        }
         if (mobAuthorityRoom(pingRoom)) {
           await this.ensureMobRoomLoaded(pingRoom);
           if (this.processMobRespawns(pingRoom, now)) await this.persistMobRoom(pingRoom);
@@ -2381,9 +2235,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     }
 
     if (m.type === 'room') {
-      let requested = cleanRoom(m.room);
-      if(requested.startsWith('clanboss-'))await this.refreshClanIdentity(ws,a);
-      if(requested.startsWith('clanboss-')&&!clanBossRoomAllowed(a,requested))requested='safe';
+      const requested = cleanRoom(m.room);
       const d = dungeonInfo(requested);
       if (d) {
         const current = dungeonInfo(a.room);
@@ -2414,7 +2266,6 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       const room = this.moveSocketRoom(ws, a, requested, now);
       this.sendRoomSnapshot(ws, room);
-      if(isClanBossRoom(room)&&clanBossRoomAllowed(a,room))await this.sendClanBossState(ws,a,null,now);
       if (mobAuthorityRoom(room)) {
         await this.ensureMobRoomLoaded(room);
         if (this.processMobRespawns(room, now)) await this.persistMobRoom(room);
@@ -2428,9 +2279,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (now - (Number(a.lastMove) || 0) < 90) return;
 
       const oldRoom = cleanRoom(a.room);
-      let wantedRoom = m.room != null ? cleanRoom(m.room) : oldRoom;
-      if(wantedRoom.startsWith('clanboss-'))await this.refreshClanIdentity(ws,a);
-      if(wantedRoom.startsWith('clanboss-')&&!clanBossRoomAllowed(a,wantedRoom))wantedRoom='safe';
+      const wantedRoom = m.room != null ? cleanRoom(m.room) : oldRoom;
       const wantedDungeon = dungeonInfo(wantedRoom);
       const currentDungeon = dungeonInfo(oldRoom);
       let currentRoom = oldRoom;
