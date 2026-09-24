@@ -184,9 +184,11 @@
         b.__ppaClanBossStatus=String(lastState.status||'');
       }finally{applying--}
     }
-    if((String(lastState.status)==='defeated'||String(lastState.status)==='cooldown')&&Number(lastState.bossHp)<=0){
+    if(inScene()&&window.__PPA_CLAN_BOSS_SESSION_ENTERED===true&&(String(lastState.status)==='defeated'||String(lastState.status)==='cooldown')&&Number(lastState.bossHp)<=0){
       try{if(typeof showPickup==='function'&&!window.__PPA_CLAN_BOSS_DEFEAT_SHOWN){window.__PPA_CLAN_BOSS_DEFEAT_SHOWN=true;showPickup('КЛАНОВЫЙ БОСС ПОВЕРЖЕН · ОТКАТ 6 ЧАСОВ','#ffd36a')}}catch(_){}
-    }else window.__PPA_CLAN_BOSS_DEFEAT_SHOWN=false;
+    }else if(!inScene()||window.__PPA_CLAN_BOSS_SESSION_ENTERED!==true){
+      window.__PPA_CLAN_BOSS_DEFEAT_SHOWN=false;
+    }
     return true;
   }
   function request(force){
