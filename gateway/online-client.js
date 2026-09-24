@@ -257,7 +257,18 @@
       if(r&&r.balances&&Number.isFinite(Number(r.balances.gold)))INV.gold=Math.max(0,Number(r.balances.gold));
       return r;
     };
-    window.PPA_CLAN_BOSS_HANDLER=async function(req){var r=await clanCall(req||{});if(r&&r.bossState&&window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(r.bossState);return r};
+    window.PPA_CLAN_BOSS_HANDLER=async function(req){
+      req=Object.assign({},req||{});
+      if(String(req.action||'')==='startRaid'){
+        if(!window.PPA_CLAN_BOSS_ENTER)return {ok:false,message:'ONLINE клан-босса ещё подключается'};
+        var rr=await window.PPA_CLAN_BOSS_ENTER(String(req.bossId||''));
+        if(rr&&rr.bossState&&window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(rr.bossState);
+        return rr;
+      }
+      var r=await clanCall(req);
+      if(r&&r.bossState&&window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(r.bossState);
+      return r
+    };
     window.PPA_CLAN_SIEGE_HANDLER=clanCall;
     window.PPA_CLAN_TRADE_HANDLER=async function(req){
       req=Object.assign({},req||{});
