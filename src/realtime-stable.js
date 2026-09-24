@@ -384,8 +384,9 @@ export class RealtimeHub extends BaseRealtimeHub {
     const storedCooldown=st?Math.max(0,Number(st.respawnAt)||0):0;
     const cooldown=Math.max(metaCooldown,storedCooldown);
     if(cooldown>now&&!(st&&String(st.status)==='active'&&Number(st.hp)>0)){
-      const coolState=st||{clanId:member.clanId,bossId:cfg.id,hp:0,mhp:cfg.mhp,status:'cooldown',startedAt:0,updatedAt:now,defeatedAt:cooldown-clanBossRespawnMs(),respawnAt:cooldown,damageByPid:{},qaMode:CLAN_BOSS_QA_TEST_OPEN};
+      const coolState=st||{clanId:member.clanId,bossId:cfg.id,hp:0,mhp:cfg.mhp,status:'cooldown',startedAt:0,updatedAt:now,defeatedAt:cooldown-clanBossRespawnMs(),respawnAt:cooldown,damageByPid:{},telegramByPid:{},nameByPid:{},rewardsByPid:{},qaMode:CLAN_BOSS_QA_TEST_OPEN};
       coolState.status='cooldown';coolState.respawnAt=cooldown;
+      if(st)await this.sendClanBossReward(ws,a,st,now);
       wsJson(ws,{type:'clan-boss-reject',requestId,reason:'Босс ещё восстанавливается.',bossState:this.clanBossPublicState(coolState,clanBossRoom(member.clanId,cfg.id),a,now),ts:now});
       return;
     }
@@ -395,7 +396,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         clanId:member.clanId,bossId:cfg.id,
         hp:cfg.mhp,mhp:cfg.mhp,status:'active',
         startedAt:now,updatedAt:now,defeatedAt:0,respawnAt:0,
-        damageByPid:{},qaMode:CLAN_BOSS_QA_TEST_OPEN
+        damageByPid:{},telegramByPid:{},nameByPid:{},rewardsByPid:{},qaMode:CLAN_BOSS_QA_TEST_OPEN
       };
       await this.clanBossPersist(st);
     }
@@ -426,6 +427,73 @@ export class RealtimeHub extends BaseRealtimeHub {
     this.sendOnlineCount();
   }
 
+  clanBossRollMistressReward(st,pid,now=Date.now()) {
+    pid=String(pid||'');
+    if(!st||String(st.bossId)!=='clan_boss_1'||!pid)return null;
+    if(!st.rewardsByPid||typeof st.rewardsByPid!=='object')st.rewardsByPid={};
+    const existing=st.rewardsByPid[pid];
+    if(existing&&existing.rewardId)return existing;
+
+    let green=2+Math.floor(Math.random()*3);
+    let blue=1+Math.floor(Math.random()*2);
+    const normalStones=2+Math.floor(Math.random()*3);
+    if(Math.random()<0.15){
+      if(Math.random()<0.5)green+=1;
+      else blue+=1;
+    }
+    const damage=Math.max(0,Number(st.damageByPid&&st.damageByPid[pid])||0);
+    const clanCoins=Math.max(0,Math.floor(damage/10000));
+    const reward={
+      rewardId:'cbr:'+String(st.clanId||'')+':'+String(st.bossId||'')+':'+String(st.defeatedAt||now)+':'+pid,
+      bossId:'clan_boss_1',
+      greenResources:green,
+      blueResources:blue,
+      normalStones,
+      premiumStone:Math.random()<0.04,
+      blueGear:Math.random()<0.12,
+      grayRune:Math.random()<0.10,
+      runeRoll:Math.floor(Math.random()*1000000000),
+      clanCoins,
+      createdAt:now,
+      acked:false
+    };
+    st.rewardsByPid[pid]=reward;
+    return reward;
+  }
+
+  clanBossEnsureRewards(st,now=Date.now()) {
+    if(!st||String(st.bossId)!=='clan_boss_1')return;
+    if(!st.rewardsByPid||typeof st.rewardsByPid!=='object')st.rewardsByPid={};
+    const dmg=st.damageByPid&&typeof st.damageByPid==='object'?st.damageByPid:{};
+    for(const pid of Object.keys(dmg)){
+      if(Math.max(0,Number(dmg[pid])||0)<=0)continue;
+      this.clanBossRollMistressReward(st,pid,now);
+    }
+  }
+
+  async sendClanBossReward(ws,a,st=null,now=Date.now()) {
+    if(!ws||!a||!a.pid)return false;
+    st=st||await this.clanBossStored(a.clanId);
+    if(!st||!st.rewardsByPid||typeof st.rewardsByPid!=='object')return false;
+    const reward=st.rewardsByPid[String(a.pid||'')];
+    if(!reward||reward.acked===true)return false;
+    wsJson(ws,{type:'clan-boss-reward',reward:Object.assign({},reward),ts:now});
+    return true;
+  }
+
+  async clanBossRewardAck(a,rewardId,now=Date.now()) {
+    if(!a||!a.clanId||!a.pid||!rewardId)return false;
+    const st=await this.clanBossStored(a.clanId);
+    if(!st||!st.rewardsByPid||typeof st.rewardsByPid!=='object')return false;
+    const reward=st.rewardsByPid[String(a.pid||'')];
+    if(!reward||String(reward.rewardId||'')!==String(rewardId||''))return false;
+    if(reward.acked===true)return true;
+    reward.acked=true;reward.ackedAt=now;
+    st.updatedAt=now;
+    await this.clanBossPersist(st);
+    return true;
+  }
+
   async clanBossRecordDefeat(st,a,now=Date.now()) {
     if(!this.env||!this.env.DB||!st||!st.clanId)return;
     try{
@@ -434,11 +502,23 @@ export class RealtimeHub extends BaseRealtimeHub {
       const progress=jsonObj(row.progress_json||'{}');
       progress.bossReadyAt=Math.max(0,Number(st.respawnAt)||0);
       progress.lastBossId=String(st.bossId||'');
+      progress.personalByMember=progress.personalByMember&&typeof progress.personalByMember==='object'?progress.personalByMember:{};
+      let clanCoinGain=0;
+      const rewards=st.rewardsByPid&&typeof st.rewardsByPid==='object'?st.rewardsByPid:{};
+      const telegramByPid=st.telegramByPid&&typeof st.telegramByPid==='object'?st.telegramByPid:{};
+      for(const pid of Object.keys(rewards)){
+        const rw=rewards[pid]||{},coins=Math.max(0,Math.floor(Number(rw.clanCoins)||0));
+        if(!coins)continue;
+        clanCoinGain+=coins;
+        const tid=String(telegramByPid[pid]||'');
+        if(tid)progress.personalByMember[tid]=Math.max(0,Number(progress.personalByMember[tid])||0)+coins;
+      }
+      progress.coins=Math.max(0,Number(progress.coins)||0)+clanCoinGain;
       const events=jsonArr(row.events_json||'[]');
       events.unshift({
         id:'ce_'+crypto.randomUUID(),type:'clanBossDefeated',
         playerId:String(a&&a.telegramId||''),playerName:cleanName(a&&a.name||'Игрок'),
-        text:CLAN_BOSS_QA_TEST_OPEN?'ТЕСТ · клановый босс · откат 10 секунд':'Клановый босс повержен · откат 12 часов',ts:now
+        text:(CLAN_BOSS_QA_TEST_OPEN?'ТЕСТ · клановый босс · откат 10 секунд':'Клановый босс повержен · откат 12 часов')+(clanCoinGain?' · монеты клана +'+clanCoinGain:''),ts:now
       });
       await this.env.DB.prepare('UPDATE clan_meta SET progress_json=?1,events_json=?2,updated_at=?3 WHERE clan_id=?4')
         .bind(JSON.stringify(progress),JSON.stringify(events.slice(0,300)),now,String(st.clanId)).run();
@@ -472,8 +552,12 @@ export class RealtimeHub extends BaseRealtimeHub {
     st.hp=Math.max(0,before-damage);
     st.updatedAt=now;
     if(!st.damageByPid||typeof st.damageByPid!=='object')st.damageByPid={};
+    if(!st.telegramByPid||typeof st.telegramByPid!=='object')st.telegramByPid={};
+    if(!st.nameByPid||typeof st.nameByPid!=='object')st.nameByPid={};
     const pid=String(a.pid||'');
     st.damageByPid[pid]=Math.round((Math.max(0,Number(st.damageByPid[pid])||0)+damage)*100)/100;
+    st.telegramByPid[pid]=String(a.telegramId||'');
+    st.nameByPid[pid]=cleanName(a.name||'Игрок');
     a.lastClanBossSeq=seq;
     ws.serializeAttachment(a);
 
@@ -486,7 +570,14 @@ export class RealtimeHub extends BaseRealtimeHub {
     await this.broadcastClanBossState(st,room,now);
 
     if(defeated){
+      this.clanBossEnsureRewards(st,now);
+      await this.clanBossPersist(st);
       await this.clanBossRecordDefeat(st,a,now);
+      for(const peer of this.roomSockets(room)){
+        const pa=attOf(peer);
+        if(String(pa.clanId||'')!==String(st.clanId||''))continue;
+        await this.sendClanBossReward(peer,pa,st,now);
+      }
       this.roomBroadcast(room,{
         type:'clan-boss-defeated',room,bossId:String(st.bossId||''),
         cooldownUntil:Number(st.respawnAt)||0,
@@ -1662,6 +1753,12 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     if (m.type === 'clan-boss-state-request') {
       await this.sendClanBossState(ws,a,null,now);
+      await this.sendClanBossReward(ws,a,null,now);
+      return;
+    }
+
+    if (m.type === 'clan-boss-reward-ack') {
+      await this.clanBossRewardAck(a,String(m.rewardId||''),now);
       return;
     }
 
