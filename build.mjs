@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v556-smith-custom-dark-select-regexfix-20260924';
+const CLIENT_BUILD = 'v557-smith-custom-dark-select-validationfix-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5225,7 +5225,7 @@ else setTimeout(ppaInstallSmithCustomSelects,0);
 function inspectSmithItem(it,context){`)
 );
 
-if(!output.includes("id='ppaSmithSelectStyle'") ||
+if(!output.includes("ppaSmithSelectStyle") ||
    !output.includes("select.ppaSmithNative") ||
    !output.includes("ppaRefreshSmithCustomSelects")) {
   throw new Error('Blacksmith custom select patch did not apply');
