@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v549-fart-guards-30m-respawn-20260924';
+const CLIENT_BUILD = 'v550-fart-guide-transparent-backdrop-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3612,6 +3612,26 @@ if(!output.includes("const itemUntil=Math.max(0,Number(item.expiresAt)||0)") ||
 }
 /* ======================================================================== */
 
+
+
+/* === FART GUIDE TRANSPARENT BACKDROP ==================================== */
+ppaPatchRegex(
+  'fart guide transparent backdrop',
+  /shade\.style\.cssText='position:fixed;inset:0;z-index:99995;display:flex;align-items:center;justify-content:center;background:rgba\(0,0,0,\.72\);padding:16px';/,
+  "shade.style.cssText='position:fixed;inset:0;z-index:99995;display:flex;align-items:center;justify-content:center;background:transparent;padding:16px';"
+);
+
+ppaPatchRegex(
+  'fart guide tap outside closes menu',
+  /document\.body\.appendChild\(shade\);\s*shade\.querySelector\('#fartGuideClose'\)\.onclick=function\(\)\{shade\.remove\(\)\};/,
+  "document.body.appendChild(shade);\n    shade.addEventListener('click',function(e){if(e.target===shade)shade.remove()});\n    shade.querySelector('#fartGuideClose').onclick=function(){shade.remove()};"
+);
+
+if(!output.includes("background:transparent;padding:16px") ||
+   !output.includes("shade.addEventListener('click',function(e){if(e.target===shade)shade.remove()})")) {
+  throw new Error('Fart guide transparent backdrop patch did not apply');
+}
+/* ======================================================================== */
 
 /* === FART GUARD 30-MINUTE RESPAWN ====================================== */
 ppaPatchRegex(
