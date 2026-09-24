@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v551-fart-guide-respawn-build-fix-20260924';
+const CLIENT_BUILD = 'v552-fart-respawn-integrated-fix-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2619,10 +2619,12 @@ function updateFartZoneSystem(){
     FART_ZONE_STATE.slagSince=0;
   }
 
-  // Individual guard respawns stay unchanged.
+  // Every killed guard returns exactly 30 minutes after its queued death.
+  // Keep our own deadline on the queue item so older packed MIN/MAX values cannot interfere.
   for(let i=FART_ZONE_STATE.respawns.length-1;i>=0;i--){
     const q=FART_ZONE_STATE.respawns[i];
-    if(now<q.at)continue;
+    if(!Number(q.__ppaRespawn30mAt))q.__ppaRespawn30mAt=now+30*60*1000;
+    if(now<Number(q.__ppaRespawn30mAt))continue;
     const mine=fartMineById(q.mineId);
     if(mine)fartSpawnGuard(mine,q.index);
     FART_ZONE_STATE.respawns.splice(i,1);
@@ -2669,8 +2671,9 @@ function drawFartZoneMines()`
 
 if(output.includes('id="fartAutoMineBtn" type="button" onclick="fartToggleAutoMining()"') ||
    !output.includes("if(d<=FART_MINE_RADIUS&&!fartMineHasLivingGuard(mine))") ||
-   !output.includes("FART_ZONE_STATE.autoMineId=near.id")) {
-  throw new Error('Passive Fart mining patch did not apply');
+   !output.includes("FART_ZONE_STATE.autoMineId=near.id") ||
+   !output.includes("q.__ppaRespawn30mAt=now+30*60*1000")) {
+  throw new Error('Passive Fart mining/30-minute respawn patch did not apply');
 }
 /* ======================================================================== */
 
@@ -3630,20 +3633,6 @@ ppaPatchRegex(
 if(!output.includes("background:transparent;padding:16px") ||
    !output.includes("shade.addEventListener('click',function(e){if(e.target===shade)shade.remove()})")) {
   throw new Error('Fart guide transparent backdrop patch did not apply');
-}
-/* ======================================================================== */
-
-/* === FART GUARD 30-MINUTE RESPAWN ====================================== */
-// Patch the actual queued respawn deadline directly. This is intentionally
-// independent from whatever MIN/MAX constants the packed source currently uses.
-ppaPatchRegex(
-  'fart guard queued respawn fixed 30 minutes',
-  /at:Date\.now\(\)\+FART_GUARD_RESPAWN_MIN\+Math\.random\(\)\*\(FART_GUARD_RESPAWN_MAX-FART_GUARD_RESPAWN_MIN\)/,
-  "at:Date.now()+30*60*1000"
-);
-
-if(!output.includes("at:Date.now()+30*60*1000")) {
-  throw new Error('Fart guard fixed 30-minute queued respawn patch did not apply');
 }
 /* ======================================================================== */
 
