@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v552-fart-respawn-integrated-fix-20260924';
+const CLIENT_BUILD = 'v553-global-text-longpress-guard-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -4119,6 +4119,84 @@ if(!output.includes("ppaIframeImageLongPressGuard") ||
    !output.includes("fr.contentDocument") ||
    !output.includes("pointer-events:none!important")) {
   throw new Error('Iframe image longpress guard did not apply');
+}
+/* ======================================================================== */
+
+
+/* === GLOBAL TEXT LONGPRESS / SELECTION GUARD ============================ */
+// Android/Telegram WebView must not show the native text toolbar over game UI.
+// Real text editors remain fully selectable/editable.
+ppaPatchRegex(
+  'global text selection guard',
+  /<\/body>/,
+  `<script id="ppaGlobalTextSelectionGuard">
+(function(){
+  function isEditableTarget(t){
+    try{
+      if(!t)return false;
+      if(t.nodeType===3)t=t.parentElement;
+      if(!t||!t.closest)return false;
+      return !!t.closest('input,textarea,[contenteditable="true"],[contenteditable=""],[role="textbox"],[data-allow-text-select="true"]');
+    }catch(_){return false}
+  }
+  function guardDoc(doc){
+    if(!doc||doc.__ppaTextSelectionGuard)return;
+    doc.__ppaTextSelectionGuard=true;
+    try{
+      var st=doc.createElement('style');
+      st.id='ppaTextSelectionGuardStyle';
+      st.textContent=
+        'html,body,body *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}'+
+        'input,textarea,[contenteditable="true"],[contenteditable=""],[role="textbox"],[data-allow-text-select="true"]{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important}';
+      (doc.head||doc.documentElement).appendChild(st);
+    }catch(_){}
+    try{
+      doc.addEventListener('selectstart',function(e){
+        if(!isEditableTarget(e.target)){e.preventDefault();e.stopPropagation();}
+      },true);
+      doc.addEventListener('contextmenu',function(e){
+        if(!isEditableTarget(e.target)){e.preventDefault();e.stopPropagation();}
+      },true);
+    }catch(_){}
+    function guardFrame(fr){
+      if(!fr)return;
+      function apply(){
+        try{
+          var d=fr.contentDocument||(fr.contentWindow&&fr.contentWindow.document);
+          if(d)guardDoc(d);
+        }catch(_){}
+      }
+      try{fr.addEventListener('load',function(){apply();setTimeout(apply,0);setTimeout(apply,150)},true)}catch(_){}
+      apply();setTimeout(apply,0);
+    }
+    function scanFrames(root){
+      try{(root&&root.querySelectorAll?root:doc).querySelectorAll('iframe').forEach(guardFrame)}catch(_){}
+    }
+    scanFrames(doc);
+    try{
+      new MutationObserver(function(ms){
+        ms.forEach(function(m){
+          (m.addedNodes||[]).forEach(function(n){
+            if(!n||n.nodeType!==1)return;
+            if(n.tagName==='IFRAME')guardFrame(n);
+            scanFrames(n);
+          });
+        });
+      }).observe(doc.documentElement,{childList:true,subtree:true});
+    }catch(_){}
+  }
+  guardDoc(document);
+})();
+</script>
+</body>`
+);
+
+if(!output.includes("id=\"ppaGlobalTextSelectionGuard\"") ||
+   !output.includes("ppaTextSelectionGuardStyle") ||
+   !output.includes("data-allow-text-select=\"true\"") ||
+   !output.includes("if(!isEditableTarget(e.target)){e.preventDefault();e.stopPropagation();}") ||
+   !output.includes("fr.contentDocument")) {
+  throw new Error('Global text longpress guard did not apply');
 }
 /* ======================================================================== */
 
