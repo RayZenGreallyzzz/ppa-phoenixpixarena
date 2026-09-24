@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v546-pickaxe-expiry-persistence-20260924';
+const CLIENT_BUILD = 'v547-pickaxe-expiry-build-fix-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3491,24 +3491,7 @@ if(!output.includes("🔥 УЛУЧШИТЬ ДО ЛЕГЕНДАРНОЙ · 2120 P
 /* === FART PICKAXE REAL-TIME EXPIRY ====================================== */
 // Absolute expiry survives save/reload. Relaunching never resets 4h/14h.
 
-ppaPatchRegex(
-  'fart pickaxe default expiry state',
-  /fartPickaxe:false,\s*v263PickaxePpaGranted:false,/,
-  "fartPickaxe:false,\n  fartPickaxeUntil:0,\n  v263PickaxePpaGranted:false;"
-);
-
-ppaPatchRegex(
-  'save fart pickaxe absolute expiry',
-  /fartPickaxe:!!INV\.fartPickaxe,\s*v263PickaxePpaGranted:!!INV\.v263PickaxePpaGranted,/,
-  "fartPickaxe:!!INV.fartPickaxe,\n    fartPickaxeUntil:Math.max(0,Number(INV.fartPickaxeUntil)||0),\n    v263PickaxePpaGranted:!!INV.v263PickaxePpaGranted,"
-);
-
-ppaPatchRegex(
-  'load fart pickaxe absolute expiry',
-  /INV\.fartPickaxe=!!s\.fartPickaxe;\s*INV\.v263PickaxePpaGranted=!!s\.v263PickaxePpaGranted;/,
-  "INV.fartPickaxe=!!s.fartPickaxe;\n  INV.fartPickaxeUntil=Math.max(0,Number(s.fartPickaxeUntil)||0);\n  INV.v263PickaxePpaGranted=!!s.v263PickaxePpaGranted;"
-);
-
+// Pickaxe expiry is persisted on the bag item itself via expiresAt.
 ppaPatchRegex(
   'pickaxe removal clears bag and all storage',
   /function fartRemovePickaxeItem\(\)\{[\s\S]*?\n\}/,
@@ -3617,10 +3600,10 @@ function fartRefreshPickaxeTimerUi(){
 setInterval(fartRefreshPickaxeTimerUi,1000);`
 );
 
-if(!output.includes("fartPickaxeUntil:Math.max(0,Number(INV.fartPickaxeUntil)||0)") ||
-   !output.includes("INV.fartPickaxeUntil=Math.max(0,Number(s.fartPickaxeUntil)||0)") ||
-   !output.includes("const itemUntil=Math.max(0,Number(item.expiresAt)||0)") ||
+if(!output.includes("const itemUntil=Math.max(0,Number(item.expiresAt)||0)") ||
+   !output.includes("const until=itemUntil||savedUntil") ||
    !output.includes("if(!until||until<=Date.now())") ||
+   !output.includes("fartRemovePickaxeItem();") ||
    !output.includes("if(!it||it.fartPickaxe===true)return;") ||
    !output.includes("setInterval(fartRefreshPickaxeTimerUi,1000)") ||
    !output.includes("Кирка закончилась · купи новую")) {
