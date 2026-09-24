@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v554-smith-dark-native-select-20260924';
+const CLIENT_BUILD = 'v555-smith-custom-dark-select-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5072,21 +5072,163 @@ if(!output.includes("id=\"ppaRuneFusionExactSource\"") ||
 /* ======================================================================== */
 
 
-/* === BLACKSMITH DARK NATIVE SELECT ====================================== */
-// Styling only. Keep the native <select> controls and all smith event handlers
-// untouched; color-scheme asks Android/Telegram WebView to render the popup dark.
+/* === BLACKSMITH CUSTOM DARK SELECT ====================================== */
+// Android/Telegram WebView renders the popup of a native <select> itself and
+// ignores CSS for that popup. Keep the original selects as the source of truth,
+// but hide their native UI and mirror them with a custom dark/gold dropdown.
+// Selecting an entry writes back to the original <select> and dispatches the
+// normal input/change events, so all existing smith logic stays untouched.
 ppaPatchRegex(
-  'blacksmith dark sharpening selects',
-  /\.pill\{height:30px;padding:0 10px;border:1px solid #49351c;border-radius:4px;background:#0d1114;color:#bfb5a4;font-size:9px;cursor:pointer\}/,
-  ".pill{height:30px;padding:0 10px;border:1px solid #49351c;border-radius:4px;background:#0d1114;color:#bfb5a4;font-size:9px;cursor:pointer}\n"+
-  "html,body{color-scheme:dark}\n"+
-  "select.pill{color-scheme:dark!important;background:#0d1114!important;color:#f0c166!important;border-color:#7a5528!important}\n"+
-  "select.pill option,select.pill optgroup{background:#15110c!important;color:#f0c166!important}"
+  'blacksmith custom dark sharpening selects',
+  /function\\s+inspectSmithItem\\(it,context\\)\\s*\\{/,
+  ppaEscapeSrcdocCode(`function ppaInstallSmithCustomSelects(){
+  if(!document.getElementById('ppaSmithSelectStyle')){
+    var st=document.createElement('style');
+    st.id='ppaSmithSelectStyle';
+    st.textContent=
+      '.ppaSmithSelect{display:inline-block;position:relative;vertical-align:middle;min-width:120px}'+
+      '.ppaSmithSelectBtn{box-sizing:border-box;width:100%;height:30px;padding:0 28px 0 10px;border:1px solid #7a5528;border-radius:4px;background:#0d1114;color:#f0c166;font:9px monospace;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}'+
+      '.ppaSmithSelectBtn:after{content:"⌄";position:absolute;right:9px;top:50%;transform:translateY(-55%);color:#e6b75b;font-size:14px}'+
+      '.ppaSmithSelectBtn:disabled{opacity:.45}'+
+      '.ppaSmithSelectMenu{position:fixed;z-index:2147483647;display:none;box-sizing:border-box;max-height:260px;overflow:auto;border:1px solid #8b622f;border-radius:5px;background:#100d09;box-shadow:0 10px 28px rgba(0,0,0,.72);padding:3px}'+
+      '.ppaSmithSelectMenu.on{display:block}'+
+      '.ppaSmithSelectOpt{display:block;box-sizing:border-box;width:100%;min-height:34px;padding:9px 10px;border:0;border-bottom:1px solid #342717;background:#100d09;color:#e8be70;font:9px monospace;text-align:left}'+
+      '.ppaSmithSelectOpt:last-child{border-bottom:0}'+
+      '.ppaSmithSelectOpt:active,.ppaSmithSelectOpt.sel{background:#2b1d0d;color:#ffd98c}'+
+      '.ppaSmithSelectOpt:disabled{opacity:.4}'+
+      'select.ppaSmithNative{position:absolute!important;left:-99999px!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+
+  function closeAll(except){
+    Array.prototype.forEach.call(document.querySelectorAll('.ppaSmithSelectMenu.on'),function(m){
+      if(m!==except)m.classList.remove('on');
+    });
+  }
+
+  function labelFor(sel){
+    var o=sel.options&&sel.selectedIndex>=0?sel.options[sel.selectedIndex]:null;
+    return o?String(o.textContent||o.label||o.value||'').trim():'Выбрать';
+  }
+
+  function positionMenu(btn,menu){
+    var r=btn.getBoundingClientRect();
+    var w=Math.max(120,Math.round(r.width));
+    menu.style.width=w+'px';
+    menu.style.left=Math.max(4,Math.min(window.innerWidth-w-4,r.left))+'px';
+    var below=window.innerHeight-r.bottom-6;
+    var mh=Math.min(260,Math.max(80,menu.scrollHeight||180));
+    if(below>=Math.min(mh,160)){
+      menu.style.top=(r.bottom+3)+'px';
+      menu.style.bottom='auto';
+    }else{
+      menu.style.top='auto';
+      menu.style.bottom=Math.max(4,window.innerHeight-r.top+3)+'px';
+    }
+  }
+
+  function rebuild(sel,btn,menu){
+    btn.textContent=labelFor(sel);
+    btn.disabled=!!sel.disabled;
+    menu.innerHTML='';
+    Array.prototype.forEach.call(sel.options||[],function(o){
+      var b=document.createElement('button');
+      b.type='button';
+      b.className='ppaSmithSelectOpt'+(o.selected?' sel':'');
+      b.textContent=String(o.textContent||o.label||o.value||'').trim();
+      b.disabled=!!o.disabled;
+      b.onclick=function(ev){
+        ev.preventDefault();ev.stopPropagation();
+        if(o.disabled)return;
+        sel.value=o.value;
+        try{sel.dispatchEvent(new Event('input',{bubbles:true}))}catch(_){}
+        try{sel.dispatchEvent(new Event('change',{bubbles:true}))}catch(_){}
+        btn.textContent=labelFor(sel);
+        menu.classList.remove('on');
+        setTimeout(function(){ppaRefreshSmithCustomSelects()},0);
+      };
+      menu.appendChild(b);
+    });
+  }
+
+  function upgrade(sel){
+    if(!sel||sel.tagName!=='SELECT'||!sel.classList.contains('pill'))return;
+    if(sel.dataset.ppaSmithCustom==='1'){
+      var oldBtn=sel.__ppaSmithBtn,oldMenu=sel.__ppaSmithMenu;
+      if(oldBtn&&oldMenu)rebuild(sel,oldBtn,oldMenu);
+      return;
+    }
+
+    var r=sel.getBoundingClientRect();
+    var host=document.createElement('span');
+    host.className='ppaSmithSelect';
+    host.style.width=Math.max(120,Math.round(r.width||160))+'px';
+    sel.parentNode.insertBefore(host,sel);
+    host.appendChild(sel);
+
+    var btn=document.createElement('button');
+    btn.type='button';
+    btn.className='ppaSmithSelectBtn';
+    host.appendChild(btn);
+
+    var menu=document.createElement('div');
+    menu.className='ppaSmithSelectMenu';
+    document.body.appendChild(menu);
+
+    sel.dataset.ppaSmithCustom='1';
+    sel.classList.add('ppaSmithNative');
+    sel.__ppaSmithBtn=btn;
+    sel.__ppaSmithMenu=menu;
+
+    rebuild(sel,btn,menu);
+
+    btn.onclick=function(ev){
+      ev.preventDefault();ev.stopPropagation();
+      if(btn.disabled)return;
+      var opening=!menu.classList.contains('on');
+      closeAll(menu);
+      if(opening){
+        rebuild(sel,btn,menu);
+        menu.classList.add('on');
+        positionMenu(btn,menu);
+      }else menu.classList.remove('on');
+    };
+    sel.addEventListener('change',function(){rebuild(sel,btn,menu)});
+  }
+
+  window.ppaRefreshSmithCustomSelects=function(){
+    Array.prototype.forEach.call(document.querySelectorAll('select.pill'),upgrade);
+    Array.prototype.forEach.call(document.querySelectorAll('.ppaSmithSelectMenu'),function(m){
+      var owner=null;
+      Array.prototype.some.call(document.querySelectorAll('select[data-ppa-smith-custom="1"]'),function(s){
+        if(s.__ppaSmithMenu===m){owner=s;return true}return false;
+      });
+      if(!owner||!document.documentElement.contains(owner)){try{m.remove()}catch(_){}}
+    });
+  };
+
+  if(!window.__ppaSmithSelectGlobalHandlers){
+    window.__ppaSmithSelectGlobalHandlers=1;
+    document.addEventListener('click',function(e){
+      if(!e.target.closest||(!e.target.closest('.ppaSmithSelect')&&!e.target.closest('.ppaSmithSelectMenu')))closeAll();
+    },true);
+    window.addEventListener('resize',function(){closeAll()});
+    window.addEventListener('scroll',function(){closeAll()},true);
+  }
+
+  ppaRefreshSmithCustomSelects();
+  if(!window.__ppaSmithSelectTimer)window.__ppaSmithSelectTimer=setInterval(ppaRefreshSmithCustomSelects,700);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ppaInstallSmithCustomSelects);
+else setTimeout(ppaInstallSmithCustomSelects,0);
+
+function inspectSmithItem(it,context){`)
 );
 
-if(!output.includes("select.pill{color-scheme:dark!important") ||
-   !output.includes("select.pill option,select.pill optgroup{background:#15110c!important;color:#f0c166!important}")) {
-  throw new Error('Blacksmith dark native select styling did not apply');
+if(!output.includes("id='ppaSmithSelectStyle'") ||
+   !output.includes("select.ppaSmithNative") ||
+   !output.includes("ppaRefreshSmithCustomSelects")) {
+  throw new Error('Blacksmith custom select patch did not apply');
 }
 /* ======================================================================== */
 
