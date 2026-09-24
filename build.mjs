@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v582-clan-boss-semi-server-rollback-20260925';
+const CLIENT_BUILD = 'v583-clan-boss-authoritative-core-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6810,6 +6810,22 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !realtimeClient.includes("if(p.pt!==undefined)r.petName=")) {
     throw new Error('Remote Great Ruri visibility/runtime sync patch missing');
   }
+  if (!realtimeServer.includes('CLAN_BOSS_RESPAWN_MS = 12 * 60 * 60 * 1000') ||
+      !realtimeServer.includes("m.type === 'clan-boss-enter'") ||
+      !realtimeServer.includes("m.type === 'clan-boss-hit'") ||
+      !realtimeServer.includes("type:'clan-boss-defeated'") ||
+      !realtimeServer.includes("return 'clan-boss:' + String(clanId") ||
+      !realtimeClient.includes('window.PPA_CLAN_BOSS_ENTER=clanBossEnter') ||
+      !realtimeClient.includes('window.PPA_CLAN_BOSS_DAMAGE=clanBossDamage') ||
+      !realtimeClient.includes("type:'clan-boss-hit'") ||
+      !dungeonMobEvents.includes('e&&e.isClanBoss&&window.PPA_CLAN_BOSS_DAMAGE') ||
+      !worldCombat.includes("s==='clanboss1'") ||
+      !worldCombat.includes("s==='clansiege'||s==='clanboss1'") ||
+      !onlineClient.includes("String(req.action||'')==='startRaid'") ||
+      !clanOnline.includes("code:'REALTIME_REQUIRED'")) {
+    throw new Error('Single-path realtime clan boss core is incomplete');
+  }
+
   if (!clanOnline.includes('CREATE TABLE IF NOT EXISTS clan_trades') ||
       !clanOnline.includes("if(a==='requestTrade')") ||
       !clanOnline.includes("if(a==='setOffer')") ||
