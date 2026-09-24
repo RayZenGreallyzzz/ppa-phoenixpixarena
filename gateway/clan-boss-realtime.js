@@ -17,20 +17,23 @@
   }
   function markManualExit(){manualExitUntil=Date.now()+4500}
   function normalizeClanBossStartupScene(){
-    if(window.__PPA_CLAN_BOSS_STARTUP_NORMALIZED)return;
-    window.__PPA_CLAN_BOSS_STARTUP_NORMALIZED=true;
     try{
-      if(!inScene())return;
-      // clanboss1 can remain in the persisted player save. A fresh game launch
-      // must never resume directly inside a raid arena; raid entry is explicit.
+      if(!inScene())return false;
+      if(window.__PPA_CLAN_BOSS_SESSION_ENTERED===true)return false;
+      // A saved/local/cloud clanboss1 is never a valid login position.
+      // Only the live "ВОЙТИ К БОССУ" action authorizes this scene for the
+      // current page session, so late cloud restore cannot put the player back.
       markManualExit();
       try{if(P){P.tid=null;P.attacking=false}}catch(_){}
       try{if(typeof cancelSmartAttack==='function')cancelSmartAttack()}catch(_){}
       if(typeof changeScene==='function')changeScene('safe');
       else if(typeof window.changeScene==='function')window.changeScene('safe');
       else if(typeof P!=='undefined'&&P)P.scene='safe';
-      try{if(typeof saveGame==='function')setTimeout(function(){try{saveGame()}catch(_){}},120)}catch(_){}
-    }catch(_){}
+      setTimeout(function(){
+        try{if(typeof saveGame==='function')saveGame()}catch(_){}
+      },120);
+      return true;
+    }catch(_){return false}
   }
   function installSceneGuard(){
     if(sceneGuardInstalled)return true;
@@ -248,10 +251,13 @@
     installTrack();
     installSceneGuard();
     bindManualExit();
+    if(normalizeClanBossStartupScene())return;
     if(inScene()){
       var b=boss()||ensureBoss(false);
       if(b&&lastState)apply(lastState);else lockBoss(b);
       request(false);
+    }else if(Date.now()>Number(window.__PPA_CLAN_BOSS_ENTRY_GRACE_UNTIL||0)){
+      window.__PPA_CLAN_BOSS_SESSION_ENTERED=false;
     }
   },350);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){installTrack();installSceneGuard();bindManualExit()},50)},{once:true});else setTimeout(function(){installTrack();installSceneGuard();bindManualExit()},50);
