@@ -1107,6 +1107,12 @@
   window.PPA_RT_SEND=send;
   window.PPA_CLAN_BOSS_ENTER=clanBossEnter;
   window.PPA_CLAN_BOSS_DAMAGE=clanBossDamage;
+  window.PPA_CLAN_BOSS_SERVER_ACTIVE=function(){try{return !!(RT.clanBossRoom&&typeof P!=='undefined'&&P&&P.scene==='clanboss1')}catch(_){return false}};
+  window.ppaClanBossTrackDamageLocal=function(amount){
+    if(window.PPA_CLAN_BOSS_SERVER_ACTIVE&&window.PPA_CLAN_BOSS_SERVER_ACTIVE())return amount;
+    try{if(typeof clanBossTrackDamage==='function')return clanBossTrackDamage(amount)}catch(_){}
+    return amount;
+  };
   window.PPA_CLAN_BOSS_LEAVE=function(){return clanBossLeave(true)};
   window.PPA_PK_CLEAR_TARGET=function(){RT.pkTargetId='';RT.pkAutoTarget=false;try{if(P)P.tid=null}catch(_){};return true};
   window.PPA_PK_TARGET_ID=function(){return String(RT.pkTargetId||'')};
