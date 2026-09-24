@@ -49,7 +49,9 @@
       btn.style.transform='scale(.98)';
     }catch(_){}
     try{
-      w.__PPA_CLAN_BOSS_SESSION_ENTERED=true;
+      // Do not authorize the arena before the server confirms startRaid.
+      // A stale/failed click must never make a restored clanboss1 scene valid.
+      w.__PPA_CLAN_BOSS_SESSION_ENTERED=false;
       w.__PPA_CLAN_BOSS_ENTRY_GRACE_UNTIL=Date.now()+2500;
       if(doc&&doc.body)doc.body.dataset.ppaBossEntering='1';
       if(typeof w.showPickup==='function')w.showPickup('ВХОД К КЛАНОВОМУ БОССУ…','#ffd36a');
@@ -67,6 +69,10 @@
       if(!(r&&r.ok)){
         throw new Error((r&&r.message)||'Сервер не подтвердил вход к боссу');
       }
+      // Only a successful server-confirmed startRaid authorizes clanboss1
+      // for this page session. This flag is intentionally runtime-only.
+      w.__PPA_CLAN_BOSS_SESSION_ENTERED=true;
+      w.__PPA_CLAN_BOSS_ENTRY_AUTH_UNTIL=Date.now()+10000;
       // Handler owns the normal transition. Fallback only if it did not move us.
       setTimeout(function(){
         try{
@@ -74,6 +80,7 @@
         }catch(_){}
       },80);
     }catch(e){
+      try{w.__PPA_CLAN_BOSS_SESSION_ENTERED=false;w.__PPA_CLAN_BOSS_ENTRY_AUTH_UNTIL=0}catch(_){}
       notice(w,String(e&&e.message||e||'Не удалось войти к боссу'),true);
       try{
         btn.disabled=false;
