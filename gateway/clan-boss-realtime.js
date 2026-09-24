@@ -16,6 +16,22 @@
     }catch(_){return false}
   }
   function markManualExit(){manualExitUntil=Date.now()+4500}
+  function normalizeClanBossStartupScene(){
+    if(window.__PPA_CLAN_BOSS_STARTUP_NORMALIZED)return;
+    window.__PPA_CLAN_BOSS_STARTUP_NORMALIZED=true;
+    try{
+      if(!inScene())return;
+      // clanboss1 can remain in the persisted player save. A fresh game launch
+      // must never resume directly inside a raid arena; raid entry is explicit.
+      markManualExit();
+      try{if(P){P.tid=null;P.attacking=false}}catch(_){}
+      try{if(typeof cancelSmartAttack==='function')cancelSmartAttack()}catch(_){}
+      if(typeof changeScene==='function')changeScene('safe');
+      else if(typeof window.changeScene==='function')window.changeScene('safe');
+      else if(typeof P!=='undefined'&&P)P.scene='safe';
+      try{if(typeof saveGame==='function')setTimeout(function(){try{saveGame()}catch(_){}},120)}catch(_){}
+    }catch(_){}
+  }
   function installSceneGuard(){
     if(sceneGuardInstalled)return true;
     var base=null;
@@ -225,6 +241,8 @@
   window.PPA_CLAN_BOSS_RT_START=function(st){apply(st);setTimeout(function(){ensureBoss(true);apply(lastState);request(true)},120);setTimeout(function(){ensureBoss(true);apply(lastState)},500);return true};
   window.PPA_CLAN_BOSS_RT_HIT=hit;
   window.PPA_CLAN_BOSS_RT_DIAG=function(){var b=boss();return{installed:installed,scene:inScene(),room:(rtDiag()||{}).room||'',clanId:clanId(),state:lastState,bossPresent:!!b,bossLocked:!!(b&&b.__ppaClanBossRtLocked),entityCount:(typeof EN!=='undefined'&&Array.isArray(EN)?EN.length:-1),lastSpawnMethod:lastSpawnMethod,lastSpawnTry:lastSpawnTry,lastRequest:lastRequest,lastHitAt:lastHitAt,lastHitAmount:lastHitAmount,sceneGuard:sceneGuardInstalled,manualExitUntil:manualExitUntil}};
+
+  normalizeClanBossStartupScene();
 
   setInterval(function(){
     installTrack();
