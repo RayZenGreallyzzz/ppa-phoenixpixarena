@@ -49,6 +49,7 @@
       btn.style.transform='scale(.98)';
     }catch(_){}
     try{
+      w.__PPA_CLAN_BOSS_ENTRY_GRACE_UNTIL=Date.now()+2500;
       if(doc&&doc.body)doc.body.dataset.ppaBossEntering='1';
       if(typeof w.showPickup==='function')w.showPickup('ВХОД К КЛАНОВОМУ БОССУ…','#ffd36a');
     }catch(_){}
