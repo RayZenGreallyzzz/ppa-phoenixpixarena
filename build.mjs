@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v586-clan-boss-qa-helper-fix-20260925';
+const CLIENT_BUILD = 'v587-blood-mistress-loot-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6760,6 +6760,81 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
 }
 /* ======================================================================== */
 
+/* === CLAN BOSS REWARD LEXICAL BRIDGE ==================================== */
+// Realtime server owns the reward roll. This bridge only materializes that
+// already-decided reward through the game's native loot factories.
+ppaPatchRegex(
+  'clan boss reward lexical bridge',
+  /function\s+runeUiState\(\)\s*\{/,
+  `function ppaClanBossSpawnReward(pkt){
+  try{
+    pkt=pkt&&typeof pkt==='object'?pkt:{};
+    if(String(pkt.bossId||'')!=='clan_boss_1')return false;
+    var e=null;
+    try{
+      if(typeof EN!=='undefined'&&Array.isArray(EN)){
+        for(var i=0;i<EN.length;i++)if(EN[i]&&EN[i].isClanBoss){e=EN[i];break}
+      }
+    }catch(_){}
+    if(!e)e={x:(typeof P!=='undefined'&&P?Number(P.x)||0:0),y:(typeof P!=='undefined'&&P?Number(P.y)||0:0),lvl:30,isClanBoss:true};
+
+    var green=Math.max(0,Math.min(20,Math.floor(Number(pkt.greenResources)||0)));
+    var blue=Math.max(0,Math.min(20,Math.floor(Number(pkt.blueResources)||0)));
+    var stones=Math.max(0,Math.min(20,Math.floor(Number(pkt.normalStones)||0)));
+
+    for(var g=0;g<green;g++)if(typeof pushMaterialDrop==='function')pushMaterialDrop(e,'uncommon',1);
+    for(var b=0;b<blue;b++)if(typeof pushMaterialDrop==='function')pushMaterialDrop(e,'rare',1);
+    if(stones>0&&typeof pushStoneDrop==='function')pushStoneDrop(e,'normal',stones);
+    if(pkt.premiumStone&&typeof pushStoneDrop==='function')pushStoneDrop(e,'premium',1);
+
+    if(pkt.blueGear){
+      if(typeof v232PushGear==='function')v232PushGear(e,'rare');
+      else if(typeof genItem==='function'&&typeof LOOT!=='undefined'&&Array.isArray(LOOT)){
+        var it=genItem(30,false,'rare');
+        if(it)LOOT.push({x:e.x+(Math.random()-.5)*30,y:e.y+(Math.random()-.5)*30,kind:'gear',item:it,gear:it,bob:Math.random()*6});
+      }
+    }
+
+    if(pkt.grayRune&&typeof RUNE_TYPES!=='undefined'&&typeof runeKey==='function'&&typeof runeDefByKey==='function'&&typeof LOOT!=='undefined'&&Array.isArray(LOOT)){
+      var types=Object.keys(RUNE_TYPES||{});
+      if(types.length){
+        var idx=Math.abs(Math.floor(Number(pkt.runeRoll)||0))%types.length;
+        var d=runeDefByKey(runeKey(types[idx],'common'));
+        if(d)LOOT.push({
+          x:e.x+(Math.random()-.5)*34,y:e.y+(Math.random()-.5)*34,
+          kind:'statRune',runeKey:d.key,name:d.name,icon:d.icon,img:d.img,
+          rarity:d.rarity,amount:1,bob:Math.random()*6
+        });
+      }
+    }
+
+    try{
+      if(typeof showPickup==='function'){
+        var msg='ВЛАДЫЧИЦА · НАГРАДА';
+        if(Number(pkt.clanCoins)>0)msg+=' · монеты клана +'+Math.floor(Number(pkt.clanCoins)||0);
+        showPickup(msg,'#ffd36a');
+      }
+    }catch(_){}
+    return true;
+  }catch(err){
+    console.warn('PPA clan boss reward materialize',err);
+    return false;
+  }
+}
+window.PPA_CLAN_BOSS_SPAWN_REWARD=ppaClanBossSpawnReward;
+function runeUiState(){`
+);
+if(!output.includes('function ppaClanBossSpawnReward(pkt)')||
+   !output.includes("pushMaterialDrop(e,'uncommon',1)")||
+   !output.includes("pushMaterialDrop(e,'rare',1)")||
+   !output.includes("pushStoneDrop(e,'normal',stones)")||
+   !output.includes("v232PushGear(e,'rare')")||
+   !output.includes("runeKey(types[idx],'common')")||
+   !output.includes('window.PPA_CLAN_BOSS_SPAWN_REWARD=ppaClanBossSpawnReward')){
+  throw new Error('Clan boss reward lexical bridge did not apply');
+}
+/* ======================================================================== */
+
 /* === CLAN BOSS SINGLE DAMAGE PATH ======================================== */
 // The packed game already calls clanBossTrackDamage() after its native attack
 // bookkeeping. In realtime raids the actual damage has already been sent once
@@ -6790,6 +6865,7 @@ if(_ppaClanBossTrackCalls<1){
   const dungeonMobEvents=fs.readFileSync(path.join(ROOT,'gateway/dungeon-mob-events.js'),'utf8');
   const dungeonDropSlotsAudit=fs.readFileSync(path.join(ROOT,'gateway/dungeon-drop-slots.js'),'utf8');
   const bossDropBoost=fs.readFileSync(path.join(ROOT,'gateway/boss-drop-boost.js'),'utf8');
+  const clanBossLoot=fs.readFileSync(path.join(ROOT,'gateway/clan-boss-loot.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
   const mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');
@@ -6837,7 +6913,16 @@ if(_ppaClanBossTrackCalls<1){
       !clanOnline.includes('clanBossUiReadyAt') ||
       !realtimeServer.includes("m.type === 'clan-boss-enter'") ||
       !realtimeServer.includes("m.type === 'clan-boss-hit'") ||
+      !realtimeServer.includes("m.type === 'clan-boss-reward-ack'") ||
       !realtimeServer.includes("type:'clan-boss-defeated'") ||
+      !realtimeServer.includes("type:'clan-boss-reward'") ||
+      !realtimeServer.includes('clanBossRollMistressReward') ||
+      !realtimeServer.includes('greenResources:green') ||
+      !realtimeServer.includes('blueGear:Math.random()<0.12') ||
+      !realtimeServer.includes('premiumStone:Math.random()<0.04') ||
+      !realtimeServer.includes('grayRune:Math.random()<0.10') ||
+      !realtimeClient.includes("m.type==='clan-boss-reward'") ||
+      !realtimeClient.includes('PPA_CLAN_BOSS_SPAWN_REWARD') ||
       !realtimeServer.includes("return 'clan-boss:' + String(clanId") ||
       !realtimeClient.includes('window.PPA_CLAN_BOSS_ENTER=clanBossEnter') ||
       !realtimeClient.includes('window.PPA_CLAN_BOSS_DAMAGE=clanBossDamage') ||
@@ -6962,9 +7047,25 @@ if(_ppaClanBossTrackCalls<1){
   }
   if (!bossDropBoost.includes('BONUS_ROLL_CHANCE=0.50') ||
       !bossDropBoost.includes('__ppaBossBonusRoll') ||
+      !bossDropBoost.includes('if(e.isDungeonElite||e.isClanBoss)return false') ||
+      !bossDropBoost.includes('if(e&&e.isClanBoss)return null') ||
       !bossDropBoost.includes('Keep the boss table itself exactly as configured') ||
       !bossDropBoost.includes('Бонусный бросок таблицы босса')) {
     throw new Error('Boss drop boost helper incomplete');
+  }
+  if (!clanBossLoot.includes('__PPA_CLAN_BOSS_LOOT_V1') ||
+      !clanBossLoot.includes("['Зелёный ресурс ×2–4','100%']") ||
+      !clanBossLoot.includes("['Синий / редкий ресурс ×1–2','100%']") ||
+      !clanBossLoot.includes("['Обычный камень заточки ×2–4','100%']") ||
+      !clanBossLoot.includes("['Синий шмот / оружие · случайный слот и класс','12%']") ||
+      !clanBossLoot.includes("['Премиум камень заточки ×1','4%']") ||
+      !clanBossLoot.includes("['Серая универсальная руна ×1 · случайный тип','10%']") ||
+      !clanBossLoot.includes("['Доп. зелёный или синий ресурс ×1','15%']") ||
+      clanBossLoot.includes('Золото') ||
+      clanBossLoot.includes('PPA ×1') ||
+      clanBossLoot.includes('Случайный серый шмот') ||
+      clanBossLoot.includes('Бонусный бросок таблицы босса')) {
+    throw new Error('Blood Mistress clan boss loot table is incomplete');
   }
   try{new Function(dungeonDropSlotsAudit)}catch(err){throw new Error('Dungeon drop helper syntax invalid: '+String(err&&err.message||err))}
   if (!dungeonDropSlotsAudit.includes('__ppaApprovedDropRows') ||
@@ -7019,6 +7120,7 @@ const filesToPublish = [
   ['gateway/dungeon-mob-events.js','dungeon-mob-events.js','Dungeon mob event bridge missing'],
   ['gateway/dungeon-drop-slots.js','dungeon-drop-slots.js','Dungeon drop slot helper missing'],
   ['gateway/boss-drop-boost.js','boss-drop-boost.js','Boss drop boost helper missing'],
+  ['gateway/clan-boss-loot.js','clan-boss-loot.js','Clan boss loot helper missing'],
   ['gateway/ruri-event-drops.js','ruri-event-drops.js','Great Ruri event drops missing'],
   ['gateway/qa-test-access.js','qa-test-access.js','QA dungeon access helper missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
@@ -7044,6 +7146,7 @@ const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
 output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('chat-ui.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
 <script src="${js('dungeon-drop-slots.js')}"></script>
 <script src="${js('boss-drop-boost.js')}"></script>
+<script src="${js('clan-boss-loot.js')}"></script>
 <script src="${js('ruri-event-drops.js')}"></script>
 <script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
@@ -7061,6 +7164,7 @@ console.log('Dungeon 60 dragon: /game/dungeon60-dragon.js');
 console.log('Dungeon mob events: /game/dungeon-mob-events.js');
 console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
 console.log('Boss drop boost: /game/boss-drop-boost.js');
+console.log('Clan boss loot: /game/clan-boss-loot.js');
 console.log('Great Ruri event drops: /game/ruri-event-drops.js · TEST ACTIVE');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
