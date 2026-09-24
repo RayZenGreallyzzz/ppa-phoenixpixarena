@@ -424,7 +424,7 @@
       clanBossApplyState(m.bossState||Object.assign({},RT.clanBossState||{},{active:false,status:'cooldown',bossHp:0,bossReadyAt:Number(m.cooldownUntil)||0,cooldownUntil:Number(m.cooldownUntil)||0}));
       if(!RT.clanBossDefeatShown){
         RT.clanBossDefeatShown=true;
-        try{if(typeof showPickup==='function')showPickup('КЛАНОВЫЙ БОСС ПОВЕРЖЕН · ОТКАТ 12 ЧАСОВ','#ffd36a')}catch(_){}
+        try{if(typeof showPickup==='function')showPickup((m.bossState&&m.bossState.qaTest)?'ТЕСТ · КЛАНОВЫЙ БОСС · ОТКАТ 10 СЕКУНД':'КЛАНОВЫЙ БОСС ПОВЕРЖЕН · ОТКАТ 12 ЧАСОВ','#ffd36a')}catch(_){}
       }
       return;
     }
