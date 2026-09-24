@@ -3,13 +3,12 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import sharp from 'sharp';
-import { INVITE_IMAGE_BASE64 } from './src/invite-image.js';
 
 const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v565-invite-public-photo-20260924';
+const CLIENT_BUILD = 'v566-clan-boss-live-hotfix-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -84,19 +83,6 @@ const gameDir = path.join(publicDir, 'game');
 fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
-{
-  const inviteRaw=Buffer.from(INVITE_IMAGE_BASE64,'base64');
-  if(inviteRaw.length<10000)throw new Error('PHONIX invite image payload is too small');
-  const inviteOut=path.join(assetsDir,'phonix-invite.jpg');
-  await sharp(inviteRaw)
-    .rotate()
-    .resize({width:1280,height:720,fit:'cover',position:'centre',withoutEnlargement:true})
-    .jpeg({quality:92,mozjpeg:true})
-    .toFile(inviteOut);
-  const inviteMeta=await sharp(inviteOut).metadata();
-  if(inviteMeta.format!=='jpeg'||!inviteMeta.width||!inviteMeta.height)throw new Error('PHONIX invite public JPG build failed');
-  console.log('PHONIX invite public image: /assets/phonix-invite.jpg '+inviteMeta.width+'x'+inviteMeta.height);
-}
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
 for(const name of PPA_RURI_RESOURCE_FILES){
   fs.copyFileSync(path.join(ROOT,'assets-src',name),path.join(assetsDir,name));
