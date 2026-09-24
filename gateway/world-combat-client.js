@@ -13,12 +13,12 @@
 
   function combatScene(){
     var s=scene();
-    return s==='fartzone'||s==='dungeon'||s==='worldboss';
+    return s==='fartzone'||s==='dungeon'||s==='worldboss'||s==='clanboss1';
   }
 
   function pkZone(){
     var s=scene();
-    if(s==='safe'||s==='pvp1'||s==='pvpteam'||s==='clansiege')return false;
+    if(s==='safe'||s==='pvp1'||s==='pvpteam'||s==='clansiege'||s==='clanboss1')return false;
     // All ordinary non-safe gameplay maps are PvE+PvP zones.
     return true;
   }
