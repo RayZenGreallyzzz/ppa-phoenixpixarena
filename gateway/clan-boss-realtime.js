@@ -60,10 +60,12 @@
   }
   function installTrack(){
     if(installed)return true;
-    var fn=window.clanBossTrackDamage;
+    var fn=null;
+    try{if(typeof clanBossTrackDamage==='function')fn=clanBossTrackDamage}catch(_){}
+    if(typeof fn!=='function')fn=window.clanBossTrackDamage;
     if(typeof fn!=='function')return false;
     originalTrack=fn;
-    window.clanBossTrackDamage=function(amount){
+    var wrapped=function(amount){
       if(activeRoom()){
         hit(amount);
         var b=lockBoss(boss());
@@ -74,7 +76,9 @@
       }
       return originalTrack.apply(this,arguments);
     };
-    window.clanBossTrackDamage.__ppaClanBossRealtime=true;
+    wrapped.__ppaClanBossRealtime=true;
+    window.clanBossTrackDamage=wrapped;
+    try{clanBossTrackDamage=wrapped}catch(_){}
     installed=true;
     return true;
   }
