@@ -2498,7 +2498,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     if (m.type === 'room') {
       let requested = cleanRoom(m.room);
-      if(isClanBossRoom(requested)&&(!a.clanBossRoom||cleanRoom(a.clanBossRoom)!==requested))requested='safe';
+      if(requested==='clanboss1'||(isClanBossRoom(requested)&&(!a.clanBossRoom||cleanRoom(a.clanBossRoom)!==requested)))requested='safe';
       const d = dungeonInfo(requested);
       if (d) {
         const current = dungeonInfo(a.room);
@@ -2543,7 +2543,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       const oldRoom = cleanRoom(a.room);
       let wantedRoom = m.room != null ? cleanRoom(m.room) : oldRoom;
-      if(isClanBossRoom(wantedRoom)&&(!a.clanBossRoom||cleanRoom(a.clanBossRoom)!==wantedRoom))wantedRoom='safe';
+      if(wantedRoom==='clanboss1'||(isClanBossRoom(wantedRoom)&&(!a.clanBossRoom||cleanRoom(a.clanBossRoom)!==wantedRoom)))wantedRoom='safe';
       const wantedDungeon = dungeonInfo(wantedRoom);
       const currentDungeon = dungeonInfo(oldRoom);
       let currentRoom = oldRoom;
