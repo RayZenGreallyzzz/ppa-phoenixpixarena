@@ -6,6 +6,7 @@ import { RealtimeHub } from './realtime-stable.js';
 import { handleSocialRequest } from './social.js';
 import { handleClassSyncRequest } from './class-sync.js';
 import { handleWithdrawBotRequest } from './withdraw-bot.js';
+import { handleGameBotRequest } from './game-bot.js';
 
 export { RealtimeHub };
 
@@ -62,6 +63,8 @@ export default {
         });
       }
     }
+    const gameBot = await handleGameBotRequest(request, env);
+    if (gameBot) return gameBot;
     const withdrawBot = await handleWithdrawBotRequest(request, env);
     if (withdrawBot) return withdrawBot;
     const realtime = await handleRealtimeRequest(request, env);
