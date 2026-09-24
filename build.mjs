@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v547-pickaxe-expiry-build-fix-20260924';
+const CLIENT_BUILD = 'v548-fart-guards-24k-hp-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2587,13 +2587,14 @@ function updateFartZoneSystem(){
   if(Array.isArray(EN)){
     for(let _fi=0;_fi<EN.length;_fi++){
       const _fg=EN[_fi];
-      if(!_fg||!_fg.isFartGuard||_fg.__ppaFartHpPlus8000===true)continue;
+      if(!_fg||!_fg.isFartGuard||_fg.__ppaFartHp24000===true)continue;
       const _oldMax=Math.max(1,Number(_fg.mhp)||Number(_fg.hp)||1);
       const _oldHp=Number(_fg.hp);
-      _fg.__ppaFartHpPlus8000=true;
-      _fg.__ppaFartHpBeforeBonus=_oldMax;
-      _fg.mhp=_oldMax+8000;
-      if(Number.isFinite(_oldHp)&&_oldHp>0)_fg.hp=Math.min(_fg.mhp,_oldHp+8000);
+      const _missingHp=Number.isFinite(_oldHp)?Math.max(0,_oldMax-_oldHp):0;
+      _fg.__ppaFartHp24000=true;
+      _fg.__ppaFartHpBefore24000=_oldMax;
+      _fg.mhp=24000;
+      if(Number.isFinite(_oldHp)&&_oldHp>0)_fg.hp=Math.max(1,Math.min(24000,24000-_missingHp));
     }
   }
 
@@ -3790,9 +3791,10 @@ if(!output.includes("e.isDungeonElite=false;e.isElite=false;e.elite=false;e.elit
   throw new Error('Fart guard elite-state cleanup did not apply');
 }
 if(!output.includes("__ppaFartOwnType") ||
-   !output.includes("__ppaFartHpPlus8000=true") ||
-   !output.includes("_fg.mhp=_oldMax+8000")) {
-  throw new Error('Fart guard stable name/HP patch did not apply');
+   !output.includes("__ppaFartHp24000=true") ||
+   !output.includes("_fg.mhp=24000") ||
+   !output.includes("_missingHp")) {
+  throw new Error('Fart guard stable name/24k HP patch did not apply');
 }
 /* ======================================================================== */
 
@@ -6665,8 +6667,8 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
   if (!dungeonMobEvents.includes("rows.push(['p20',3913") ||
       !dungeonMobEvents.includes("DUNGEON21_BOSS_HP:9000)||9000)+5350") ||
       !dungeonMobEvents.includes("rows.push(['b60',36700") ||
-      !output.includes('__ppaFartHpPlus8000=true') ||
-      !output.includes('_fg.mhp=_oldMax+8000')) {
+      !output.includes('__ppaFartHp24000=true') ||
+      !output.includes('_fg.mhp=24000')) {
     throw new Error('Boss/Fart HP balance patch incomplete');
   }
 }
