@@ -1,7 +1,7 @@
 (function(){
   'use strict';
 
-  var installed=false,originalTrack=null,applying=0,lastState=null,lastRequest=0,lastHitAt=0;
+  var installed=false,originalTrack=null,applying=0,lastState=null,lastRequest=0,lastHitAt=0,lastHitAmount=0,lastHitTokenAt=0;
 
   function inScene(){try{return typeof P!=='undefined'&&P&&P.scene==='clanboss1'}catch(_){return false}}
   function rtDiag(){try{return window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null}catch(_){return null}}
@@ -20,7 +20,11 @@
     if(!b||b.__ppaClanBossRtLocked)return b;
     var hp=Math.max(0,Number(b.hp)||0),mhp=Math.max(1,Number(b.mhp)||hp||1);
     try{
-      Object.defineProperty(b,'hp',{configurable:true,enumerable:true,get:function(){return hp},set:function(v){if(applying>0||!activeRoom())hp=Math.max(0,Number(v)||0)}});
+      Object.defineProperty(b,'hp',{configurable:true,enumerable:true,get:function(){return hp},set:function(v){
+        var next=Math.max(0,Number(v)||0);
+        if(applying>0||!activeRoom()){hp=next;return}
+        if(next<hp)hit(hp-next);
+      }});
       Object.defineProperty(b,'mhp',{configurable:true,enumerable:true,get:function(){return mhp},set:function(v){if(applying>0||!activeRoom())mhp=Math.max(1,Number(v)||1)}});
       Object.defineProperty(b,'__ppaClanBossRtLocked',{value:true,configurable:true});
     }catch(_){}
@@ -53,9 +57,11 @@
   function hit(amount){
     amount=Math.max(0,Number(amount)||0);
     if(!(amount>0)||!activeRoom())return false;
-    var now=Date.now();lastHitAt=now;
+    var now=Date.now(),rounded=Math.round(amount*100)/100;
+    if(Math.abs(rounded-lastHitAmount)<0.01&&now-lastHitTokenAt<70)return true;
+    lastHitAmount=rounded;lastHitTokenAt=now;lastHitAt=now;
     var b=boss(),bossId=String(lastState&&lastState.bossId||b&&b.clanBossId||b&&b.id||'clan_boss_1');
-    send({type:'clan-boss-hit',bossId:bossId,amount:Math.round(amount*100)/100,event:'cb:'+now+':'+Math.random().toString(36).slice(2,8)});
+    send({type:'clan-boss-hit',bossId:bossId,amount:rounded,event:'cb:'+now+':'+Math.random().toString(36).slice(2,8)});
     return true;
   }
   function installTrack(){
@@ -97,7 +103,7 @@
   window.PPA_CLAN_BOSS_RT_APPLY_STATE=apply;
   window.PPA_CLAN_BOSS_RT_START=function(st){apply(st);setTimeout(function(){request(true)},120);return true};
   window.PPA_CLAN_BOSS_RT_HIT=hit;
-  window.PPA_CLAN_BOSS_RT_DIAG=function(){return{installed:installed,scene:inScene(),room:(rtDiag()||{}).room||'',clanId:clanId(),state:lastState,bossLocked:!!(boss()&&boss().__ppaClanBossRtLocked),lastRequest:lastRequest,lastHitAt:lastHitAt}};
+  window.PPA_CLAN_BOSS_RT_DIAG=function(){return{installed:installed,scene:inScene(),room:(rtDiag()||{}).room||'',clanId:clanId(),state:lastState,bossLocked:!!(boss()&&boss().__ppaClanBossRtLocked),lastRequest:lastRequest,lastHitAt:lastHitAt,lastHitAmount:lastHitAmount}};
 
   setInterval(function(){
     installTrack();
