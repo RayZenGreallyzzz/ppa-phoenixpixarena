@@ -151,6 +151,11 @@
     lastState=Object.assign({},st);
     try{if(window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(lastState)}catch(_){}
     var b=lockBoss(boss()||ensureBoss(true));
+    if(b&&lastState.active===false&&Number(lastState.bossHp)<=0){
+      applying++;
+      try{b.hp=0;b.dead=true;b.hidden=true;b.x=-99999;b.y=-99999;b.sz=0}catch(_){}
+      finally{applying--}
+    }
     if(b){
       applying++;
       try{
