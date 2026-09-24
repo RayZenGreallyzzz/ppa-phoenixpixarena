@@ -371,6 +371,7 @@
 
   window.PPA_MOB_EVENT_DAMAGE=function(e,amount,meta){
     try{
+      if(e&&e.isClanBoss&&window.PPA_CLAN_BOSS_DAMAGE)return !!window.PPA_CLAN_BOSS_DAMAGE(e,amount,meta);
       if(applying||!active())return false;
       meta=(meta&&typeof meta==='object')?meta:{};
       var key=keyOf(e),dmg=Number(amount),mhp=Math.max(1,Number(e&&e.mhp)||Number(e&&e.hp)||1);
