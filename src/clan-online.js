@@ -12,7 +12,10 @@ async function schema(env){if(ready)return;const qs=[
 `CREATE TABLE IF NOT EXISTS clans(id TEXT PRIMARY KEY,name TEXT NOT NULL,name_key TEXT NOT NULL UNIQUE,leader_id TEXT NOT NULL,storage_unlocked INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)`,
 `CREATE TABLE IF NOT EXISTS clan_members(clan_id TEXT NOT NULL,telegram_id TEXT NOT NULL UNIQUE,role TEXT NOT NULL DEFAULT 'member',joined_at INTEGER NOT NULL,PRIMARY KEY(clan_id,telegram_id))`,
 `CREATE INDEX IF NOT EXISTS idx_clan_members_clan ON clan_members(clan_id)`,
-`CREATE TABLE IF NOT EXISTS clan_meta(clan_id TEXT PRIMARY KEY,permissions_json TEXT NOT NULL DEFAULT '{}',authority_json TEXT NOT NULL DEFAULT '{}',applications_json TEXT NOT NULL DEFAULT '[]',history_json TEXT NOT NULL DEFAULT '[]',events_json TEXT NOT NULL DEFAULT '[]',storage_json TEXT NOT NULL DEFAULT '[]',progress_json TEXT NOT NULL DEFAULT '{}',siege_reward_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL)`
+`CREATE TABLE IF NOT EXISTS clan_meta(clan_id TEXT PRIMARY KEY,permissions_json TEXT NOT NULL DEFAULT '{}',authority_json TEXT NOT NULL DEFAULT '{}',applications_json TEXT NOT NULL DEFAULT '[]',history_json TEXT NOT NULL DEFAULT '[]',events_json TEXT NOT NULL DEFAULT '[]',storage_json TEXT NOT NULL DEFAULT '[]',progress_json TEXT NOT NULL DEFAULT '{}',siege_reward_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL)`,
+`CREATE TABLE IF NOT EXISTS clan_trades(id TEXT PRIMARY KEY,clan_id TEXT NOT NULL,player_a TEXT NOT NULL,player_b TEXT NOT NULL,offer_a_json TEXT NOT NULL DEFAULT '{"items":[],"gold":0,"ppa":0}',offer_b_json TEXT NOT NULL DEFAULT '{"items":[],"gold":0,"ppa":0}',confirmed_a INTEGER NOT NULL DEFAULT 0,confirmed_b INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'active',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,expires_at INTEGER NOT NULL,completed_at INTEGER NOT NULL DEFAULT 0)`,
+`CREATE INDEX IF NOT EXISTS idx_clan_trades_players ON clan_trades(clan_id,player_a,player_b,status,updated_at)`,
+`CREATE TABLE IF NOT EXISTS clan_trade_guard(id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))`
 ];for(const q of qs)await env.DB.prepare(q).run();ready=true}
 async function ensurePlayer(env,u){const id=String(u.id),now=Date.now();await env.DB.prepare(`INSERT INTO players(telegram_id,telegram_username,telegram_first_name,telegram_last_name,nickname,nickname_key,class_key,created_at,updated_at,last_auth_at) VALUES(?1,?2,?3,?4,NULL,NULL,NULL,?5,?5,?5) ON CONFLICT(telegram_id) DO UPDATE SET telegram_username=excluded.telegram_username,telegram_first_name=excluded.telegram_first_name,telegram_last_name=excluded.telegram_last_name,last_auth_at=excluded.last_auth_at`).bind(id,String(u.username||''),String(u.first_name||''),String(u.last_name||''),now).run();return env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(id).first()}
 async function saveRow(env,id){const r=await env.DB.prepare('SELECT version,state_json FROM saves WHERE telegram_id=?1').bind(id).first();return r?{row:r,state:sj(r.state_json||'{}',{})}:null}
@@ -69,7 +72,120 @@ async function clearPendingApplications(env,id,exceptClanId=''){
   }
 }
 function can(m,meta,key){return m.role==='leader'||!!(meta.authority&&meta.authority[m.telegram_id]&&meta.authority[m.telegram_id][key])}
-async function state(env,id,p,includeDirectory=false){const m=await mem(env,id),name=nm((p&&p.nickname)||(p&&p.telegram_first_name)||('ID '+id));const base={connected:true,clan:null,self:{id,name,role:''},members:[],permissions:{},applications:[],authority:{},storageUnlocked:false,storage:{used:0,max:500,items:[]},history:[],events:[],bosses:[],wars:[],tradeSession:null,tradeEligible:false,clanProgress:progUi(prog0()),siegeReward:{}};const s=await saveRow(env,id);base.tradeEligible=act(s&&s.state);if(includeDirectory){const d=await clanDirectory(env,id);base.clanDirectory=d;base.clanRanking=d.slice();}if(!m)return base;const c=await env.DB.prepare('SELECT * FROM clans WHERE id=?1').bind(m.clan_id).first();if(!c)return base;const rows=await env.DB.prepare(`SELECT cm.telegram_id,cm.role,cm.joined_at,p.nickname,p.telegram_first_name,p.telegram_username FROM clan_members cm LEFT JOIN players p ON p.telegram_id=cm.telegram_id WHERE cm.clan_id=?1 ORDER BY cm.joined_at`).bind(c.id).all(),meta=parseMeta(await metaRow(env,c.id));const members=(rows.results||[]).map(x=>({id:String(x.telegram_id),name:nm(x.nickname||x.telegram_first_name||x.telegram_username||('ID '+x.telegram_id)),role:x.role==='leader'?'Глава':'Участник',joinedAt:Number(x.joined_at)||0,tradeEligible:true,activated:true,contribution:Number(meta.progress.personalByMember&&meta.progress.personalByMember[x.telegram_id])||0}));base.clan={id:c.id,name:c.name,leaderId:String(c.leader_id),ownerId:String(c.leader_id),createdAt:Number(c.created_at)||0};base.members=members;base.self=members.find(x=>x.id===id)||base.self;base.permissions=meta.permissions;base.applications=meta.applications;base.authority=meta.authority;base.storageUnlocked=!!c.storage_unlocked;base.storage={used:meta.storage.length,max:500,items:meta.storage};base.history=meta.history;base.events=meta.events;base.clanProgress=progUi(meta.progress);base.siegeReward=meta.siegeReward;return base}
+const TRADE_TTL_MS=15*60*1000;
+const TRADE_DONE_VISIBLE_MS=5*60*1000;
+function trClone(v){return sj(JSON.stringify(v),null)}
+function trNum(v,max=1000000000,dec=0){v=Number(v);if(!Number.isFinite(v)||v<0)return 0;v=Math.min(max,v);const p=Math.pow(10,dec);return Math.round(v*p)/p}
+function trSig(it){return [String(it&&it.name||''),String(it&&it.slot||''),String(it&&it.rarity||''),String(it&&it.enh||0),String(it&&it.refId||''),String(it&&it.classKey||'')].join('|')}
+function trUid(it){return String(it&&(it.uid||it.itemUid||it.itemId)||'')}
+function trLocked(it){return !!(it&&(it.bound===true||it.tradeLocked===true||it.fartPickaxe===true||it.fartSlag===true||it.eventRewardStock===true))}
+function trBag(state){state.bag=Array.isArray(state.bag)?state.bag:[];return state.bag}
+function trCounter(state,kind){const k={material:'materials',stone:'stones',consumable:'consumables',grimoire:'grimoires',feather:'feathers'}[kind];if(!k)return null;state[k]=state[k]&&typeof state[k]==='object'?state[k]:{};return state[k]}
+function trResolveBag(state,raw){
+  const bag=trBag(state),x=raw&&typeof raw==='object'?(raw.item&&typeof raw.item==='object'?raw.item:raw):{};
+  const uid=String(x.uid||x.itemUid||x.itemId||raw&&raw.uid||'');
+  if(uid){const i=bag.findIndex(it=>it&&trUid(it)===uid);if(i>=0)return{i,item:bag[i]}}
+  const ref=Number(raw&&((raw.bagIndex!=null)?raw.bagIndex:((raw.index!=null)?raw.index:raw.ref)));
+  if(Number.isFinite(ref)&&ref>=0&&ref<bag.length&&bag[ref]){
+    const sig=String(raw&&raw.sig||trSig(x));if(!sig||trSig(bag[ref])===sig)return{i:ref,item:bag[ref]};
+  }
+  const sig=String(raw&&raw.sig||trSig(x));if(sig){const i=bag.findIndex(it=>it&&trSig(it)===sig);if(i>=0)return{i,item:bag[i]}}
+  return null;
+}
+function trNormalizeOffer(state,raw){
+  raw=raw&&typeof raw==='object'?raw:{};
+  if(raw.offer&&typeof raw.offer==='object')raw=raw.offer;
+  let arr=Array.isArray(raw.items)?raw.items:(Array.isArray(raw.offerItems)?raw.offerItems:(raw.item?[raw.item]:[]));
+  if(arr.length>12)throw Object.assign(new Error('В обмен можно положить максимум 12 позиций.'),{status:400});
+  const out={items:[],gold:trNum(raw.gold!=null?raw.gold:raw.coins,1000000000,0),ppa:trNum(raw.ppa,1000000000,2)},seen=new Set();
+  for(const entry of arr){
+    const wrap=entry&&typeof entry==='object'?entry:{},obj=wrap.item&&typeof wrap.item==='object'?wrap.item:wrap;
+    const kind=String(wrap.kind||obj.kind||'').toLowerCase();
+    if(['material','stone','consumable','grimoire','feather'].includes(kind)){
+      const refId=String(wrap.refId||obj.refId||obj.id||'').slice(0,80);
+      const qty=Math.max(1,Math.min(999,Math.floor(Number(wrap.qty||wrap.count||1))));
+      if(!refId)throw Object.assign(new Error('Не удалось определить ресурс для обмена.'),{status:400});
+      const counter=trCounter(state,kind),have=Math.max(0,Math.floor(Number(counter[refId])||0));
+      if(have<qty)throw Object.assign(new Error('Недостаточно предметов «'+String(obj.name||refId)+'».'),{status:409});
+      const key=kind+':'+refId;if(seen.has(key))throw Object.assign(new Error('Одинаковую позицию добавь в обмен один раз.'),{status:400});seen.add(key);
+      out.items.push({kind,refId,qty,item:{name:nm(obj.name||refId,60),rarity:String(obj.rarity||''),icon:String(obj.icon||obj.ic||''),img:String(obj.img||'')}});
+      continue;
+    }
+    const r=trResolveBag(state,wrap);
+    if(!r||!r.item)throw Object.assign(new Error('Предмет для обмена уже не найден в сумке.'),{status:409});
+    if(trLocked(r.item))throw Object.assign(new Error('Этот предмет нельзя передавать.'),{status:409});
+    const key='gear:'+(trUid(r.item)||('idx:'+r.i+':'+trSig(r.item)));if(seen.has(key))throw Object.assign(new Error('Один предмет нельзя положить в обмен дважды.'),{status:400});seen.add(key);
+    out.items.push({kind:'gear',uid:trUid(r.item),bagIndex:r.i,sig:trSig(r.item),qty:1,item:trClone(r.item)});
+  }
+  const gold=Math.max(0,Number(state.gold)||0),ppa=Math.max(0,Number(state.ppa)||0);
+  if(out.gold>gold)throw Object.assign(new Error('Недостаточно Gold для обмена.'),{status:409});
+  if(out.ppa>ppa)throw Object.assign(new Error('Недостаточно PPA для обмена.'),{status:409});
+  return out;
+}
+function trExtract(state,offer){
+  const bundle={gear:[],counters:[],gold:trNum(offer&&offer.gold,1000000000,0),ppa:trNum(offer&&offer.ppa,1000000000,2)};
+  const bag=trBag(state);
+  for(const x of (offer&&offer.items)||[]){
+    if(x.kind==='gear'){
+      const r=trResolveBag(state,x);if(!r||!r.item||trLocked(r.item))throw Object.assign(new Error('Один из предметов предложения изменился или исчез.'),{status:409});
+      bundle.gear.push(trClone(r.item));bag.splice(r.i,1);
+    }else{
+      const c=trCounter(state,x.kind),have=Math.max(0,Math.floor(Number(c&&c[x.refId])||0)),qty=Math.max(1,Math.floor(Number(x.qty)||1));
+      if(!c||have<qty)throw Object.assign(new Error('Один из ресурсов предложения уже недоступен.'),{status:409});
+      c[x.refId]=have-qty;bundle.counters.push({kind:x.kind,refId:x.refId,qty,item:x.item||{}});
+    }
+  }
+  if(Math.max(0,Number(state.gold)||0)<bundle.gold)throw Object.assign(new Error('Недостаточно Gold для подтверждённого обмена.'),{status:409});
+  if(Math.max(0,Number(state.ppa)||0)+1e-9<bundle.ppa)throw Object.assign(new Error('Недостаточно PPA для подтверждённого обмена.'),{status:409});
+  state.gold=Math.max(0,(Number(state.gold)||0)-bundle.gold);
+  state.ppa=Math.round((Math.max(0,Number(state.ppa)||0)-bundle.ppa)*100)/100;
+  return bundle;
+}
+function trReceive(state,bundle){
+  const bag=trBag(state);if(bag.length+(bundle.gear||[]).length>100)throw Object.assign(new Error('В сумке получателя недостаточно места.'),{status:409});
+  for(const it of bundle.gear||[])bag.push(it);
+  for(const x of bundle.counters||[]){const c=trCounter(state,x.kind);c[x.refId]=Math.max(0,Math.floor(Number(c[x.refId])||0))+Math.max(1,Math.floor(Number(x.qty)||1))}
+  state.gold=Math.max(0,Number(state.gold)||0)+trNum(bundle.gold,1000000000,0);
+  state.ppa=Math.round((Math.max(0,Number(state.ppa)||0)+trNum(bundle.ppa,1000000000,2))*100)/100;
+}
+async function trActive(env,cid,id,tradeId=''){
+  const now=Date.now();await env.DB.prepare("UPDATE clan_trades SET status='expired',updated_at=?1 WHERE status='active' AND expires_at<=?1").bind(now).run();
+  if(tradeId){const r=await env.DB.prepare("SELECT * FROM clan_trades WHERE id=?1 AND clan_id=?2 AND status='active' AND (player_a=?3 OR player_b=?3)").bind(String(tradeId),cid,id).first();if(r)return r}
+  return env.DB.prepare("SELECT * FROM clan_trades WHERE clan_id=?1 AND status='active' AND expires_at>?2 AND (player_a=?3 OR player_b=?3) ORDER BY updated_at DESC LIMIT 1").bind(cid,now,id).first();
+}
+async function trView(env,cid,id){
+  const now=Date.now();await env.DB.prepare("UPDATE clan_trades SET status='expired',updated_at=?1 WHERE status='active' AND expires_at<=?1").bind(now).run();
+  const r=await env.DB.prepare("SELECT * FROM clan_trades WHERE clan_id=?1 AND (player_a=?2 OR player_b=?2) AND ((status='active' AND expires_at>?3) OR (status='completed' AND completed_at>?4)) ORDER BY CASE WHEN status='active' THEN 0 ELSE 1 END,updated_at DESC LIMIT 1").bind(cid,id,now,now-TRADE_DONE_VISIBLE_MS).first();
+  if(!r)return null;
+  const mineA=String(r.player_a)===String(id),otherId=mineA?String(r.player_b):String(r.player_a);
+  const pr=await env.DB.prepare('SELECT nickname,telegram_first_name,telegram_username FROM players WHERE telegram_id=?1').bind(otherId).first();
+  const a=sj(r.offer_a_json||'{}',{items:[],gold:0,ppa:0}),b=sj(r.offer_b_json||'{}',{items:[],gold:0,ppa:0});
+  const mine=mineA?a:b,other=mineA?b:a,mc=mineA?!!r.confirmed_a:!!r.confirmed_b,oc=mineA?!!r.confirmed_b:!!r.confirmed_a;
+  return{id:String(r.id),tradeId:String(r.id),status:String(r.status),partnerId:otherId,targetId:otherId,otherId,partnerName:nm(pr&&pr.nickname||pr&&pr.telegram_first_name||pr&&pr.telegram_username||('ID '+otherId),24),myOffer:mine,mine,otherOffer:other,theirs:other,myConfirmed:mc,selfConfirmed:mc,otherConfirmed:oc,partnerConfirmed:oc,canExecute:String(r.status)==='active'&&mc&&oc,createdAt:Number(r.created_at)||0,updatedAt:Number(r.updated_at)||0,expiresAt:Number(r.expires_at)||0,completedAt:Number(r.completed_at)||0};
+}
+async function trExecute(env,cid,id,tradeId){
+  const tr=await trActive(env,cid,id,tradeId);if(!tr)throw Object.assign(new Error('Активный обмен не найден.'),{status:409});
+  if(!tr.confirmed_a||!tr.confirmed_b)throw Object.assign(new Error('Оба игрока должны подтвердить предложение.'),{status:409});
+  const sa=await saveRow(env,String(tr.player_a)),sb=await saveRow(env,String(tr.player_b));if(!sa||!sb)throw Object.assign(new Error('Облачный сейв одного из игроков не найден.'),{status:409});
+  if(!act(sa.state)||!act(sb.state))throw Object.assign(new Error('Обмен доступен только активированным аккаунтам.'),{status:403});
+  const aState=trClone(sa.state),bState=trClone(sb.state);
+  const oa=sj(tr.offer_a_json||'{}',{items:[],gold:0,ppa:0}),ob=sj(tr.offer_b_json||'{}',{items:[],gold:0,ppa:0});
+  const ba=trExtract(aState,oa),bb=trExtract(bState,ob);trReceive(aState,bb);trReceive(bState,ba);
+  const rawA=JSON.stringify(aState),rawB=JSON.stringify(bState);
+  if(enc.encode(rawA).byteLength>1_800_000||enc.encode(rawB).byteLength>1_800_000)throw Object.assign(new Error('Сейв после обмена слишком большой.'),{status:413});
+  const now=Date.now(),va=Number(sa.row.version)||0,vb=Number(sb.row.version)||0,gid='tg_'+crypto.randomUUID();
+  try{
+    await env.DB.batch([
+      env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5').bind(va+1,rawA,now,String(tr.player_a),va),
+      env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5').bind(vb+1,rawB,now,String(tr.player_b),vb),
+      env.DB.prepare("UPDATE clan_trades SET status='completed',completed_at=?1,updated_at=?1 WHERE id=?2 AND status='active' AND confirmed_a=1 AND confirmed_b=1").bind(now,String(tr.id)),
+      env.DB.prepare("INSERT INTO clan_trade_guard(id,ok) VALUES(?1,CASE WHEN EXISTS(SELECT 1 FROM saves WHERE telegram_id=?2 AND version=?3) AND EXISTS(SELECT 1 FROM saves WHERE telegram_id=?4 AND version=?5) AND EXISTS(SELECT 1 FROM clan_trades WHERE id=?6 AND status='completed' AND completed_at=?7) THEN 1 ELSE 0 END)").bind(gid,String(tr.player_a),va+1,String(tr.player_b),vb+1,String(tr.id),now),
+      env.DB.prepare('DELETE FROM clan_trade_guard WHERE id=?1').bind(gid)
+    ]);
+  }catch(e){throw Object.assign(new Error('Состояние одного из игроков изменилось. Обнови обмен и подтверди ещё раз.'),{status:409})}
+  return{tradeId:String(tr.id),completedAt:now};
+}
+async function state(env,id,p,includeDirectory=false){const m=await mem(env,id),name=nm((p&&p.nickname)||(p&&p.telegram_first_name)||('ID '+id));const base={connected:true,clan:null,self:{id,name,role:''},members:[],permissions:{},applications:[],authority:{},storageUnlocked:false,storage:{used:0,max:500,items:[]},history:[],events:[],bosses:[],wars:[],tradeSession:null,tradeEligible:false,clanProgress:progUi(prog0()),siegeReward:{}};const s=await saveRow(env,id);base.tradeEligible=act(s&&s.state);if(includeDirectory){const d=await clanDirectory(env,id);base.clanDirectory=d;base.clanRanking=d.slice();}if(!m)return base;const c=await env.DB.prepare('SELECT * FROM clans WHERE id=?1').bind(m.clan_id).first();if(!c)return base;const rows=await env.DB.prepare(`SELECT cm.telegram_id,cm.role,cm.joined_at,p.nickname,p.telegram_first_name,p.telegram_username,s.state_json FROM clan_members cm LEFT JOIN players p ON p.telegram_id=cm.telegram_id LEFT JOIN saves s ON s.telegram_id=cm.telegram_id WHERE cm.clan_id=?1 ORDER BY cm.joined_at`).bind(c.id).all(),meta=parseMeta(await metaRow(env,c.id));const members=(rows.results||[]).map(x=>{const activated=act(sj(x.state_json||'{}',{}));return{id:String(x.telegram_id),name:nm(x.nickname||x.telegram_first_name||x.telegram_username||('ID '+x.telegram_id)),role:x.role==='leader'?'Глава':'Участник',joinedAt:Number(x.joined_at)||0,tradeEligible:activated,activated,contribution:Number(meta.progress.personalByMember&&meta.progress.personalByMember[x.telegram_id])||0}});base.clan={id:c.id,name:c.name,leaderId:String(c.leader_id),ownerId:String(c.leader_id),createdAt:Number(c.created_at)||0};base.members=members;base.self=members.find(x=>x.id===id)||base.self;base.permissions=meta.permissions;base.applications=meta.applications;base.authority=meta.authority;base.storageUnlocked=!!c.storage_unlocked;base.storage={used:meta.storage.length,max:500,items:meta.storage};base.history=meta.history;base.events=meta.events;base.clanProgress=progUi(meta.progress);base.siegeReward=meta.siegeReward;base.tradeSession=await trView(env,c.id,id);return base}
 function ev(meta,type,id,name,text){meta.events.unshift({id:'ce_'+crypto.randomUUID(),type,playerId:id,playerName:name,text,ts:Date.now()});meta.events=meta.events.slice(0,300)}
 async function action(env,id,p,b){const a=String(b.action||''),pname=nm((p&&p.nickname)||(p&&p.telegram_first_name)||'Игрок');
  if(a==='create'){const name=nm(b.name);if(name.length<3)return jr({ok:false,message:'Название минимум 3 символа'},400);if(!p||!p.nickname)return jr({ok:false,message:'Сначала закрепи ник персонажа.'},409);if(await mem(env,id))return jr({ok:false,message:'Ты уже состоишь в клане.'},409);const s=await saveRow(env,id),blocked=Number(s&&s.state&&s.state.clanJoinBlockedUntil)||0;if(blocked>Date.now())return jr({ok:false,message:'После выхода новый клан будет доступен через 24 часа.'},409);if(await env.DB.prepare('SELECT id FROM clans WHERE name_key=?1').bind(nk(name)).first())return jr({ok:false,message:'Такое название уже занято.'},409);const cid='clan_'+crypto.randomUUID(),now=Date.now();await env.DB.prepare('INSERT INTO clans(id,name,name_key,leader_id,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?5)').bind(cid,name,nk(name),id,now).run();await env.DB.prepare("INSERT INTO clan_members(clan_id,telegram_id,role,joined_at) VALUES(?1,?2,'leader',?3)").bind(cid,id,now).run();const mr=await metaRow(env,cid),mm=parseMeta(mr);ev(mm,'createClan',id,pname,'Создан клан «'+name+'»');await writeMeta(env,cid,mm);await clearPendingApplications(env,id,cid);return jr({ok:true,state:await state(env,id,p,true),message:'Клан «'+name+'» создан.'})}
@@ -100,7 +216,53 @@ async function action(env,id,p,b){const a=String(b.action||''),pname=nm((p&&p.ni
  if(a==='upgradeBonus'){if(m.role!=='leader')return jr({ok:false,message:'Бонусы распределяет только глава.'},403);const k=String(b.bonusKey||''),keys=['mobDamage','bossDamage','hp','mp','xp','gold'];if(!keys.includes(k))return jr({ok:false,message:'Неизвестный бонус.'},400);const pu=progUi(meta.progress);if(pu.freePoints<=0)return jr({ok:false,message:'Нет свободных очков клана.'},409);meta.progress.bonuses=Object.assign(prog0().bonuses,meta.progress.bonuses||{});if((Number(meta.progress.bonuses[k])||0)>=3)return jr({ok:false,message:'Бонус уже максимальный.'},409);meta.progress.bonuses[k]=(Number(meta.progress.bonuses[k])||0)+1;await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),message:'Клановый бонус улучшен.'})}
  if(a==='castleCaptured'){meta.siegeReward=Object.assign({clanKey:c.id,clanName:c.name,capturedAt:Date.now(),expiresAt:Date.now()+3*24*3600000,xpPct:5,goldPct:5,resourcePct:5,movePct:3},b.reward||{});await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),message:'Награда осады сохранена.'})}
  if(a==='startRaid'){if(Number(meta.progress.bossReadyAt)>Date.now())return jr({ok:false,message:'Босс ещё восстанавливается.'},409);const bid=String(b.bossId||''),hp=bid==='clan_boss_2'?45000000:5000000;return jr({ok:true,state:await state(env,id,p),bossState:{active:true,bossId:bid,bossHp:hp,bossMaxHp:hp,partySize:1,aliveCount:1,playerDamage:0,rewardedDamage:0,earnedCoins:0,status:'fighting',lastEvent:'Рейд подтверждён сервером',enterScene:'clanboss1'},message:'Рейд запущен.'})}
- if(['playerDeath','requestTrade','setOffer','confirm','execute','cancel'].includes(a))return jr({ok:true,state:await state(env,id,p),message:'Клановый сервер подключён. Для синхронного боя/обмена используется следующий WebSocket-этап.'});
+ if(a==='requestTrade'){
+   const target=String(b.memberId||b.targetId||b.partnerId||b.toId||'');
+   if(!target||target===id)return jr({ok:false,message:'Выбери другого участника клана.'},400);
+   const tm=await env.DB.prepare('SELECT telegram_id FROM clan_members WHERE clan_id=?1 AND telegram_id=?2').bind(c.id,target).first();if(!tm)return jr({ok:false,message:'Игрок уже не состоит в твоём клане.'},409);
+   const ss=await saveRow(env,id),ts=await saveRow(env,target);if(!act(ss&&ss.state)||!act(ts&&ts.state))return jr({ok:false,message:'Клановый обмен доступен только активированным аккаунтам.'},403);
+   const now=Date.now();await env.DB.prepare("UPDATE clan_trades SET status='expired',updated_at=?1 WHERE status='active' AND expires_at<=?1").bind(now).run();
+   const busy=await env.DB.prepare("SELECT * FROM clan_trades WHERE clan_id=?1 AND status='active' AND expires_at>?2 AND (player_a IN (?3,?4) OR player_b IN (?3,?4)) ORDER BY updated_at DESC LIMIT 1").bind(c.id,now,id,target).first();
+   if(busy){
+     if((String(busy.player_a)===id&&String(busy.player_b)===target)||(String(busy.player_a)===target&&String(busy.player_b)===id))return jr({ok:true,state:await state(env,id,p),message:'Обмен уже открыт.'});
+     return jr({ok:false,message:'Один из игроков уже участвует в другом обмене.'},409);
+   }
+   const tid='trade_'+crypto.randomUUID();await env.DB.prepare("INSERT INTO clan_trades(id,clan_id,player_a,player_b,created_at,updated_at,expires_at,status) VALUES(?1,?2,?3,?4,?5,?5,?6,'active')").bind(tid,c.id,id,target,now,now+TRADE_TTL_MS).run();
+   return jr({ok:true,state:await state(env,id,p),tradeId:tid,message:'Клановый обмен открыт. Оба предложения должны быть подтверждены.'});
+ }
+ if(a==='setOffer'){
+   const tr=await trActive(env,c.id,id,b.tradeId||b.id);if(!tr)return jr({ok:false,message:'Активный обмен не найден.'},409);
+   const s=await saveRow(env,id);if(!s)return jr({ok:false,message:'Облачный сейв не найден.'},409);
+   const raw=b.offer&&typeof b.offer==='object'?b.offer:{items:Array.isArray(b.items)?b.items:(b.item?[b.item]:[]),gold:b.gold,ppa:b.ppa};
+   let offer;try{offer=trNormalizeOffer(s.state,raw)}catch(e){return jr({ok:false,message:String(e.message||e)},Number(e.status)||409)}
+   const mineA=String(tr.player_a)===id,now=Date.now();
+   if(mineA)await env.DB.prepare("UPDATE clan_trades SET offer_a_json=?1,confirmed_a=0,confirmed_b=0,updated_at=?2,expires_at=?3 WHERE id=?4 AND status='active'").bind(JSON.stringify(offer),now,now+TRADE_TTL_MS,String(tr.id)).run();
+   else await env.DB.prepare("UPDATE clan_trades SET offer_b_json=?1,confirmed_a=0,confirmed_b=0,updated_at=?2,expires_at=?3 WHERE id=?4 AND status='active'").bind(JSON.stringify(offer),now,now+TRADE_TTL_MS,String(tr.id)).run();
+   return jr({ok:true,state:await state(env,id,p),message:'Предложение обновлено. Подтверждения сброшены.'});
+ }
+ if(a==='confirm'){
+   const tr=await trActive(env,c.id,id,b.tradeId||b.id);if(!tr)return jr({ok:false,message:'Активный обмен не найден.'},409);
+   const mineA=String(tr.player_a)===id,now=Date.now();
+   if(mineA)await env.DB.prepare("UPDATE clan_trades SET confirmed_a=1,updated_at=?1,expires_at=?2 WHERE id=?3 AND status='active'").bind(now,now+TRADE_TTL_MS,String(tr.id)).run();
+   else await env.DB.prepare("UPDATE clan_trades SET confirmed_b=1,updated_at=?1,expires_at=?2 WHERE id=?3 AND status='active'").bind(now,now+TRADE_TTL_MS,String(tr.id)).run();
+   return jr({ok:true,state:await state(env,id,p),message:'Предложение подтверждено.'});
+ }
+ if(a==='execute'){
+   try{
+     const done=await trExecute(env,c.id,id,b.tradeId||b.id);
+     const pa=await env.DB.prepare('SELECT nickname,telegram_first_name FROM players WHERE telegram_id=?1').bind(id).first();
+     const tr=await env.DB.prepare('SELECT player_a,player_b FROM clan_trades WHERE id=?1').bind(done.tradeId).first(),other=String(tr&&tr.player_a)===id?String(tr.player_b):String(tr.player_a);
+     const po=await env.DB.prepare('SELECT nickname,telegram_first_name FROM players WHERE telegram_id=?1').bind(other).first();
+     ev(meta,'trade',id,pname,'Обмен завершён: '+nm(pa&&pa.nickname||pa&&pa.telegram_first_name||pname)+' ↔ '+nm(po&&po.nickname||po&&po.telegram_first_name||'Игрок'));await writeMeta(env,c.id,meta);
+     return jr({ok:true,state:await state(env,id,p),tradeCompleted:true,tradeId:done.tradeId,reload:true,message:'Обмен завершён сервером. Предметы и валюты переданы.'});
+   }catch(e){return jr({ok:false,message:String(e.message||e)},Number(e.status)||409)}
+ }
+ if(a==='cancel'){
+   const tr=await trActive(env,c.id,id,b.tradeId||b.id);if(!tr)return jr({ok:true,state:await state(env,id,p),message:'Активного обмена уже нет.'});
+   await env.DB.prepare("UPDATE clan_trades SET status='cancelled',updated_at=?1 WHERE id=?2 AND status='active'").bind(Date.now(),String(tr.id)).run();
+   return jr({ok:true,state:await state(env,id,p),message:'Обмен отменён.'});
+ }
+ if(a==='playerDeath')return jr({ok:true,state:await state(env,id,p),message:'Состояние игрока принято.'});
  return jr({ok:false,message:'Клановое действие не поддерживается.'},400)}
 
 export async function handleClanOnline(request,env){const u=new URL(request.url);if(!u.pathname.startsWith('/api/clan/'))return null;if(request.method!=='POST')return jr({ok:false,message:'POST required'},405);try{let b={};try{b=await request.json()}catch(_){}const user=await auth(b.initData||request.headers.get('x-telegram-init-data')||'',env.BOT_TOKEN);await schema(env);const p=await ensurePlayer(env,user),id=String(user.id);if(u.pathname==='/api/clan/state')return jr({ok:true,state:await state(env,id,p,true)});if(u.pathname==='/api/clan/action')return action(env,id,p,b);return jr({ok:false,message:'Clan route not found'},404)}catch(e){const s=Number(e&&e.status)||500;console.error('PPA clan online',e);return jr({ok:false,message:String((e&&e.message)||'Clan server error')},s)}}

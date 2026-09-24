@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v562-realtime-clan-name-sync-20260924';
+const CLIENT_BUILD = 'v563-clan-trade-server-final-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6779,6 +6779,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
   const legendaryGearArt=fs.readFileSync(path.join(ROOT,'gateway/legendary-gear-art.js'),'utf8');
   const onlineClient=fs.readFileSync(path.join(ROOT,'gateway/online-client.js'),'utf8');
   const ppaBridge=fs.readFileSync(path.join(ROOT,'gateway/ppa-bridge.js'),'utf8');
+  const clanOnline=fs.readFileSync(path.join(ROOT,'src/clan-online.js'),'utf8');
 
   if (worldCombat.includes('ppaWorldPkBtn') ||
       worldCombat.includes('PPA_WORLD_PK_TRY_BASIC_ATTACK') ||
@@ -6807,6 +6808,18 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !ruriPet.includes("match&&!window.__PPA_REMOTE_PET_DRAW") ||
       !realtimeClient.includes("if(p.pt!==undefined)r.petName=")) {
     throw new Error('Remote Great Ruri visibility/runtime sync patch missing');
+  }
+  if (!clanOnline.includes('CREATE TABLE IF NOT EXISTS clan_trades') ||
+      !clanOnline.includes("if(a==='requestTrade')") ||
+      !clanOnline.includes("if(a==='setOffer')") ||
+      !clanOnline.includes("if(a==='confirm')") ||
+      !clanOnline.includes("if(a==='execute')") ||
+      !clanOnline.includes('function trExecute') ||
+      !clanOnline.includes('clan_trade_guard') ||
+      clanOnline.includes('Для синхронного боя/обмена используется следующий WebSocket-этап') ||
+      !onlineClient.includes('flushClanTradeSave') ||
+      !onlineClient.includes('ppaClanTradeAppliedV563')) {
+    throw new Error('Server-authoritative clan trade bridge incomplete');
   }
   if (!onlineClient.includes('seedAdminEventRewardStock') ||
       !onlineClient.includes('PPA_ADMIN_EVENT_REWARD_STOCK') ||

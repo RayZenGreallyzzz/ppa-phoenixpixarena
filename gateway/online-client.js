@@ -9,7 +9,7 @@
 
   async function refreshClan(){
     if(!online()||!PPA.ppaClanState)return;
-    try{var r=await PPA.ppaClanState();if(r&&r.state&&window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state)}catch(e){console.warn('Clan sync',e)}
+    try{var r=await PPA.ppaClanState();pushClanState(r)}catch(e){console.warn('Clan sync',e)}
   }
 
   function appliedCreditSet(){try{var a=JSON.parse(localStorage.getItem('ppaAuctionCreditsAppliedV279')||'[]');return new Set(Array.isArray(a)?a:[])}catch(_){return new Set()}}
@@ -181,7 +181,30 @@
     }catch(_){}
   }
 
-  function pushClanState(r){if(r&&r.state&&window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state);return r}
+  function tradeSeenKey(id){return 'ppaClanTradeAppliedV563:'+String(id||'')}
+  function handleCompletedTradeState(st){
+    try{
+      var tr=st&&st.tradeSession;if(!tr||tr.status!=='completed'||!tr.id)return;
+      var k=tradeSeenKey(tr.id);if(localStorage.getItem(k)==='1')return;
+      localStorage.setItem(k,'1');
+      try{showPickup('КЛАНОВЫЙ ОБМЕН ЗАВЕРШЁН · СИНХРОНИЗАЦИЯ','#8dff9a')}catch(_){}
+      setTimeout(function(){location.reload()},450);
+    }catch(_){}
+  }
+  function pushClanState(r){
+    if(r&&r.state){
+      window.PPA_SERVER_CLAN_STATE=r.state;
+      if(window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state);
+      handleCompletedTradeState(r.state);
+    }
+    return r
+  }
+  async function flushClanTradeSave(){
+    if(!PPA.ppaSaveGame)return;
+    var snap=null;try{snap=typeof window.ppaBuildSaveObject==='function'?window.ppaBuildSaveObject():null}catch(_){}
+    if(!snap){try{snap=JSON.parse(localStorage.getItem('pxSave')||'null')}catch(_){snap=null}}
+    if(snap&&typeof snap==='object')await PPA.ppaSaveGame(snap,window.PPA_CLOUD&&window.PPA_CLOUD.version);
+  }
   async function clanCall(req){
     req=Object.assign({},req||{});
     if(req.action==='join')req.action='apply';
@@ -236,7 +259,18 @@
     };
     window.PPA_CLAN_BOSS_HANDLER=async function(req){var r=await clanCall(req||{});if(r&&r.bossState&&window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(r.bossState);return r};
     window.PPA_CLAN_SIEGE_HANDLER=clanCall;
-    window.PPA_CLAN_TRADE_HANDLER=async function(req){var r=await clanCall(req||{});return Object.assign({},r,{clanState:r&&r.state?r.state:null})};
+    window.PPA_CLAN_TRADE_HANDLER=async function(req){
+      req=Object.assign({},req||{});
+      var a=String(req.action||'');
+      if(a==='setOffer'||a==='confirm'||a==='execute')await flushClanTradeSave();
+      var r=await clanCall(req);
+      if(r&&r.tradeCompleted&&r.tradeId){
+        try{localStorage.setItem(tradeSeenKey(r.tradeId),'1')}catch(_){}
+        try{showPickup('ОБМЕН ЗАВЕРШЁН · ОБНОВЛЯЮ СЕЙВ','#8dff9a')}catch(_){}
+        setTimeout(function(){location.reload()},350);
+      }
+      return Object.assign({},r,{clanState:r&&r.state?r.state:null})
+    };
 
     // Replace the old local-only clan administration with authenticated server actions.
     try{
@@ -290,7 +324,7 @@
 
     setTimeout(function(){refreshClan();refreshAuction();refreshWallet();seedAdminEventRewardStock()},200);
     setInterval(refreshAuction,15000);
-    setInterval(refreshClan,30000);
+    setInterval(refreshClan,10000);
     return true;
   }
 
