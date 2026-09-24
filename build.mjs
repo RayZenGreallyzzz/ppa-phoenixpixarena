@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v544-dragon60-legendary-drop-20260924';
+const CLIENT_BUILD = 'v545-dragon60-name-fix-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -2018,11 +2018,22 @@ ppaPatchRegex(
   "if(!e.isWorldCrystalBoss&&!e.isDungeon60Boss)ppaAddDeathRemnant(e);"
 );
 
+
+ppaPatchRegex(
+  'dragon60 mob info title',
+  /name=e\.isClanBoss\?'ВЛАДЫЧИЦА ПЛАМЕНИ':\(e\.isDungeon21Boss\?'ВЛАДЫКА СКВЕРНЫ':\(e\.isBoss\?'ФЕНИКС':\(\(e\.type&&e\.type\.n\)\|\|'Моб'\)\)\);/,
+  "name=e.isClanBoss?'ВЛАДЫЧИЦА ПЛАМЕНИ':(e.isDungeon60Boss?'ДРАКОН ПЕПЛА':(e.isDungeon21Boss?'ВЛАДЫКА СКВЕРНЫ':(e.isBoss?'ФЕНИКС':((e.type&&e.type.n)||'Моб'))));"
+);
+
 ppaPatchRegex(
   'dragon60 death notice',
   /\}else if\s*\(e\.isDungeon21Boss&&P\.scene===['"]dungeon['"]\)\s*\{/,
   "}else if(e.isDungeon60Boss&&P.scene==='dungeon'){\n        const ln=document.getElementById('locName');\n        ln.innerHTML='ДРАКОН ПЕПЛА ПОВЕРЖЕН<div class=\"sub\">Откат 6 часов</div>';\n        ln.classList.add('show');\n        setTimeout(()=>ln.classList.remove('show'),2500);\n      }else if(e.isDungeon21Boss&&P.scene==='dungeon'){"
 );
+
+if (!output.includes("e.isDungeon60Boss?'ДРАКОН ПЕПЛА'")) {
+  throw new Error('Dragon 60 mob info title patch did not apply');
+}
 
 ppaPatchRegex(
   'dragon60 keeper card text',
