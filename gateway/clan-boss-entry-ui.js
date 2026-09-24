@@ -39,37 +39,38 @@
     if(now-lastClickAt<350)return;
     lastClickAt=now;
 
-    var w=parentWin(doc),handler=null;
-    try{handler=w.PPA_CLAN_BOSS_HANDLER}catch(_){}
-    if(typeof handler!=='function'){
-      notice(w,'Клановый сервер ещё подключается…',true);
-      return;
-    }
-
-    var old=btn.textContent,bid=bossIdFor(btn,doc);
+    var w=parentWin(doc),handler=null,old=btn.textContent,bid=bossIdFor(btn,doc);
     try{
       btn.disabled=true;
       btn.dataset.ppaBossEntering='1';
       btn.textContent='ВХОД…';
       btn.style.opacity='.72';
       btn.style.pointerEvents='none';
+      btn.style.transform='scale(.98)';
     }catch(_){}
+    try{
+      if(doc&&doc.body)doc.body.dataset.ppaBossEntering='1';
+      if(typeof w.showPickup==='function')w.showPickup('ВХОД К КЛАНОВОМУ БОССУ…','#ffd36a');
+    }catch(_){}
+
+    try{handler=w.PPA_CLAN_BOSS_HANDLER}catch(_){}
+    if(typeof handler!=='function'){
+      notice(w,'Клановый сервер ещё подключается…',true);
+      try{btn.disabled=false;btn.textContent=old;btn.style.opacity='';btn.style.pointerEvents='';btn.style.transform='';delete btn.dataset.ppaBossEntering}catch(_){}
+      return;
+    }
 
     try{
       var r=await handler({action:'startRaid',bossId:bid,source:'bossButton'});
       if(!(r&&r.ok)){
         throw new Error((r&&r.message)||'Сервер не подтвердил вход к боссу');
       }
-      notice(w,'ВХОД К КЛАНОВОМУ БОССУ…',false);
-      // The authoritative handler changes scene itself. Keep a small fallback
-      // in case an older cached handler did not.
+      // Handler owns the normal transition. Fallback only if it did not move us.
       setTimeout(function(){
         try{
-          if(typeof w.P!=='undefined'&&w.P&&w.P.scene!=='clanboss1'){
-            if(typeof w.changeScene==='function')w.changeScene('clanboss1');
-          }
+          if(typeof w.P!=='undefined'&&w.P&&w.P.scene!=='clanboss1'&&typeof w.changeScene==='function')w.changeScene('clanboss1');
         }catch(_){}
-      },180);
+      },80);
     }catch(e){
       notice(w,String(e&&e.message||e||'Не удалось войти к боссу'),true);
       try{
@@ -77,6 +78,7 @@
         btn.textContent=old;
         btn.style.opacity='';
         btn.style.pointerEvents='';
+        btn.style.transform='';
         delete btn.dataset.ppaBossEntering;
       }catch(_){}
     }
@@ -85,6 +87,14 @@
     if(!doc||seen.has(doc))return;
     seen.add(doc);
     try{
+      doc.addEventListener('pointerdown',function(ev){
+        var btn=isEnterButton(ev.target);
+        if(!btn||btn.disabled||btn.dataset.ppaBossEntering==='1')return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        if(ev.stopImmediatePropagation)ev.stopImmediatePropagation();
+        enter(btn,doc);
+      },{capture:true,passive:false});
       doc.addEventListener('click',function(ev){
         var btn=isEnterButton(ev.target);
         if(!btn||btn.disabled||btn.dataset.ppaBossEntering==='1')return;
@@ -93,14 +103,6 @@
         if(ev.stopImmediatePropagation)ev.stopImmediatePropagation();
         enter(btn,doc);
       },true);
-      doc.addEventListener('touchend',function(ev){
-        var btn=isEnterButton(ev.target);
-        if(!btn||btn.disabled||btn.dataset.ppaBossEntering==='1')return;
-        ev.preventDefault();
-        ev.stopPropagation();
-        if(ev.stopImmediatePropagation)ev.stopImmediatePropagation();
-        enter(btn,doc);
-      },{capture:true,passive:false});
     }catch(_){}
   }
   function scan(){
