@@ -195,6 +195,7 @@
     if(r&&r.state){
       window.PPA_SERVER_CLAN_STATE=r.state;
       if(window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state);
+      if(r.state.bossState&&window.PPA_CLAN_BOSS_RT_APPLY_STATE)window.PPA_CLAN_BOSS_RT_APPLY_STATE(r.state.bossState);
       handleCompletedTradeState(r.state);
     }
     return r
@@ -257,7 +258,15 @@
       if(r&&r.balances&&Number.isFinite(Number(r.balances.gold)))INV.gold=Math.max(0,Number(r.balances.gold));
       return r;
     };
-    window.PPA_CLAN_BOSS_HANDLER=async function(req){var r=await clanCall(req||{});if(r&&r.bossState&&window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(r.bossState);return r};
+    window.PPA_CLAN_BOSS_HANDLER=async function(req){
+      req=Object.assign({},req||{});
+      var r=await clanCall(req);
+      var bs=r&&r.bossState?r.bossState:(r&&r.state&&r.state.bossState?r.state.bossState:null);
+      if(bs&&window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(bs);
+      if(bs&&window.PPA_CLAN_BOSS_RT_APPLY_STATE)window.PPA_CLAN_BOSS_RT_APPLY_STATE(bs);
+      if(String(req.action||'')==='startRaid'&&bs&&window.PPA_CLAN_BOSS_RT_START)window.PPA_CLAN_BOSS_RT_START(bs);
+      return r
+    };
     window.PPA_CLAN_SIEGE_HANDLER=clanCall;
     window.PPA_CLAN_TRADE_HANDLER=async function(req){
       req=Object.assign({},req||{});
