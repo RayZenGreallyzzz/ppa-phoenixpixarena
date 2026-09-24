@@ -3,6 +3,11 @@
 
   var lastPet=null,lastSent=0,installedPacket=false,installedDraw=false;
   var IMG_CACHE=new Map();
+  var RURI_NAME='Великий Рури';
+  var RURI_MOVE_SRC='/assets/ruri-move.webp';
+  var RURI_MOVE_FRAME_MS=120;
+  var RURI_MOVE_IMG=new Image();
+  RURI_MOVE_IMG.src=RURI_MOVE_SRC;
 
   function localPetName(){
     try{
@@ -72,6 +77,10 @@
     return Number(r&&r.face)<0?'W':'E';
   }
 
+  function ruriDirRow(dir){
+    return dir==='N'?1:(dir==='W'?2:(dir==='E'?3:0));
+  }
+
   function drawPet(r,now){
     try{
       var name=String(r&&r.petName||'');if(!name)return;
@@ -92,25 +101,40 @@
       var ddx=tx-r.__ppaPetX,ddy=ty-r.__ppaPetY,dd=Math.hypot(ddx,ddy);
       var alpha=1-Math.exp(-dt/115);
       if(dd>.4){r.__ppaPetX+=ddx*alpha;r.__ppaPetY+=ddy*alpha;r.__ppaPetDir=facingFromMove(ddx,ddy,r)}
-      var dir=r.__ppaPetDir||facingFromMove(mdx,mdy,r),src=petArt(name,dir),im=imageFor(src);
+      var dir=r.__ppaPetDir||facingFromMove(mdx,mdy,r);
+      var isRuri=name===RURI_NAME;
+      var src='',im=null,ruriSheet=false;
+      if(isRuri&&RURI_MOVE_IMG.complete&&RURI_MOVE_IMG.naturalWidth>=256&&RURI_MOVE_IMG.naturalHeight>=256){
+        im=RURI_MOVE_IMG;ruriSheet=true;
+      }else{
+        src=petArt(name,dir);im=imageFor(src);
+      }
       if(!im||!im.complete||!im.naturalWidth)return;
 
       var sx=r.__ppaPetX-cam.x,sy=r.__ppaPetY-cam.y;
       var vw=cv.width/cameraZoom(),vh=cv.height/cameraZoom();
-      if(sx<-80||sy<-100||sx>vw+80||sy>vh+100)return;
+      if(sx<-90||sy<-110||sx>vw+90||sy>vh+110)return;
 
       var scale=(typeof PHONE_REMOTE_PLAYER_VISUAL_SCALE==='number'?PHONE_REMOTE_PLAYER_VISUAL_SCALE:1);
-      var size=Math.max(34,Math.min(56,48*scale));
+      var size=isRuri?Math.max(52,Math.min(72,62*scale)):Math.max(34,Math.min(56,48*scale));
       var bob=Math.sin(now*.008+String(r.id||'').length)*1.4;
       cx.save();
       cx.imageSmoothingEnabled=false;
       cx.globalAlpha=.94;
       cx.fillStyle='rgba(0,0,0,.28)';cx.beginPath();cx.ellipse(sx,sy+size*.31,size*.25,size*.08,0,0,Math.PI*2);cx.fill();
-      window.__PPA_REMOTE_PET_DRAW=(Number(window.__PPA_REMOTE_PET_DRAW)||0)+1;
-      try{
-        cx.drawImage(im,Math.round(sx-size/2),Math.round(sy-size*.64+bob),Math.round(size),Math.round(size));
-      }finally{
-        window.__PPA_REMOTE_PET_DRAW=Math.max(0,(Number(window.__PPA_REMOTE_PET_DRAW)||1)-1);
+      if(ruriSheet){
+        var moving=dd>.4||ml>.18;
+        var frame=moving?(Math.floor(Number(now||0)/RURI_MOVE_FRAME_MS)%4):0;
+        var row=ruriDirRow(dir);
+        cx.drawImage(im,frame*64,row*64,64,64,
+          Math.round(sx-size/2),Math.round(sy-size*.80+bob),Math.round(size),Math.round(size));
+      }else{
+        window.__PPA_REMOTE_PET_DRAW=(Number(window.__PPA_REMOTE_PET_DRAW)||0)+1;
+        try{
+          cx.drawImage(im,Math.round(sx-size/2),Math.round(sy-size*.64+bob),Math.round(size),Math.round(size));
+        }finally{
+          window.__PPA_REMOTE_PET_DRAW=Math.max(0,(Number(window.__PPA_REMOTE_PET_DRAW)||1)-1);
+        }
       }
       cx.restore();
     }catch(_){}
