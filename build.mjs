@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v545-dragon60-name-fix-20260924';
+const CLIENT_BUILD = 'v546-pickaxe-expiry-persistence-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3486,6 +3486,147 @@ if(!output.includes("🔥 УЛУЧШИТЬ ДО ЛЕГЕНДАРНОЙ · 2120 P
 }
 /* ======================================================================== */
 
+
+
+/* === FART PICKAXE REAL-TIME EXPIRY ====================================== */
+// Absolute expiry survives save/reload. Relaunching never resets 4h/14h.
+
+ppaPatchRegex(
+  'fart pickaxe default expiry state',
+  /fartPickaxe:false,\s*v263PickaxePpaGranted:false,/,
+  "fartPickaxe:false,\n  fartPickaxeUntil:0,\n  v263PickaxePpaGranted:false;"
+);
+
+ppaPatchRegex(
+  'save fart pickaxe absolute expiry',
+  /fartPickaxe:!!INV\.fartPickaxe,\s*v263PickaxePpaGranted:!!INV\.v263PickaxePpaGranted,/,
+  "fartPickaxe:!!INV.fartPickaxe,\n    fartPickaxeUntil:Math.max(0,Number(INV.fartPickaxeUntil)||0),\n    v263PickaxePpaGranted:!!INV.v263PickaxePpaGranted,"
+);
+
+ppaPatchRegex(
+  'load fart pickaxe absolute expiry',
+  /INV\.fartPickaxe=!!s\.fartPickaxe;\s*INV\.v263PickaxePpaGranted=!!s\.v263PickaxePpaGranted;/,
+  "INV.fartPickaxe=!!s.fartPickaxe;\n  INV.fartPickaxeUntil=Math.max(0,Number(s.fartPickaxeUntil)||0);\n  INV.v263PickaxePpaGranted=!!s.v263PickaxePpaGranted;"
+);
+
+ppaPatchRegex(
+  'pickaxe removal clears bag and all storage',
+  /function fartRemovePickaxeItem\(\)\{[\s\S]*?\n\}/,
+  `function fartRemovePickaxeItem(){
+  if(Array.isArray(INV.bag)){
+    for(let i=INV.bag.length-1;i>=0;i--)if(INV.bag[i]&&INV.bag[i].fartPickaxe===true)INV.bag.splice(i,1);
+  }
+  if(INV.storage&&typeof INV.storage==='object'){
+    ['personal','clan','premium'].forEach(function(k){
+      const a=INV.storage[k];
+      if(!Array.isArray(a))return;
+      for(let i=a.length-1;i>=0;i--)if(a[i]&&a[i].fartPickaxe===true)a.splice(i,1);
+    });
+  }
+}`
+);
+
+ppaPatchRegex(
+  'pickaxe absolute-time normalization',
+  /function fartNormalizePickaxe\(\)\{[\s\S]*?\n\}\nfunction fartHasPickaxe/,
+  `function fartNormalizePickaxe(){
+  if(!Array.isArray(INV.bag))INV.bag=[];
+  let item=fartPickaxeBagItem();
+
+  if(INV.storage&&typeof INV.storage==='object'){
+    ['personal','clan','premium'].forEach(function(k){
+      const a=INV.storage[k];
+      if(!Array.isArray(a))return;
+      for(let i=a.length-1;i>=0;i--)if(a[i]&&a[i].fartPickaxe===true)a.splice(i,1);
+    });
+  }
+
+  if(!item){
+    if(INV.fartPickaxe||Number(INV.fartPickaxeUntil)>0){
+      INV.fartPickaxe=false;
+      INV.fartPickaxeUntil=0;
+      try{saveGame();sendInvState();sendBlacksmithState();sendStorageState();updateUI()}catch(_){}
+    }
+    return false;
+  }
+
+  const itemUntil=Math.max(0,Number(item.expiresAt)||0);
+  const savedUntil=Math.max(0,Number(INV.fartPickaxeUntil)||0);
+  const until=itemUntil||savedUntil;
+
+  if(!until||until<=Date.now()){
+    INV.fartPickaxe=false;
+    INV.fartPickaxeUntil=0;
+    fartRemovePickaxeItem();
+    try{saveGame();sendInvState();sendBlacksmithState();sendStorageState();updateUI()}catch(_){}
+    return false;
+  }
+
+  INV.fartPickaxe=true;
+  INV.fartPickaxeUntil=until;
+  item.expiresAt=until;
+  if(!item.fartPickaxeTier)item.fartPickaxeTier='common';
+  return true;
+}
+function fartHasPickaxe`
+);
+
+ppaPatchRegex(
+  'hide pickaxe from storage deposit inventory',
+  /\(INV\.bag\|\|\[\]\)\.forEach\(function\(it,idx\)\{\s*if\(!it\)return;\s*var x=storageItemForUi\(it\);x\.kind='gear';x\.refId=String\(idx\);x\.storageRef='gear:'\+idx;out\.push\(x\);/,
+  `(INV.bag||[]).forEach(function(it,idx){
+      if(!it||it.fartPickaxe===true)return;
+      var x=storageItemForUi(it);x.kind='gear';x.refId=String(idx);x.storageRef='gear:'+idx;out.push(x);`
+);
+
+ppaPatchRegex(
+  'live pickaxe timer refresh',
+  /function fartPickaxeRemainingText\(\)\{[\s\S]*?\n\}/,
+  `function fartPickaxeRemainingText(){
+  if(!fartHasPickaxe())return '';
+  const ms=Math.max(0,Number(INV.fartPickaxeUntil)-Date.now());
+  const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000),sec=Math.floor((ms%60000)/1000);
+  return h+'ч '+String(m).padStart(2,'0')+'м '+String(sec).padStart(2,'0')+'с';
+}
+function fartRefreshPickaxeTimerUi(){
+  const has=fartHasPickaxe();
+  const ps=document.getElementById('fartGuidePickaxeStatus');
+  const pb=document.getElementById('fartGuidePickaxe');
+  const lb=document.getElementById('fartGuideLegendPickaxe');
+  if(!ps&&!pb&&!lb)return;
+  const tier=has?fartPickaxeTier():'';
+  const left=has?fartPickaxeRemainingText():'';
+  if(ps)ps.textContent=has
+    ?((tier==='legendary'?'Легендарная':'Обычная')+' кирка: осталось '+left)
+    :'Кирка закончилась · купи новую';
+  if(pb){
+    pb.disabled=has;
+    pb.textContent=has&&tier==='common'?('✓ ОБЫЧНАЯ КИРКА · '+left):'⛏ ОБЫЧНАЯ КИРКА · 200 PPA · 4 Ч';
+    pb.style.opacity=has?'.55':'1';
+  }
+  if(lb){
+    const legendaryActive=has&&tier==='legendary';
+    const canUpgrade=has&&tier==='common';
+    lb.disabled=legendaryActive;
+    lb.textContent=legendaryActive
+      ?('✓ ЛЕГЕНДАРНАЯ КИРКА · '+left)
+      :(canUpgrade?'🔥 УЛУЧШИТЬ ДО ЛЕГЕНДАРНОЙ · 2120 PPA':'🔥 ЛЕГЕНДАРНАЯ КИРКА · 2120 PPA · 14 Ч');
+    lb.style.opacity=legendaryActive?'.55':'1';
+  }
+}
+setInterval(fartRefreshPickaxeTimerUi,1000);`
+);
+
+if(!output.includes("fartPickaxeUntil:Math.max(0,Number(INV.fartPickaxeUntil)||0)") ||
+   !output.includes("INV.fartPickaxeUntil=Math.max(0,Number(s.fartPickaxeUntil)||0)") ||
+   !output.includes("const itemUntil=Math.max(0,Number(item.expiresAt)||0)") ||
+   !output.includes("if(!until||until<=Date.now())") ||
+   !output.includes("if(!it||it.fartPickaxe===true)return;") ||
+   !output.includes("setInterval(fartRefreshPickaxeTimerUi,1000)") ||
+   !output.includes("Кирка закончилась · купи новую")) {
+  throw new Error('Fart pickaxe real-time expiry persistence patch did not apply');
+}
+/* ======================================================================== */
 
 /* === FART ZONE GUARDS ==================================================== */
 // Five approved transparent guard skins.
