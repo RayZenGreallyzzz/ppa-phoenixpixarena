@@ -262,6 +262,10 @@
       req=Object.assign({},req||{});
       var originalAction=String(req.action||'');
       if(['enterRaid','joinRaid','enterBoss','bossEnter','startBoss'].indexOf(originalAction)>=0)req.action='startRaid';
+      var isBossStart=String(req.action||'')==='startRaid';
+      if(isBossStart){
+        try{window.__PPA_CLAN_BOSS_SESSION_ENTERED=false;window.__PPA_CLAN_BOSS_ENTRY_AUTH_UNTIL=0}catch(_){}
+      }
       var r=await clanCall(req);
       var bs=r&&r.bossState?r.bossState:(r&&r.state&&r.state.bossState?r.state.bossState:null);
       if(bs&&window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(bs);
@@ -270,6 +274,11 @@
         if(window.PPA_CLAN_BOSS_RT_START)window.PPA_CLAN_BOSS_RT_START(bs);
         var canEnter=bs.active===true||String(bs.status||'')==='fighting'||String(bs.status||'')==='active';
         if(canEnter){
+          try{
+            window.__PPA_CLAN_BOSS_SESSION_ENTERED=true;
+            window.__PPA_CLAN_BOSS_ENTRY_AUTH_UNTIL=Date.now()+10000;
+            window.__PPA_CLAN_BOSS_ENTRY_GRACE_UNTIL=Math.max(Number(window.__PPA_CLAN_BOSS_ENTRY_GRACE_UNTIL||0),Date.now()+2500);
+          }catch(_){}
           try{if(typeof closeClanMenu==='function')closeClanMenu()}catch(_){}
           try{if(typeof closeClan==='function')closeClan()}catch(_){}
           try{if(typeof closeClanPanel==='function')closeClanPanel()}catch(_){}
