@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v559-ruri-remote-pet-visible-20260924';
+const CLIENT_BUILD = 'v560-ruri-remote-pet-auditfix-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6814,7 +6814,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !ruriPet.includes("kind:'ruri'") ||
       !ruriPet.includes('PPA_RURI_DIAG') ||
       !ruriPet.includes('a.down=a.front=a.south=a.S') ||
-      !ruriPet.includes('Great Ruri is drawn only by the dedicated overlay below') ||
+      !ruriPet.includes("if(match&&!window.__PPA_REMOTE_PET_DRAW)") ||
       !ruriPet.includes('drawMoveFrame(ruriX,ruriY,dx,dy,moving,now,RURI_DRAW_SIZE)') ||
       !realtimeServer.includes("hitKind === 'ruri'") ||
       !realtimeServer.includes("cleanPet(a.pet || '') !== 'Великий Рури'") ||
