@@ -1,7 +1,7 @@
 (function(){
   'use strict';
 
-  var installed=false,originalTrack=null,applying=0,lastState=null,lastRequest=0,lastHitAt=0,lastHitAmount=0,lastHitTokenAt=0,lastSpawnTry=0,lastSpawnMethod='';
+  var installed=false,originalTrack=null,applying=0,lastState=null,lastRequest=0,lastHitAt=0,lastHitAmount=0,lastHitTokenAt=0,lastSpawnTry=0,lastSpawnMethod='',manualExitUntil=0,sceneGuardInstalled=false,originalChangeScene=null;
 
   function inScene(){try{return typeof P!=='undefined'&&P&&P.scene==='clanboss1'}catch(_){return false}}
   function rtDiag(){try{return window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null}catch(_){return null}}
@@ -9,6 +9,55 @@
   function clanId(){var s=clanState();return String(s&&s.clan&&s.clan.id||'')}
   function activeRoom(){var d=rtDiag(),r=String(d&&d.room||'');return inScene()&&!!clanId()&&r.indexOf('clanboss-')===0}
   function send(o){try{return !!(window.PPA_RT_SEND&&window.PPA_RT_SEND(o))}catch(_){return false}}
+  function activeBossFight(){
+    try{
+      return inScene()&&lastState&&lastState.active===true&&Number(lastState.bossHp)>0&&
+        !(P&&(P.dead||Number(P.hp)<=0));
+    }catch(_){return false}
+  }
+  function markManualExit(){manualExitUntil=Date.now()+1800}
+  function installSceneGuard(){
+    if(sceneGuardInstalled)return true;
+    var base=null;
+    try{if(typeof changeScene==='function')base=changeScene}catch(_){}
+    if(typeof base!=='function')base=window.changeScene;
+    if(typeof base!=='function')return false;
+    originalChangeScene=base;
+    var wrapped=function(next){
+      var dest=String(next||'').toLowerCase();
+      var leavingToTown=(dest==='safe'||dest==='city'||dest==='town'||dest==='hub');
+      if(leavingToTown&&activeBossFight()&&Date.now()>manualExitUntil){
+        try{
+          if(typeof showPickup==='function')showPickup('КЛАНОВЫЙ БОСС · БОЙ ПРОДОЛЖАЕТСЯ','#ffd36a');
+        }catch(_){}
+        return false;
+      }
+      return originalChangeScene.apply(this,arguments);
+    };
+    wrapped.__ppaClanBossSceneGuard=true;
+    try{window.changeScene=wrapped}catch(_){}
+    try{changeScene=wrapped}catch(_){}
+    sceneGuardInstalled=true;
+    return true;
+  }
+  function bindManualExit(){
+    if(window.__PPA_CLAN_BOSS_EXIT_GUARD_BOUND)return;
+    window.__PPA_CLAN_BOSS_EXIT_GUARD_BOUND=true;
+    try{
+      document.addEventListener('pointerdown',function(ev){
+        if(!inScene())return;
+        var el=ev.target&&ev.target.closest?ev.target.closest('button,[role="button"],.btn,.action'):null;
+        var t=String(el&&el.textContent||'').replace(/\s+/g,' ').trim().toUpperCase();
+        if(t.indexOf('ВЫЙТИ')>=0||t.indexOf('В ГОРОД')>=0||t.indexOf('ПОКИНУТЬ')>=0)markManualExit();
+      },true);
+      document.addEventListener('click',function(ev){
+        if(!inScene())return;
+        var el=ev.target&&ev.target.closest?ev.target.closest('button,[role="button"],.btn,.action'):null;
+        var t=String(el&&el.textContent||'').replace(/\s+/g,' ').trim().toUpperCase();
+        if(t.indexOf('ВЫЙТИ')>=0||t.indexOf('В ГОРОД')>=0||t.indexOf('ПОКИНУТЬ')>=0)markManualExit();
+      },true);
+    }catch(_){}
+  }
   function boss(){
     try{
       if(typeof EN==='undefined'||!Array.isArray(EN))return null;
@@ -138,15 +187,17 @@
   window.PPA_CLAN_BOSS_RT_APPLY_STATE=apply;
   window.PPA_CLAN_BOSS_RT_START=function(st){apply(st);setTimeout(function(){ensureBoss(true);apply(lastState);request(true)},120);setTimeout(function(){ensureBoss(true);apply(lastState)},500);return true};
   window.PPA_CLAN_BOSS_RT_HIT=hit;
-  window.PPA_CLAN_BOSS_RT_DIAG=function(){var b=boss();return{installed:installed,scene:inScene(),room:(rtDiag()||{}).room||'',clanId:clanId(),state:lastState,bossPresent:!!b,bossLocked:!!(b&&b.__ppaClanBossRtLocked),entityCount:(typeof EN!=='undefined'&&Array.isArray(EN)?EN.length:-1),lastSpawnMethod:lastSpawnMethod,lastSpawnTry:lastSpawnTry,lastRequest:lastRequest,lastHitAt:lastHitAt,lastHitAmount:lastHitAmount}};
+  window.PPA_CLAN_BOSS_RT_DIAG=function(){var b=boss();return{installed:installed,scene:inScene(),room:(rtDiag()||{}).room||'',clanId:clanId(),state:lastState,bossPresent:!!b,bossLocked:!!(b&&b.__ppaClanBossRtLocked),entityCount:(typeof EN!=='undefined'&&Array.isArray(EN)?EN.length:-1),lastSpawnMethod:lastSpawnMethod,lastSpawnTry:lastSpawnTry,lastRequest:lastRequest,lastHitAt:lastHitAt,lastHitAmount:lastHitAmount,sceneGuard:sceneGuardInstalled,manualExitUntil:manualExitUntil}};
 
   setInterval(function(){
     installTrack();
+    installSceneGuard();
+    bindManualExit();
     if(inScene()){
       var b=boss()||ensureBoss(false);
       if(b&&lastState)apply(lastState);else lockBoss(b);
       request(false);
     }
   },350);
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(installTrack,50)},{once:true});else setTimeout(installTrack,50);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){installTrack();installSceneGuard();bindManualExit()},50)},{once:true});else setTimeout(function(){installTrack();installSceneGuard();bindManualExit()},50);
 })();
