@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v580-clan-boss-defeat-popup-guard-20260925';
+const CLIENT_BUILD = 'v581-clan-boss-preboot-scene-scrub-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -194,7 +194,8 @@ if (!output.includes('data-ppa-tonconnect="1"')) {
 }
 
 if (!output.includes('<head>')) throw new Error('PPA <head> not found');
-output = output.replace('<head>', `<head>\n<script>window.PPA_CLIENT_BUILD=${JSON.stringify(CLIENT_BUILD)};window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=true;window.PPA_TEST_ALL_DUNGEONS=true;</script>`);
+const PPA_PREBOOT_SCENE_GUARD = `<script>(function(){try{function scrub(s){if(!s||typeof s!=='object')return s;var changed=false,o=Object.assign({},s);if(String(o.scene||'').toLowerCase()==='clanboss1'){o.scene='safe';changed=true}if(o.player&&typeof o.player==='object'&&String(o.player.scene||'').toLowerCase()==='clanboss1'){o.player=Object.assign({},o.player,{scene:'safe'});changed=true}if(o.P&&typeof o.P==='object'&&String(o.P.scene||'').toLowerCase()==='clanboss1'){o.P=Object.assign({},o.P,{scene:'safe'});changed=true}return changed?o:s}['pxSave','pxSaveLastGood'].forEach(function(k){try{var raw=localStorage.getItem(k);if(!raw)return;var s=JSON.parse(raw);var n=scrub(s);if(n!==s)localStorage.setItem(k,JSON.stringify(n))}catch(_){}});window.__PPA_CLAN_BOSS_SESSION_ENTERED=false;window.__PPA_CLAN_BOSS_ENTRY_AUTH_UNTIL=0}catch(_){}})();</script>`;
+output = output.replace('<head>', `<head>\n${PPA_PREBOOT_SCENE_GUARD}\n<script>window.PPA_CLIENT_BUILD=${JSON.stringify(CLIENT_BUILD)};window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=true;window.PPA_TEST_ALL_DUNGEONS=true;</script>`);
 
 const legacyInitNeedle = 'async function PPAOnlineInit(){\n';
 if (!output.includes(legacyInitNeedle)) throw new Error('Legacy PPAOnlineInit patch target not found');
