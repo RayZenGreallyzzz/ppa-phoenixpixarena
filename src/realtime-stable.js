@@ -33,6 +33,23 @@ function finite(v, min, max, fallback = 0) {
   return Math.max(min, Math.min(max, v));
 }
 
+const CLAN_BOSS_RESPAWN_MS = 12 * 60 * 60 * 1000;
+const CLAN_BOSS_CONFIG = Object.freeze({
+  clan_boss_1: Object.freeze({ id:'clan_boss_1', mhp:5000000 }),
+  clan_boss_2: Object.freeze({ id:'clan_boss_2', mhp:45000000 }),
+});
+function clanBossConfig(v){
+  return CLAN_BOSS_CONFIG[String(v||'')] || null;
+}
+function clanBossRoom(clanId,bossId){
+  clanId=String(clanId||'').trim();
+  bossId=String(bossId||'').trim();
+  return clanId&&clanBossConfig(bossId)?cleanRoom('clanboss-'+clanId+'-'+bossId):'';
+}
+function isClanBossRoom(v){return cleanRoom(v).startsWith('clanboss-')}
+function jsonObj(v){try{const x=JSON.parse(String(v||'{}'));return x&&typeof x==='object'&&!Array.isArray(x)?x:{}}catch(_){return{}}}
+function jsonArr(v){try{const x=JSON.parse(String(v||'[]'));return Array.isArray(x)?x:[]}catch(_){return[]}}
+
 const DUNGEON_CAPACITY = 40;
 const DUNGEON_RESERVE_MS = 90_000;
 const DUNGEON_MOB_RESPAWN_MS = 14_000;
@@ -110,7 +127,7 @@ function playerPkRoomAllowed(v){
   if(!room||room==='safe')return false;
   if(room.startsWith('pvp1-')||room.startsWith('pvpteam-'))return false;
   if(room==='pvp1'||room==='pvpteam')return false;
-  if(room.startsWith('clansiege'))return false;
+  if(room.startsWith('clansiege')||room.startsWith('clanboss-'))return false;
   return true;
 }
 
@@ -248,6 +265,227 @@ export class RealtimeHub extends BaseRealtimeHub {
       players,
       ts: Date.now(),
     });
+  }
+
+  clanBossStorageKey(clanId) {
+    return 'clan-boss:' + String(clanId || '').trim();
+  }
+
+  async clanBossStored(clanId) {
+    clanId=String(clanId||'').trim();
+    if(!clanId)return null;
+    try{
+      const st=await this.ctx.storage.get(this.clanBossStorageKey(clanId));
+      return st&&typeof st==='object'?st:null;
+    }catch(_){return null}
+  }
+
+  async clanBossPersist(st) {
+    if(!st||!st.clanId)return false;
+    await this.ctx.storage.put(this.clanBossStorageKey(st.clanId),st);
+    return true;
+  }
+
+  async clanBossMembership(a) {
+    if(!a||!a.telegramId||!this.env||!this.env.DB)return null;
+    const row=await this.env.DB.prepare(
+      'SELECT cm.clan_id,c.name AS clan_name FROM clan_members cm LEFT JOIN clans c ON c.id=cm.clan_id WHERE cm.telegram_id=?1 LIMIT 1'
+    ).bind(String(a.telegramId)).first();
+    if(!row||!row.clan_id)return null;
+    a.clanId=String(row.clan_id).slice(0,80);
+    a.clanName=String(row.clan_name||'').trim().slice(0,24);
+    return {clanId:a.clanId,clanName:a.clanName};
+  }
+
+  async clanBossCooldownFromMeta(clanId) {
+    if(!this.env||!this.env.DB||!clanId)return 0;
+    try{
+      const row=await this.env.DB.prepare('SELECT progress_json FROM clan_meta WHERE clan_id=?1').bind(String(clanId)).first();
+      const p=jsonObj(row&&row.progress_json||'{}');
+      return Math.max(0,Number(p.bossReadyAt)||0);
+    }catch(_){return 0}
+  }
+
+  clanBossPublicState(st,room,recipient,now=Date.now()) {
+    if(!st)return null;
+    room=cleanRoom(room||clanBossRoom(st.clanId,st.bossId));
+    let partySize=0,aliveCount=0;
+    for(const peer of this.roomSockets(room)){
+      const pa=attOf(peer);
+      if(String(pa.clanId||'')!==String(st.clanId||''))continue;
+      if(!pa.pid)continue;
+      partySize++;
+      if(!pa.deadLocked&&Number(pa.h)>0)aliveCount++;
+    }
+    const dmg=st.damageByPid&&typeof st.damageByPid==='object'?st.damageByPid:{};
+    const pid=String(recipient&&recipient.pid||'');
+    const hp=Math.max(0,Number(st.hp)||0),mhp=Math.max(1,Number(st.mhp)||1);
+    const respawnAt=Math.max(0,Number(st.respawnAt)||0);
+    const active=String(st.status)==='active'&&hp>0;
+    return {
+      active,bossId:String(st.bossId||''),bossHp:hp,bossMaxHp:mhp,
+      partySize,aliveCount,
+      playerDamage:Math.max(0,Number(dmg[pid])||0),
+      totalDamage:Object.values(dmg).reduce((sum,v)=>sum+Math.max(0,Number(v)||0),0),
+      rewardedDamage:0,earnedCoins:0,
+      status:active?'fighting':(respawnAt>now?'cooldown':'ready'),
+      startedAt:Number(st.startedAt)||0,updatedAt:Number(st.updatedAt)||0,
+      defeatedAt:Number(st.defeatedAt)||0,cooldownUntil:respawnAt,bossReadyAt:respawnAt,
+      lastEvent:active?'Рейд идёт':(respawnAt>now?'Босс повержен · откат 12 часов':'Босс готов'),
+      enterScene:'clanboss1'
+    };
+  }
+
+  async sendClanBossState(ws,a,st=null,now=Date.now()) {
+    if(!a||!a.clanBossRoom||!a.clanId)return false;
+    st=st||await this.clanBossStored(a.clanId);
+    if(!st)return false;
+    wsJson(ws,{type:'clan-boss-state',room:cleanRoom(a.clanBossRoom),bossState:this.clanBossPublicState(st,a.clanBossRoom,a,now),ts:now});
+    return true;
+  }
+
+  async broadcastClanBossState(st,room,now=Date.now()) {
+    if(!st)return;
+    room=cleanRoom(room||clanBossRoom(st.clanId,st.bossId));
+    for(const peer of this.roomSockets(room)){
+      const pa=attOf(peer);
+      if(String(pa.clanId||'')!==String(st.clanId||''))continue;
+      wsJson(peer,{type:'clan-boss-state',room,bossState:this.clanBossPublicState(st,room,pa,now),ts:now});
+    }
+  }
+
+  async clanBossEnter(ws,a,bossId,requestId,now=Date.now()) {
+    requestId=String(requestId||'').slice(0,80);
+    const cfg=clanBossConfig(bossId);
+    if(!cfg){
+      wsJson(ws,{type:'clan-boss-reject',requestId,reason:'Неизвестный клановый босс.',ts:now});
+      return;
+    }
+    const member=await this.clanBossMembership(a);
+    if(!member){
+      wsJson(ws,{type:'clan-boss-reject',requestId,reason:'Ты не состоишь в клане.',ts:now});
+      return;
+    }
+
+    const metaCooldown=await this.clanBossCooldownFromMeta(member.clanId);
+    let st=await this.clanBossStored(member.clanId);
+    if(st&&String(st.status)==='active'&&Number(st.hp)>0&&String(st.bossId)!==cfg.id){
+      wsJson(ws,{type:'clan-boss-reject',requestId,reason:'Другой клановый босс уже активен.',bossState:this.clanBossPublicState(st,clanBossRoom(st.clanId,st.bossId),a,now),ts:now});
+      return;
+    }
+
+    const storedCooldown=st?Math.max(0,Number(st.respawnAt)||0):0;
+    const cooldown=Math.max(metaCooldown,storedCooldown);
+    if(cooldown>now&&!(st&&String(st.status)==='active'&&Number(st.hp)>0)){
+      const coolState=st||{clanId:member.clanId,bossId:cfg.id,hp:0,mhp:cfg.mhp,status:'cooldown',startedAt:0,updatedAt:now,defeatedAt:cooldown-CLAN_BOSS_RESPAWN_MS,respawnAt:cooldown,damageByPid:{}};
+      coolState.status='cooldown';coolState.respawnAt=cooldown;
+      wsJson(ws,{type:'clan-boss-reject',requestId,reason:'Босс ещё восстанавливается.',bossState:this.clanBossPublicState(coolState,clanBossRoom(member.clanId,cfg.id),a,now),ts:now});
+      return;
+    }
+
+    if(!st||String(st.status)!=='active'||!(Number(st.hp)>0)){
+      st={
+        clanId:member.clanId,bossId:cfg.id,
+        hp:cfg.mhp,mhp:cfg.mhp,status:'active',
+        startedAt:now,updatedAt:now,defeatedAt:0,respawnAt:0,
+        damageByPid:{}
+      };
+      await this.clanBossPersist(st);
+    }
+
+    const room=clanBossRoom(member.clanId,st.bossId);
+    a.clanBossId=String(st.bossId);
+    a.clanBossRoom=room;
+    a.lastClanBossSeq=0;
+    a.lastClanBossStateAt=0;
+    this.moveSocketRoom(ws,a,room,now);
+    ws.serializeAttachment(a);
+    const bossState=this.clanBossPublicState(st,room,a,now);
+    wsJson(ws,{type:'clan-boss-entered',requestId,room,bossState,ts:now});
+    this.sendRoomSnapshot(ws,room);
+    await this.broadcastClanBossState(st,room,now);
+    this.sendOnlineCount();
+  }
+
+  clanBossLeave(ws,a,now=Date.now()) {
+    const old=cleanRoom(a&&a.room);
+    if(a){
+      a.clanBossId='';a.clanBossRoom='';a.lastClanBossSeq=0;a.lastClanBossStateAt=0;
+      this.moveSocketRoom(ws,a,'safe',now);
+      ws.serializeAttachment(a);
+    }
+    wsJson(ws,{type:'clan-boss-left',room:'safe',ts:now});
+    if(old&&old!=='safe')this.sendRoomSnapshot(ws,'safe');
+    this.sendOnlineCount();
+  }
+
+  async clanBossRecordDefeat(st,a,now=Date.now()) {
+    if(!this.env||!this.env.DB||!st||!st.clanId)return;
+    try{
+      const row=await this.env.DB.prepare('SELECT progress_json,events_json FROM clan_meta WHERE clan_id=?1').bind(String(st.clanId)).first();
+      if(!row)return;
+      const progress=jsonObj(row.progress_json||'{}');
+      progress.bossReadyAt=Math.max(0,Number(st.respawnAt)||0);
+      progress.lastBossId=String(st.bossId||'');
+      const events=jsonArr(row.events_json||'[]');
+      events.unshift({
+        id:'ce_'+crypto.randomUUID(),type:'clanBossDefeated',
+        playerId:String(a&&a.telegramId||''),playerName:cleanName(a&&a.name||'Игрок'),
+        text:'Клановый босс повержен · откат 12 часов',ts:now
+      });
+      await this.env.DB.prepare('UPDATE clan_meta SET progress_json=?1,events_json=?2,updated_at=?3 WHERE clan_id=?4')
+        .bind(JSON.stringify(progress),JSON.stringify(events.slice(0,300)),now,String(st.clanId)).run();
+    }catch(e){console.warn('Clan boss defeat meta',e)}
+  }
+
+  async clanBossHit(ws,a,m,now=Date.now()) {
+    const room=cleanRoom(a&&a.room);
+    const expected=clanBossRoom(a&&a.clanId,a&&a.clanBossId);
+    if(!a||!a.clanId||!a.clanBossId||!expected||room!==expected||a.deadLocked||!(Number(a.h)>0)){
+      wsJson(ws,{type:'clan-boss-reject',reason:'Удар по клановому боссу отклонён.',ts:now});
+      return;
+    }
+
+    const seq=Math.max(0,Math.floor(Number(m.seq)||0));
+    if(!seq||seq<=Math.max(0,Number(a.lastClanBossSeq)||0))return;
+    const st=await this.clanBossStored(a.clanId);
+    if(!st||String(st.status)!=='active'||!(Number(st.hp)>0)||String(st.bossId)!==String(a.clanBossId)){
+      if(st)await this.sendClanBossState(ws,a,st,now);
+      return;
+    }
+
+    const atk=Math.max(1,Math.min(2500,Number(a.atk)||1));
+    const critDmg=Math.max(100,Math.min(350,Number(a.critDmg)||180));
+    const maxHit=Math.max(500,Math.min(250000,Math.ceil(atk*40+critDmg*25+10000)));
+    const requested=finite(m.amount,0,maxHit,0);
+    if(!(requested>0))return;
+
+    const before=Math.max(0,Number(st.hp)||0);
+    const damage=Math.min(before,requested);
+    st.hp=Math.max(0,before-damage);
+    st.updatedAt=now;
+    if(!st.damageByPid||typeof st.damageByPid!=='object')st.damageByPid={};
+    const pid=String(a.pid||'');
+    st.damageByPid[pid]=Math.round((Math.max(0,Number(st.damageByPid[pid])||0)+damage)*100)/100;
+    a.lastClanBossSeq=seq;
+    ws.serializeAttachment(a);
+
+    let defeated=false;
+    if(st.hp<=0){
+      defeated=true;
+      st.hp=0;st.status='cooldown';st.defeatedAt=now;st.respawnAt=now+CLAN_BOSS_RESPAWN_MS;
+    }
+    await this.clanBossPersist(st);
+    await this.broadcastClanBossState(st,room,now);
+
+    if(defeated){
+      await this.clanBossRecordDefeat(st,a,now);
+      this.roomBroadcast(room,{
+        type:'clan-boss-defeated',room,bossId:String(st.bossId||''),
+        cooldownUntil:Number(st.respawnAt)||0,
+        bossState:this.clanBossPublicState(st,room,a,now),ts:now
+      },null);
+    }
   }
 
   dungeonReservations() {
@@ -1405,6 +1643,26 @@ export class RealtimeHub extends BaseRealtimeHub {
     const a = attOf(ws);
     const now = Date.now();
 
+    if (m.type === 'clan-boss-enter') {
+      await this.clanBossEnter(ws,a,String(m.bossId||''),String(m.requestId||''),now);
+      return;
+    }
+
+    if (m.type === 'clan-boss-leave') {
+      this.clanBossLeave(ws,a,now);
+      return;
+    }
+
+    if (m.type === 'clan-boss-state-request') {
+      await this.sendClanBossState(ws,a,null,now);
+      return;
+    }
+
+    if (m.type === 'clan-boss-hit') {
+      await this.clanBossHit(ws,a,m,now);
+      return;
+    }
+
     if (m.type === 'player-respawn-confirm') {
       if(a.arenaMatchId)return;
       if(!a.deadLocked&&Number(a.h)>0&&!m.wasDead){
@@ -2209,6 +2467,10 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.lastSeenAt = now;
       {
         const pingRoom = cleanRoom(a.room);
+        if (isClanBossRoom(pingRoom)&&a.clanBossRoom&&cleanRoom(a.clanBossRoom)===pingRoom&&now-Number(a.lastClanBossStateAt||0)>=5000) {
+          a.lastClanBossStateAt=now;
+          await this.sendClanBossState(ws,a,null,now);
+        }
         if (mobAuthorityRoom(pingRoom)) {
           await this.ensureMobRoomLoaded(pingRoom);
           if (this.processMobRespawns(pingRoom, now)) await this.persistMobRoom(pingRoom);
@@ -2235,7 +2497,8 @@ export class RealtimeHub extends BaseRealtimeHub {
     }
 
     if (m.type === 'room') {
-      const requested = cleanRoom(m.room);
+      let requested = cleanRoom(m.room);
+      if(isClanBossRoom(requested)&&(!a.clanBossRoom||cleanRoom(a.clanBossRoom)!==requested))requested='safe';
       const d = dungeonInfo(requested);
       if (d) {
         const current = dungeonInfo(a.room);
@@ -2279,7 +2542,8 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (now - (Number(a.lastMove) || 0) < 90) return;
 
       const oldRoom = cleanRoom(a.room);
-      const wantedRoom = m.room != null ? cleanRoom(m.room) : oldRoom;
+      let wantedRoom = m.room != null ? cleanRoom(m.room) : oldRoom;
+      if(isClanBossRoom(wantedRoom)&&(!a.clanBossRoom||cleanRoom(a.clanBossRoom)!==wantedRoom))wantedRoom='safe';
       const wantedDungeon = dungeonInfo(wantedRoom);
       const currentDungeon = dungeonInfo(oldRoom);
       let currentRoom = oldRoom;
