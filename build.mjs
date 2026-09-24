@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v583-clan-boss-authoritative-core-20260925';
+const CLIENT_BUILD = 'v584-clan-boss-single-damage-path-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6760,6 +6760,24 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
 }
 /* ======================================================================== */
 
+/* === CLAN BOSS SINGLE DAMAGE PATH ======================================== */
+// The packed game already calls clanBossTrackDamage() after its native attack
+// bookkeeping. In realtime raids the actual damage has already been sent once
+// through PPA_MOB_EVENT_DAMAGE -> PPA_CLAN_BOSS_DAMAGE. Redirect only CALL
+// SITES (never the function declaration) so the legacy tracker cannot mutate
+// local boss state a second time.
+let _ppaClanBossTrackCalls=0;
+output=output.replace(/\bclanBossTrackDamage\(/g,function(match,offset,whole){
+  const before=whole.slice(Math.max(0,offset-24),offset);
+  if(/function\s+$/.test(before))return match;
+  _ppaClanBossTrackCalls++;
+  return 'ppaClanBossTrackDamageLocal(';
+});
+if(_ppaClanBossTrackCalls<1){
+  throw new Error('Clan boss legacy damage call bridge did not find any call sites');
+}
+/* ======================================================================== */
+
 /* === RUNTIME BUILD AUDIT ================================================= */
 {
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
@@ -6817,6 +6835,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !realtimeServer.includes("return 'clan-boss:' + String(clanId") ||
       !realtimeClient.includes('window.PPA_CLAN_BOSS_ENTER=clanBossEnter') ||
       !realtimeClient.includes('window.PPA_CLAN_BOSS_DAMAGE=clanBossDamage') ||
+      !realtimeClient.includes('window.ppaClanBossTrackDamageLocal=function') ||
       !realtimeClient.includes("type:'clan-boss-hit'") ||
       !dungeonMobEvents.includes('e&&e.isClanBoss&&window.PPA_CLAN_BOSS_DAMAGE') ||
       !worldCombat.includes("s==='clanboss1'") ||
