@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v570-clan-boss-instant-button-feedback-20260924';
+const CLIENT_BUILD = 'v571-clan-boss-entry-race-fix-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -237,6 +237,16 @@ function ppaPatchRegex(label, re, replacement, all=false) {
   console.log('[PPA BUILD] '+label+': patched');
   return output !== before;
 }
+
+
+// Clan boss scene can render one legacy frame before the authoritative boss
+// object is materialized. Do not report that transient state as a real error.
+ppaPatchRegex(
+  'clan boss transient not-found message',
+  /(['"])Босс не найден\1/g,
+  "$1Босс загружается…$1",
+  true
+);
 
 function ppaEscapeSrcdocCode(code) {
   return String(code)
