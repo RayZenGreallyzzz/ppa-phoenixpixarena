@@ -35,6 +35,9 @@
       if(typeof dropLoot!=='function'||dropLoot.__ppaBossBonusRoll)return;
       var base=dropLoot;
       var wrapped=function(e){
+        // Clan bosses are fully server-rewarded. Never let the legacy local
+        // loot table leak Gold/PPA/gray gear or duplicate realtime rewards.
+        if(e&&e.isClanBoss)return null;
         var first=base.apply(this,arguments);
         if(!isBoss(e)||!rewardEligible(e))return first;
         if(Math.random()>=BONUS_ROLL_CHANCE)return first;
