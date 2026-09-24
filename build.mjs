@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v553-global-text-longpress-guard-20260924';
+const CLIENT_BUILD = 'v554-smith-dark-native-select-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -5068,6 +5068,25 @@ if(!output.includes("id=\"ppaRuneFusionExactSource\"") ||
    !output.includes("infoText:ppaFusionRuneInfoText(d)") ||
    !output.includes("INV.runes[d.key]=have-2")) {
   throw new Error('Exact INV.runes fusion source patch did not apply');
+}
+/* ======================================================================== */
+
+
+/* === BLACKSMITH DARK NATIVE SELECT ====================================== */
+// Styling only. Keep the native <select> controls and all smith event handlers
+// untouched; color-scheme asks Android/Telegram WebView to render the popup dark.
+ppaPatchRegex(
+  'blacksmith dark sharpening selects',
+  /\.pill\{height:30px;padding:0 10px;border:1px solid #49351c;border-radius:4px;background:#0d1114;color:#bfb5a4;font-size:9px;cursor:pointer\}/,
+  ".pill{height:30px;padding:0 10px;border:1px solid #49351c;border-radius:4px;background:#0d1114;color:#bfb5a4;font-size:9px;cursor:pointer}\n"+
+  "html,body{color-scheme:dark}\n"+
+  "select.pill{color-scheme:dark!important;background:#0d1114!important;color:#f0c166!important;border-color:#7a5528!important}\n"+
+  "select.pill option,select.pill optgroup{background:#15110c!important;color:#f0c166!important}"
+);
+
+if(!output.includes("select.pill{color-scheme:dark!important") ||
+   !output.includes("select.pill option,select.pill optgroup{background:#15110c!important;color:#f0c166!important}")) {
+  throw new Error('Blacksmith dark native select styling did not apply');
 }
 /* ======================================================================== */
 
