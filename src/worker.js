@@ -165,38 +165,17 @@ async function registerCharacter(env, telegramId, nickname, classKey) {
   return { ok: true, profile: profileFromRow(await env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(telegramId).first()) };
 }
 
-function sanitizeTransientGameState(state) {
-  if (!state || typeof state !== 'object' || Array.isArray(state)) return state;
-  let changed = false;
-  const out = Object.assign({}, state);
-  function scrub(obj, key) {
-    if (!obj || typeof obj !== 'object') return obj;
-    if (String(obj[key] || '').toLowerCase() !== 'clanboss1') return obj;
-    const next = Object.assign({}, obj);
-    next[key] = 'safe';
-    changed = true;
-    return next;
-  }
-  const rootScene = String(out.scene || '').toLowerCase();
-  if (rootScene === 'clanboss1') { out.scene = 'safe'; changed = true; }
-  const player = scrub(out.player, 'scene'); if (player !== out.player) out.player = player;
-  const p = scrub(out.P, 'scene'); if (p !== out.P) out.P = p;
-  return changed ? out : state;
-}
-
 async function loadSave(env, telegramId) {
   const row = await env.DB.prepare('SELECT version, state_json, updated_at FROM saves WHERE telegram_id=?1').bind(telegramId).first();
   if (!row) return { ok: true, version: null, state: null };
   let state = null;
   try { state = JSON.parse(row.state_json || 'null'); } catch (_) { state = null; }
-  state = sanitizeTransientGameState(state);
   return { ok: true, version: Number(row.version) || 0, state, updatedAt: Number(row.updated_at) || 0 };
 }
 
 async function saveGameState(env, telegramId, state) {
   if (!state || typeof state !== 'object' || Array.isArray(state)) return { ok: false, status: 400, message: 'Некорректное сохранение.' };
 
-  state = sanitizeTransientGameState(state);
   const raw = JSON.stringify(state);
   if (new TextEncoder().encode(raw).byteLength > 1_800_000) {
     return { ok: false, status: 413, message: 'Сохранение слишком большое.' };
