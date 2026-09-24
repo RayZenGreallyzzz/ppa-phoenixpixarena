@@ -1,7 +1,7 @@
 (function(){
   'use strict';
 
-  var installed=false,originalTrack=null,applying=0,lastState=null,lastRequest=0,lastHitAt=0,lastHitAmount=0,lastHitTokenAt=0;
+  var installed=false,originalTrack=null,applying=0,lastState=null,lastRequest=0,lastHitAt=0,lastHitAmount=0,lastHitTokenAt=0,lastSpawnTry=0,lastSpawnMethod='';
 
   function inScene(){try{return typeof P!=='undefined'&&P&&P.scene==='clanboss1'}catch(_){return false}}
   function rtDiag(){try{return window.PPA_REALTIME_DIAG?window.PPA_REALTIME_DIAG():null}catch(_){return null}}
@@ -14,6 +14,41 @@
       if(typeof EN==='undefined'||!Array.isArray(EN))return null;
       for(var i=0;i<EN.length;i++)if(EN[i]&&EN[i].isClanBoss)return EN[i];
     }catch(_){}
+    return null;
+  }
+  function trySpawnFn(name,fn){
+    if(typeof fn!=='function'||/draw|render|update|tick|damage|track|reward|drop|state|diag|receive|apply|hit/i.test(String(name||'')))return null;
+    try{
+      var src=Function.prototype.toString.call(fn);
+      if(src.indexOf('isClanBoss')<0)return null;
+      if(src.indexOf('EN.push')<0&&src.indexOf('.push(')<0)return null;
+      lastSpawnMethod=String(name||'anonymous');
+      try{fn(lastState&&lastState.bossId,lastState)}catch(_){try{fn(lastState)}catch(__){try{fn()}catch(___){}}}
+      return boss();
+    }catch(_){return null}
+  }
+  function ensureBoss(force){
+    if(!inScene()||!lastState||lastState.active!==true||!(Number(lastState.bossHp)>0))return boss();
+    var b=boss();if(b)return b;
+    var now=Date.now();if(!force&&now-lastSpawnTry<250)return null;lastSpawnTry=now;
+
+    var names=['spawnClanBoss','spawnClanBoss1','spawnClanRaidBoss','createClanBoss','makeClanBoss','clanBossSpawn','startClanBossFight','startClanBoss1'];
+    for(var i=0;i<names.length;i++){
+      try{b=trySpawnFn(names[i],window[names[i]])}catch(_){}
+      if(b)return b;
+    }
+
+    try{
+      var keys=Object.getOwnPropertyNames(window);
+      for(var k=0;k<keys.length;k++){
+        var name=keys[k],fn=null;
+        try{fn=window[name]}catch(_){continue}
+        if(typeof fn!=='function')continue;
+        b=trySpawnFn(name,fn);
+        if(b)return b;
+      }
+    }catch(_){}
+
     return null;
   }
   function lockBoss(b){
@@ -34,7 +69,7 @@
     if(!st||typeof st!=='object')return false;
     lastState=Object.assign({},st);
     try{if(window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(lastState)}catch(_){}
-    var b=lockBoss(boss());
+    var b=lockBoss(boss()||ensureBoss(true));
     if(b){
       applying++;
       try{
@@ -101,14 +136,15 @@
     if(m.type==='clan-boss-reject')request(true);
   };
   window.PPA_CLAN_BOSS_RT_APPLY_STATE=apply;
-  window.PPA_CLAN_BOSS_RT_START=function(st){apply(st);setTimeout(function(){request(true)},120);return true};
+  window.PPA_CLAN_BOSS_RT_START=function(st){apply(st);setTimeout(function(){ensureBoss(true);apply(lastState);request(true)},120);setTimeout(function(){ensureBoss(true);apply(lastState)},500);return true};
   window.PPA_CLAN_BOSS_RT_HIT=hit;
-  window.PPA_CLAN_BOSS_RT_DIAG=function(){return{installed:installed,scene:inScene(),room:(rtDiag()||{}).room||'',clanId:clanId(),state:lastState,bossLocked:!!(boss()&&boss().__ppaClanBossRtLocked),lastRequest:lastRequest,lastHitAt:lastHitAt,lastHitAmount:lastHitAmount}};
+  window.PPA_CLAN_BOSS_RT_DIAG=function(){var b=boss();return{installed:installed,scene:inScene(),room:(rtDiag()||{}).room||'',clanId:clanId(),state:lastState,bossPresent:!!b,bossLocked:!!(b&&b.__ppaClanBossRtLocked),entityCount:(typeof EN!=='undefined'&&Array.isArray(EN)?EN.length:-1),lastSpawnMethod:lastSpawnMethod,lastSpawnTry:lastSpawnTry,lastRequest:lastRequest,lastHitAt:lastHitAt,lastHitAmount:lastHitAmount}};
 
   setInterval(function(){
     installTrack();
     if(inScene()){
-      lockBoss(boss());
+      var b=boss()||ensureBoss(false);
+      if(b&&lastState)apply(lastState);else lockBoss(b);
       request(false);
     }
   },350);
