@@ -43,14 +43,30 @@
     }catch(_){return null}
   }
 
+  function sanitizeClanBossSaveState(state){
+    try{
+      if(!state||typeof state!=='object')return state;
+      var out=state,changed=false;
+      function root(){if(!changed){out=Object.assign({},state);changed=true}}
+      if(String(state.scene||'').toLowerCase()==='clanboss1'){root();out.scene='safe'}
+      if(state.player&&typeof state.player==='object'&&String(state.player.scene||'').toLowerCase()==='clanboss1'){
+        root();out.player=Object.assign({},state.player,{scene:'safe'});
+      }
+      if(state.P&&typeof state.P==='object'&&String(state.P.scene||'').toLowerCase()==='clanboss1'){
+        root();out.P=Object.assign({},state.P,{scene:'safe'});
+      }
+      return out;
+    }catch(_){return state}
+  }
+
   function currentSaveSnapshot(){
     try{
       if(typeof window.ppaBuildSaveObject==='function'){
         var built=window.ppaBuildSaveObject();
-        if(built&&typeof built==='object')return built;
+        if(built&&typeof built==='object')return sanitizeClanBossSaveState(built);
       }
     }catch(_){}
-    return localSave();
+    return sanitizeClanBossSaveState(localSave());
   }
 
   function localNickname(){
@@ -91,6 +107,7 @@
       var now=Date.now();
       var wait=Math.max(0,1200-(now-lastSaveAt));
       if(wait)await new Promise(function(resolve){setTimeout(resolve,wait)});
+      state=sanitizeClanBossSaveState(state);
       var result=await call('/api/save',{state:state,version:version==null?null:Number(version)});
       lastSaveAt=Date.now();
       try{if(window.PPA_CLOUD&&Number.isFinite(Number(result&&result.version)))window.PPA_CLOUD.version=Number(result.version)}catch(_){}
@@ -118,7 +135,13 @@
     isAvailable:available,
     ppaAuthTelegram:auth,
     ppaLoadProfile:loadProfileWithSafeFirstMigration,
-    ppaLoadSave:async function(){await auth();return call('/api/save/load')},
+    ppaLoadSave:async function(){
+      await auth();
+      var r=await call('/api/save/load');
+      if(r&&r.state&&typeof r.state==='object')r.state=sanitizeClanBossSaveState(r.state);
+      if(r&&r.save&&typeof r.save==='object')r.save=sanitizeClanBossSaveState(r.save);
+      return r;
+    },
     ppaSaveGame:async function(state,version){await auth();return queueSave(state,version)},
     ppaRegisterCharacter:async function(nickname,classKey){return authed('/api/character/register',{nickname:nickname,classKey:classKey||''})},
     ppaSyncNicknameFromSave:async function(){return authed('/api/profile/sync-nickname',{nickname:localNickname()})},
