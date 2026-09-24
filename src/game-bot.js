@@ -49,15 +49,27 @@ function inviteMarkup(origin){
   ]};
 }
 async function sendInvite(env,chatId,origin){
+  const markup=inviteMarkup(origin);
+  const photo=origin+'/assets/phonix-invite.jpg?v=565';
   try{
-    return await tgPhotoBytes(env,chatId,INVITE_CAPTION,inviteMarkup(origin));
-  }catch(e){
-    console.error('PPA invite image send failed',e);
-    return tg(env,'sendMessage',{
+    return await tg(env,'sendPhoto',{
       chat_id:chatId,
-      text:INVITE_CAPTION,
-      reply_markup:inviteMarkup(origin)
+      photo,
+      caption:INVITE_CAPTION,
+      reply_markup:markup
     });
+  }catch(urlErr){
+    console.error('PPA invite URL send failed',urlErr);
+    try{
+      return await tgPhotoBytes(env,chatId,INVITE_CAPTION,markup);
+    }catch(uploadErr){
+      console.error('PPA invite direct upload failed',uploadErr);
+      return tg(env,'sendMessage',{
+        chat_id:chatId,
+        text:INVITE_CAPTION,
+        reply_markup:markup
+      });
+    }
   }
 }
 async function handleMessage(env,message,origin){
