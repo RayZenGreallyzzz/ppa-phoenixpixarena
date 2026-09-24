@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v584-clan-boss-single-damage-path-20260925';
+const CLIENT_BUILD = 'v585-clan-boss-qa-10s-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6829,6 +6829,12 @@ if(_ppaClanBossTrackCalls<1){
     throw new Error('Remote Great Ruri visibility/runtime sync patch missing');
   }
   if (!realtimeServer.includes('CLAN_BOSS_RESPAWN_MS = 12 * 60 * 60 * 1000') ||
+      !realtimeServer.includes('CLAN_BOSS_QA_TEST_OPEN = true') ||
+      !realtimeServer.includes('CLAN_BOSS_QA_RESPAWN_MS = 10 * 1000') ||
+      !realtimeServer.includes('st.qaMode=CLAN_BOSS_QA_TEST_OPEN') ||
+      !realtimeClient.includes('ТЕСТ · КЛАНОВЫЙ БОСС · ОТКАТ 10 СЕКУНД') ||
+      !clanOnline.includes('const CLAN_BOSS_QA_TEST_OPEN=true') ||
+      !clanOnline.includes('clanBossUiReadyAt') ||
       !realtimeServer.includes("m.type === 'clan-boss-enter'") ||
       !realtimeServer.includes("m.type === 'clan-boss-hit'") ||
       !realtimeServer.includes("type:'clan-boss-defeated'") ||
