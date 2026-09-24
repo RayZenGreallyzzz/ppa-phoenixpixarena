@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v563-clan-trade-server-final-20260924';
+const CLIENT_BUILD = 'v564-clan-boss-realtime-shared-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6780,6 +6780,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
   const onlineClient=fs.readFileSync(path.join(ROOT,'gateway/online-client.js'),'utf8');
   const ppaBridge=fs.readFileSync(path.join(ROOT,'gateway/ppa-bridge.js'),'utf8');
   const clanOnline=fs.readFileSync(path.join(ROOT,'src/clan-online.js'),'utf8');
+  const clanBossRealtime=fs.readFileSync(path.join(ROOT,'gateway/clan-boss-realtime.js'),'utf8');
 
   if (worldCombat.includes('ppaWorldPkBtn') ||
       worldCombat.includes('PPA_WORLD_PK_TRY_BASIC_ATTACK') ||
@@ -6808,6 +6809,17 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !ruriPet.includes("match&&!window.__PPA_REMOTE_PET_DRAW") ||
       !realtimeClient.includes("if(p.pt!==undefined)r.petName=")) {
     throw new Error('Remote Great Ruri visibility/runtime sync patch missing');
+  }
+  if (!clanOnline.includes('CREATE TABLE IF NOT EXISTS clan_boss_raids') ||
+      !clanOnline.includes("if(a==='startRaid')") ||
+      !realtimeServer.includes("m.type === 'clan-boss-hit'") ||
+      !realtimeServer.includes('CLAN_BOSS_COOLDOWN_MS=6*60*60*1000') ||
+      !realtimeClient.includes("P.scene==='clanboss1'") ||
+      !realtimeClient.includes("indexOf('clan-boss-')===0") ||
+      !clanBossRealtime.includes('PPA_CLAN_BOSS_RT_HIT') ||
+      !clanBossRealtime.includes('__ppaClanBossRtLocked') ||
+      !onlineClient.includes('PPA_CLAN_BOSS_RT_START')) {
+    throw new Error('Server-authoritative clan boss realtime bridge incomplete');
   }
   if (!clanOnline.includes('CREATE TABLE IF NOT EXISTS clan_trades') ||
       !clanOnline.includes("if(a==='requestTrade')") ||
@@ -6970,6 +6982,7 @@ const filesToPublish = [
   ['gateway/ppa-bridge.js','ppa-bridge.js','Telegram gateway bridge missing'],
   ['gateway/online-client.js','online-client.js','Online client bridge missing'],
   ['gateway/realtime-client.js','realtime-client.js','Realtime client bridge missing'],
+  ['gateway/clan-boss-realtime.js','clan-boss-realtime.js','Clan boss realtime bridge missing'],
   ['gateway/chat-ui.js','chat-ui.js','Realtime chat UI missing'],
   ['gateway/arena-pvp-client.js','arena-pvp-client.js','Arena PvP client missing'],
   ['gateway/world-combat-client.js','world-combat-client.js','World combat client missing'],
@@ -6999,7 +7012,7 @@ for (const [srcName,dstName,err] of filesToPublish) {
 
 if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
 const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
-output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('chat-ui.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
+output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"></script>\n<script src="${js('mobile-hud-tweaks.js')}"></script>\n<script src="${js('online-client.js')}"></script>\n<script src="${js('chat-ui.js')}"></script>\n<script src="${js('realtime-client.js')}"></script>\n<script src="${js('clan-boss-realtime.js')}"></script>\n<script src="${js('world-combat-client.js')}"></script>\n<script src="${js('dungeon60-dragon.js')}"></script>\n<script src="${js('dungeon-mob-events.js')}"></script>
 <script src="${js('dungeon-drop-slots.js')}"></script>
 <script src="${js('boss-drop-boost.js')}"></script>
 <script src="${js('ruri-event-drops.js')}"></script>
