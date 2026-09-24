@@ -10,7 +10,10 @@
     lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null,
     assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40,
     selfPid:'',serverDeadLocked:false,pkTargetId:'',pkAutoTarget:false,pkLastAttack:0,arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,arenaLastRoundToken:'',arenaAutoTarget:false,arenaAutoTick:0,
-    arenaQueuePromise:null,arenaQueueResolve:null,arenaQueueTimer:0,arenaQueueMode:''
+    arenaQueuePromise:null,arenaQueueResolve:null,arenaQueueTimer:0,arenaQueueMode:'',
+    clanBossRoom:'',clanBossId:'',clanBossState:null,clanBossSeq:0,
+    clanBossEnterPromise:null,clanBossEnterResolve:null,clanBossEnterTimer:0,clanBossRequestId:'',
+    clanBossEnteringUntil:0,clanBossSceneSeen:false,clanBossReconnectId:'',clanBossDefeatShown:false
   };
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
@@ -31,6 +34,7 @@
     try{
       if(RT.arenaRoom)return canonicalRoom(RT.arenaRoom);
       if(RT.arenaLeavingUntil>Date.now())return 'safe';
+      if(RT.clanBossRoom)return canonicalRoom(RT.clanBossRoom);
       // 41-60 must use a dungeon-* room or server-authoritative mobs/bosses never activate.
       if(typeof P!=='undefined'&&P&&P.scene==='dungeon'&&typeof DUNGEON_MODE!=='undefined'){
         if(DUNGEON_MODE==='41-60')return 'dungeon-41-60';
@@ -105,6 +109,92 @@
   function status(text,col){try{if(typeof ppaOnlineSetStatus==='function'){ppaOnlineSetStatus(text,col);fixOnlineBadge()}}catch(_){}}
   function refreshBadge(){if(RT.ws&&RT.ws.readyState===WebSocket.OPEN)status(badgeText(),'#9fffc1')}
   function send(o){try{if(RT.ws&&RT.ws.readyState===WebSocket.OPEN){RT.ws.send(JSON.stringify(o));return true}}catch(_){}return false}
+
+  function clanBossEntity(){
+    try{
+      if(typeof EN==='undefined'||!Array.isArray(EN))return null;
+      for(var i=0;i<EN.length;i++)if(EN[i]&&EN[i].isClanBoss)return EN[i];
+    }catch(_){}
+    return null;
+  }
+  function clanBossApplyState(st){
+    if(!st||typeof st!=='object')return false;
+    RT.clanBossState=Object.assign({},st);
+    RT.clanBossId=String(st.bossId||RT.clanBossId||'');
+    try{if(window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(RT.clanBossState)}catch(_){}
+    try{
+      var b=clanBossEntity();
+      if(b){
+        b.__ppaClanBossServer=true;
+        if(Number.isFinite(Number(st.bossMaxHp)))b.mhp=Math.max(1,Number(st.bossMaxHp));
+        if(Number.isFinite(Number(st.bossHp)))b.hp=Math.max(0,Math.min(Math.max(1,Number(b.mhp)||1),Number(st.bossHp)));
+      }
+    }catch(_){}
+    return true;
+  }
+  function clanBossResolve(result){
+    var fn=RT.clanBossEnterResolve;
+    RT.clanBossEnterResolve=null;RT.clanBossEnterPromise=null;RT.clanBossRequestId='';
+    if(RT.clanBossEnterTimer){clearTimeout(RT.clanBossEnterTimer);RT.clanBossEnterTimer=0}
+    if(fn)try{fn(result||{ok:false,message:'Клановый рейд не подтверждён'})}catch(_){}
+  }
+  function clanBossEnter(bossId){
+    bossId=String(bossId||'');
+    if(bossId!=='clan_boss_1'&&bossId!=='clan_boss_2')return Promise.resolve({ok:false,message:'Неизвестный клановый босс'});
+    if(RT.clanBossEnterPromise)return RT.clanBossEnterPromise;
+    if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN)return Promise.resolve({ok:false,message:'ONLINE переподключается'});
+    RT.clanBossId=bossId;RT.clanBossSeq=0;RT.clanBossSceneSeen=false;RT.clanBossEnteringUntil=Date.now()+6000;
+    RT.clanBossRequestId='cb:'+Date.now().toString(36)+':'+Math.random().toString(36).slice(2,8);
+    RT.clanBossEnterPromise=new Promise(function(resolve){RT.clanBossEnterResolve=resolve});
+    if(!send({type:'clan-boss-enter',bossId:bossId,requestId:RT.clanBossRequestId})){
+      clanBossResolve({ok:false,message:'Не удалось отправить вход к боссу'});
+      return Promise.resolve({ok:false,message:'Не удалось отправить вход к боссу'});
+    }
+    RT.clanBossEnterTimer=setTimeout(function(){
+      clanBossResolve({ok:false,message:'Сервер клан-босса не ответил'});
+    },8000);
+    return RT.clanBossEnterPromise;
+  }
+  function clanBossLeave(sendServer){
+    try{if(sendServer!==false&&RT.clanBossRoom)send({type:'clan-boss-leave',bossId:RT.clanBossId||''})}catch(_){}
+    RT.clanBossRoom='';RT.clanBossId='';RT.clanBossState=null;RT.clanBossSeq=0;
+    RT.clanBossEnteringUntil=0;RT.clanBossSceneSeen=false;RT.clanBossReconnectId='';RT.clanBossDefeatShown=false;
+    if(RT.clanBossEnterPromise)clanBossResolve({ok:false,message:'Вход к боссу отменён'});
+    commitRoom('safe');RT.lastRoomSync=0;
+    return true;
+  }
+  function clanBossDamage(e,amount,meta){
+    try{
+      if(!RT.clanBossRoom||!RT.clanBossId||typeof P==='undefined'||!P||P.scene!=='clanboss1')return false;
+      var st=RT.clanBossState||{};
+      if(String(st.status||'')!=='fighting'&&st.active!==true)return false;
+      var dmg=Number(amount);
+      if(!Number.isFinite(dmg)||dmg<=0)return false;
+      var seq=++RT.clanBossSeq;
+      return send({
+        type:'clan-boss-hit',bossId:RT.clanBossId,seq:seq,
+        amount:Math.round(dmg*100)/100,
+        kind:String(meta&&meta.kind||'').slice(0,16)
+      });
+    }catch(_){return false}
+  }
+  function clanBossTick(){
+    try{
+      var now=Date.now(),sceneNow=(typeof P!=='undefined'&&P)?String(P.scene||''):'';
+      if(RT.clanBossRoom){
+        if(sceneNow==='clanboss1'){
+          RT.clanBossSceneSeen=true;
+          if(RT.clanBossState)clanBossApplyState(RT.clanBossState);
+        }else if(RT.clanBossSceneSeen&&now>RT.clanBossEnteringUntil){
+          clanBossLeave(true);
+        }
+        return;
+      }
+      if(sceneNow==='clanboss1'&&!RT.clanBossEnterPromise&&!RT.clanBossReconnectId&&RT.ws&&RT.ws.readyState===WebSocket.OPEN){
+        if(typeof changeScene==='function')changeScene('safe');
+      }
+    }catch(_){}
+  }
 
   function arenaQueueStatus(text,on){
     try{
@@ -312,6 +402,46 @@
   function receive(m){
     if(!m||typeof m!=='object')return;
     RT.lastServerAt=Date.now();
+    if(m.type==='clan-boss-entered'){
+      if(RT.clanBossRequestId&&m.requestId&&String(m.requestId)!==String(RT.clanBossRequestId))return;
+      RT.clanBossRoom=canonicalRoom(m.room||'');
+      RT.clanBossId=String(m.bossState&&m.bossState.bossId||RT.clanBossId||'');
+      RT.clanBossReconnectId='';
+      RT.clanBossEnteringUntil=Date.now()+6000;
+      RT.clanBossSceneSeen=false;RT.clanBossSeq=0;
+      commitRoom(RT.clanBossRoom);RT.serverRoom=RT.clanBossRoom;RT.lastRoomSync=Date.now();
+      clanBossApplyState(m.bossState||{});
+      clanBossResolve({ok:true,bossState:m.bossState||{},message:'Рейд запущен.'});
+      sendMove(true);
+      return;
+    }
+    if(m.type==='clan-boss-state'){
+      if(m.room&&RT.clanBossRoom&&canonicalRoom(m.room)!==canonicalRoom(RT.clanBossRoom))return;
+      clanBossApplyState(m.bossState||{});
+      return;
+    }
+    if(m.type==='clan-boss-defeated'){
+      clanBossApplyState(m.bossState||Object.assign({},RT.clanBossState||{},{active:false,status:'cooldown',bossHp:0,bossReadyAt:Number(m.cooldownUntil)||0,cooldownUntil:Number(m.cooldownUntil)||0}));
+      if(!RT.clanBossDefeatShown){
+        RT.clanBossDefeatShown=true;
+        try{if(typeof showPickup==='function')showPickup('КЛАНОВЫЙ БОСС ПОВЕРЖЕН · ОТКАТ 12 ЧАСОВ','#ffd36a')}catch(_){}
+      }
+      return;
+    }
+    if(m.type==='clan-boss-reject'){
+      var msg=String(m.reason||'Клановый рейд отклонён');
+      if(m.bossState)clanBossApplyState(m.bossState);
+      if(RT.clanBossEnterPromise)clanBossResolve({ok:false,message:msg,bossState:m.bossState||null});
+      if(RT.clanBossReconnectId){
+        RT.clanBossReconnectId='';
+        try{if(typeof changeScene==='function'&&typeof P!=='undefined'&&P&&P.scene==='clanboss1')changeScene('safe')}catch(_){}
+      }
+      return;
+    }
+    if(m.type==='clan-boss-left'){
+      clanBossLeave(false);
+      return;
+    }
     if(m.type==='hello'){
       RT.selfPid=String(m.pid||RT.selfPid||'');
       try{if(typeof PPA_ONLINE!=='undefined'){PPA_ONLINE.selfId=RT.selfPid||String(PPA_ONLINE.selfId||'');PPA_ONLINE.selfName=String(m.name||selfName())}}catch(_){}
@@ -557,9 +687,9 @@
       var t=await ticket(),proto=location.protocol==='https:'?'wss:':'ws:';
       var ws=new WebSocket(proto+'//'+location.host+'/api/realtime/ws?ticket='+encodeURIComponent(t.ticket));
       RT.ws=ws;
-      ws.onopen=function(){if(RT.ws!==ws)return;RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;RT.lastServerAt=Date.now();RT.lastRoomSync=0;RT.serverRoom='';RT.roomPeers=null;setConnected(true);sendRoom(true);sendMove(true)};
+      ws.onopen=function(){if(RT.ws!==ws)return;RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;RT.lastServerAt=Date.now();RT.lastRoomSync=0;RT.serverRoom='';RT.roomPeers=null;setConnected(true);sendRoom(true);sendMove(true);if(RT.clanBossReconnectId){var _cb=RT.clanBossReconnectId;setTimeout(function(){clanBossEnter(_cb)},80)}};
       ws.onmessage=function(ev){if(RT.ws!==ws)return;try{receive(JSON.parse(ev.data))}catch(_){}};
-      ws.onclose=function(){if(RT.ws!==ws)return;RT.ws=null;RT.connecting=false;RT.pingMs=null;RT.pingSent=0;RT.lastServerAt=0;RT.lastRoomSync=0;RT.serverRoom='';RT.roomPeers=null;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
+      ws.onclose=function(){if(RT.ws!==ws)return;if(RT.clanBossRoom&&RT.clanBossId&&RT.clanBossSceneSeen)RT.clanBossReconnectId=RT.clanBossId;RT.clanBossRoom='';RT.ws=null;RT.connecting=false;RT.pingMs=null;RT.pingSent=0;RT.lastServerAt=0;RT.lastRoomSync=0;RT.serverRoom='';RT.roomPeers=null;clearRemotes();syncPartyAllies({partyId:'',members:[]});setConnected(false);scheduleReconnect()};
       ws.onerror=function(){};
     }catch(e){RT.connecting=false;console.warn('PPA realtime connect',e);setConnected(false);scheduleReconnect()}
   }
@@ -573,7 +703,7 @@
 
   setInterval(function(){
     if(!RT.ws||RT.ws.readyState!==WebSocket.OPEN)return;
-    disableLegacyOnline();sendRoom(false);sendMove(false);
+    disableLegacyOnline();sendRoom(false);sendMove(false);clanBossTick();
   },120);
 
   setInterval(function(){
@@ -975,6 +1105,9 @@
   }
 
   window.PPA_RT_SEND=send;
+  window.PPA_CLAN_BOSS_ENTER=clanBossEnter;
+  window.PPA_CLAN_BOSS_DAMAGE=clanBossDamage;
+  window.PPA_CLAN_BOSS_LEAVE=function(){return clanBossLeave(true)};
   window.PPA_PK_CLEAR_TARGET=function(){RT.pkTargetId='';RT.pkAutoTarget=false;try{if(P)P.tid=null}catch(_){};return true};
   window.PPA_PK_TARGET_ID=function(){return String(RT.pkTargetId||'')};
   window.PPA_PVP_QUEUE_HANDLER=function(info){
@@ -1053,7 +1186,7 @@
   };
   window.PPA_REALTIME_RESYNC=resyncRoom;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
-  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,selfPid:RT.selfPid,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady(),pkActive:pkActive(),pkTargetId:RT.pkTargetId,serverDeadLocked:RT.serverDeadLocked}};
+  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,selfPid:RT.selfPid,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady(),pkActive:pkActive(),pkTargetId:RT.pkTargetId,serverDeadLocked:RT.serverDeadLocked,clanBossRoom:RT.clanBossRoom,clanBossId:RT.clanBossId,clanBossState:RT.clanBossState}};
 
   function boot(){
     if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();bindServerRespawnConfirm();bindArenaSmartMovement();bindArenaAttackCapture();
