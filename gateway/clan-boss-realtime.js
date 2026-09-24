@@ -15,7 +15,7 @@
         !(P&&(P.dead||Number(P.hp)<=0));
     }catch(_){return false}
   }
-  function markManualExit(){manualExitUntil=Date.now()+1800}
+  function markManualExit(){manualExitUntil=Date.now()+4500}
   function installSceneGuard(){
     if(sceneGuardInstalled)return true;
     var base=null;
@@ -40,22 +40,50 @@
     sceneGuardInstalled=true;
     return true;
   }
-  function bindManualExit(){
-    if(window.__PPA_CLAN_BOSS_EXIT_GUARD_BOUND)return;
-    window.__PPA_CLAN_BOSS_EXIT_GUARD_BOUND=true;
+  var exitDocs=new WeakSet();
+  function exitIntent(ev,doc){
     try{
-      document.addEventListener('pointerdown',function(ev){
-        if(!inScene())return;
-        var el=ev.target&&ev.target.closest?ev.target.closest('button,[role="button"],.btn,.action'):null;
-        var t=String(el&&el.textContent||'').replace(/\s+/g,' ').trim().toUpperCase();
-        if(t.indexOf('ВЫЙТИ')>=0||t.indexOf('В ГОРОД')>=0||t.indexOf('ПОКИНУТЬ')>=0)markManualExit();
-      },true);
-      document.addEventListener('click',function(ev){
-        if(!inScene())return;
-        var el=ev.target&&ev.target.closest?ev.target.closest('button,[role="button"],.btn,.action'):null;
-        var t=String(el&&el.textContent||'').replace(/\s+/g,' ').trim().toUpperCase();
-        if(t.indexOf('ВЫЙТИ')>=0||t.indexOf('В ГОРОД')>=0||t.indexOf('ПОКИНУТЬ')>=0)markManualExit();
-      },true);
+      if(!inScene())return false;
+      var el=ev.target&&ev.target.closest?ev.target.closest('button,[role="button"],.btn,.action,a,[data-action],[data-cmd]'):null;
+      var t=String(el&&el.textContent||'').replace(/\s+/g,' ').trim().toUpperCase();
+      var meta=String(
+        (el&&el.id||'')+' '+(el&&el.className||'')+' '+
+        (el&&el.getAttribute&&el.getAttribute('name')||'')+' '+
+        (el&&el.getAttribute&&el.getAttribute('data-action')||'')+' '+
+        (el&&el.getAttribute&&el.getAttribute('data-cmd')||'')
+      ).toLowerCase();
+      if(t.indexOf('ВЫЙТИ')>=0||t.indexOf('В ГОРОД')>=0||t.indexOf('ПОКИНУТЬ')>=0||
+         t.indexOf('НАЗАД')>=0||/(exit|leave|back|city|town|safe)/.test(meta))return true;
+
+      // The legacy clan-boss exit control may be canvas-backed and therefore
+      // have no useful DOM label. It lives in the scene's top control strip.
+      var w=doc&&doc.defaultView?doc.defaultView:window;
+      var vw=Math.max(1,Number(w.innerWidth)||Number(doc&&doc.documentElement&&doc.documentElement.clientWidth)||1);
+      var vh=Math.max(1,Number(w.innerHeight)||Number(doc&&doc.documentElement&&doc.documentElement.clientHeight)||1);
+      var x=Number(ev.clientX),y=Number(ev.clientY);
+      if(Number.isFinite(x)&&Number.isFinite(y)&&y<=Math.max(150,vh*.18)&&x>=vw*.55)return true;
+    }catch(_){}
+    return false;
+  }
+  function bindExitDoc(doc){
+    if(!doc||exitDocs.has(doc))return;
+    exitDocs.add(doc);
+    try{
+      ['pointerdown','touchstart','click'].forEach(function(type){
+        doc.addEventListener(type,function(ev){
+          if(exitIntent(ev,doc))markManualExit();
+        },{capture:true,passive:true});
+      });
+    }catch(_){}
+  }
+  function bindManualExit(){
+    bindExitDoc(document);
+    try{
+      var frames=document.querySelectorAll('iframe');
+      for(var i=0;i<frames.length;i++){
+        var d=null;try{d=frames[i].contentDocument}catch(_){}
+        if(d)bindExitDoc(d);
+      }
     }catch(_){}
   }
   function boss(){
@@ -107,7 +135,11 @@
       Object.defineProperty(b,'hp',{configurable:true,enumerable:true,get:function(){return hp},set:function(v){
         var next=Math.max(0,Number(v)||0);
         if(applying>0||!activeRoom()){hp=next;return}
-        if(next<hp)hit(hp-next);
+        // While realtime is active the server owns HP. The native clan-boss
+        // damage tracker is the only primary damage path. The setter is just a
+        // fallback before that tracker is available, otherwise every native
+        // hit can be counted twice and local HP timers can feed damage back.
+        if(next<hp&&!installed)hit(hp-next);
       }});
       Object.defineProperty(b,'mhp',{configurable:true,enumerable:true,get:function(){return mhp},set:function(v){if(applying>0||!activeRoom())mhp=Math.max(1,Number(v)||1)}});
       Object.defineProperty(b,'__ppaClanBossRtLocked',{value:true,configurable:true});
