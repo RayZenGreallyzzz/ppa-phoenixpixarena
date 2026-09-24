@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v558-titan-qa-respawn-20260924';
+const CLIENT_BUILD = 'v559-ruri-remote-pet-visible-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6792,6 +6792,11 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
       !worldCombat.includes('z-index:40!important') ||
       !worldCombat.includes('z-index:41!important')) {
     throw new Error('PK/AUTO HUD layer must stay below menus');
+  }
+  if (!remotePet.includes('__PPA_REMOTE_PET_DRAW') ||
+      !ruriPet.includes("match&&!window.__PPA_REMOTE_PET_DRAW") ||
+      !realtimeClient.includes("if(p.pt!==undefined)r.petName=")) {
+    throw new Error('Remote Great Ruri visibility/runtime sync patch missing');
   }
   if (!onlineClient.includes('seedAdminEventRewardStock') ||
       !onlineClient.includes('PPA_ADMIN_EVENT_REWARD_STOCK') ||

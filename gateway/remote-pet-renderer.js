@@ -106,7 +106,12 @@
       cx.imageSmoothingEnabled=false;
       cx.globalAlpha=.94;
       cx.fillStyle='rgba(0,0,0,.28)';cx.beginPath();cx.ellipse(sx,sy+size*.31,size*.25,size*.08,0,0,Math.PI*2);cx.fill();
-      cx.drawImage(im,Math.round(sx-size/2),Math.round(sy-size*.64+bob),Math.round(size),Math.round(size));
+      window.__PPA_REMOTE_PET_DRAW=(Number(window.__PPA_REMOTE_PET_DRAW)||0)+1;
+      try{
+        cx.drawImage(im,Math.round(sx-size/2),Math.round(sy-size*.64+bob),Math.round(size),Math.round(size));
+      }finally{
+        window.__PPA_REMOTE_PET_DRAW=Math.max(0,(Number(window.__PPA_REMOTE_PET_DRAW)||1)-1);
+      }
       cx.restore();
     }catch(_){}
   }

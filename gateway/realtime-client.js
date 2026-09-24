@@ -147,6 +147,7 @@
           if(p.p!==undefined)r.partyId=String(p.p||'');
           if(p.av!==undefined)r.arenaSide=String(p.av||'');
           if(p.am!==undefined)r.arenaMatchId=String(p.am||'');
+          if(p.pt!==undefined)r.petName=String(p.pt||'').trim().slice(0,48);
           if(p.hu!==undefined)r.hiddenUntil=Math.max(0,Number(p.hu)||0);
           if(Number.isFinite(Number(p.df)))r.def=Math.max(0,Number(p.df)||0);
           if(Number.isFinite(Number(p.at)))r.atk=Math.max(1,Number(p.at)||1);

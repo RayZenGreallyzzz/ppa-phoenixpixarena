@@ -116,10 +116,10 @@
             var im=arguments[0],src=String(im.currentSrc||im.src||'');
             var arr=ruriSources(),match=false;
             for(var i=0;i<arr.length;i++)if(src===arr[i]){match=true;break}
-            if(match){
-              // Great Ruri is drawn only by the dedicated overlay below.
-              // This removes the old local-pet direction branch that made the
-              // right-facing sprite disappear and also keeps one fixed size.
+            if(match&&!window.__PPA_REMOTE_PET_DRAW){
+              // Great Ruri LOCAL rendering is owned by the dedicated overlay below.
+              // Remote players still render their equipped Ruri through
+              // remote-pet-renderer, which temporarily raises the bypass flag.
               return;
             }
           }
