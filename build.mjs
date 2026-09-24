@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v550-fart-guide-transparent-backdrop-20260924';
+const CLIENT_BUILD = 'v551-fart-guide-respawn-build-fix-20260924';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -3634,16 +3634,16 @@ if(!output.includes("background:transparent;padding:16px") ||
 /* ======================================================================== */
 
 /* === FART GUARD 30-MINUTE RESPAWN ====================================== */
+// Patch the actual queued respawn deadline directly. This is intentionally
+// independent from whatever MIN/MAX constants the packed source currently uses.
 ppaPatchRegex(
-  'fart guards respawn every 30 minutes',
-  /const FART_GUARD_RESPAWN_MIN=180000;\s*const FART_GUARD_RESPAWN_MAX=240000;/,
-  "const FART_GUARD_RESPAWN_MIN=30*60*1000;\nconst FART_GUARD_RESPAWN_MAX=30*60*1000;"
+  'fart guard queued respawn fixed 30 minutes',
+  /at:Date\.now\(\)\+FART_GUARD_RESPAWN_MIN\+Math\.random\(\)\*\(FART_GUARD_RESPAWN_MAX-FART_GUARD_RESPAWN_MIN\)/,
+  "at:Date.now()+30*60*1000"
 );
 
-if(!output.includes("const FART_GUARD_RESPAWN_MIN=30*60*1000") ||
-   !output.includes("const FART_GUARD_RESPAWN_MAX=30*60*1000") ||
-   !output.includes("at:Date.now()+FART_GUARD_RESPAWN_MIN+Math.random()*(FART_GUARD_RESPAWN_MAX-FART_GUARD_RESPAWN_MIN)")) {
-  throw new Error('Fart guard 30-minute respawn patch did not apply');
+if(!output.includes("at:Date.now()+30*60*1000")) {
+  throw new Error('Fart guard fixed 30-minute queued respawn patch did not apply');
 }
 /* ======================================================================== */
 
