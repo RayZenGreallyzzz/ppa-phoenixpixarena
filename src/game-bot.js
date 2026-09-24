@@ -1,3 +1,4 @@
+import { INVITE_IMAGE_BASE64 } from './invite-image.js';
 const enc=new TextEncoder();
 
 function json(data,status=200){
@@ -31,7 +32,7 @@ function inviteMarkup(origin){
   ]};
 }
 async function sendInvite(env,chatId,origin){
-  const photo=origin+'/assets/phonix-invite.jpg?v=565';
+  const photo=origin+'/api/game-bot/invite-image?v=565';
   return tg(env,'sendPhoto',{
     chat_id:chatId,
     photo,
@@ -59,6 +60,20 @@ async function handleMessage(env,message,origin){
 
 export async function handleGameBotRequest(request,env){
   const url=new URL(request.url);
+  if(url.pathname==='/api/game-bot/invite-image'){
+    try{
+      const raw=atob(INVITE_IMAGE_BASE64);
+      const bytes=new Uint8Array(raw.length);
+      for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+      return new Response(bytes,{headers:{
+        'content-type':'image/jpeg',
+        'cache-control':'public, max-age=86400',
+        'access-control-allow-origin':'*'
+      }});
+    }catch(e){
+      return new Response('Invite image unavailable',{status:500});
+    }
+  }
   if(url.pathname==='/api/game-bot/setup'){
     if(request.method!=='GET'&&request.method!=='POST')return json({ok:false,message:'GET or POST required'},405);
     try{
