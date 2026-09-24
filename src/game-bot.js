@@ -22,6 +22,23 @@ async function tg(env,method,payload){
   return data.result;
 }
 
+async function tgPhotoBytes(env,chatId,caption,replyMarkup){
+  const token=String(env.BOT_TOKEN||'').trim();
+  if(!token)throw Object.assign(new Error('BOT_TOKEN is not configured'),{status:503});
+  const raw=atob(INVITE_IMAGE_BASE64);
+  const bytes=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+  const form=new FormData();
+  form.append('chat_id',String(chatId));
+  form.append('caption',String(caption||''));
+  form.append('reply_markup',JSON.stringify(replyMarkup||{}));
+  form.append('photo',new Blob([bytes],{type:'image/jpeg'}),'phonix-invite.jpg');
+  const r=await fetch('https://api.telegram.org/bot'+token+'/sendPhoto',{method:'POST',body:form});
+  let data=null;try{data=await r.json()}catch(_){}
+  if(!r.ok||!data||data.ok!==true)throw new Error('Telegram sendPhoto upload failed: '+String(data&&data.description||r.status));
+  return data.result;
+}
+
 const BOT_USERNAME='PhoenixPixMMORPGbot';
 const INVITE_CAPTION='🔥 Эпическая MMORPG в Telegram.\n\n⚔️ Сражайся с боссами, прокачивай персонажа, вступай в гильдии.\n\n🎮 Играй бесплатно !!!\n\n👉 @'+BOT_USERNAME;
 
@@ -32,13 +49,16 @@ function inviteMarkup(origin){
   ]};
 }
 async function sendInvite(env,chatId,origin){
-  const photo=origin+'/api/game-bot/invite-image?v=565';
-  return tg(env,'sendPhoto',{
-    chat_id:chatId,
-    photo,
-    caption:INVITE_CAPTION,
-    reply_markup:inviteMarkup(origin)
-  });
+  try{
+    return await tgPhotoBytes(env,chatId,INVITE_CAPTION,inviteMarkup(origin));
+  }catch(e){
+    console.error('PPA invite image send failed',e);
+    return tg(env,'sendMessage',{
+      chat_id:chatId,
+      text:INVITE_CAPTION,
+      reply_markup:inviteMarkup(origin)
+    });
+  }
 }
 async function handleMessage(env,message,origin){
   const chatId=message&&message.chat&&message.chat.id;
