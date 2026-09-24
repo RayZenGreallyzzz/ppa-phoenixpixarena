@@ -39,7 +39,7 @@ function clanBossRoomFor(a){
   const cid=String(a&&a.clanId||'').trim();
   return cid?cleanRoom('clanboss-'+cid):'';
 }
-function isClanBossRoom(v){return cleanRoom(v).startsWith('clanboss-clan_')}
+function isClanBossRoom(v){return cleanRoom(v).startsWith('clanboss-')}
 function clanBossRoomAllowed(a,v){const want=clanBossRoomFor(a);return !!want&&want===cleanRoom(v)}
 
 const DUNGEON_CAPACITY = 40;
@@ -269,6 +269,22 @@ export class RealtimeHub extends BaseRealtimeHub {
     clanId=String(clanId||'');
     if(!clanId||!this.env||!this.env.DB)return null;
     return this.env.DB.prepare('SELECT * FROM clan_boss_raids WHERE clan_id=?1').bind(clanId).first();
+  }
+
+  async refreshClanIdentity(ws,a){
+    if(!a||!this.env||!this.env.DB)return a;
+    const tid=String(a.telegramId||'');
+    if(!tid)return a;
+    const row=await this.env.DB.prepare(
+      'SELECT cm.clan_id,c.name AS clan_name FROM clan_members cm LEFT JOIN clans c ON c.id=cm.clan_id WHERE cm.telegram_id=?1'
+    ).bind(tid).first();
+    const cid=row?String(row.clan_id||'').slice(0,80):'';
+    const cname=row?String(row.clan_name||'').trim().slice(0,24):'';
+    if(String(a.clanId||'')!==cid||String(a.clanName||'')!==cname){
+      a.clanId=cid;a.clanName=cname;a.lastSeenAt=Date.now();
+      try{ws.serializeAttachment(a)}catch(_){}
+    }
+    return a;
   }
 
   clanBossState(row,room,recipient,now=Date.now()){
@@ -1469,6 +1485,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     const now = Date.now();
 
     if (m.type === 'clan-boss-state-request') {
+      await this.refreshClanIdentity(ws,a);
       if(!clanBossRoomAllowed(a,a.room)){
         wsJson(ws,{type:'clan-boss-reject',reason:'Клановый рейд доступен только в комнате своего клана.',ts:now});
         return;
@@ -1478,8 +1495,10 @@ export class RealtimeHub extends BaseRealtimeHub {
     }
 
     if (m.type === 'clan-boss-hit') {
+      await this.refreshClanIdentity(ws,a);
       const room=cleanRoom(a.room);
-      if(!clanBossRoomAllowed(a,room)||a.deadLocked||!(Number(a.h)>0)){
+      const hpKnown=Number.isFinite(Number(a.h));
+      if(!clanBossRoomAllowed(a,room)||a.deadLocked||(hpKnown&&Number(a.h)<=0)){
         wsJson(ws,{type:'clan-boss-reject',reason:'Удар по клановому боссу отклонён.',ts:now});
         return;
       }
@@ -2363,6 +2382,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     if (m.type === 'room') {
       let requested = cleanRoom(m.room);
+      if(requested.startsWith('clanboss-'))await this.refreshClanIdentity(ws,a);
       if(requested.startsWith('clanboss-')&&!clanBossRoomAllowed(a,requested))requested='safe';
       const d = dungeonInfo(requested);
       if (d) {
@@ -2409,6 +2429,7 @@ export class RealtimeHub extends BaseRealtimeHub {
 
       const oldRoom = cleanRoom(a.room);
       let wantedRoom = m.room != null ? cleanRoom(m.room) : oldRoom;
+      if(wantedRoom.startsWith('clanboss-'))await this.refreshClanIdentity(ws,a);
       if(wantedRoom.startsWith('clanboss-')&&!clanBossRoomAllowed(a,wantedRoom))wantedRoom='safe';
       const wantedDungeon = dungeonInfo(wantedRoom);
       const currentDungeon = dungeonInfo(oldRoom);
