@@ -1,0 +1,47 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+const ROOT = process.cwd();
+const indexPath = path.join(ROOT, 'public', 'index.html');
+const eventPath = path.join(ROOT, 'gateway', 'mimic-sombrero-event.js');
+if (!fs.existsSync(indexPath)) throw new Error('public/index.html not found; run node build.mjs first');
+if (!fs.existsSync(eventPath)) throw new Error('gateway/mimic-sombrero-event.js not found');
+
+let html = fs.readFileSync(indexPath, 'utf8');
+const code = fs.readFileSync(eventPath, 'utf8');
+const marker = '<!-- PPA_MIMIC_SOMBRERO_EVENT_V2 -->';
+const key = 'v614-mimic-sombrero-ticket-battle-20260925';
+html = html
+  .split('v602-clan-siege-exit-visible-20260925').join(key)
+  .split('v606-clan-siege-city-exit-20260925').join(key)
+  .split('v607-clan-siege-castle-cache-20260925').join(key)
+  .split('v609-pc-mouse-hotkeys-safe-20260925').join(key)
+  .split('v610-pc-telegram-desktop-20260925').join(key)
+  .split('v611-hide-duplicate-city-button-20260925').join(key)
+  .split('v612-clan-boss-cerberus-drop-20260925').join(key)
+  .split('v613-mimic-sombrero-event-20260925').join(key);
+
+if (!html.includes(marker)) {
+  const script = `${marker}\n<script>\n${code}\n</script>`;
+  if (html.includes('</body>')) html = html.replace('</body>', script + '\n</body>');
+  else html += '\n' + script + '\n';
+}
+const count = (html.match(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+if (count !== 1) throw new Error('Mimic Sombrero event injected more than once: ' + count);
+for (const required of [
+  'PPA_MIMIC_SOMBRERO_EVENT',
+  'Билет Мимика-Самбреро',
+  '0.47%',
+  'Мимик-Самбреро 20',
+  'Мимик-Самбреро 40',
+  'Мимик-Самбреро 60',
+  '10000',
+  '20000',
+  '50000',
+  key
+]) {
+  if (!html.includes(required)) throw new Error('Mimic Sombrero validation missing: ' + required);
+}
+fs.writeFileSync(indexPath, html, 'utf8');
+console.log('[PPA POSTBUILD] Mimic-Sombrero event injected: ticket 0.47%, arena battle 20/40/60, event set rewards.');
+console.log('[PPA POSTBUILD] index.html: ' + (Buffer.byteLength(html) / 1024 / 1024).toFixed(2) + ' MiB');
