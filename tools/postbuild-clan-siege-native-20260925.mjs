@@ -88,13 +88,28 @@ function replaceRequired(src, before, after, label) {
   return src.split(before).join(after);
 }
 
+function replaceIfPresent(src, before, after) {
+  return src.split(before).join(after);
+}
+
+function prependGuardToFunction(src, name, guard) {
+  const needle = `function ${name}(){`;
+  let count = 0;
+  const out = src.replaceAll(needle, needle + '\n  ' + guard + '\n');
+  count = out === src ? 0 : src.split(needle).length - 1;
+  return { out, count };
+}
+
 let html = fs.readFileSync(indexPath, 'utf8');
 const before = html;
 
 // Force a fresh client cache key for this clean native siege build.
-html = html.split('v602-clan-siege-exit-visible-20260925').join('v604-clan-siege-native-leave-20260925');
+html = html
+  .split('v602-clan-siege-exit-visible-20260925').join('v605-clan-siege-won-fps-20260925')
+  .split('v603-clan-siege-native-clean-20260925').join('v605-clan-siege-won-fps-20260925')
+  .split('v604-clan-siege-native-leave-20260925').join('v605-clan-siege-won-fps-20260925');
 
-// Remove the old duplicate exit button state, then install one native leave button owned by the HUD.
+// Native state: one leave button, no duplicate exit button, no castle-cleared hack flag.
 html = replaceRequired(
   html,
   "baseStats:null,hud:null,exitBtn:null,hudHtml:'',hudLastAt:0,castleCleared:false",
@@ -136,7 +151,7 @@ html = replaceAllFunctions(html, 'clanSiegeHudUpdate', `function clanSiegeHudUpd
   if(!force&&now-(PPA_SIEGE.hudLastAt||0)<200)return;
   PPA_SIEGE.hudLastAt=now;
   h.style.display='block';
-  if(leave)leave.style.display='block';
+  if(leave)leave.style.display=PPA_SIEGE.phase==='won'?'block':'none';
   const alive=EN.filter(e=>e&&e.isClanSiegeCrystal&&e.hp>0).length;
   const b=PPA_SIEGE.bonuses;
   const badges=[
@@ -169,17 +184,41 @@ html = replaceRequired(
   'siege leave duplicate exit hide'
 );
 
-// Castle collider must exist only while the castle phase is active.
+// Castle must not be rendered, collide, or update expensive capture logic after it is captured.
+html = replaceIfPresent(
+  html,
+  "PPA_SIEGE.phase==='castle'||PPA_SIEGE.phase==='won'",
+  "PPA_SIEGE.phase==='castle'"
+);
+html = replaceIfPresent(
+  html,
+  "PPA_SIEGE.phase === 'castle' || PPA_SIEGE.phase === 'won'",
+  "PPA_SIEGE.phase === 'castle'"
+);
+html = replaceIfPresent(
+  html,
+  "PPA_SIEGE.phase==='castle' || PPA_SIEGE.phase==='won'",
+  "PPA_SIEGE.phase==='castle'"
+);
+
 html = html.replace(
-  /if\(PPA_SIEGE\.phase==='castle'\|\|PPA_SIEGE\.phase==='won'\)\{\s*\n\s*\/\/ Compact round collision sits fully inside the castle footprint\.\s*\n\s*const c=CLAN_SIEGE_CASTLE_COLLISION;/g,
+  /if\(PPA_SIEGE\.phase==='castle'\)\{\s*\n\s*\/\/ Compact round collision sits fully inside the castle footprint\.\s*\n\s*const c=CLAN_SIEGE_CASTLE_COLLISION;/g,
   "if(PPA_SIEGE.phase==='castle'){\n    // Compact round collision sits fully inside the castle footprint.\n    const c=CLAN_SIEGE_CASTLE_COLLISION;"
 );
 
-// Keep draw logic and collision logic aligned if an older castle draw branch is still present.
-html = html.replace(
-  /if\(PPA_SIEGE\.phase==='castle'\|\|PPA_SIEGE\.phase==='won'\)\{(\s*const c=CLAN_SIEGE_CASTLE,)/g,
-  "if(PPA_SIEGE.phase==='castle'){$1"
+const drawGuard = prependGuardToFunction(
+  html,
+  'drawClanSiegeWorld',
+  "if(PPA_SIEGE&&PPA_SIEGE.phase==='won')return;"
 );
+html = drawGuard.out;
+
+const captureGuard = prependGuardToFunction(
+  html,
+  'clanSiegeUpdateCapture',
+  "if(PPA_SIEGE&&PPA_SIEGE.phase==='won')return;"
+);
+html = captureGuard.out;
 
 const forbidden = [
   "id='clanSiegeExitNative'",
@@ -191,17 +230,29 @@ const forbidden = [
 for (const token of forbidden) {
   if (html.includes(token)) throw new Error('Forbidden duplicate/hack token remains: ' + token);
 }
-if (!html.includes("id='clanSiegeLeaveBtn'") || !html.includes('PPA_SIEGE.leaveBtn') || !html.includes("if(leave)leave.style.display='block'") || !html.includes("b.onclick=()=>changeScene('safe')")) {
+if (!html.includes("id='clanSiegeLeaveBtn'") ||
+    !html.includes('PPA_SIEGE.leaveBtn') ||
+    !html.includes("if(leave)leave.style.display=PPA_SIEGE.phase==='won'?'block':'none'") ||
+    !html.includes("b.onclick=()=>changeScene('safe')")) {
   throw new Error('Native clan siege leave button validation failed');
 }
 if (!/if\(PPA_SIEGE\.phase==='castle'\)\{\s*\/\/ Compact round collision sits fully inside the castle footprint\.\s*const c=CLAN_SIEGE_CASTLE_COLLISION;\s*if\(Math\.hypot\(x-c\.x,y-c\.y\)<c\.r\+r\)return false;/.test(html)) {
   throw new Error('Castle collision phase gate validation failed');
 }
-if (/if\(PPA_SIEGE\.phase==='castle'\|\|PPA_SIEGE\.phase==='won'\)\{[\s\S]{0,160}?CLAN_SIEGE_CASTLE_COLLISION/.test(html)) {
-  throw new Error('Old castle collision won-phase gate still remains');
+if (html.includes("PPA_SIEGE.phase==='castle'||PPA_SIEGE.phase==='won'") ||
+    html.includes("PPA_SIEGE.phase === 'castle' || PPA_SIEGE.phase === 'won'") ||
+    html.includes("PPA_SIEGE.phase==='castle' || PPA_SIEGE.phase==='won'")) {
+  throw new Error('Old castle/won phase branch still remains');
+}
+if (!html.includes("function drawClanSiegeWorld(){\n  if(PPA_SIEGE&&PPA_SIEGE.phase==='won')return;")) {
+  throw new Error('drawClanSiegeWorld won-phase guard missing');
+}
+if (!html.includes("function clanSiegeUpdateCapture(){\n  if(PPA_SIEGE&&PPA_SIEGE.phase==='won')return;")) {
+  throw new Error('clanSiegeUpdateCapture won-phase guard missing');
 }
 if (html === before) throw new Error('No changes applied to public/index.html');
 
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] clean native clan siege applied: single leave button, castle collision only in castle phase.');
+console.log('[PPA POSTBUILD] clean native clan siege applied: leave after win, castle render/collision/update off after win.');
+console.log('[PPA POSTBUILD] draw guards: '+drawGuard.count+' capture guards: '+captureGuard.count);
 console.log('[PPA POSTBUILD] index.html: '+(Buffer.byteLength(html)/1024/1024).toFixed(2)+' MiB');
