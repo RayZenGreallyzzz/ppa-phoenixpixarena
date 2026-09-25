@@ -3,8 +3,10 @@
   if(window.__PPA_CLAN_SIEGE_FIX_V1)return;
   window.__PPA_CLAN_SIEGE_FIX_V1=true;
 
-  var captured=false,wrappedHandler=null,exitBtn=null,compactHud=null,hudSource=null;
+  var captured=false,wrappedHandler=null,exitBtn=null,compactHud=null,hudSource=null,qaBtn=null;
   var drawInstalled=false,castleImage=null,candidates=new Map(),lastScene='';
+  var CLAN_SIEGE_QA_TEST_OPEN=true;
+  window.PPA_CLAN_SIEGE_QA_TEST_OPEN=CLAN_SIEGE_QA_TEST_OPEN;
   var scanAt=0;
 
   function scene(){
@@ -31,6 +33,7 @@
       '#ppaClanSiegeExit{position:fixed;right:12px;top:108px;z-index:58;display:none;min-width:96px;height:34px;padding:0 11px;'+
       'border:1px solid #c58435;border-radius:8px;background:linear-gradient(#542815,#2b160d);color:#ffd787;'+
       'box-shadow:0 3px 12px rgba(0,0,0,.65);font:800 10px monospace;touch-action:manipulation}'+
+      '#ppaClanSiegeQaEnter{display:none;margin:8px auto 0;min-width:170px;height:32px;padding:0 12px;border:1px solid #d69a42;border-radius:8px;background:linear-gradient(#5d3517,#2d180c);color:#ffe09a;font:800 9px monospace;box-shadow:0 3px 10px rgba(0,0,0,.5);touch-action:manipulation}'+
       '@media(max-width:520px){#ppaClanSiegeCompactHud{left:61%;width:56vw;max-width:260px;font-size:7px;padding:3px 5px}#ppaClanSiegeExit{top:98px;right:8px;height:31px;min-width:84px;font-size:9px}}';
     (document.head||document.documentElement).appendChild(s);
   }
@@ -40,6 +43,13 @@
     if(!compactHud||!compactHud.isConnected){
       compactHud=document.createElement('div');compactHud.id='ppaClanSiegeCompactHud';
       document.body.appendChild(compactHud);
+    }
+    if(!qaBtn||!qaBtn.isConnected){
+      qaBtn=document.createElement('button');qaBtn.id='ppaClanSiegeQaEnter';qaBtn.type='button';qaBtn.textContent='ТЕСТ · ВОЙТИ СНОВА';
+      qaBtn.onclick=function(ev){
+        try{if(ev){ev.preventDefault();ev.stopPropagation()}}catch(_){}
+        qaEnterSiege();
+      };
     }
     if(!exitBtn||!exitBtn.isConnected){
       exitBtn=document.createElement('button');exitBtn.id='ppaClanSiegeExit';exitBtn.type='button';exitBtn.textContent='↩ ВЫЙТИ';
@@ -55,6 +65,61 @@
       };
       document.body.appendChild(exitBtn);
     }
+    installQaButton();
+  }
+
+  function clanReadyForQa(){
+    try{
+      var st=window.PPA_SERVER_CLAN_STATE;
+      return !!(st&&st.clan&&st.clan.id);
+    }catch(_){return false}
+  }
+  function qaEnterSiege(){
+    if(!CLAN_SIEGE_QA_TEST_OPEN)return false;
+    if(!clanReadyForQa()){note('ТЕСТ ОСАДЫ · сначала войди в клан','#ff9a7a');return false}
+    try{sessionStorage.removeItem('ppaClanSiegeCapturedV1')}catch(_){}
+    captured=false;castleImage=null;candidates.clear();cleanupHud();
+    try{
+      if(typeof changeScene==='function'){
+        changeScene('clansiege');
+        note('ТЕСТ ОСАДЫ · ОТКАТ ОТКЛЮЧЁН','#91ffab');
+        return true;
+      }
+    }catch(_){}
+    try{
+      if(typeof window.PPA_CHANGE_SCENE==='function'){
+        window.PPA_CHANGE_SCENE('clansiege');
+        note('ТЕСТ ОСАДЫ · ОТКАТ ОТКЛЮЧЁН','#91ffab');
+        return true;
+      }
+    }catch(_){}
+    note('ТЕСТ ОСАДЫ · вход недоступен','#ff9a7a');
+    return false;
+  }
+  window.PPA_CLAN_SIEGE_QA_ENTER=qaEnterSiege;
+
+  function installQaButton(){
+    if(!CLAN_SIEGE_QA_TEST_OPEN||!qaBtn)return;
+    try{
+      var direct=document.getElementById('ppaOpenCitadel');
+      if(direct&&direct.parentElement){
+        if(qaBtn.parentElement!==direct.parentElement)direct.insertAdjacentElement('afterend',qaBtn);
+        qaBtn.style.display='block';
+        return;
+      }
+      var nodes=document.querySelectorAll('button,a,[role="button"],div');
+      for(var i=0;i<nodes.length;i++){
+        var el=nodes[i],t=String(el.textContent||'').replace(/\s+/g,' ').trim().toUpperCase();
+        if(!t||t.length>80)continue;
+        if(t.indexOf('ЦИТАДЕЛ')<0&&t.indexOf('КЛАНОВАЯ ВОЙНА')<0)continue;
+        if(!visible(el))continue;
+        var host=el.parentElement||el;
+        if(qaBtn.parentElement!==host)host.appendChild(qaBtn);
+        qaBtn.style.display='block';
+        return;
+      }
+      qaBtn.style.display='none';
+    }catch(_){}
   }
 
   function restoreHudSource(){
@@ -230,10 +295,11 @@
     wrapSiegeHandler();installDrawGuard();
     if(inSiege()){
       var now=Date.now();
-      if(now-scanAt>180){scanAt=now;updateCompactHud();if(captured)removeCastleEntities()}
+      if(now-scanAt>180){scanAt=now;updateCompactHud();if(captured)removeCastleEntities();installQaButton()}
       if(captured&&exitBtn)exitBtn.style.display='block';
     }else{
       if(exitBtn)exitBtn.style.display='none';
+      var now2=Date.now();if(now2-scanAt>220){scanAt=now2;installQaButton()}
     }
     requestAnimationFrame(tick);
   }
