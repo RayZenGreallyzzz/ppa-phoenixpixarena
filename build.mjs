@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v590-guaranteed-clan-boss-pool-20260925';
+const CLIENT_BUILD = 'v591-clan-siege-capture-hud-fix-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6883,6 +6883,7 @@ if(_ppaClanBossTrackCalls<1){
   const bossDropBoost=fs.readFileSync(path.join(ROOT,'gateway/boss-drop-boost.js'),'utf8');
   const clanBossLoot=fs.readFileSync(path.join(ROOT,'gateway/clan-boss-loot.js'),'utf8');
   const clanBossChest=fs.readFileSync(path.join(ROOT,'gateway/clan-boss-chest.js'),'utf8');
+  const clanSiegeFix=fs.readFileSync(path.join(ROOT,'gateway/clan-siege-fixes.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
   const mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');
@@ -7018,6 +7019,15 @@ if(_ppaClanBossTrackCalls<1){
       !output.includes("PPA_LEGENDARY_GEAR_ITEM_ART(o)") ||
       !output.includes("o.img=a;o.image=a;o.art=a")) {
     throw new Error('Legendary real-file all-UI runtime incomplete');
+  }
+  if (!clanSiegeFix.includes('__PPA_CLAN_SIEGE_FIX_V1') ||
+      !clanSiegeFix.includes("String(req.action||'')==='castleCaptured'") ||
+      !clanSiegeFix.includes("changeScene('safe')") ||
+      !clanSiegeFix.includes("id='ppaClanSiegeCompactHud'") && !clanSiegeFix.includes("id=\"ppaClanSiegeCompactHud\"") ||
+      !clanSiegeFix.includes('CanvasRenderingContext2D') ||
+      !realtimeClient.includes("String(P.scene||'')==='clansiege'") ||
+      !realtimeClient.includes("el.style.right='8px';el.style.top='58px'")) {
+    throw new Error('Clan siege capture/UI fix incomplete');
   }
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
       !worldCombat.includes('PPA_PK_ACTIVE') ||
@@ -7163,6 +7173,7 @@ const filesToPublish = [
   ['gateway/boss-drop-boost.js','boss-drop-boost.js','Boss drop boost helper missing'],
   ['gateway/clan-boss-loot.js','clan-boss-loot.js','Clan boss loot helper missing'],
   ['gateway/clan-boss-chest.js','clan-boss-chest.js','Clan boss reward chest UI missing'],
+  ['gateway/clan-siege-fixes.js','clan-siege-fixes.js','Clan siege capture/UI fix missing'],
   ['gateway/ruri-event-drops.js','ruri-event-drops.js','Great Ruri event drops missing'],
   ['gateway/qa-test-access.js','qa-test-access.js','QA dungeon access helper missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
@@ -7190,6 +7201,7 @@ output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"><
 <script src="${js('boss-drop-boost.js')}"></script>
 <script src="${js('clan-boss-loot.js')}"></script>
 <script src="${js('clan-boss-chest.js')}"></script>
+<script src="${js('clan-siege-fixes.js')}"></script>
 <script src="${js('ruri-event-drops.js')}"></script>
 <script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
@@ -7209,6 +7221,7 @@ console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
 console.log('Boss drop boost: /game/boss-drop-boost.js');
 console.log('Clan boss loot: /game/clan-boss-loot.js');
 console.log('Clan boss reward chest: /game/clan-boss-chest.js');
+console.log('Clan siege capture/UI fix: /game/clan-siege-fixes.js');
 console.log('Great Ruri event drops: /game/ruri-event-drops.js · TEST ACTIVE');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
