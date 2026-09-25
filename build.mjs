@@ -7148,7 +7148,7 @@ if(_ppaClanBossTrackCalls<1){
       !bossDropBoost.includes('Бонусный бросок таблицы босса')) {
     throw new Error('Boss drop boost helper incomplete');
   }
-  if (!clanBossLoot.includes('__PPA_CLAN_BOSS_LOOT_V1') ||
+  if (!clanBossLoot.includes('__PPA_CLAN_BOSS_LOOT_V2') ||
       !clanBossLoot.includes("['Участие','от 5 000 урона · +1 зелёный ресурс +3 монеты клана']") ||
       !clanBossLoot.includes("['Обычный камень заточки ×4–7','100% каждому участнику']") ||
       !clanBossLoot.includes("['Синий шмот / оружие · случайный слот и класс','×1 гарантированно · общий ролл']") ||
