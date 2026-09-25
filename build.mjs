@@ -6805,7 +6805,7 @@ function sendEventsState(){`
 ppaPatchRegex(
   'Great Ruri state in Events payload',
   /titanShards:titanShardCount\(\),\s*worldBoss:worldBossDailyStatus\(\),/,
-  "titanShards:titanShardCount(),\n        mimicTickets:(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount==='function'?window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount():0),\n        ruri:(typeof ppaRuriCraftState==='function'?ppaRuriCraftState():null),\n        worldBoss:worldBossDailyStatus(),"
+  "titanShards:titanShardCount(),\n        mimicTickets:(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount==='function'?window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount():0),\n        mimicEvent:(function(){try{var a=window.PPA_MIMIC_SOMBRERO_EVENT,s=a&&typeof a.schedule==='function'?a.schedule():null;return s?{active:!!a.active(),test:!!(a.testMode&&a.testMode()),end:Number(s.end)||0,nextStart:Number(s.nextStart)||0,days:Number(s.days)||5,startDay:Number(s.startDay)||25}:{active:false,test:false,end:0,nextStart:0,days:5,startDay:25}}catch(_){return{active:false,test:false,end:0,nextStart:0,days:5,startDay:25}}})(),\n        ruri:(typeof ppaRuriCraftState==='function'?ppaRuriCraftState():null),\n        worldBoss:worldBossDailyStatus(),"
 );
 ppaPatchRegex(
   'Great Ruri craft message route',
@@ -6816,6 +6816,7 @@ if(!output.includes('function ppaRuriCraftFromEvent()')||
    !output.includes("d.type==='ruriCraft'")||
    !output.includes("d.type==='mimicSombreroOpen'")||
    !output.includes('mimicTickets:')||
+   !output.includes('mimicEvent:')||
    !output.includes("Демонический кристалл']=st.resources.demonic-72")||
    !output.includes("eventRewardId:'crafted_ruri_legendary_v1'")){
   throw new Error('Great Ruri direct craft patch incomplete');
