@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V6)return;
-  window.__PPA_MIMIC_SOMBRERO_ARENA_V6=true;
+  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V7)return;
+  window.__PPA_MIMIC_SOMBRERO_ARENA_V7=true;
 
   var MAP_SRC='/assets/mimic-sombrero-arena.webp';
   var MASK_SRC='/assets/mimic-sombrero-walk-mask.png';
@@ -103,27 +103,21 @@
     return root;
   }
   function hideCurrencyHud(){
+    // Do NOT hide parent HUD containers here. Some of them also own the
+    // Events / Premium / Wallet buttons and can remain hidden after a scene
+    // transition. Only hide tiny leaf labels in the top-right currency area.
     hiddenHud.length=0;
     try{
-      var nodes=Array.prototype.slice.call(document.querySelectorAll('body *')),cand=[];
+      var nodes=Array.prototype.slice.call(document.querySelectorAll('body *'));
       for(var i=0;i<nodes.length;i++){
-        var el=nodes[i];
-        if(!el||el===root||el===cv||el.id==='ppaMimicArenaExit'||el.id==='ppaMimicArenaTag')continue;
+        var el=nodes[i];if(!el||el===root||el===cv||el.children.length>0)continue;
         var txt=String(el.textContent||'').replace(/\s+/g,' ').trim();
-        if(!txt||txt.length>140||txt.indexOf('БМ')<0)continue;
+        if(!txt||txt.length>40)continue;
+        if(txt.indexOf('БМ')<0&&!/^[0-9\s.,]+$/.test(txt))continue;
         var rr=el.getBoundingClientRect();
-        if(rr.width<8||rr.height<8||rr.top>innerHeight*.28||rr.left<innerWidth*.48)continue;
-        cand.push({el:el,area:rr.width*rr.height});
-      }
-      cand.sort(function(a,b){return a.area-b.area});
-      if(cand.length){
-        var target=cand[0].el;
-        for(var j=0;j<3&&target.parentElement&&target.parentElement!==document.body;j++){
-          var p=target.parentElement,pr=p.getBoundingClientRect(),pt=String(p.textContent||'').replace(/\s+/g,' ').trim();
-          if(pr.top<=innerHeight*.30&&pr.left>=innerWidth*.45&&pr.width<=260&&pr.height<=130&&pt.indexOf('БМ')>=0)target=p;else break;
-        }
-        hiddenHud.push({el:target,display:target.style.display,visibility:target.style.visibility});
-        target.style.setProperty('display','none','important');
+        if(rr.width<6||rr.height<6||rr.top>innerHeight*.25||rr.left<innerWidth*.58||rr.width>180||rr.height>50)continue;
+        hiddenHud.push({el:el,display:el.style.display,visibility:el.style.visibility});
+        el.style.setProperty('visibility','hidden','important');
       }
     }catch(_){}
   }
@@ -131,11 +125,19 @@
     try{
       hiddenHud.forEach(function(x){
         if(!x||!x.el)return;
-        x.el.style.display=x.display||'';
-        x.el.style.visibility=x.visibility||'';
+        if(x.display)x.el.style.display=x.display;else x.el.style.removeProperty('display');
+        if(x.visibility)x.el.style.visibility=x.visibility;else x.el.style.removeProperty('visibility');
       });
     }catch(_){}
     hiddenHud.length=0;
+  }
+  function refreshNativeHud(){
+    // The native HUD gates some city buttons by P.scene. Refresh it after the
+    // Mimic scene is left so Events / Premium / Wallet cannot remain in their
+    // combat-hidden state after repeated runs.
+    try{if(typeof updateUI==='function')updateUI()}catch(_){}
+    try{if(typeof sendEventsState==='function')sendEventsState()}catch(_){}
+    try{window.dispatchEvent(new Event('resize'))}catch(_){}
   }
   function rememberControl(el){
     if(!el)return;
@@ -614,6 +616,7 @@
       if(P){P.tid=null;P.scene='safe'}
       if(typeof changeScene==='function')changeScene('safe');
     }catch(_){}
+    setTimeout(refreshNativeHud,0);setTimeout(refreshNativeHud,120);
   }
   function safeExit(){
     // Normal path returns to the scene we entered from. If that path fails
@@ -648,6 +651,7 @@
       }
     }catch(_){}
     if(dead){try{if(typeof changeScene==='function')changeScene('safe')}catch(_){}}
+    setTimeout(refreshNativeHud,0);setTimeout(refreshNativeHud,120);
   }
 
   function wrapCombatHooks(){
