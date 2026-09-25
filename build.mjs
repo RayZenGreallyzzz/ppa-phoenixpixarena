@@ -117,7 +117,12 @@ if(!fs.existsSync(PPA_MIMIC_EVENT_CARD_PATH)||fs.statSync(PPA_MIMIC_EVENT_CARD_P
   throw new Error('Mimic Sombrero event card missing/invalid: assets-src/mimic-sombrero-event-card.webp');
 }
 fs.copyFileSync(PPA_MIMIC_EVENT_CARD_PATH,path.join(assetsDir,'mimic-sombrero-event-card.webp'));
-console.log('[PPA BUILD] Mimic Sombrero event card: ready');
+const PPA_MIMIC_TICKET_ART_PATH=path.join(ROOT,'assets-src','mimic-sombrero-ticket.webp');
+if(!fs.existsSync(PPA_MIMIC_TICKET_ART_PATH)||fs.statSync(PPA_MIMIC_TICKET_ART_PATH).size<1000){
+  throw new Error('Mimic Sombrero ticket art missing/invalid: assets-src/mimic-sombrero-ticket.webp');
+}
+fs.copyFileSync(PPA_MIMIC_TICKET_ART_PATH,path.join(assetsDir,'mimic-sombrero-ticket.webp'));
+console.log('[PPA BUILD] Mimic Sombrero event card + ticket art: ready');
 
 // V531: canonical Great Ruri poster file itself gets the approved current crystal.
 // No CSS/DOM marker or overlay is needed in the Events UI.
