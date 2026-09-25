@@ -137,20 +137,64 @@
     if(compactHud)compactHud.style.display='none';
   }
 
+  function siegeHudMarkerText(t){
+    t=String(t||'').replace(/\s+/g,' ').trim().toUpperCase();
+    if(!t)return false;
+    if(t.indexOf('КРИСТАЛЛЫ:')>=0)return true;
+    if(t.indexOf('ЗАХВАТ ЗАМКА')>=0)return true;
+    if(t.indexOf('ЗАХВАТ')>=0&&(t.indexOf('ATK')>=0||t.indexOf('DEF')>=0))return true;
+    return false;
+  }
+
+  function siegeHudOwnWrapper(el){
+    if(!el)return null;
+    var cur=el,txt='';
+    try{txt=String(el.textContent||'').replace(/\s+/g,' ').trim()}catch(_){return el}
+    for(var n=0;n<3;n++){
+      var p=cur.parentElement;
+      if(!p||p===document.body||p===document.documentElement)break;
+      var pt='';try{pt=String(p.textContent||'').replace(/\s+/g,' ').trim()}catch(_){break}
+      if(pt!==txt)break;
+      var r;try{r=p.getBoundingClientRect()}catch(_){break}
+      if(r.top>145||r.bottom<0||r.height>125)break;
+      cur=p;
+    }
+    return cur;
+  }
+
   function captureHudCandidate(){
     if(!inSiege())return null;
-    if(hudSource&&hudSource.isConnected)return hudSource;
-    var nodes=document.querySelectorAll('div,section,aside,header');
-    var best=null,bestScore=-1;
-    for(var i=0;i<nodes.length;i++){
-      var el=nodes[i],t='';
-      try{t=String(el.textContent||'').replace(/\s+/g,' ').trim()}catch(_){continue}
-      if(t.indexOf('ЗАХВАТ')<0||t.indexOf('ATK')<0||t.indexOf('DEF')<0)continue;
-      var r;try{r=el.getBoundingClientRect()}catch(_){continue}
-      if(r.top>145||r.bottom<0||r.width<240||r.height<18||r.height>115)continue;
-      var score=r.width-(r.height*1.8);
-      if(score>bestScore){best=el;bestScore=score}
+    if(hudSource&&hudSource.isConnected){
+      var live='';try{live=String(hudSource.textContent||'').replace(/\s+/g,' ').trim()}catch(_){}
+      if(siegeHudMarkerText(live))return hudSource;
+      restoreHudSource();
     }
+
+    var nodes=document.querySelectorAll('div,section,aside,header,span');
+    var best=null,bestArea=Infinity,bestText='';
+    for(var i=0;i<nodes.length;i++){
+      var el=nodes[i];
+      if(el===compactHud||(compactHud&&compactHud.contains&&compactHud.contains(el)))continue;
+      var t='';try{t=String(el.textContent||'').replace(/\s+/g,' ').trim()}catch(_){continue}
+      if(!siegeHudMarkerText(t)||t.length>240)continue;
+
+      // Prefer the deepest/smallest status node, not the whole top HUD with HP/MP/ONLINE.
+      var childHasMarker=false;
+      try{
+        for(var c=0;c<el.children.length;c++){
+          var ct=String(el.children[c].textContent||'').replace(/\s+/g,' ').trim();
+          if(siegeHudMarkerText(ct)){childHasMarker=true;break}
+        }
+      }catch(_){}
+      if(childHasMarker)continue;
+
+      var wrapper=siegeHudOwnWrapper(el);
+      var r;try{r=wrapper.getBoundingClientRect()}catch(_){continue}
+      if(r.top>145||r.bottom<0||r.width<120||r.height<12||r.height>125)continue;
+      var area=Math.max(1,r.width*r.height);
+      if(area<bestArea){best=wrapper;bestArea=area;bestText=t}
+    }
+
     if(best){
       hudSource=best;
       try{
@@ -158,6 +202,7 @@
         best.dataset.ppaSiegeHudHidden='1';
         best.style.visibility='hidden';
       }catch(_){}
+      try{best.dataset.ppaSiegeMirrorText=bestText}catch(_){}
     }
     return best;
   }
@@ -172,8 +217,9 @@
     if(!inSiege()){cleanupHud();return}
     var src=captureHudCandidate();
     if(!src){if(compactHud)compactHud.style.display='none';return}
-    var t=compactText(src.textContent);
+    var t=compactText(src.textContent||src.dataset&&src.dataset.ppaSiegeMirrorText||'');
     if(!t){compactHud.style.display='none';return}
+    try{src.dataset.ppaSiegeMirrorText=t}catch(_){}
     compactHud.textContent=t;
     compactHud.style.display='block';
   }
