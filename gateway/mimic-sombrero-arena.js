@@ -500,7 +500,7 @@
     resize();
     var dt=lastTs?Math.max(0,Math.min(50,ts-lastTs)):16;lastTs=ts;
     var now=Date.now();
-    if(now-lastControlFix>500){lastControlFix=now;setCombatControls(true)}
+    if(!fightDone&&now-lastControlFix>500){lastControlFix=now;setCombatControls(true)}
     updatePlayer(now,dt);bossAI(now,dt);syncProxy();
 
     var W=cv.width,H=cv.height,size=Math.min(W,H),ox=(W-size)/2,oy=(H-size)/2;
@@ -548,7 +548,7 @@
       }
       (extraLabels||[]).forEach(function(s){html.push('<div style="margin:5px 0;color:#cfe7ff">'+String(s)+'</div>')});
       if(!extraLabels||!extraLabels.length)html.push('<div style="margin-top:7px;color:#a99578">Дополнительный дроп не выпал.</div>');
-      html.push('<div style="margin-top:10px;color:#b9a17f;font-size:9px">Награда уже сохранена. Можно спокойно посмотреть результат и выйти.</div>');
+      html.push('<div style="margin-top:10px;color:#b9a17f;font-size:9px">Результат боя зафиксирован. Можно спокойно посмотреть награду и выйти.</div>');
       body.innerHTML=html.join('');
       rewardPanel.style.display='flex';
     }catch(e){console.warn('Mimic reward panel',e)}
