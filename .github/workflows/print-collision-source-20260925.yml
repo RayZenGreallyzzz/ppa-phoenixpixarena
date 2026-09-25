@@ -1,0 +1,15 @@
+name: Print collision source
+on:
+  push:
+    branches:
+      - main
+jobs:
+  print:
+    if: contains(github.event.head_commit.message, 'Run collision source printer')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/print-collision-source-20260925.mjs
