@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v600-native-clan-siege-hud-fps-20260925';
+const CLIENT_BUILD = 'v601-clan-siege-exit-collision-native-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -287,25 +287,25 @@ function ppaEscapeSrcdocCode(code) {
 ppaPatchRegex(
   'native clan siege state cache',
   /baseStats:null,hud:null/,
-  "baseStats:null,hud:null,exitBtn:null,hudHtml:'',hudLastAt:0"
+  "baseStats:null,hud:null,exitBtn:null,hudHtml:'',hudLastAt:0,castleCleared:false"
 );
 
 ppaPatchRegex(
   'native compact clan siege HUD',
   /function\s+clanSiegeEnsureHud\(\)\{[\s\S]*?document\.body\.appendChild\(el\);PPA_SIEGE\.hud=el;return el;\s*\}/,
-  "function clanSiegeEnsureHud(){\n  if(PPA_SIEGE.hud&&PPA_SIEGE.hud.isConnected)return PPA_SIEGE.hud;\n  const el=document.createElement('div');\n  el.id='clanSiegeHud';\n  el.style.cssText='position:fixed;z-index:48;left:calc(60% - 30px);top:6px;transform:translateX(-50%);width:min(330px,54vw);max-width:330px;min-height:29px;box-sizing:border-box;padding:4px 8px;border:1px solid rgba(195,128,45,.7);border-radius:7px;background:rgba(21,18,12,.82);box-shadow:0 2px 9px rgba(0,0,0,.58);color:#e8d9ad;font:700 8px/1.25 monospace;text-align:center;white-space:normal;pointer-events:none;display:none';\n  document.body.appendChild(el);\n  PPA_SIEGE.hud=el;\n  if(!PPA_SIEGE.exitBtn||!PPA_SIEGE.exitBtn.isConnected){\n    const b=document.createElement('button');\n    b.id='clanSiegeExitNative';b.type='button';b.textContent='↩ ВЫЙТИ';\n    b.style.cssText='position:fixed;right:12px;top:108px;z-index:58;display:none;min-width:96px;height:34px;padding:0 11px;border:1px solid #c58435;border-radius:8px;background:linear-gradient(#542815,#2b160d);color:#ffd787;box-shadow:0 3px 12px rgba(0,0,0,.65);font:800 10px monospace;touch-action:manipulation';\n    b.onclick=()=>changeScene('safe');\n    document.body.appendChild(b);PPA_SIEGE.exitBtn=b;\n  }\n  return el;\n}"
+  "function clanSiegeEnsureHud(){\n  if(PPA_SIEGE.hud&&PPA_SIEGE.hud.isConnected)return PPA_SIEGE.hud;\n  const el=document.createElement('div');\n  el.id='clanSiegeHud';\n  el.style.cssText='position:fixed;z-index:48;left:calc(60% - 30px);top:6px;transform:translateX(-50%);width:min(330px,54vw);max-width:330px;min-height:29px;box-sizing:border-box;padding:4px 8px;border:1px solid rgba(195,128,45,.7);border-radius:7px;background:rgba(21,18,12,.82);box-shadow:0 2px 9px rgba(0,0,0,.58);color:#e8d9ad;font:700 8px/1.25 monospace;text-align:center;white-space:normal;pointer-events:none;display:none';\n  document.body.appendChild(el);\n  PPA_SIEGE.hud=el;\n  if(!PPA_SIEGE.exitBtn||!PPA_SIEGE.exitBtn.isConnected){\n    const b=document.createElement('button');\n    b.id='clanSiegeExitNative';b.type='button';b.textContent='↩ ВЫЙТИ';\n    b.style.cssText='position:fixed;left:calc(60% - 30px);top:42px;transform:translateX(-50%);z-index:58;display:none;min-width:96px;height:32px;padding:0 11px;border:1px solid #c58435;border-radius:8px;background:linear-gradient(#542815,#2b160d);color:#ffd787;box-shadow:0 3px 12px rgba(0,0,0,.65);font:800 10px monospace;touch-action:manipulation';\n    b.onclick=()=>changeScene('safe');\n    document.body.appendChild(b);PPA_SIEGE.exitBtn=b;\n  }\n  return el;\n}"
 );
 
 ppaPatchRegex(
   'native throttled clan siege HUD update',
   /function\s+clanSiegeHudUpdate\(\)\{[\s\S]*?h\.innerHTML='<b>'\+phase\+'<\/b><br><span style="color:#aeb7bd">'\+badges\+'<\/span>';\s*\}/,
-  "function clanSiegeHudUpdate(force=false){\n  const h=clanSiegeEnsureHud();\n  const exit=PPA_SIEGE.exitBtn;\n  if(P.scene!=='clansiege'||!PPA_SIEGE.active){\n    h.style.display='none';\n    if(exit)exit.style.display='none';\n    return;\n  }\n  const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();\n  if(!force&&now-(PPA_SIEGE.hudLastAt||0)<200)return;\n  PPA_SIEGE.hudLastAt=now;\n  h.style.display='block';\n  if(exit)exit.style.display=PPA_SIEGE.phase==='won'?'block':'none';\n  const alive=EN.filter(e=>e&&e.isClanSiegeCrystal&&e.hp>0).length;\n  const b=PPA_SIEGE.bonuses;\n  const badges=[\n    b.attack?'🔴+10% ATK':'⚫ СИЛА',\n    b.defense?'🔵+10% DEF':'⚫ ЗАЩИТА',\n    b.hp?'🟢+12% HP':'⚫ ЖИЗНЬ',\n    b.atkspd?'🟣+8% ASPD':'⚫ БЕЗДНА'\n  ].join(' · ');\n  const phase=alive>0?('КРИСТАЛЛЫ: '+alive+' / 4'):\n    (PPA_SIEGE.phase==='won'?('🏰 ЗАМОК ЗАХВАЧЕН · '+PPA_SIEGE.winner):\n      ('🏰 ЗАХВАТ ЗАМКА · '+Math.floor(PPA_SIEGE.captureProgress)+' / '+CLAN_SIEGE_CAPTURE.seconds+' сек · '+(PPA_SIEGE.captureActive?'ИДЁТ ЗАХВАТ':'ВСТАНЬ У КРАЯ')));\n  const html='<b>'+phase+'</b><br><span style=\"color:#aeb7bd\">'+badges+'</span>';\n  if(PPA_SIEGE.hudHtml!==html){\n    PPA_SIEGE.hudHtml=html;\n    h.innerHTML=html;\n  }\n}"
+  "function clanSiegeClearCastleObstacles(){\n  if(PPA_SIEGE.castleCleared)return;\n  PPA_SIEGE.castleCleared=true;\n  const hit=o=>{\n    if(!o)return false;\n    const id=String(o.id||o.key||o.type||'').toLowerCase();\n    const name=String(o.name||o.title||'').toUpperCase();\n    return !!(o.isClanSiegeCastle||o.clanSiegeCastle||id.indexOf('clan_siege_castle')>=0||id.indexOf('clansiegecastle')>=0||id.indexOf('castle')>=0&&id.indexOf('siege')>=0||name.indexOf('ЗАМОК')>=0);\n  };\n  const kill=o=>{if(!o)return;o.dead=true;o.hp=0;o.solid=false;o.block=false;o.blocking=false;o.collide=false;o.collision=false;o.noCollision=true;o.visible=false;o.hidden=true;};\n  try{\n    if(Array.isArray(EN)){for(let i=EN.length-1;i>=0;i--){const e=EN[i];if(hit(e)){kill(e);EN.splice(i,1);}}}\n  }catch(_){}\n  try{\n    ['OBS','OBSTACLES','SOLIDS','COLLIDERS','COLLISIONS','WALLS','BLOCKERS','STATIC_OBSTACLES','MAP_OBSTACLES'].forEach(k=>{const a=window[k];if(!Array.isArray(a))return;for(let i=a.length-1;i>=0;i--){if(hit(a[i])){kill(a[i]);a.splice(i,1);}}});\n  }catch(_){}\n}\nfunction clanSiegeHudUpdate(force=false){\n  const h=clanSiegeEnsureHud();\n  const exit=PPA_SIEGE.exitBtn;\n  if(PPA_SIEGE.phase==='won')clanSiegeClearCastleObstacles();\n  if(P.scene!=='clansiege'||!PPA_SIEGE.active){\n    h.style.display='none';\n    if(exit)exit.style.display='none';\n    return;\n  }\n  const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();\n  if(!force&&now-(PPA_SIEGE.hudLastAt||0)<200)return;\n  PPA_SIEGE.hudLastAt=now;\n  h.style.display='block';\n  if(exit)exit.style.display=PPA_SIEGE.phase==='won'?'block':'none';\n  const alive=EN.filter(e=>e&&e.isClanSiegeCrystal&&e.hp>0).length;\n  const b=PPA_SIEGE.bonuses;\n  const badges=[\n    b.attack?'🔴+10% ATK':'⚫ СИЛА',\n    b.defense?'🔵+10% DEF':'⚫ ЗАЩИТА',\n    b.hp?'🟢+12% HP':'⚫ ЖИЗНЬ',\n    b.atkspd?'🟣+8% ASPD':'⚫ БЕЗДНА'\n  ].join(' · ');\n  const phase=alive>0?('КРИСТАЛЛЫ: '+alive+' / 4'):\n    (PPA_SIEGE.phase==='won'?('🏰 ЗАМОК ЗАХВАЧЕН · '+PPA_SIEGE.winner):\n      ('🏰 ЗАХВАТ ЗАМКА · '+Math.floor(PPA_SIEGE.captureProgress)+' / '+CLAN_SIEGE_CAPTURE.seconds+' сек · '+(PPA_SIEGE.captureActive?'ИДЁТ ЗАХВАТ':'ВСТАНЬ У КРАЯ')));\n  const html='<b>'+phase+'</b><br><span style=\"color:#aeb7bd\">'+badges+'</span>';\n  if(PPA_SIEGE.hudHtml!==html){\n    PPA_SIEGE.hudHtml=html;\n    h.innerHTML=html;\n  }\n}"
 );
 
 ppaPatchRegex(
   'native siege HUD reset cache',
   /PPA_SIEGE\.captureLastAt=Date\.now\(\);PPA_SIEGE\.enemyInZone=false;PPA_SIEGE\.winner='';PPA_SIEGE\.castleShownAt=0;/,
-  "PPA_SIEGE.captureLastAt=Date.now();PPA_SIEGE.enemyInZone=false;PPA_SIEGE.winner='';PPA_SIEGE.castleShownAt=0;PPA_SIEGE.hudHtml='';PPA_SIEGE.hudLastAt=0;"
+  "PPA_SIEGE.captureLastAt=Date.now();PPA_SIEGE.enemyInZone=false;PPA_SIEGE.winner='';PPA_SIEGE.castleShownAt=0;PPA_SIEGE.hudHtml='';PPA_SIEGE.hudLastAt=0;PPA_SIEGE.castleCleared=false;"
 );
 
 ppaPatchRegex(
@@ -329,6 +329,8 @@ ppaPatchRegex(
 if(!output.includes("id='clanSiegeHud'") ||
    !output.includes("id='clanSiegeExitNative'") ||
    !output.includes("PPA_SIEGE.hudLastAt") ||
+   !output.includes("clanSiegeClearCastleObstacles") ||
+   !output.includes("castleCleared") ||
    !output.includes("left:calc(60% - 30px)") ||
    !output.includes("if(PPA_SIEGE.phase!=='castle'){PPA_SIEGE.captureActive=false;return}")){
   throw new Error('Native clan siege HUD/performance patch incomplete');
