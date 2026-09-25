@@ -105,11 +105,12 @@ const before = html;
 
 // Force a fresh client cache key for this clean native siege build.
 html = html
-  .split('v602-clan-siege-exit-visible-20260925').join('v605-clan-siege-won-fps-20260925')
-  .split('v603-clan-siege-native-clean-20260925').join('v605-clan-siege-won-fps-20260925')
-  .split('v604-clan-siege-native-leave-20260925').join('v605-clan-siege-won-fps-20260925');
+  .split('v602-clan-siege-exit-visible-20260925').join('v606-clan-siege-city-exit-20260925')
+  .split('v603-clan-siege-native-clean-20260925').join('v606-clan-siege-city-exit-20260925')
+  .split('v604-clan-siege-native-leave-20260925').join('v606-clan-siege-city-exit-20260925')
+  .split('v605-clan-siege-won-fps-20260925').join('v606-clan-siege-city-exit-20260925');
 
-// Native state: one leave button, no duplicate exit button, no castle-cleared hack flag.
+// Native state: one city-exit button after victory, no duplicate exit button, no castle-cleared hack flag.
 html = replaceRequired(
   html,
   "baseStats:null,hud:null,exitBtn:null,hudHtml:'',hudLastAt:0,castleCleared:false",
@@ -128,8 +129,8 @@ html = replaceAllFunctions(html, 'clanSiegeEnsureHud', `function clanSiegeEnsure
     const b=document.createElement('button');
     b.id='clanSiegeLeaveBtn';
     b.type='button';
-    b.textContent='↩ ВЫЙТИ';
-    b.style.cssText='position:fixed;left:calc(60% - 30px);top:42px;transform:translateX(-50%);z-index:58;display:none;min-width:86px;height:28px;padding:0 10px;border:1px solid #c58435;border-radius:8px;background:linear-gradient(#542815,#2b160d);color:#ffd787;box-shadow:0 3px 12px rgba(0,0,0,.65);font:800 9px monospace;touch-action:manipulation';
+    b.textContent='↩ В ГОРОД';
+    b.style.cssText='position:fixed;left:calc(60% - 30px);top:42px;transform:translateX(-50%);z-index:58;display:none;min-width:96px;height:28px;padding:0 10px;border:1px solid #c58435;border-radius:8px;background:linear-gradient(#542815,#2b160d);color:#ffd787;box-shadow:0 3px 12px rgba(0,0,0,.65);font:800 9px monospace;touch-action:manipulation';
     b.onclick=()=>changeScene('safe');
     document.body.appendChild(b);
     PPA_SIEGE.leaveBtn=b;
@@ -231,10 +232,11 @@ for (const token of forbidden) {
   if (html.includes(token)) throw new Error('Forbidden duplicate/hack token remains: ' + token);
 }
 if (!html.includes("id='clanSiegeLeaveBtn'") ||
+    !html.includes("b.textContent='↩ В ГОРОД'") ||
     !html.includes('PPA_SIEGE.leaveBtn') ||
     !html.includes("if(leave)leave.style.display=PPA_SIEGE.phase==='won'?'block':'none'") ||
     !html.includes("b.onclick=()=>changeScene('safe')")) {
-  throw new Error('Native clan siege leave button validation failed');
+  throw new Error('Native clan siege city-exit button validation failed');
 }
 if (!/if\(PPA_SIEGE\.phase==='castle'\)\{\s*\/\/ Compact round collision sits fully inside the castle footprint\.\s*const c=CLAN_SIEGE_CASTLE_COLLISION;\s*if\(Math\.hypot\(x-c\.x,y-c\.y\)<c\.r\+r\)return false;/.test(html)) {
   throw new Error('Castle collision phase gate validation failed');
@@ -253,6 +255,6 @@ if (!html.includes("function clanSiegeUpdateCapture(){\n  if(PPA_SIEGE&&PPA_SIEG
 if (html === before) throw new Error('No changes applied to public/index.html');
 
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] clean native clan siege applied: leave after win, castle render/collision/update off after win.');
+console.log('[PPA POSTBUILD] clean native clan siege applied: city exit after win, castle render/collision/update off after win.');
 console.log('[PPA POSTBUILD] draw guards: '+drawGuard.count+' capture guards: '+captureGuard.count);
 console.log('[PPA POSTBUILD] index.html: '+(Buffer.byteLength(html)/1024/1024).toFixed(2)+' MiB');
