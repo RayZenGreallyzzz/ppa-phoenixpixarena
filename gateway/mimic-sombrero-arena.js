@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V2)return;
-  window.__PPA_MIMIC_SOMBRERO_ARENA_V2=true;
+  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V3)return;
+  window.__PPA_MIMIC_SOMBRERO_ARENA_V3=true;
 
   var MAP_SRC='/assets/mimic-sombrero-arena.webp';
   var MASK_SRC='/assets/mimic-sombrero-walk-mask.png';
@@ -72,9 +72,9 @@
   function ensureRoot(){
     if(root&&root.isConnected)return root;
     root=document.createElement('div');root.id='ppaMimicArena';
-    root.style.cssText='position:fixed;inset:0;z-index:5;background:#090604;display:none;overflow:hidden;touch-action:none';
+    root.style.cssText='position:fixed;inset:0;z-index:5;background:#090604;display:none;overflow:hidden;touch-action:none;pointer-events:none';
     cv=document.createElement('canvas');cv.id='ppaMimicArenaCanvas';
-    cv.style.cssText='width:100%;height:100%;display:block;image-rendering:auto;touch-action:none';
+    cv.style.cssText='width:100%;height:100%;display:block;image-rendering:auto;touch-action:none;pointer-events:none';
     ctx=cv.getContext('2d',{alpha:false,desynchronized:true})||cv.getContext('2d');
 
     var exit=document.createElement('button');exit.type='button';exit.textContent='↩ ВЫЙТИ';
@@ -86,18 +86,8 @@
 
     root.appendChild(cv);root.appendChild(exit);root.appendChild(tag);document.body.appendChild(root);
 
-    function moveTo(ev){
-      if(!active||fightDone||playerDead)return;
-      var p=pointToWorld(ev);
-      if(p.x<0||p.y<0||p.x>WORLD||p.y>WORLD)return;
-      if(canWalkWorld(p.x,p.y)){
-        moveTarget={x:p.x,y:p.y};
-        pendingBasic=false;
-      }
-      try{ev.preventDefault()}catch(_){}
-    }
-    cv.addEventListener('pointerdown',moveTo,{passive:false});
-    cv.addEventListener('pointermove',function(ev){if(ev.buttons||ev.pointerType==='touch')moveTo(ev)},{passive:false});
+    // The arena is only the visual layer. Native HUD input stays above it:
+    // joystick/touch on mobile and the existing PC input bridge feed jX/jY.
     return root;
   }
   function resize(){
@@ -258,16 +248,31 @@
     if(!P||playerDead||fightDone)return;
     var px=Number(P.x),py=Number(P.y);
     if(!Number.isFinite(px)||!Number.isFinite(py)){P.x=500;P.y=840;px=500;py=840}
-    if(moveTarget){
-      var dx=moveTarget.x-px,dy=moveTarget.y-py,d=Math.hypot(dx,dy);
-      if(d<4){moveTarget=null}
-      else{
-        var slow=(now<Number(P.aiSlowUntil||0))?Math.max(.25,Math.min(1,Number(P.aiSlowMul)||.8)):1;
-        var speed=(80+Math.max(0,Number(P.spd)||3)*18)*slow;
-        var step=Math.min(d,speed*Math.max(0,dt)/1000),nx=px+dx/d*step,ny=py+dy/d*step;
-        if(canWalkWorld(nx,ny)){P.x=nx;P.y=ny}else{moveTarget=null;pendingBasic=false}
-      }
+
+    // Use the game's real input axes. This keeps the normal joystick working on
+    // phone/tablet and also accepts the already-existing PC click/WASD bridge.
+    var ix=0,iy=0;
+    try{ix=(typeof jX!=='undefined')?Number(jX)||0:0;iy=(typeof jY!=='undefined')?Number(jY)||0:0}catch(_){}
+    var mag=Math.hypot(ix,iy);
+    var manual=mag>.04;
+    if(manual){
+      // Manual steering always cancels the Mimic auto-approach order.
+      moveTarget=null;pendingBasic=false;
+      ix/=Math.max(1,mag);iy/=Math.max(1,mag);
+    }else if(moveTarget){
+      var adx=moveTarget.x-px,ady=moveTarget.y-py,ad=Math.hypot(adx,ady);
+      if(ad<4){moveTarget=null}
+      else{ix=adx/Math.max(.001,ad);iy=ady/Math.max(.001,ad)}
     }
+
+    if(Math.abs(ix)>.001||Math.abs(iy)>.001){
+      var slow=(now<Number(P.aiSlowUntil||0))?Math.max(.25,Math.min(1,Number(P.aiSlowMul)||.8)):1;
+      var speed=(80+Math.max(0,Number(P.spd)||3)*18)*slow;
+      var step=speed*Math.max(0,dt)/1000,nx=px+ix*step,ny=py+iy*step;
+      if(canWalkWorld(nx,ny)){P.x=nx;P.y=ny}
+      else if(!manual){moveTarget=null;pendingBasic=false}
+    }
+
     if(pendingBasic&&inBasicRange()){moveTarget=null;tryBasicAttack(true)}
     var mx=Number(P.x)-lastPlayerX,my=Number(P.y)-lastPlayerY;
     if(Math.hypot(mx,my)>.15){
@@ -456,8 +461,8 @@
   }
 
   function wrapCombatHooks(){
-    if(window.__PPA_MIMIC_COMBAT_HOOKS_V2)return;
-    window.__PPA_MIMIC_COMBAT_HOOKS_V2=true;
+    if(window.__PPA_MIMIC_COMBAT_HOOKS_V3)return;
+    window.__PPA_MIMIC_COMBAT_HOOKS_V3=true;
     var baseTarget=window.PPA_ARENA_SKILL_TARGET;
     var baseAround=window.PPA_ARENA_AROUND_TARGET;
     var baseHit=window.PPA_ARENA_SKILL_HIT;
@@ -490,8 +495,8 @@
     };
   }
   function bindAttackButton(){
-    if(window.__PPA_MIMIC_ATTACK_CAPTURE_V2)return;
-    window.__PPA_MIMIC_ATTACK_CAPTURE_V2=true;
+    if(window.__PPA_MIMIC_ATTACK_CAPTURE_V3)return;
+    window.__PPA_MIMIC_ATTACK_CAPTURE_V3=true;
     var blockUntil=0;
     function hit(ev){
       try{var t=ev&&ev.target;return !!(t&&((t.id==='bAtk')||(t.closest&&t.closest('#bAtk'))))}catch(_){return false}
