@@ -10,7 +10,7 @@ if (!fs.existsSync(eventPath)) throw new Error('gateway/mimic-sombrero-event.js 
 let html = fs.readFileSync(indexPath, 'utf8');
 const code = fs.readFileSync(eventPath, 'utf8');
 const marker = '<!-- PPA_MIMIC_SOMBRERO_EVENT_V2 -->';
-const key = 'v616-mimic-sombrero-live-drops-20260925';
+const key = 'v617-mimic-sombrero-card-ticket-qa-20260925';
 html = html
   .split('v602-clan-siege-exit-visible-20260925').join(key)
   .split('v606-clan-siege-city-exit-20260925').join(key)
@@ -21,7 +21,8 @@ html = html
   .split('v612-clan-boss-cerberus-drop-20260925').join(key)
   .split('v613-mimic-sombrero-event-20260925').join(key)
   .split('v614-mimic-sombrero-ticket-battle-20260925').join(key)
-  .split('v615-mimic-sombrero-arena-idle-20260925').join(key);
+  .split('v615-mimic-sombrero-arena-idle-20260925').join(key)
+  .split('v616-mimic-sombrero-live-drops-20260925').join(key);
 
 if (!html.includes(marker)) {
   const script = `${marker}\n<script>\n${code}\n</script>`;
@@ -40,10 +41,13 @@ for (const required of [
   '10000',
   '20000',
   '50000',
+  'mimic-sombrero-event.js',
+  'mimic-sombrero-event-card.webp',
+  'mimicSombreroTestToggle',
   key
 ]) {
   if (!html.includes(required)) throw new Error('Mimic Sombrero validation missing: ' + required);
 }
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] Mimic-Sombrero v616 injected: monthly 5-day event, mob tickets 0.47%, full boss drop tables, arena map/idle hook.');
+console.log('[PPA POSTBUILD] Mimic-Sombrero v617: card art, canonical ticket art, native 1-60 ticket drops, admin QA test mode.');
 console.log('[PPA POSTBUILD] index.html: ' + (Buffer.byteLength(html) / 1024 / 1024).toFixed(2) + ' MiB');
