@@ -54,14 +54,24 @@
   window.PPA_SET_MIMIC_SOMBRERO_TEST_MODE=function(v){window.PPA_MIMIC_SOMBRERO_TEST_MODE=(v===true);return active()};
 
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-  function save(){try{if(typeof scheduleCombatSave==='function')scheduleCombatSave()}catch(_){}try{if(typeof sendInvState==='function')sendInvState()}catch(_){}try{if(typeof saveGame==='function')saveGame()}catch(_){}}
+  function save(){try{if(typeof scheduleCombatSave==='function')scheduleCombatSave()}catch(_){}try{if(typeof sendInvState==='function')sendInvState()}catch(_){}try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}try{if(typeof sendBlacksmithState==='function')sendBlacksmithState()}catch(_){}try{if(typeof saveGame==='function')saveGame()}catch(_){}}
   function matBag(){try{if(typeof INV!=='object'||!INV)return null;INV.materials=(INV.materials&&typeof INV.materials==='object')?INV.materials:{};return INV.materials}catch(_){return null}}
   function matCount(n){var m=matBag();return m?Math.max(0,Number(m[n])||0):0}
   function addMat(n,a){var m=matBag();if(!m)return false;m[n]=(Math.max(0,Number(m[n])||0)+Math.max(1,Math.floor(Number(a)||1)));save();return true}
   function takeMat(n,a){var m=matBag();a=Math.max(1,Math.floor(Number(a)||1));if(!m||Math.max(0,Number(m[n])||0)<a)return false;m[n]=Math.max(0,Number(m[n])||0)-a;if(m[n]<=0)delete m[n];save();return true}
   function iconData(label,bg,fg){return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" rx="18" fill="'+bg+'" stroke="#ffd36a" stroke-width="4"/><path d="M16 57h64M25 48c3-17 10-25 23-25s20 8 23 25" fill="none" stroke="'+fg+'" stroke-width="13" stroke-linecap="round"/><path d="M19 57c20 13 39 13 58 0" fill="none" stroke="#222" stroke-width="6"/><text x="48" y="82" text-anchor="middle" font-family="monospace" font-weight="900" font-size="18" fill="#fff4c8">'+label+'</text></svg>')}
   var TICKET_SRC='/assets/mimic-sombrero-ticket.webp?v=v617';
-  var GEAR_SRC={green:iconData('SET','#163b19','#78e66f'),blue:iconData('SET','#132a4d','#75b9ff'),epic:iconData('SET','#32154b','#d58cff')};
+  var GEAR_SRC={
+    green:{
+      helmet:iconData('ШЛ','#163b19','#78e66f'),armor:iconData('ПН','#163b19','#78e66f'),gloves:iconData('ПР','#163b19','#78e66f'),legs:iconData('ШТ','#163b19','#78e66f'),boots:iconData('СА','#163b19','#78e66f')
+    },
+    blue:{
+      helmet:iconData('ШЛ','#132a4d','#75b9ff'),armor:iconData('ПН','#132a4d','#75b9ff'),gloves:iconData('ПР','#132a4d','#75b9ff'),legs:iconData('ШТ','#132a4d','#75b9ff'),boots:iconData('СА','#132a4d','#75b9ff')
+    },
+    epic:{
+      helmet:iconData('ШЛ','#32154b','#d58cff'),armor:iconData('ПН','#32154b','#d58cff'),gloves:iconData('ПР','#32154b','#d58cff'),legs:iconData('ШТ','#32154b','#d58cff'),boots:iconData('СА','#32154b','#d58cff')
+    }
+  };
 
   function registerMaterials(){
     try{
@@ -111,37 +121,117 @@
   }
 
   function gearStore(){try{if(typeof INV!=='object'||!INV)return null;INV.mimicSombreroGear=(INV.mimicSombreroGear&&typeof INV.mimicSombreroGear==='object')?INV.mimicSombreroGear:{items:[]};if(!Array.isArray(INV.mimicSombreroGear.items))INV.mimicSombreroGear.items=[];return INV.mimicSombreroGear}catch(_){return null}}
+  function nativeRarity(tier){tier=String(tier||'green').toLowerCase();return tier==='green'?'uncommon':(tier==='blue'?'rare':'epic')}
+  function eventTierFromItem(it){
+    if(!it)return'green';
+    var t=String(it.mimicTier||'').toLowerCase();if(t==='green'||t==='blue'||t==='epic')return t;
+    var r=String(it.rarity||'').toLowerCase();
+    if(r==='uncommon'||r==='green')return'green';
+    if(r==='rare'||r==='blue')return'blue';
+    if(r==='epic')return'epic';
+    var lv=Math.max(0,Number(it.level||it.lvl)||0);
+    return lv>=60?'epic':(lv>=40?'blue':'green');
+  }
+  function nativeGearForSlot(level,tier,slot){
+    var rarity=nativeRarity(tier),last=null;
+    try{
+      if(typeof genItem==='function'){
+        for(var i=0;i<80;i++){
+          var x=genItem(level,false,rarity);
+          if(!x)continue;
+          last=x;
+          if(String(x.slot||'')===String(slot||''))return x;
+        }
+      }
+    }catch(_){}
+    return last;
+  }
+  function hydrateMimicItem(it,level,tier,slot){
+    if(!it||typeof it!=='object')it={};
+    level=Math.max(1,Math.min(60,Math.floor(Number(level||it.level||it.lvl)||20)));
+    tier=String(tier||eventTierFromItem(it)).toLowerCase();
+    slot=String(slot||it.slot||SLOTS[0]).toLowerCase();
+    if(SLOTS.indexOf(slot)<0)slot=SLOTS[0];
+
+    var oldUid=String(it.uid||it.id||''),oldEnh=Math.max(0,Math.floor(Number(it.enh)||0));
+    var native=nativeGearForSlot(level,tier,slot);
+    if(native&&typeof native==='object'){
+      Object.keys(native).forEach(function(k){it[k]=native[k]});
+    }else{
+      if(!it.stats||typeof it.stats!=='object')it.stats={};
+    }
+
+    var uid=oldUid||('mimic:'+level+':'+slot+':'+Date.now().toString(36)+':'+Math.random().toString(36).slice(2,7));
+    var art=(GEAR_SRC[tier]&&GEAR_SRC[tier][slot])||(GEAR_SRC.green&&GEAR_SRC.green[slot])||'';
+    it.uid=uid;it.id=uid;it.slot=slot;it.kind='gear';it.type='gear';
+    it.name=SLOT_RU[slot]+' Самбреро';it.n=it.name;
+    it.level=level;it.lvl=level;it.rarity=nativeRarity(tier);it.mimicTier=tier;
+    it.classKey='all';it.className='Все классы';it.cls='all';
+    it.setId='mimic_sombrero';it.ppaMimicSombrero=true;it.ppaMimicNativeV1=true;
+    it.enh=oldEnh;it.sell=0;it.img=art;it.src=art;it.image=art;it.art=art;it.iconArt=art;it.cardArt=art;
+    it.desc='Ивентовый общий сет Мимика-Самбреро · статы как у обычного шмота этой редкости и уровня · подходит всем классам.';
+    it.bonusText='Сет Мимика-Самбреро · каждая часть даёт бонус золота и дропа по редкости.';
+    try{if(typeof applyEnhancementStats==='function')applyEnhancementStats(it)}catch(_){}
+    try{if(typeof syncItemBM==='function')syncItemBM(it)}catch(_){}
+    return it;
+  }
   function makeGear(d){
-    var slot=SLOTS[Math.floor(Math.random()*SLOTS.length)],rar=d.rarity,lvl=d.level;
-    var mult=rar==='epic'?3:(rar==='blue'?2:1),id='mimic:'+lvl+':'+slot+':'+Date.now().toString(36)+':'+Math.random().toString(36).slice(2,7);
-    return {id:id,n:SLOT_RU[slot]+' Самбреро',name:SLOT_RU[slot]+' Самбреро',slot:slot,kind:'gear',type:'gear',rarity:rar,level:lvl,lvl:lvl,cls:'all',classKey:'all',setId:'mimic_sombrero',ppaMimicSombrero:true,atk:0,def:8*mult,hp:slot==='armor'?120*mult:0,img:GEAR_SRC[rar],src:GEAR_SRC[rar],desc:'Ивентовый общий сет Мимика-Самбреро. Случайные части и дубли разрешены.'};
+    var slot=SLOTS[Math.floor(Math.random()*SLOTS.length)],tier=d.rarity,lvl=d.level;
+    return hydrateMimicItem({},lvl,tier,slot);
   }
   function grantGear(d){
     var it=makeGear(d),gs=gearStore(),where='премиум-хранилище';
-    if(gs)gs.items.unshift(it);
     try{
       if(typeof normalizeStorage==='function')normalizeStorage();
       if(typeof INV==='object'&&INV){
         INV.storage=(INV.storage&&typeof INV.storage==='object')?INV.storage:{personal:[],clan:[],premium:[]};
         if(!Array.isArray(INV.storage.premium))INV.storage.premium=[];
-        if(INV.storage.premium.length<50)INV.storage.premium.unshift(Object.assign({},it));
-        else if(Array.isArray(INV.bag)&&INV.bag.length<100){INV.bag.unshift(Object.assign({},it));where='сумка'}
-        else where='резерв наград события';
+        if(INV.storage.premium.length<50)INV.storage.premium.unshift(it);
+        else if(Array.isArray(INV.bag)&&INV.bag.length<100){INV.bag.unshift(it);where='сумка'}
+        else{where='резерв наград события';if(gs)gs.items.unshift(it)}
       }
-    }catch(_){where='резерв наград события'}
+    }catch(_){where='резерв наград события';if(gs)gs.items.unshift(it)}
     save();
-    try{if(typeof showPickup==='function')showPickup('🎭 '+it.name+' · '+RARITY_RU[it.rarity]+' → '+where,'#ffd36a')}catch(_){}
+    try{if(typeof showPickup==='function')showPickup('🎭 '+it.name+' · '+RARITY_RU[d.rarity]+' → '+where,'#ffd36a')}catch(_){}
     return {item:it,where:where};
   }
-  function equippedMimicPieces(){
+  function normalizeOwnedMimicGear(){
+    var changed=false;
+    function one(it){
+      if(!it||!it.ppaMimicSombrero||it.ppaMimicNativeV1)return;
+      hydrateMimicItem(it,it.level||it.lvl,eventTierFromItem(it),it.slot);changed=true;
+    }
+    function arr(a){if(!Array.isArray(a))return;a.forEach(one)}
+    try{
+      if(typeof INV==='object'&&INV){
+        arr(INV.bag);
+        if(INV.storage){arr(INV.storage.personal);arr(INV.storage.clan);arr(INV.storage.premium)}
+        if(INV.equipped)Object.keys(INV.equipped).forEach(function(k){one(INV.equipped[k])});
+        if(INV.equip)Object.keys(INV.equip).forEach(function(k){one(INV.equip[k])});
+        if(INV.mimicSombreroGear)arr(INV.mimicSombreroGear.items);
+      }
+    }catch(_){}
+    if(changed)save();
+    return changed;
+  }
+  function equippedMimicItems(){
     var seen={};
-    function scan(o){try{if(!o||typeof o!=='object')return;Object.keys(o).forEach(function(k){var it=o[k];if(it&&it.ppaMimicSombrero&&it.slot)seen[it.slot]=1})}catch(_){}}
+    function scan(o){try{if(!o||typeof o!=='object')return;Object.keys(o).forEach(function(k){var it=o[k];if(it&&it.ppaMimicSombrero&&it.slot&&!seen[it.slot])seen[it.slot]=it})}catch(_){}}
     try{if(typeof INV==='object'&&INV){scan(INV.equipped);scan(INV.equip)}}catch(_){}
     try{if(typeof P==='object'&&P){scan(P.equipped);scan(P.equip)}}catch(_){}
-    return Object.keys(seen).length;
+    return Object.keys(seen).map(function(k){return seen[k]});
   }
-  function setBonus(){var n=equippedMimicPieces();if(n>=5)return{pieces:n,gold:0.02,drop:0.02};if(n>=4)return{pieces:n,gold:0.01,drop:0.01};if(n>=2)return{pieces:n,gold:0.005,drop:0};return{pieces:n,gold:0,drop:0}}
+  function setPieceRate(it){
+    var t=eventTierFromItem(it);
+    return t==='epic'?0.014:(t==='blue'?0.01:0.004);
+  }
+  function setBonus(){
+    var a=equippedMimicItems(),g=0,d=0,tiers={green:0,blue:0,epic:0};
+    a.forEach(function(it){var t=eventTierFromItem(it),v=setPieceRate(it);tiers[t]=(tiers[t]||0)+1;g+=v;d+=v});
+    return{pieces:a.length,gold:g,drop:d,tiers:tiers};
+  }
   window.PPA_MIMIC_SOMBRERO_SET_BONUS=setBonus;
+  window.PPA_MIMIC_SOMBRERO_NORMALIZE_GEAR=normalizeOwnedMimicGear;
 
   function pct(v){return (Math.round(Number(v||0)*10000)/100).toFixed((Number(v||0)*100)%1?2:0)+'%'}
   function rewardRows(lv){
@@ -171,7 +261,7 @@
     return false;
   }
 
-  function install(){registerMaterials();installDropRoll();installDropInfo();installBlackMarketFilter()}
+  function install(){registerMaterials();normalizeOwnedMimicGear();installDropRoll();installDropInfo();installBlackMarketFilter()}
   registerMaterials();install();setTimeout(install,250);setTimeout(install,900);setTimeout(install,1800);
   window.PPA_MIMIC_SOMBRERO_DIAG=function(){
     var drop=false,info=false;
