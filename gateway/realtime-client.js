@@ -117,12 +117,12 @@
     }catch(_){}
     return null;
   }
-  function clanBossApplyState(st){
+  function clanBossApplyState(st,serverTs){
     if(!st||typeof st!=='object')return false;
     RT.clanBossState=Object.assign({},st);
     RT.clanBossId=String(st.bossId||RT.clanBossId||'');
     try{if(window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(RT.clanBossState)}catch(_){}
-    try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(RT.clanBossState.chest||null,Number(st.serverTs)||0)}catch(_){}
+    try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(RT.clanBossState.chest||null,Number(serverTs)||0)}catch(_){}
     try{
       var b=clanBossEntity();
       if(b){
@@ -464,14 +464,14 @@
       RT.clanBossEnteringUntil=Date.now()+6000;
       RT.clanBossSceneSeen=false;RT.clanBossSeq=0;
       commitRoom(RT.clanBossRoom);RT.serverRoom=RT.clanBossRoom;RT.lastRoomSync=Date.now();
-      clanBossApplyState(m.bossState||{});
+      clanBossApplyState(m.bossState||{},Number(m.ts)||0);
       clanBossResolve({ok:true,bossState:m.bossState||{},message:'Рейд запущен.'});
       sendMove(true);
       return;
     }
     if(m.type==='clan-boss-state'){
       if(m.room&&RT.clanBossRoom&&canonicalRoom(m.room)!==canonicalRoom(RT.clanBossRoom))return;
-      clanBossApplyState(m.bossState||{});
+      clanBossApplyState(m.bossState||{},Number(m.ts)||0);
       return;
     }
     if(m.type==='clan-boss-reward'){
@@ -492,7 +492,7 @@
       return;
     }
     if(m.type==='clan-boss-defeated'){
-      clanBossApplyState(m.bossState||Object.assign({},RT.clanBossState||{},{active:false,status:'cooldown',bossHp:0,bossReadyAt:Number(m.cooldownUntil)||0,cooldownUntil:Number(m.cooldownUntil)||0}));
+      clanBossApplyState(m.bossState||Object.assign({},RT.clanBossState||{},{active:false,status:'cooldown',bossHp:0,bossReadyAt:Number(m.cooldownUntil)||0,cooldownUntil:Number(m.cooldownUntil)||0}),Number(m.ts)||0);
       if(!RT.clanBossDefeatShown){
         RT.clanBossDefeatShown=true;
         try{if(typeof showPickup==='function')showPickup((m.bossState&&m.bossState.qaTest)?'ТЕСТ · КЛАНОВЫЙ БОСС · ОТКАТ 10 СЕКУНД':'КЛАНОВЫЙ БОСС ПОВЕРЖЕН · ОТКАТ 12 ЧАСОВ','#ffd36a')}catch(_){}
@@ -501,7 +501,7 @@
     }
     if(m.type==='clan-boss-reject'){
       var msg=String(m.reason||'Клановый рейд отклонён');
-      if(m.bossState)clanBossApplyState(m.bossState);
+      if(m.bossState)clanBossApplyState(m.bossState,Number(m.ts)||0);
       if(RT.clanBossEnterPromise)clanBossResolve({ok:false,message:msg,bossState:m.bossState||null});
       if(RT.clanBossReconnectId){
         RT.clanBossReconnectId='';
