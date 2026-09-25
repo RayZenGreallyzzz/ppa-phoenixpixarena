@@ -120,6 +120,7 @@ button{font:inherit}
 const RURI_ART='__PPA_RURI_CARD__';
 const TITAN_ART='__PPA_TITAN_ART__';
 const state={titanShards:0,ruri:{resources:{demonic:0,fire:0,blood:0,crystal:0},need:{demonic:72,fire:10,blood:7,crystal:11},owned:false,bagFull:false,canCraft:false},worldBoss:{available:true,killedThisCycle:false,nextResetAt:0,resetHour:18},clanSiege:{ready:true,nextAt:0,remainingMs:0,text:'ОСАДА ДОСТУПНА'}};
+const CLAN_SIEGE_QA_TEST_OPEN=true;
 let currentCat='game',currentEvent='ruri',toastTimer=0;
 
 const offers=[
@@ -148,6 +149,7 @@ function titanStatus(){
   return available?{label:'АКТИВНО',timer:'Доступен · ежедневный откат в 18:00',locked:false}:{label:'ОТКАТ',timer:'До отката 18:00: '+timeClock(reset-now),locked:true};
 }
 function citadelStatus(){
+  if(CLAN_SIEGE_QA_TEST_OPEN)return{label:'ТЕСТ',timer:'Откат осады отключён',locked:false};
   const z=state.clanSiege||{},now=Date.now(),next=Number(z.nextAt)||0;
   const ready=!!z.ready||!next||now>=next;
   return ready?{label:'ДОСТУПНО',timer:'Осада доступна · цикл 3 дня',locked:false}:{label:'ОТКАТ',timer:'Следующая осада через '+timeLeft(next-now),locked:true};
@@ -196,7 +198,7 @@ function render(){
   }
   if(currentEvent==='citadel'){
     const st=citadelStatus();
-    v.innerHTML='<div class="hero">'+artBlock('', '🏰','Цитадель Феникса')+'<div class="info"><h2>🏰 Цитадель Феникса</h2><div class="status'+(st.locked?' locked':'')+'" id="liveStatus">'+st.label+' · '+st.timer+'</div><p>4 сильнейших клана по 8 игроков. Сначала уничтожьте 4 кристалла, затем удерживайте край замка 60 секунд.</p><p>Соклановцев атаковать нельзя. Владение замком — 3 дня.</p><h3>НАГРАДЫ ПОБЕДИТЕЛЯМ</h3><p>XP +5% · золото +5% · ресурсы +5% · скорость +3% всему клану.</p><button class="action" id="enterCitadel" '+(st.locked?'disabled':'')+'>'+(st.locked?'ОСАДА НА ОТКАТЕ':'ВОЙТИ В ОСАДУ')+'</button></div></div>';
+    v.innerHTML='<div class="hero">'+artBlock('', '🏰','Цитадель Феникса')+'<div class="info"><h2>🏰 Цитадель Феникса</h2><div class="status'+(st.locked?' locked':'')+'" id="liveStatus">'+st.label+' · '+st.timer+'</div><p>4 сильнейших клана по 8 игроков. Сначала уничтожьте 4 кристалла, затем удерживайте край замка 60 секунд.</p><p>Соклановцев атаковать нельзя. Владение замком — 3 дня.</p><h3>НАГРАДЫ ПОБЕДИТЕЛЯМ</h3><p>XP +5% · золото +5% · ресурсы +5% · скорость +3% всему клану.</p><button class="action" id="enterCitadel" '+(st.locked?'disabled':'')+'>'+(CLAN_SIEGE_QA_TEST_OPEN?'ТЕСТ · ВОЙТИ В ОСАДУ':(st.locked?'ОСАДА НА ОТКАТЕ':'ВОЙТИ В ОСАДУ'))+'</button></div></div>';
     document.getElementById('enterCitadel').onclick=()=>{const s=citadelStatus();if(s.locked){showToast(s.timer);return}parent.postMessage({type:'eventsEnter',action:'clansiege',id:'clan_siege_phoenix_001'},'*')};
     return;
   }
