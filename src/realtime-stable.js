@@ -325,6 +325,17 @@ export class RealtimeHub extends BaseRealtimeHub {
     const hp=Math.max(0,Number(st.hp)||0),mhp=Math.max(1,Number(st.mhp)||1);
     const respawnAt=Math.max(0,Number(st.respawnAt)||0);
     const active=String(st.status)==='active'&&hp>0;
+    const rawChest=st.chest&&typeof st.chest==='object'?st.chest:null;
+    const chest=rawChest?{
+      state:String(rawChest.state||'closed'),
+      x:Number(rawChest.x)||0,y:Number(rawChest.y)||0,
+      spawnedAt:Number(rawChest.spawnedAt)||0,
+      openerPid:String(rawChest.openerPid||''),
+      openerName:cleanName(rawChest.openerName||''),
+      openStartedAt:Number(rawChest.openStartedAt)||0,
+      openAt:Number(rawChest.openAt)||0,
+      openedAt:Number(rawChest.openedAt)||0
+    }:null;
     return {
       active,bossId:String(st.bossId||''),bossHp:hp,bossMaxHp:mhp,
       partySize,aliveCount,
@@ -336,6 +347,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       defeatedAt:Number(st.defeatedAt)||0,cooldownUntil:respawnAt,bossReadyAt:respawnAt,
       lastEvent:active?'Рейд идёт':(respawnAt>now?(CLAN_BOSS_QA_TEST_OPEN?'ТЕСТ · босс восстанавливается 10 секунд':'Босс повержен · откат 12 часов'):'Босс готов'),
       qaTest:CLAN_BOSS_QA_TEST_OPEN,respawnMs:clanBossRespawnMs(),
+      chest,
       enterScene:'clanboss1'
     };
   }
@@ -381,6 +393,24 @@ export class RealtimeHub extends BaseRealtimeHub {
       return;
     }
 
+    const pendingChest=!!(st&&String(st.bossId)===cfg.id&&st.chest&&String(st.chest.state||'')!=='opened');
+    if(pendingChest){
+      const room=clanBossRoom(member.clanId,st.bossId);
+      a.clanBossId=String(st.bossId);
+      a.clanBossRoom=room;
+      a.lastClanBossSeq=0;
+      a.lastClanBossStateAt=0;
+      this.moveSocketRoom(ws,a,room,now);
+      ws.serializeAttachment(a);
+      const bossState=this.clanBossPublicState(st,room,a,now);
+      wsJson(ws,{type:'clan-boss-entered',requestId,room,bossState,ts:now,message:'Сундук кланового босса ждёт открытия.'});
+      this.sendRoomSnapshot(ws,room);
+      await this.broadcastClanBossState(st,room,now);
+      await this.sendClanBossReward(ws,a,st,now);
+      this.sendOnlineCount();
+      return;
+    }
+
     const storedCooldown=st?Math.max(0,Number(st.respawnAt)||0):0;
     const cooldown=Math.max(metaCooldown,storedCooldown);
     if(cooldown>now&&!(st&&String(st.status)==='active'&&Number(st.hp)>0)){
@@ -396,7 +426,9 @@ export class RealtimeHub extends BaseRealtimeHub {
         clanId:member.clanId,bossId:cfg.id,
         hp:cfg.mhp,mhp:cfg.mhp,status:'active',
         startedAt:now,updatedAt:now,defeatedAt:0,respawnAt:0,
-        damageByPid:{},telegramByPid:{},nameByPid:{},rewardsByPid:{},qaMode:CLAN_BOSS_QA_TEST_OPEN
+        damageByPid:{},telegramByPid:{},nameByPid:{},rewardsByPid:{},
+        chest:null,distribution:null,lastHitPid:'',rewardProgressApplied:false,
+        qaMode:CLAN_BOSS_QA_TEST_OPEN
       };
       await this.clanBossPersist(st);
     }
@@ -427,48 +459,102 @@ export class RealtimeHub extends BaseRealtimeHub {
     this.sendOnlineCount();
   }
 
-  clanBossRollMistressReward(st,pid,now=Date.now()) {
-    pid=String(pid||'');
-    if(!st||String(st.bossId)!=='clan_boss_1'||!pid)return null;
-    if(!st.rewardsByPid||typeof st.rewardsByPid!=='object')st.rewardsByPid={};
-    const existing=st.rewardsByPid[pid];
-    if(existing&&existing.rewardId)return existing;
-
-    let green=2+Math.floor(Math.random()*3);
-    let blue=1+Math.floor(Math.random()*2);
-    const normalStones=2+Math.floor(Math.random()*3);
-    if(Math.random()<0.15){
-      if(Math.random()<0.5)green+=1;
-      else blue+=1;
-    }
-    const damage=Math.max(0,Number(st.damageByPid&&st.damageByPid[pid])||0);
-    const clanCoins=Math.max(0,Math.floor(damage/10000));
-    const reward={
-      rewardId:'cbr:'+String(st.clanId||'')+':'+String(st.bossId||'')+':'+String(st.defeatedAt||now)+':'+pid,
-      bossId:'clan_boss_1',
-      greenResources:green,
-      blueResources:blue,
-      normalStones,
-      premiumStone:Math.random()<0.04,
-      blueGear:Math.random()<0.12,
-      grayRune:Math.random()<0.10,
-      runeRoll:Math.floor(Math.random()*1000000000),
-      clanCoins,
-      createdAt:now,
-      acked:false
-    };
-    st.rewardsByPid[pid]=reward;
-    return reward;
+  clanBossEligible(st) {
+    const dmg=st&&st.damageByPid&&typeof st.damageByPid==='object'?st.damageByPid:{};
+    const names=st&&st.nameByPid&&typeof st.nameByPid==='object'?st.nameByPid:{};
+    return Object.keys(dmg)
+      .map(pid=>({pid:String(pid),name:cleanName(names[pid]||'Игрок'),damage:Math.max(0,Number(dmg[pid])||0)}))
+      .filter(x=>x.damage>=5000)
+      .sort((a,b)=>b.damage-a.damage||String(a.pid).localeCompare(String(b.pid)));
   }
 
-  clanBossEnsureRewards(st,now=Date.now()) {
-    if(!st||String(st.bossId)!=='clan_boss_1')return;
-    if(!st.rewardsByPid||typeof st.rewardsByPid!=='object')st.rewardsByPid={};
-    const dmg=st.damageByPid&&typeof st.damageByPid==='object'?st.damageByPid:{};
-    for(const pid of Object.keys(dmg)){
-      if(Math.max(0,Number(dmg[pid])||0)<=0)continue;
-      this.clanBossRollMistressReward(st,pid,now);
+  clanBossSharedRoll(eligible,kind,label,chance) {
+    const dropped=Math.random()<chance;
+    if(!dropped||!eligible.length)return{kind,label,chance,dropped:false,winnerPid:'',winnerName:'',winnerRoll:0,rolls:[]};
+    const rolls=eligible.map(x=>({
+      pid:x.pid,name:x.name,damage:x.damage,
+      roll:1+Math.floor(Math.random()*100),
+      tie:Math.random()
+    })).sort((a,b)=>b.roll-a.roll||b.tie-a.tie||String(a.pid).localeCompare(String(b.pid)));
+    const win=rolls[0];
+    return{
+      kind,label,chance,dropped:true,
+      winnerPid:String(win.pid),winnerName:cleanName(win.name),winnerRoll:Number(win.roll)||0,
+      rolls:rolls.map(x=>({pid:String(x.pid),name:cleanName(x.name),roll:Number(x.roll)||0}))
+    };
+  }
+
+  clanBossBuildMistressDistribution(st,now=Date.now()) {
+    if(!st||String(st.bossId)!=='clan_boss_1')return null;
+    if(st.distribution&&st.distribution.id)return st.distribution;
+
+    const eligible=this.clanBossEligible(st);
+    const id='cbd:'+String(st.clanId||'')+':'+String(st.bossId||'')+':'+String(st.defeatedAt||now);
+    const shared=[
+      this.clanBossSharedRoll(eligible,'blueGear','Синий шмот / оружие',0.12),
+      this.clanBossSharedRoll(eligible,'premiumStone','Премиум камень заточки',0.04),
+      this.clanBossSharedRoll(eligible,'grayRune','Серая универсальная руна',0.10)
+    ];
+    const rewards={};
+    const rareWins={};
+
+    for(const p of eligible){
+      const damageCoins=Math.min(500,Math.floor(Math.max(0,p.damage)/10000));
+      rewards[p.pid]={
+        rewardId:id+':'+p.pid,bossId:'clan_boss_1',
+        damage:p.damage,rank:0,
+        greenResources:1,blueResources:0,normalStones:2,
+        clanCoins:3+damageCoins,
+        blueGear:false,premiumStone:false,grayRune:false,
+        runeRoll:Math.floor(Math.random()*1000000000),
+        participation:true,damageCoins,
+        topBonus:'',killBonus:false,consolation:false,
+        createdAt:now,acked:false
+      };
+      rareWins[p.pid]=0;
     }
+
+    for(let i=0;i<Math.min(3,eligible.length);i++){
+      const p=eligible[i],rw=rewards[p.pid];if(!rw)continue;
+      rw.rank=i+1;
+      if(i===0){rw.blueResources+=2;rw.normalStones+=4;rw.topBonus='1 место по урону';}
+      else if(i===1){rw.blueResources+=1;rw.normalStones+=3;rw.topBonus='2 место по урону';}
+      else{rw.greenResources+=2;rw.normalStones+=2;rw.topBonus='3 место по урону';}
+    }
+
+    const killerPid=String(st.lastHitPid||'');
+    if(rewards[killerPid]){
+      rewards[killerPid].clanCoins+=10;
+      rewards[killerPid].blueResources+=1;
+      rewards[killerPid].killBonus=true;
+    }
+
+    for(const roll of shared){
+      if(!roll.dropped||!roll.winnerPid||!rewards[roll.winnerPid])continue;
+      rewards[roll.winnerPid][roll.kind]=true;
+      rareWins[roll.winnerPid]=(rareWins[roll.winnerPid]||0)+1;
+    }
+
+    for(const p of eligible){
+      const rw=rewards[p.pid];if(!rw)continue;
+      if(!(rareWins[p.pid]>0)){
+        rw.greenResources+=1;
+        rw.normalStones+=2;
+        rw.clanCoins+=5;
+        rw.consolation=true;
+      }
+    }
+
+    st.rewardsByPid=rewards;
+    st.distribution={
+      id,bossId:'clan_boss_1',createdAt:now,minDamage:5000,
+      eligible:eligible.map(x=>({pid:x.pid,name:x.name,damage:x.damage})),
+      shared,
+      killerPid,killerName:cleanName(st.nameByPid&&st.nameByPid[killerPid]||''),
+      openedByPid:String(st.chest&&st.chest.openerPid||''),
+      openedByName:cleanName(st.chest&&st.chest.openerName||'')
+    };
+    return st.distribution;
   }
 
   async sendClanBossReward(ws,a,st=null,now=Date.now()) {
@@ -477,7 +563,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     if(!st||!st.rewardsByPid||typeof st.rewardsByPid!=='object')return false;
     const reward=st.rewardsByPid[String(a.pid||'')];
     if(!reward||reward.acked===true)return false;
-    wsJson(ws,{type:'clan-boss-reward',reward:Object.assign({},reward),ts:now});
+    wsJson(ws,{type:'clan-boss-reward',reward:Object.assign({},reward),distributionId:String(st.distribution&&st.distribution.id||''),ts:now});
     return true;
   }
 
@@ -502,27 +588,100 @@ export class RealtimeHub extends BaseRealtimeHub {
       const progress=jsonObj(row.progress_json||'{}');
       progress.bossReadyAt=Math.max(0,Number(st.respawnAt)||0);
       progress.lastBossId=String(st.bossId||'');
+      const events=jsonArr(row.events_json||'[]');
+      events.unshift({
+        id:'ce_'+crypto.randomUUID(),type:'clanBossDefeated',
+        playerId:String(a&&a.telegramId||''),playerName:cleanName(a&&a.name||'Игрок'),
+        text:(CLAN_BOSS_QA_TEST_OPEN?'ТЕСТ · клановый босс повержен · откат 10 секунд':'Клановый босс повержен · откат 12 часов')+' · появился сундук',ts:now
+      });
+      await this.env.DB.prepare('UPDATE clan_meta SET progress_json=?1,events_json=?2,updated_at=?3 WHERE clan_id=?4')
+        .bind(JSON.stringify(progress),JSON.stringify(events.slice(0,300)),now,String(st.clanId)).run();
+    }catch(e){console.warn('Clan boss defeat meta',e)}
+  }
+
+  async clanBossRecordRewards(st,now=Date.now()) {
+    if(!this.env||!this.env.DB||!st||!st.clanId||!st.distribution||!st.distribution.id)return;
+    try{
+      const row=await this.env.DB.prepare('SELECT progress_json,events_json FROM clan_meta WHERE clan_id=?1').bind(String(st.clanId)).first();
+      if(!row)return;
+      const progress=jsonObj(row.progress_json||'{}');
+      const guard=Array.isArray(progress.bossRewardGuard)?progress.bossRewardGuard.map(String):[];
+      const distId=String(st.distribution.id);
+      if(guard.includes(distId)){st.rewardProgressApplied=true;return}
       progress.personalByMember=progress.personalByMember&&typeof progress.personalByMember==='object'?progress.personalByMember:{};
-      let clanCoinGain=0;
-      const rewards=st.rewardsByPid&&typeof st.rewardsByPid==='object'?st.rewardsByPid:{};
       const telegramByPid=st.telegramByPid&&typeof st.telegramByPid==='object'?st.telegramByPid:{};
-      for(const pid of Object.keys(rewards)){
-        const rw=rewards[pid]||{},coins=Math.max(0,Math.floor(Number(rw.clanCoins)||0));
+      let clanCoinGain=0;
+      for(const pid of Object.keys(st.rewardsByPid||{})){
+        const rw=st.rewardsByPid[pid]||{},coins=Math.max(0,Math.floor(Number(rw.clanCoins)||0));
         if(!coins)continue;
         clanCoinGain+=coins;
         const tid=String(telegramByPid[pid]||'');
         if(tid)progress.personalByMember[tid]=Math.max(0,Number(progress.personalByMember[tid])||0)+coins;
       }
       progress.coins=Math.max(0,Number(progress.coins)||0)+clanCoinGain;
+      guard.unshift(distId);progress.bossRewardGuard=guard.slice(0,30);
       const events=jsonArr(row.events_json||'[]');
       events.unshift({
-        id:'ce_'+crypto.randomUUID(),type:'clanBossDefeated',
-        playerId:String(a&&a.telegramId||''),playerName:cleanName(a&&a.name||'Игрок'),
-        text:(CLAN_BOSS_QA_TEST_OPEN?'ТЕСТ · клановый босс · откат 10 секунд':'Клановый босс повержен · откат 12 часов')+(clanCoinGain?' · монеты клана +'+clanCoinGain:''),ts:now
+        id:'ce_'+crypto.randomUUID(),type:'clanBossChestOpened',
+        playerId:'',playerName:cleanName(st.distribution.openedByName||'Игрок'),
+        text:'Сундук Владычицы открыт · награды распределены · монеты клана +'+clanCoinGain,ts:now
       });
       await this.env.DB.prepare('UPDATE clan_meta SET progress_json=?1,events_json=?2,updated_at=?3 WHERE clan_id=?4')
         .bind(JSON.stringify(progress),JSON.stringify(events.slice(0,300)),now,String(st.clanId)).run();
-    }catch(e){console.warn('Clan boss defeat meta',e)}
+      st.rewardProgressApplied=true;
+    }catch(e){console.warn('Clan boss reward meta',e)}
+  }
+
+  async clanBossOpenChest(ws,a,now=Date.now()) {
+    if(!a||!a.clanId||!a.pid)return;
+    const st=await this.clanBossStored(a.clanId);
+    const room=cleanRoom(a.room),expected=clanBossRoom(a.clanId,a.clanBossId||st&&st.bossId);
+    if(!st||room!==expected||String(st.bossId)!==String(a.clanBossId||''))return;
+    const chest=st.chest&&typeof st.chest==='object'?st.chest:null;
+    if(!chest||String(chest.state)==='opened')return;
+    if(Math.max(0,Number(st.damageByPid&&st.damageByPid[a.pid])||0)<=0){
+      wsJson(ws,{type:'clan-boss-chest-reject',reason:'Сундук может открыть только участник боя.',ts:now});return;
+    }
+    const dx=(Number(a.x)||0)-(Number(chest.x)||0),dy=(Number(a.y)||0)-(Number(chest.y)||0);
+    if(Math.hypot(dx,dy)>150){
+      wsJson(ws,{type:'clan-boss-chest-reject',reason:'Подойди ближе к сундуку.',ts:now});return;
+    }
+    if(String(chest.state)==='opening'){
+      wsJson(ws,{type:'clan-boss-chest-state',chest:Object.assign({},chest),ts:now});return;
+    }
+    chest.state='opening';chest.openerPid=String(a.pid);chest.openerName=cleanName(a.name||'Игрок');
+    chest.openStartedAt=now;chest.openAt=now+5000;
+    st.updatedAt=now;
+    await this.clanBossPersist(st);
+    this.roomBroadcast(room,{type:'clan-boss-chest-state',room,chest:Object.assign({},chest),ts:now},null);
+  }
+
+  async clanBossFinalizeChest(ws,a,now=Date.now()) {
+    if(!a||!a.clanId)return;
+    const st=await this.clanBossStored(a.clanId);
+    if(!st||!st.chest||String(st.chest.state)!=='opening')return;
+    const room=clanBossRoom(st.clanId,st.bossId);
+    if(now<Math.max(0,Number(st.chest.openAt)||0)){
+      if(ws)wsJson(ws,{type:'clan-boss-chest-reject',reason:'Сундук ещё открывается.',ts:now});return;
+    }
+    st.chest.state='opened';st.chest.openedAt=now;
+    const distribution=this.clanBossBuildMistressDistribution(st,now);
+    st.updatedAt=now;
+    await this.clanBossPersist(st);
+    await this.clanBossRecordRewards(st,now);
+    await this.clanBossPersist(st);
+
+    this.roomBroadcast(room,{
+      type:'clan-boss-chest-opened',room,
+      chest:Object.assign({},st.chest),
+      distribution:distribution||null,ts:now
+    },null);
+    await this.broadcastClanBossState(st,room,now);
+    for(const peer of this.roomSockets(room)){
+      const pa=attOf(peer);
+      if(String(pa.clanId||'')!==String(st.clanId||''))continue;
+      await this.sendClanBossReward(peer,pa,st,now);
+    }
   }
 
   async clanBossHit(ws,a,m,now=Date.now()) {
@@ -565,23 +724,27 @@ export class RealtimeHub extends BaseRealtimeHub {
     if(st.hp<=0){
       defeated=true;
       st.hp=0;st.status='cooldown';st.defeatedAt=now;st.respawnAt=now+clanBossRespawnMs();st.qaMode=CLAN_BOSS_QA_TEST_OPEN;
+      st.lastHitPid=pid;
+      st.rewardsByPid={};st.distribution=null;st.rewardProgressApplied=false;
+      st.chest={
+        state:'closed',
+        x:finite(m.bx,-10000,10000,Number(a.x)||0),
+        y:finite(m.by,-10000,10000,Number(a.y)||0),
+        spawnedAt:now,openerPid:'',openerName:'',openStartedAt:0,openAt:0,openedAt:0
+      };
     }
     await this.clanBossPersist(st);
     await this.broadcastClanBossState(st,room,now);
 
     if(defeated){
-      this.clanBossEnsureRewards(st,now);
-      await this.clanBossPersist(st);
       await this.clanBossRecordDefeat(st,a,now);
-      for(const peer of this.roomSockets(room)){
-        const pa=attOf(peer);
-        if(String(pa.clanId||'')!==String(st.clanId||''))continue;
-        await this.sendClanBossReward(peer,pa,st,now);
-      }
       this.roomBroadcast(room,{
         type:'clan-boss-defeated',room,bossId:String(st.bossId||''),
         cooldownUntil:Number(st.respawnAt)||0,
         bossState:this.clanBossPublicState(st,room,a,now),ts:now
+      },null);
+      this.roomBroadcast(room,{
+        type:'clan-boss-chest-state',room,chest:Object.assign({},st.chest),ts:now
       },null);
     }
   }
@@ -1754,6 +1917,16 @@ export class RealtimeHub extends BaseRealtimeHub {
     if (m.type === 'clan-boss-state-request') {
       await this.sendClanBossState(ws,a,null,now);
       await this.sendClanBossReward(ws,a,null,now);
+      return;
+    }
+
+    if (m.type === 'clan-boss-chest-open') {
+      await this.clanBossOpenChest(ws,a,now);
+      return;
+    }
+
+    if (m.type === 'clan-boss-chest-complete') {
+      await this.clanBossFinalizeChest(ws,a,now);
       return;
     }
 
