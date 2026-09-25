@@ -98,15 +98,16 @@
     try{
       var nm=String(P&&P.playerName||'Игрок');ctx.font='700 '+Math.max(9,Math.round(size*.012))+'px monospace';ctx.textAlign='center';ctx.fillStyle='#fff3c7';ctx.fillText(nm,px,py-Math.max(12,size*.018));
     }catch(_){}
-    var tag=document.getElementById('ppaMimicArenaTag');if(tag)tag.textContent='🎭 МИМИК-САМБРЕРО '+level+' · ТЕСТ КАРТЫ / IDLE 4×4';
+    var tag=document.getElementById('ppaMimicArenaTag');if(tag){var aa=eventApi(),tm=!!(aa&&typeof aa.testMode==='function'&&aa.testMode());tag.textContent='🎭 МИМИК-САМБРЕРО '+level+(tm?' · ТЕСТ БЕЗ БИЛЕТА':'')+' · КАРТА / IDLE 4×4';}
     lastTs=ts;raf=requestAnimationFrame(drawFrame);
   }
   function enter(lv){
     lv=[20,40,60].includes(Number(lv))?Number(lv):20;
     var a=eventApi();if(!a||typeof a.consumeTicket!=='function'){toast('Событие Мимика ещё не готово','#ff9c72');return}
-    if(count()<1){toast('Нужен Билет Мимика-Самбреро','#ff9c72');return}
+    var tm=!!(a&&typeof a.testMode==='function'&&a.testMode());
+    if(!tm&&count()<1){toast('Нужен Билет Мимика-Самбреро','#ff9c72');return}
     preload().then(function(){
-      if(!a.consumeTicket(1)){toast('Нужен Билет Мимика-Самбреро','#ff9c72');return}
+      if(!tm&&!a.consumeTicket(1)){toast('Нужен Билет Мимика-Самбреро','#ff9c72');return}
       ensureRoot();level=lv;player.x=.50;player.y=.84;boss.x=.50;boss.y=.50;
       try{prevScene=String(P&&P.scene||'');if(P)P.scene=SCENE}catch(_){}
       root.style.display='block';active=true;lastTs=0;cancelAnimationFrame(raf);raf=requestAnimationFrame(drawFrame);
