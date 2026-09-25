@@ -103,7 +103,9 @@ const PPA_MIMIC_ARENA_FILES=[
 let ppaMimicArenaAssetCount=0;
 for(const pair of PPA_MIMIC_ARENA_FILES){
   const srcName=pair[0],outName=pair[1];
-  const src=path.join(ROOT,'assets-src',srcName);
+  const preferred=path.join(ROOT,'assets-src',srcName);
+  const fallback=path.join(ROOT,srcName);
+  const src=fs.existsSync(preferred)?preferred:fallback;
   if(fs.existsSync(src)&&fs.statSync(src).size>500){
     fs.copyFileSync(src,path.join(assetsDir,outName));
     ppaMimicArenaAssetCount++;
