@@ -7315,7 +7315,7 @@ console.log('Clan boss loot: /game/clan-boss-loot.js');
 console.log('Clan boss reward chest: /game/clan-boss-chest.js');
 console.log('Great Ruri event drops: /game/ruri-event-drops.js · TEST ACTIVE');
 console.log('Mimic Sombrero event: /game/mimic-sombrero-event.js · monthly 5-day + QA test mode');
-console.log('Mimic Sombrero arena: /game/mimic-sombrero-arena.js · TEST MAP/IDLE');
+console.log('Mimic Sombrero arena: /game/mimic-sombrero-arena.js · REAL COMBAT V2');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
