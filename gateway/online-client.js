@@ -213,13 +213,16 @@
   }
 
   var adminRewardSeedTried=false;
+  window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED=false;
   async function seedAdminEventRewardStock(){
     if(adminRewardSeedTried)return;
     adminRewardSeedTried=true;
     if(!online()||!window.PPA||!PPA.ppaAdminEventRewardStockAccess||typeof window.PPA_ADMIN_EVENT_REWARD_STOCK!=='function')return;
     try{
       var access=await PPA.ppaAdminEventRewardStockAccess();
-      if(!access||!access.authorized)return;
+      window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED=!!(access&&access.authorized);
+      try{if(typeof sendEventsState==='function')sendEventsState()}catch(_){}
+      if(!window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED)return;
       var seeded=window.PPA_ADMIN_EVENT_REWARD_STOCK();
       var added=Math.max(0,Number(seeded&&seeded.added)||0);
       if(!added)return;
