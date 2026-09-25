@@ -3,7 +3,7 @@
   "private": true,
   "version": "278.0.0",
   "scripts": {
-    "build": "node build.mjs",
+    "build": "node build.mjs && node tools/postbuild-clan-siege-native-20260925.mjs",
     "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
