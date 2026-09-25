@@ -16,7 +16,7 @@ function insertBeforeLastScriptClose(src, code) {
 let html = fs.readFileSync(indexPath, 'utf8');
 const before = html;
 
-const KEY = 'v609-pc-mouse-hotkeys-safe-20260925';
+const KEY = 'v610-pc-telegram-desktop-20260925';
 html = html
   .split('v602-clan-siege-exit-visible-20260925').join(KEY)
   .split('v603-clan-siege-native-clean-20260925').join(KEY)
@@ -24,21 +24,43 @@ html = html
   .split('v605-clan-siege-won-fps-20260925').join(KEY)
   .split('v606-clan-siege-city-exit-20260925').join(KEY)
   .split('v607-clan-siege-castle-cache-20260925').join(KEY)
-  .split('v608-pc-mouse-hotkeys-20260925').join(KEY);
+  .split('v608-pc-mouse-hotkeys-20260925').join(KEY)
+  .split('v609-pc-mouse-hotkeys-safe-20260925').join(KEY);
 
 const PC_INPUT_CODE = `
 
-// === V609 DESKTOP MOUSE + HOTKEY INPUT ====================================
-// PC-only layer. It is disabled on touch devices so phone/tablet joystick stays native.
+// === V610 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT ===========================
+// Desktop-only layer. Android/iOS/tablet touch keeps the native joystick.
 let PPA_PC_CLICK_MOVE={active:false,x:0,y:0,lastAt:0};
 let PPA_PC_MOVE_LAST={x:0,y:0,active:false};
+let PPA_PC_POINTER_SEEN=false;
+let PPA_PC_KEY_SEEN=false;
+function ppaPcTgPlatform(){
+  try{return String(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.platform||'').toLowerCase()}catch(_){return ''}
+}
+function ppaPcMobileLike(){
+  const ua=String(navigator.userAgent||'').toLowerCase();
+  const p=ppaPcTgPlatform();
+  return /android|iphone|ipad|ipod|mobile|tablet|kindle|silk/.test(ua)||/android|ios|iphone|ipad/.test(p);
+}
+function ppaPcDesktopTelegram(){
+  const p=ppaPcTgPlatform();
+  if(/tdesktop|windows|win32|macos|mac|linux|desktop/.test(p))return true;
+  if((p==='web'||p==='weba'||p==='unknown')&&!ppaPcMobileLike())return true;
+  return false;
+}
+function ppaPcFinePointer(){
+  try{return !!(window.matchMedia&&(matchMedia('(hover:hover)').matches||matchMedia('(pointer:fine)').matches||matchMedia('(any-pointer:fine)').matches))}catch(_){return false}
+}
 function ppaPcInputEnabled(){
   try{
-    if((navigator.maxTouchPoints||0)>0)return false;
-    if(window.matchMedia&&!matchMedia('(hover:hover) and (pointer:fine)').matches)return false;
-    if(Math.min(innerWidth||0,innerHeight||0)<520)return false;
-    if(Math.max(innerWidth||0,innerHeight||0)<900)return false;
-    return true;
+    const large=Math.max(innerWidth||0,innerHeight||0)>=900&&Math.min(innerWidth||0,innerHeight||0)>=480;
+    if(!large)return false;
+    if(ppaPcMobileLike())return false;
+    if(ppaPcDesktopTelegram())return true;
+    if(PPA_PC_POINTER_SEEN||PPA_PC_KEY_SEEN)return true;
+    if(ppaPcFinePointer())return true;
+    return false;
   }catch(_){return false}
 }
 function ppaPcIsTyping(){
@@ -132,12 +154,52 @@ function ppaPcHudSkill(index,ev){
     return true;
   }catch(_){return false}
 }
+function ppaPcMarkPointer(e){
+  try{if(!e||e.pointerType==='mouse'||e.type==='mousemove')PPA_PC_POINTER_SEEN=true}catch(_){PPA_PC_POINTER_SEEN=true}
+}
+function ppaPcIsGamePointerTarget(e){
+  const canvas=ppaPcCanvas();
+  if(!canvas)return false;
+  return e&&e.target===canvas;
+}
+function ppaPcBindCanvas(){
+  const canvas=ppaPcCanvas();
+  if(!canvas||canvas.__PPA_PC_INPUT_BOUND__)return false;
+  canvas.__PPA_PC_INPUT_BOUND__=true;
+  canvas.addEventListener('pointerdown',function(e){
+    ppaPcMarkPointer(e);
+    if(!ppaPcInputEnabled()||ppaPcIsTyping())return;
+    if(e.button===0){
+      e.preventDefault();e.stopPropagation();
+      ppaPcSetMoveTarget(e.clientX,e.clientY);
+    }else if(e.button===2){
+      e.preventDefault();e.stopPropagation();
+      ppaPcAttack(e);
+    }
+  },{passive:false});
+  canvas.addEventListener('mousedown',function(e){
+    PPA_PC_POINTER_SEEN=true;
+  },{passive:true});
+  canvas.addEventListener('contextmenu',function(e){
+    PPA_PC_POINTER_SEEN=true;
+    if(ppaPcInputEnabled()){e.preventDefault();e.stopPropagation()}
+  },{passive:false});
+  return true;
+}
 function ppaPcBindInput(){
   if(window.__PPA_PC_MOUSE_HOTKEYS_BOUND__)return;
   window.__PPA_PC_MOUSE_HOTKEYS_BOUND__=true;
+  window.addEventListener('pointermove',ppaPcMarkPointer,{passive:true});
+  window.addEventListener('mousemove',function(){PPA_PC_POINTER_SEEN=true},{passive:true});
+  window.addEventListener('pointerdown',function(e){
+    ppaPcMarkPointer(e);
+    if(!ppaPcIsGamePointerTarget(e))return;
+  },{passive:true,capture:true});
   window.addEventListener('keydown',function(e){
     if(e.repeat||e.ctrlKey||e.altKey||e.metaKey)return;
-    if(!ppaPcInputEnabled()||ppaPcIsTyping())return;
+    if(ppaPcIsTyping())return;
+    PPA_PC_KEY_SEEN=true;
+    if(!ppaPcInputEnabled())return;
     const k=String(e.key||'').toLowerCase();
     let skill=-1;
     if(k==='1')skill=0;else if(k==='2')skill=1;else if(k==='3')skill=2;else if(k==='4')skill=3;
@@ -148,45 +210,39 @@ function ppaPcBindInput(){
       if(typeof cancelSmartAttack==='function')cancelSmartAttack();
     }
   },{passive:false});
-  const canvas=ppaPcCanvas();
-  if(canvas){
-    canvas.addEventListener('pointerdown',function(e){
-      if(!ppaPcInputEnabled()||ppaPcIsTyping())return;
-      if(e.button===0){
-        e.preventDefault();e.stopPropagation();
-        ppaPcSetMoveTarget(e.clientX,e.clientY);
-      }else if(e.button===2){
-        e.preventDefault();e.stopPropagation();
-        ppaPcAttack(e);
-      }
-    },{passive:false});
-    canvas.addEventListener('contextmenu',function(e){
-      if(ppaPcInputEnabled()){e.preventDefault();e.stopPropagation()}
-    },{passive:false});
-  }
+  let tries=0;
+  const retryCanvas=()=>{
+    ppaPcBindCanvas();
+    tries++;
+    if(tries<120)setTimeout(retryCanvas,500);
+  };
+  retryCanvas();
   const loop=()=>{ppaPcTickMove();requestAnimationFrame(loop)};
   requestAnimationFrame(loop);
 }
+window.PPA_PC_INPUT_DEBUG=function(){
+  return {enabled:ppaPcInputEnabled(),tgPlatform:ppaPcTgPlatform(),mobileLike:ppaPcMobileLike(),desktopTelegram:ppaPcDesktopTelegram(),finePointer:ppaPcFinePointer(),pointerSeen:PPA_PC_POINTER_SEEN,keySeen:PPA_PC_KEY_SEEN,maxTouchPoints:navigator.maxTouchPoints||0,ua:String(navigator.userAgent||''),canvas:!!ppaPcCanvas()};
+};
 ppaPcBindInput();
 // ========================================================================
 `;
 
-if (!html.includes('V609 DESKTOP MOUSE + HOTKEY INPUT')) {
+if (!html.includes('V610 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT')) {
   html = insertBeforeLastScriptClose(html, PC_INPUT_CODE);
 }
 
 if (!html.includes(KEY) ||
-    !html.includes('function ppaPcInputEnabled()') ||
-    !html.includes("matchMedia('(hover:hover) and (pointer:fine)')") ||
-    !html.includes('(navigator.maxTouchPoints||0)>0') ||
-    !html.includes('function ppaPcTickMove()') ||
+    !html.includes('function ppaPcDesktopTelegram()') ||
+    !html.includes('function ppaPcBindCanvas()') ||
+    !html.includes('PPA_PC_POINTER_SEEN') ||
+    !html.includes('window.PPA_PC_INPUT_DEBUG') ||
     !html.includes('ppaPcHudSkill(skill,e)') ||
     !html.includes('ppaPcSetMoveTarget(e.clientX,e.clientY)') ||
     !html.includes('requestAnimationFrame(loop)')) {
-  throw new Error('PC mouse/hotkey validation failed');
+  throw new Error('PC Telegram mouse/hotkey validation failed');
 }
 if (html === before) throw new Error('No changes applied to public/index.html');
 
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] PC input applied safely: left click move, right click/Space attack, 1-4 skills; touch devices disabled.');
+console.log('[PPA POSTBUILD] PC input applied for Telegram Desktop/browser: left click move, right click/Space attack, 1-4 skills; Android/iOS touch disabled.');
 console.log('[PPA POSTBUILD] index.html: '+(Buffer.byteLength(html)/1024/1024).toFixed(2)+' MiB');
