@@ -273,7 +273,8 @@ function ppaEscapeSrcdocCode(code) {
   if(!eventsFrameMatches.length)throw new Error('Native Events iframe target not found');
   output=output.replace(eventsFrameRe,'<iframe id="eventsMenuFrame" title="События" srcdoc="'+nativeEventsEscaped+'"></iframe>');
   console.log('[PPA BUILD] Native Events iframe instances replaced: '+eventsFrameMatches.length);
-  if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('craftRuri')||!output.includes('data-cat=&quot;game&quot;')){
+  if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('craftRuri')||!output.includes('data-cat=&quot;game&quot;')||
+     !output.includes('CLAN_SIEGE_QA_TEST_OPEN=true')||!output.includes('ТЕСТ · ВОЙТИ В ОСАДУ')||!output.includes('Откат осады отключён')){
     throw new Error('Native tabbed Events replacement incomplete');
   }
   console.log('[PPA BUILD] Native Events iframe replaced: Игровые / Клановые / Война / Обновления');
