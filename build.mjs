@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v592-clan-siege-qa-reentry-20260925';
+const CLIENT_BUILD = 'v593-clan-siege-qa-frame-bridge-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -274,7 +274,7 @@ function ppaEscapeSrcdocCode(code) {
   output=output.replace(eventsFrameRe,'<iframe id="eventsMenuFrame" title="События" srcdoc="'+nativeEventsEscaped+'"></iframe>');
   console.log('[PPA BUILD] Native Events iframe instances replaced: '+eventsFrameMatches.length);
   if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('craftRuri')||!output.includes('data-cat=&quot;game&quot;')||
-     !output.includes('CLAN_SIEGE_QA_TEST_OPEN=true')||!output.includes('ТЕСТ · ВОЙТИ В ОСАДУ')||!output.includes('Откат осады отключён')){
+     !output.includes('CLAN_SIEGE_QA_TEST_OPEN=true')||!output.includes('ТЕСТ · ВОЙТИ В ОСАДУ')||!output.includes('Откат осады отключён')||!output.includes('ppaClanSiegeQaEnter')){
     throw new Error('Native tabbed Events replacement incomplete');
   }
   console.log('[PPA BUILD] Native Events iframe replaced: Игровые / Клановые / Война / Обновления');

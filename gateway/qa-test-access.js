@@ -88,9 +88,25 @@
 
   window.PPA_QA_ENTER_CLAN_SIEGE=forceSiegeEnter;
 
+  function bindSiegeQaFrameBridge(){
+    if(window.__PPA_QA_CLAN_SIEGE_FRAME_BRIDGE)return;
+    window.__PPA_QA_CLAN_SIEGE_FRAME_BRIDGE=1;
+    window.addEventListener('message',function(ev){
+      try{
+        if(window.PPA_TEST_CLAN_SIEGE!==true)return;
+        var d=ev&&ev.data;
+        if(!d||String(d.type||'')!=='ppaClanSiegeQaEnter'||String(d.action||'')!=='clansiege')return;
+        var f=document.getElementById('eventsMenuFrame');
+        if(f&&f.contentWindow&&ev.source!==f.contentWindow)return;
+        forceSiegeEnter();
+      }catch(e){console.warn('PPA QA clan siege frame bridge',e)}
+    },true);
+  }
+
   function bind(){
     openButtons();
     bindSiegeQa();
+    bindSiegeQaFrameBridge();
     var b21=document.getElementById('dungeonEnter21Btn');
     var b41=document.getElementById('dungeonEnter41Btn');
     if(b21&&!b21.__ppaQaOpen){
