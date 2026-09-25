@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v599-clan-siege-ping-only-20260925';
+const CLIENT_BUILD = 'v600-clan-siege-native-hud-no-runtime-hacks-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -278,6 +278,23 @@ function ppaEscapeSrcdocCode(code) {
     throw new Error('Native tabbed Events replacement incomplete');
   }
   console.log('[PPA BUILD] Native Events iframe replaced: Игровые / Клановые / Война / Обновления');
+}
+/* ======================================================================== */
+
+
+/* === CLAN SIEGE NATIVE HUD CLEANUP ====================================== */
+// Do not mirror/scan the runtime DOM. Patch the original clan siege HUD once
+// during build so the game creates the compact panel directly.
+ppaPatchRegex(
+  'native clan siege hud compact style',
+  /el\.style\.cssText='position:fixed;z-index:48;left:50%;top:8px;transform:translateX\(-50%\);min-width:min\(92vw,520px\);max-width:94vw;padding:7px 10px;border:1px solid rgba\(231,177,82,\.62\);border-radius:9px;background:rgba\(7,8,10,\.86\);box-shadow:0 4px 20px rgba\(0,0,0,\.45\);color:#ead8b1;font:9px\/1\.35 monospace;text-align:center;pointer-events:none;display:none'/,
+  "el.style.cssText='position:fixed;z-index:48;left:calc(60% - 30px);top:6px;transform:translateX(-50%);width:min(330px,54vw);max-width:330px;min-height:29px;box-sizing:border-box;padding:4px 8px;border:1px solid rgba(195,128,45,.7);border-radius:7px;background:rgba(21,18,12,.82);box-shadow:0 2px 9px rgba(0,0,0,.58);color:#e8d9ad;font:700 8px/1.25 monospace;text-align:center;white-space:normal;text-shadow:0 1px 2px #000;pointer-events:none;display:none'"
+);
+if(output.includes('min-width:min(92vw,520px);max-width:94vw;padding:7px 10px')){
+  throw new Error('Clan siege native wide HUD style still present');
+}
+if(!output.includes('width:min(330px,54vw)')||!output.includes('font:700 8px/1.25 monospace')){
+  throw new Error('Clan siege native compact HUD style missing');
 }
 /* ======================================================================== */
 
@@ -7021,22 +7038,15 @@ if(_ppaClanBossTrackCalls<1){
       !output.includes("o.img=a;o.image=a;o.art=a")) {
     throw new Error('Legendary real-file all-UI runtime incomplete');
   }
-  if (!clanSiegeFix.includes('__PPA_CLAN_SIEGE_FIX_V1') ||
-      !clanSiegeFix.includes("String(req.action||'')==='castleCaptured'") ||
-      !clanSiegeFix.includes("changeScene('safe')") ||
-      !clanSiegeFix.includes("id='ppaClanSiegeCompactHud'") && !clanSiegeFix.includes("id=\"ppaClanSiegeCompactHud\"") ||
-      !clanSiegeFix.includes('CanvasRenderingContext2D') ||
-      !clanSiegeFix.includes('CLAN_SIEGE_QA_TEST_OPEN=true') ||
-      !clanSiegeFix.includes('PPA_CLAN_SIEGE_QA_ENTER=qaEnterSiege') ||
-      !clanSiegeFix.includes("changeScene('clansiege')") ||
-      !clanSiegeFix.includes('ТЕСТ · ВОЙТИ СНОВА') ||
-      !clanSiegeFix.includes("t.indexOf('КРИСТАЛЛЫ:')>=0") ||
-      !clanSiegeFix.includes('siegeHudOwnWrapper') ||
-      !clanSiegeFix.includes("best.style.visibility='hidden'") ||
-      !realtimeClient.includes("String(P.scene||'')==='clansiege'") ||
+  if (!clanSiegeFix.includes('__PPA_CLAN_SIEGE_FIX_DISABLED_V600') ||
+      clanSiegeFix.includes('requestAnimationFrame(tick)') ||
+      clanSiegeFix.includes('querySelectorAll') ||
+      clanSiegeFix.includes('CanvasRenderingContext2D') ||
+      !output.includes('width:min(330px,54vw)') ||
+      output.includes('min-width:min(92vw,520px);max-width:94vw;padding:7px 10px') ||
       !realtimeClient.includes("if(siege)return Number.isFinite(RT.pingMs)?Math.round(RT.pingMs)+' ms':'… ms'") ||
       !realtimeClient.includes("el.style.right='8px';el.style.top='58px'")) {
-    throw new Error('Clan siege capture/UI fix incomplete');
+    throw new Error('Clan siege native HUD cleanup incomplete');
   }
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
       !worldCombat.includes('PPA_PK_ACTIVE') ||
