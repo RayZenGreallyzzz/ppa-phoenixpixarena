@@ -4,8 +4,9 @@
   window.__PPA_CLAN_BOSS_CHEST_V1=true;
 
   var CHEST_SRC='/assets/clan-boss-chest.webp';
-  var chest=null,root=null,button=null,label=null,barWrap=null,bar=null,who=null;
+  var chest=null,root=null,button=null,label=null,barWrap=null,bar=null,who=null,countdown=null;
   var raf=0,lastCompleteKey='',rollPanel=null,rollTimers=[];
+  var openingKey='',localOpenStart=0,localOpenEnd=0;
 
   function scene(){
     try{return String(P&&P.scene||'')}catch(_){return''}
@@ -45,15 +46,16 @@
     if(document.getElementById('ppaClanBossChestStyle'))return;
     var st=document.createElement('style');st.id='ppaClanBossChestStyle';
     st.textContent=
-      '#ppaClanBossChest{position:fixed;z-index:35;display:none;pointer-events:none;transform:translate(-50%,-68%);text-align:center;filter:drop-shadow(0 8px 9px rgba(0,0,0,.72))}'+
-      '#ppaClanBossChestBtn{position:relative;width:116px;height:116px;padding:0;border:0;background:transparent;pointer-events:auto;touch-action:manipulation;cursor:pointer}'+
+      '#ppaClanBossChest{position:fixed;z-index:35;display:none;width:0;height:0;pointer-events:none;text-align:center;filter:drop-shadow(0 8px 9px rgba(0,0,0,.72))}'+
+      '#ppaClanBossChestBtn{position:absolute;left:-62px;bottom:-10px;width:124px;height:124px;padding:0;border:0;background:transparent;pointer-events:auto;touch-action:manipulation;cursor:pointer;transform-origin:50% 100%}'+
       '#ppaClanBossChestBtn img{width:100%;height:100%;object-fit:contain;display:block;user-select:none;-webkit-user-drag:none;image-rendering:auto}'+
       '#ppaClanBossChest.closed #ppaClanBossChestBtn{animation:ppaCbChestPulse 1.35s ease-in-out infinite}'+
       '#ppaClanBossChest.opening #ppaClanBossChestBtn{pointer-events:none;animation:ppaCbChestGlow .65s ease-in-out infinite alternate}'+
-      '#ppaClanBossChestLabel{display:inline-block;margin-top:-9px;padding:3px 7px;border:1px solid rgba(255,190,79,.72);border-radius:7px;background:rgba(20,12,8,.88);color:#ffd36a;font:800 10px/1.15 monospace;text-shadow:0 1px 2px #000;white-space:nowrap}'+
-      '#ppaClanBossChestWho{margin-top:3px;color:#fff2c7;font:700 9px/1.2 monospace;text-shadow:0 1px 3px #000;white-space:nowrap}'+
-      '#ppaClanBossChestBarWrap{display:none;width:120px;height:8px;margin:4px auto 0;padding:1px;border:1px solid rgba(255,211,106,.82);border-radius:5px;background:rgba(0,0,0,.72);overflow:hidden}'+
+      '#ppaClanBossChestLabel{position:absolute;left:0;bottom:111px;transform:translateX(-50%);display:inline-block;padding:3px 7px;border:1px solid rgba(255,190,79,.72);border-radius:7px;background:rgba(20,12,8,.9);color:#ffd36a;font:800 10px/1.15 monospace;text-shadow:0 1px 2px #000;white-space:nowrap}'+
+      '#ppaClanBossChestWho{position:absolute;left:0;bottom:132px;transform:translateX(-50%);color:#fff2c7;font:700 9px/1.2 monospace;text-shadow:0 1px 3px #000;white-space:nowrap}'+
+      '#ppaClanBossChestBarWrap{position:absolute;left:-61px;bottom:147px;display:none;width:120px;height:8px;padding:1px;border:1px solid rgba(255,211,106,.82);border-radius:5px;background:rgba(0,0,0,.76);overflow:hidden}'+
       '#ppaClanBossChestBar{height:100%;width:0%;border-radius:3px;background:linear-gradient(90deg,#9b301c,#ff843b,#ffe173);box-shadow:0 0 8px rgba(255,132,59,.8)}'+
+      '#ppaClanBossChestCount{position:absolute;left:0;bottom:43px;transform:translateX(-50%);display:none;min-width:42px;height:42px;border-radius:50%;align-items:center;justify-content:center;background:rgba(18,8,4,.78);border:2px solid #ffd36a;color:#fff3b0;font:900 25px/42px monospace;text-align:center;text-shadow:0 2px 3px #000;box-shadow:0 0 16px rgba(255,112,34,.72)}'+
       '#ppaClanBossRoll{position:fixed;left:50%;top:12%;transform:translateX(-50%);z-index:10065;width:min(430px,88vw);max-height:72vh;overflow:auto;padding:12px;border:1px solid rgba(255,190,79,.72);border-radius:12px;background:rgba(13,10,9,.96);box-shadow:0 12px 36px rgba(0,0,0,.72);color:#f7e8c3;font:700 11px/1.35 monospace;text-align:left}'+
       '#ppaClanBossRoll .ttl{text-align:center;color:#ffd36a;font-size:14px;margin-bottom:8px}'+
       '#ppaClanBossRoll .sub{text-align:center;color:#d8c59f;font-size:10px;margin-bottom:8px}'+
@@ -78,7 +80,8 @@
     who=document.createElement('div');who.id='ppaClanBossChestWho';
     barWrap=document.createElement('div');barWrap.id='ppaClanBossChestBarWrap';
     bar=document.createElement('div');bar.id='ppaClanBossChestBar';barWrap.appendChild(bar);
-    root.appendChild(button);root.appendChild(label);root.appendChild(who);root.appendChild(barWrap);
+    countdown=document.createElement('div');countdown.id='ppaClanBossChestCount';
+    root.appendChild(button);root.appendChild(label);root.appendChild(who);root.appendChild(barWrap);root.appendChild(countdown);
     document.body.appendChild(root);
     button.addEventListener('click',function(ev){
       ev.preventDefault();ev.stopPropagation();
@@ -87,10 +90,38 @@
     },{passive:false});
   }
   function hide(){if(root)root.style.display='none'}
-  function setChest(c){
+  function setChest(c,serverTs){
     chest=c&&typeof c==='object'?Object.assign({},c):null;
-    if(chest&&String(chest.state||'')==='opening'&&String(chest.openerPid||'')!==selfPid())lastCompleteKey='';
-    if(!chest)hide();
+    if(!chest){openingKey='';localOpenStart=0;localOpenEnd=0;hide();return}
+    var state=String(chest.state||'closed');
+    if(state==='opening'){
+      var key=String(chest.openerPid||'')+':'+String(chest.openStartedAt||0)+':'+String(chest.openAt||0);
+      if(key!==openingKey||!(localOpenEnd>0)){
+        openingKey=key;
+        var serverStart=Math.max(0,Number(chest.openStartedAt)||0);
+        var serverEnd=Math.max(serverStart+1,Number(chest.openAt)||serverStart+5000);
+        var duration=Math.max(1000,Math.min(7000,serverEnd-serverStart||5000));
+        var ts=Math.max(0,Number(serverTs)||0);
+        var remain=ts>0?Math.max(0,Math.min(duration,serverEnd-ts)):duration;
+        localOpenEnd=Date.now()+remain;
+        localOpenStart=localOpenEnd-duration;
+      }
+      if(String(chest.openerPid||'')!==selfPid())lastCompleteKey='';
+    }else{
+      openingKey='';localOpenStart=0;localOpenEnd=0;
+      if(state!=='opened')lastCompleteKey='';
+    }
+  }
+  function blockChest(c){
+    try{
+      if(!c||String(c.state||'')==='opened'||typeof P==='undefined'||!P||scene()!=='clanboss1')return;
+      var cx=Number(c.x)||0,cy=Number(c.y)||0,dx=(Number(P.x)||0)-cx,dy=(Number(P.y)||0)-cy;
+      var minD=64,d=Math.hypot(dx,dy);
+      if(d>=minD)return;
+      if(d<.001){dx=0;dy=1;d=1}
+      P.x=cx+dx/d*minD;
+      P.y=cy+dy/d*minD;
+    }catch(_){}
   }
   function tick(){
     try{
@@ -101,13 +132,16 @@
       var pad=80;
       if(p.x<p.rect.left-pad||p.x>p.rect.right+pad||p.y<p.rect.top-pad||p.y>p.rect.bottom+pad){hide();raf=requestAnimationFrame(tick);return}
       root.style.display='block';root.style.left=p.x+'px';root.style.top=p.y+'px';root.className=state==='opening'?'opening':'closed';
+      blockChest(chest);
       if(state==='opening'){
-        var start=Math.max(0,Number(chest.openStartedAt)||0),end=Math.max(start+1,Number(chest.openAt)||start+5000),now=Date.now();
-        var pct=Math.max(0,Math.min(1,(now-start)/(end-start)));
-        label.textContent='ОТКРЫТИЕ · '+Math.ceil(Math.max(0,end-now)/1000)+'с';
-        who.textContent=String(chest.openerName||'Игрок')+' открывает сундук';
+        var now=Date.now(),start=localOpenStart||now,end=localOpenEnd||now+5000;
+        var duration=Math.max(1,end-start),pct=Math.max(0,Math.min(1,(now-start)/duration));
+        var sec=Math.max(1,Math.ceil(Math.max(0,end-now)/1000));
+        label.textContent='ОТКРЫТИЕ СУНДУКА';
+        who.textContent=String(chest.openerName||'Игрок')+' открывает';
         barWrap.style.display='block';bar.style.width=(pct*100).toFixed(1)+'%';
-        var key=String(chest.openerPid||'')+':'+String(end);
+        countdown.style.display='flex';countdown.textContent=String(sec);
+        var key=String(chest.openerPid||'')+':'+String(chest.openAt||0);
         if(String(chest.openerPid||'')===selfPid()&&now>=end&&lastCompleteKey!==key){
           lastCompleteKey=key;
           if(typeof window.PPA_CLAN_BOSS_CHEST_COMPLETE==='function')window.PPA_CLAN_BOSS_CHEST_COMPLETE();
@@ -115,7 +149,7 @@
       }else{
         label.textContent=nearChest(chest)?'НАЖМИ · ОТКРЫТЬ':'СУНДУК ВЛАДЫЧИЦЫ';
         who.textContent=nearChest(chest)?'Открытие займёт 5 секунд':'Подойди ближе';
-        barWrap.style.display='none';bar.style.width='0%';
+        barWrap.style.display='none';bar.style.width='0%';countdown.style.display='none';countdown.textContent='';
       }
     }catch(_){}
     raf=requestAnimationFrame(tick);
