@@ -96,19 +96,20 @@ for(const name of PPA_RURI_RESOURCE_FILES){
 }
 
 const PPA_MIMIC_ARENA_FILES=[
-  'mimic-sombrero-arena.webp',
-  'mimic-sombrero-walk-mask.png',
-  'mimic-sombrero-idle-4x4.webp'
+  ['mimic-sombrero-arena.bin','mimic-sombrero-arena.webp'],
+  ['mimic-sombrero-walk-mask.bin','mimic-sombrero-walk-mask.png'],
+  ['mimic-sombrero-idle-4x4.bin','mimic-sombrero-idle-4x4.webp']
 ];
 let ppaMimicArenaAssetCount=0;
-for(const name of PPA_MIMIC_ARENA_FILES){
-  const src=path.join(ROOT,'assets-src',name);
+for(const pair of PPA_MIMIC_ARENA_FILES){
+  const srcName=pair[0],outName=pair[1];
+  const src=path.join(ROOT,'assets-src',srcName);
   if(fs.existsSync(src)&&fs.statSync(src).size>500){
-    fs.copyFileSync(src,path.join(assetsDir,name));
+    fs.copyFileSync(src,path.join(assetsDir,outName));
     ppaMimicArenaAssetCount++;
   }
 }
-console.log('[PPA BUILD] Mimic Sombrero arena assets: '+ppaMimicArenaAssetCount+'/'+PPA_MIMIC_ARENA_FILES.length+(ppaMimicArenaAssetCount===PPA_MIMIC_ARENA_FILES.length?' ready':' pending upload'));
+console.log('[PPA BUILD] Mimic Sombrero arena assets: '+ppaMimicArenaAssetCount+'/'+PPA_MIMIC_ARENA_FILES.length+(ppaMimicArenaAssetCount===PPA_MIMIC_ARENA_FILES.length?' ready':' pending .bin upload'));
 
 // V531: canonical Great Ruri poster file itself gets the approved current crystal.
 // No CSS/DOM marker or overlay is needed in the Events UI.
