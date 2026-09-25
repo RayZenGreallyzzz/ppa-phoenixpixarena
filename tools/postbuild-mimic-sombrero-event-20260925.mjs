@@ -10,7 +10,7 @@ if (!fs.existsSync(eventPath)) throw new Error('gateway/mimic-sombrero-event.js 
 let html = fs.readFileSync(indexPath, 'utf8');
 const code = fs.readFileSync(eventPath, 'utf8');
 const marker = '<!-- PPA_MIMIC_SOMBRERO_EVENT_V2 -->';
-const key = 'v624-mimic-sombrero-menu-restore-20260926';
+const key = 'v625-mimic-sombrero-native-gear-20260926';
 html = html
   .split('v602-clan-siege-exit-visible-20260925').join(key)
   .split('v606-clan-siege-city-exit-20260925').join(key)
@@ -29,7 +29,8 @@ html = html
   .split('v620-mimic-sombrero-safe-exit-20260926').join(key)
   .split('v621-mimic-sombrero-handoff-combat-20260926').join(key)
   .split('v622-mimic-sombrero-reward-fx-mapfill-20260926').join(key)
-  .split('v623-mimic-sombrero-victory-polish-20260926').join(key);
+  .split('v623-mimic-sombrero-victory-polish-20260926').join(key)
+  .split('v624-mimic-sombrero-menu-restore-20260926').join(key);
 
 if (!html.includes(marker)) {
   const script = `${marker}\n<script>\n${code}\n</script>`;
@@ -56,5 +57,5 @@ for (const required of [
   if (!html.includes(required)) throw new Error('Mimic Sombrero validation missing: ' + required);
 }
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] Mimic-Sombrero v624: stable repeated runs with native menu restore.');
+console.log('[PPA POSTBUILD] Mimic-Sombrero v625: native rarity-matched set items, smith-ready schema and per-piece set bonuses.');
 console.log('[PPA POSTBUILD] index.html: ' + (Buffer.byteLength(html) / 1024 / 1024).toFixed(2) + ' MiB');
