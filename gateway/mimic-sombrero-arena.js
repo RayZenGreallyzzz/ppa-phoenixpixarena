@@ -422,7 +422,7 @@
         var cfg=v174AiSpriteCfg({aiClass:key,aiAnim:anim}),a=cfg&&cfg.anim;
         if(a&&a.img&&a.img.complete&&a.img.naturalWidth){
           var dir=playerDir,row=cfg.rowMap&&cfg.rowMap[dir]!=null?cfg.rowMap[dir]:0;
-          var baseTs=attacking?Math.max(0,ts-playerAttackStartedAt):ts;var frame=Math.floor(baseTs/(1000/Math.max(1,Number(a.fps)||8)))%Math.max(1,Number(a.frames)||1);
+          var baseTs=attacking?Math.max(0,now-playerAttackStartedAt):ts;var frame=Math.floor(baseTs/(1000/Math.max(1,Number(a.fps)||8)))%Math.max(1,Number(a.frames)||1);
           var dh=Math.max(58,Math.min(104,size*.092)),dw=dh;if(key==='gnome'){dh*=.78;dw*=.78}
           var flip=(key==='gnome'&&typeof GNOME_FLIP_BY_DIR!=='undefined')?!!GNOME_FLIP_BY_DIR[dir]:false;
           ctx.save();ctx.imageSmoothingEnabled=false;
