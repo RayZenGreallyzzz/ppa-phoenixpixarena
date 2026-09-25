@@ -26,7 +26,7 @@
     if(document.getElementById('ppaClanSiegeFixStyle'))return;
     var s=document.createElement('style');s.id='ppaClanSiegeFixStyle';
     s.textContent=
-      '#ppaClanSiegeCompactHud{position:fixed;left:60%;top:6px;transform:translateX(-50%);z-index:46;display:none;'+
+      '#ppaClanSiegeCompactHud{position:fixed;left:calc(60% - 30px);top:6px;transform:translateX(-50%);z-index:46;display:none;'+
       'width:min(330px,54vw);max-width:330px;min-height:29px;box-sizing:border-box;padding:4px 8px;border:1px solid rgba(195,128,45,.7);'+
       'border-radius:7px;background:rgba(21,18,12,.82);box-shadow:0 2px 9px rgba(0,0,0,.58);color:#e8d9ad;'+
       'font:700 8px/1.25 monospace;text-align:center;white-space:normal;pointer-events:none}'+
@@ -34,7 +34,7 @@
       'border:1px solid #c58435;border-radius:8px;background:linear-gradient(#542815,#2b160d);color:#ffd787;'+
       'box-shadow:0 3px 12px rgba(0,0,0,.65);font:800 10px monospace;touch-action:manipulation}'+
       '#ppaClanSiegeQaEnter{display:none;margin:8px auto 0;min-width:170px;height:32px;padding:0 12px;border:1px solid #d69a42;border-radius:8px;background:linear-gradient(#5d3517,#2d180c);color:#ffe09a;font:800 9px monospace;box-shadow:0 3px 10px rgba(0,0,0,.5);touch-action:manipulation}'+
-      '@media(max-width:520px){#ppaClanSiegeCompactHud{left:61%;width:56vw;max-width:260px;font-size:7px;padding:3px 5px}#ppaClanSiegeExit{top:98px;right:8px;height:31px;min-width:84px;font-size:9px}}';
+      '@media(max-width:520px){#ppaClanSiegeCompactHud{left:calc(61% - 30px);width:56vw;max-width:260px;font-size:7px;padding:3px 5px}#ppaClanSiegeExit{top:98px;right:8px;height:31px;min-width:84px;font-size:9px}}';
     (document.head||document.documentElement).appendChild(s);
   }
 
