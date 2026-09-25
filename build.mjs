@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v587-blood-mistress-loot-20260925';
+const CLIENT_BUILD = 'v588-clan-boss-reward-chest-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -37,6 +37,7 @@ function ppaReadApprovedB64(name){
 const PPA_APPROVED_SLAG_ART=ppaReadApprovedB64('fart-slag-reference.b64');
 const PPA_APPROVED_EMERALD_ART=ppaReadApprovedB64('emerald-smith-reference.b64');
 const PPA_RURI_EVENT_CARD_ART=ppaReadApprovedB64('ruri-event-card-approved.b64');
+const PPA_CLAN_BOSS_CHEST_ART=ppaReadApprovedB64('clan-boss-chest.b64');
 function ppaReadApprovedB64Parts(names){
   const b64=names.map((name)=>{
     const p=path.join(ROOT,'assets-src',name);
@@ -84,6 +85,7 @@ fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
+fs.writeFileSync(path.join(assetsDir,'clan-boss-chest.webp'),PPA_CLAN_BOSS_CHEST_ART.buf);
 for(const name of PPA_RURI_RESOURCE_FILES){
   fs.copyFileSync(path.join(ROOT,'assets-src',name),path.join(assetsDir,name));
 }
@@ -6866,6 +6868,7 @@ if(_ppaClanBossTrackCalls<1){
   const dungeonDropSlotsAudit=fs.readFileSync(path.join(ROOT,'gateway/dungeon-drop-slots.js'),'utf8');
   const bossDropBoost=fs.readFileSync(path.join(ROOT,'gateway/boss-drop-boost.js'),'utf8');
   const clanBossLoot=fs.readFileSync(path.join(ROOT,'gateway/clan-boss-loot.js'),'utf8');
+  const clanBossChest=fs.readFileSync(path.join(ROOT,'gateway/clan-boss-chest.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
   const mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');
@@ -6916,16 +6919,25 @@ if(_ppaClanBossTrackCalls<1){
       !realtimeServer.includes("m.type === 'clan-boss-reward-ack'") ||
       !realtimeServer.includes("type:'clan-boss-defeated'") ||
       !realtimeServer.includes("type:'clan-boss-reward'") ||
-      !realtimeServer.includes('clanBossRollMistressReward') ||
-      !realtimeServer.includes('greenResources:green') ||
-      !realtimeServer.includes('blueGear:Math.random()<0.12') ||
-      !realtimeServer.includes('premiumStone:Math.random()<0.04') ||
-      !realtimeServer.includes('grayRune:Math.random()<0.10') ||
+      !realtimeServer.includes('clanBossBuildMistressDistribution') ||
+      !realtimeServer.includes('clanBossSharedRoll') ||
+      !realtimeServer.includes('.filter(x=>x.damage>=5000)') ||
+      !realtimeServer.includes("'blueGear','Синий шмот / оружие',0.12") ||
+      !realtimeServer.includes("'premiumStone','Премиум камень заточки',0.04") ||
+      !realtimeServer.includes("'grayRune','Серая универсальная руна',0.10") ||
+      !realtimeServer.includes('normalStones:4+Math.floor(Math.random()*4)') ||
+      !realtimeServer.includes("m.type === 'clan-boss-chest-open'") ||
+      !realtimeServer.includes("m.type === 'clan-boss-chest-complete'") ||
+      !realtimeServer.includes("state:'closed'") ||
+      !realtimeServer.includes('openAt=now+5000') ||
       !realtimeClient.includes("m.type==='clan-boss-reward'") ||
       !realtimeClient.includes('PPA_CLAN_BOSS_SPAWN_REWARD') ||
       !realtimeServer.includes("return 'clan-boss:' + String(clanId") ||
       !realtimeClient.includes('window.PPA_CLAN_BOSS_ENTER=clanBossEnter') ||
       !realtimeClient.includes('window.PPA_CLAN_BOSS_DAMAGE=clanBossDamage') ||
+      !realtimeClient.includes('window.PPA_CLAN_BOSS_CHEST_OPEN=clanBossChestOpen') ||
+      !realtimeClient.includes('window.PPA_CLAN_BOSS_CHEST_COMPLETE=clanBossChestComplete') ||
+      !realtimeClient.includes('window.PPA_CLAN_BOSS_SELF_PID=function') ||
       !realtimeClient.includes('window.ppaClanBossTrackDamageLocal=function') ||
       !realtimeClient.includes("type:'clan-boss-hit'") ||
       !dungeonMobEvents.includes('e&&e.isClanBoss&&window.PPA_CLAN_BOSS_DAMAGE') ||
@@ -7054,18 +7066,23 @@ if(_ppaClanBossTrackCalls<1){
     throw new Error('Boss drop boost helper incomplete');
   }
   if (!clanBossLoot.includes('__PPA_CLAN_BOSS_LOOT_V1') ||
-      !clanBossLoot.includes("['Зелёный ресурс ×2–4','100%']") ||
-      !clanBossLoot.includes("['Синий / редкий ресурс ×1–2','100%']") ||
-      !clanBossLoot.includes("['Обычный камень заточки ×2–4','100%']") ||
-      !clanBossLoot.includes("['Синий шмот / оружие · случайный слот и класс','12%']") ||
-      !clanBossLoot.includes("['Премиум камень заточки ×1','4%']") ||
-      !clanBossLoot.includes("['Серая универсальная руна ×1 · случайный тип','10%']") ||
-      !clanBossLoot.includes("['Доп. зелёный или синий ресурс ×1','15%']") ||
+      !clanBossLoot.includes("['Участие','от 5 000 урона · +1 зелёный ресурс +3 монеты клана']") ||
+      !clanBossLoot.includes("['Обычный камень заточки ×4–7','100% каждому участнику']") ||
+      !clanBossLoot.includes("['Синий шмот / оружие · случайный слот и класс','12% · общий ролл']") ||
+      !clanBossLoot.includes("['Премиум камень заточки ×1','4% · общий ролл']") ||
+      !clanBossLoot.includes("['Серая универсальная руна ×1 · случайный тип','10% · общий ролл']") ||
+      !clanBossLoot.includes("['Последний удар','+10 монет клана +1 синий ресурс']") ||
+      !clanBossLoot.includes("['Утешительная · без редкого выигрыша','+1 зелёный ресурс +2 заточки +5 монет']") ||
+      !clanBossChest.includes('__PPA_CLAN_BOSS_CHEST_V1') ||
+      !clanBossChest.includes("CHEST_SRC='/assets/clan-boss-chest.webp'") ||
+      !clanBossChest.includes('Открытие займёт 5 секунд') ||
+      !clanBossChest.includes('РОЛЛ СУНДУКА ВЛАДЫЧИЦЫ') ||
+      !clanBossChest.includes('PPA_CLAN_BOSS_CHEST_COMPLETE') ||
       clanBossLoot.includes('Золото') ||
       clanBossLoot.includes('PPA ×1') ||
       clanBossLoot.includes('Случайный серый шмот') ||
       clanBossLoot.includes('Бонусный бросок таблицы босса')) {
-    throw new Error('Blood Mistress clan boss loot table is incomplete');
+    throw new Error('Blood Mistress clan boss chest/reward table is incomplete');
   }
   try{new Function(dungeonDropSlotsAudit)}catch(err){throw new Error('Dungeon drop helper syntax invalid: '+String(err&&err.message||err))}
   if (!dungeonDropSlotsAudit.includes('__ppaApprovedDropRows') ||
@@ -7121,6 +7138,7 @@ const filesToPublish = [
   ['gateway/dungeon-drop-slots.js','dungeon-drop-slots.js','Dungeon drop slot helper missing'],
   ['gateway/boss-drop-boost.js','boss-drop-boost.js','Boss drop boost helper missing'],
   ['gateway/clan-boss-loot.js','clan-boss-loot.js','Clan boss loot helper missing'],
+  ['gateway/clan-boss-chest.js','clan-boss-chest.js','Clan boss reward chest UI missing'],
   ['gateway/ruri-event-drops.js','ruri-event-drops.js','Great Ruri event drops missing'],
   ['gateway/qa-test-access.js','qa-test-access.js','QA dungeon access helper missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
@@ -7147,6 +7165,7 @@ output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"><
 <script src="${js('dungeon-drop-slots.js')}"></script>
 <script src="${js('boss-drop-boost.js')}"></script>
 <script src="${js('clan-boss-loot.js')}"></script>
+<script src="${js('clan-boss-chest.js')}"></script>
 <script src="${js('ruri-event-drops.js')}"></script>
 <script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
@@ -7165,6 +7184,7 @@ console.log('Dungeon mob events: /game/dungeon-mob-events.js');
 console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
 console.log('Boss drop boost: /game/boss-drop-boost.js');
 console.log('Clan boss loot: /game/clan-boss-loot.js');
+console.log('Clan boss reward chest: /game/clan-boss-chest.js');
 console.log('Great Ruri event drops: /game/ruri-event-drops.js · TEST ACTIVE');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
