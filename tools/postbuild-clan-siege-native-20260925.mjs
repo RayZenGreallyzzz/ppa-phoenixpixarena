@@ -103,12 +103,13 @@ function prependGuardToFunction(src, name, guard) {
 let html = fs.readFileSync(indexPath, 'utf8');
 const before = html;
 
-// Force a fresh client cache key for this clean native siege build.
+// Force a fresh client cache key for this optimized native siege build.
 html = html
-  .split('v602-clan-siege-exit-visible-20260925').join('v606-clan-siege-city-exit-20260925')
-  .split('v603-clan-siege-native-clean-20260925').join('v606-clan-siege-city-exit-20260925')
-  .split('v604-clan-siege-native-leave-20260925').join('v606-clan-siege-city-exit-20260925')
-  .split('v605-clan-siege-won-fps-20260925').join('v606-clan-siege-city-exit-20260925');
+  .split('v602-clan-siege-exit-visible-20260925').join('v607-clan-siege-castle-cache-20260925')
+  .split('v603-clan-siege-native-clean-20260925').join('v607-clan-siege-castle-cache-20260925')
+  .split('v604-clan-siege-native-leave-20260925').join('v607-clan-siege-castle-cache-20260925')
+  .split('v605-clan-siege-won-fps-20260925').join('v607-clan-siege-castle-cache-20260925')
+  .split('v606-clan-siege-city-exit-20260925').join('v607-clan-siege-castle-cache-20260925');
 
 // Native state: one city-exit button after victory, no duplicate exit button, no castle-cleared hack flag.
 html = replaceRequired(
@@ -207,12 +208,40 @@ html = html.replace(
   "if(PPA_SIEGE.phase==='castle'){\n    // Compact round collision sits fully inside the castle footprint.\n    const c=CLAN_SIEGE_CASTLE_COLLISION;"
 );
 
-const drawGuard = prependGuardToFunction(
-  html,
-  'drawClanSiegeWorld',
-  "if(PPA_SIEGE&&PPA_SIEGE.phase==='won')return;"
-);
-html = drawGuard.out;
+// Active castle optimization: build one pre-scaled image and draw it without per-frame scaling.
+html = replaceAllFunctions(html, 'drawClanSiegeWorld', `function drawClanSiegeWorld(){
+  if(P.scene!=='clansiege'||!PPA_SIEGE.active)return;
+  if(PPA_SIEGE.phase==='won')return;
+  if(PPA_SIEGE.phase!=='castle')return;
+  const c=CLAN_SIEGE_CASTLE;
+  const w=Math.max(1,Math.ceil(c.w)),h=Math.max(1,Math.ceil(c.h));
+  const dx=Math.floor(c.x-cam.x-w/2),dy=Math.floor(c.y-cam.y-h*.78);
+  const viewW=(cx&&cx.canvas?cx.canvas.width:innerWidth)||0,viewH=(cx&&cx.canvas?cx.canvas.height:innerHeight)||0;
+  if(dx>viewW+64||dy>viewH+64||dx+w<-64||dy+h<-64)return;
+  const im=imgClanSiegeCastle;
+  if(!(im&&im.complete&&im.naturalWidth>0))return;
+  const key=(im.src||'castle')+'|'+im.naturalWidth+'x'+im.naturalHeight+'|'+w+'x'+h;
+  let cache=window.__PPA_SIEGE_CASTLE_CACHE__;
+  if(!cache||cache.key!==key||!cache.canvas){
+    let cn=null,g=null;
+    try{cn=(typeof OffscreenCanvas!=='undefined')?new OffscreenCanvas(w,h):document.createElement('canvas')}catch(e){cn=document.createElement('canvas')}
+    cn.width=w;cn.height=h;
+    try{g=cn.getContext('2d',{alpha:true})}catch(e){g=cn.getContext('2d')}
+    if(g){
+      try{g.imageSmoothingEnabled=true;g.imageSmoothingQuality='medium'}catch(e){}
+      g.clearRect(0,0,w,h);
+      g.drawImage(im,0,0,w,h);
+      cache={key:key,canvas:cn};
+      window.__PPA_SIEGE_CASTLE_CACHE__=cache;
+    }
+  }
+  cx.save();
+  const age=Math.min(1,(Date.now()-(PPA_SIEGE.castleShownAt||Date.now()))/800);
+  cx.globalAlpha=Math.max(.18,age);
+  if(cache&&cache.canvas)cx.drawImage(cache.canvas,dx,dy);
+  else cx.drawImage(im,dx,dy,w,h);
+  cx.restore();
+}`);
 
 const captureGuard = prependGuardToFunction(
   html,
@@ -246,8 +275,10 @@ if (html.includes("PPA_SIEGE.phase==='castle'||PPA_SIEGE.phase==='won'") ||
     html.includes("PPA_SIEGE.phase==='castle' || PPA_SIEGE.phase==='won'")) {
   throw new Error('Old castle/won phase branch still remains');
 }
-if (!html.includes("function drawClanSiegeWorld(){\n  if(PPA_SIEGE&&PPA_SIEGE.phase==='won')return;")) {
-  throw new Error('drawClanSiegeWorld won-phase guard missing');
+if (!html.includes("function drawClanSiegeWorld(){\n  if(P.scene!=='clansiege'||!PPA_SIEGE.active)return;\n  if(PPA_SIEGE.phase==='won')return;\n  if(PPA_SIEGE.phase!=='castle')return;") ||
+    !html.includes('window.__PPA_SIEGE_CASTLE_CACHE__') ||
+    !html.includes("if(dx>viewW+64||dy>viewH+64||dx+w<-64||dy+h<-64)return")) {
+  throw new Error('optimized drawClanSiegeWorld castle cache/culling validation failed');
 }
 if (!html.includes("function clanSiegeUpdateCapture(){\n  if(PPA_SIEGE&&PPA_SIEGE.phase==='won')return;")) {
   throw new Error('clanSiegeUpdateCapture won-phase guard missing');
@@ -255,6 +286,6 @@ if (!html.includes("function clanSiegeUpdateCapture(){\n  if(PPA_SIEGE&&PPA_SIEG
 if (html === before) throw new Error('No changes applied to public/index.html');
 
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] clean native clan siege applied: city exit after win, castle render/collision/update off after win.');
-console.log('[PPA POSTBUILD] draw guards: '+drawGuard.count+' capture guards: '+captureGuard.count);
+console.log('[PPA POSTBUILD] clean native clan siege applied: city exit after win, active castle cached and culled.');
+console.log('[PPA POSTBUILD] capture guards: '+captureGuard.count);
 console.log('[PPA POSTBUILD] index.html: '+(Buffer.byteLength(html)/1024/1024).toFixed(2)+' MiB');
