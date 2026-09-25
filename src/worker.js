@@ -99,6 +99,30 @@ function profileFromRow(row) {
   };
 }
 
+function parseStateJson(raw) {
+  try {
+    const state = JSON.parse(raw || 'null');
+    return state && typeof state === 'object' && !Array.isArray(state) ? state : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function applyProfileToSaveState(profile, state) {
+  if (!profile) return state;
+  const out = state && typeof state === 'object' && !Array.isArray(state) ? { ...state } : {};
+  const nickname = String(profile.nickname || '').trim();
+  const classKey = String(profile.classKey || '').trim();
+  if (nickname && !String(out.playerName || '').trim()) out.playerName = nickname;
+  if (nickname && !String(out.nickname || '').trim()) out.nickname = nickname;
+  if (classKey && !String(out.cls || '').trim()) out.cls = classKey;
+  if (classKey && !String(out.classKey || '').trim()) out.classKey = classKey;
+  out.telegramId = String(profile.telegramId || out.telegramId || '');
+  out.profileTelegramId = String(profile.telegramId || out.profileTelegramId || '');
+  out.gatewayProfileBound = !!nickname;
+  return out;
+}
+
 async function ensurePlayer(env, tgUser) {
   if (!env.DB) throw Object.assign(new Error('D1 database is not connected'), { status: 503, code: 'DB_MISSING' });
   const now = Date.now();
@@ -140,8 +164,47 @@ async function nicknameOwner(env, key) {
   return env.DB.prepare('SELECT telegram_id, nickname FROM players WHERE nickname_key=?1 LIMIT 1').bind(key).first();
 }
 
+async function upsertBoundInitialSave(env, telegramId, profile, nickname, classKey) {
+  const row = await env.DB.prepare('SELECT version, state_json FROM saves WHERE telegram_id=?1').bind(telegramId).first();
+  let state = parseStateJson(row && row.state_json) || {};
+  const before = JSON.stringify(state);
+  state = applyProfileToSaveState(profile, state);
+  nickname = String(nickname || profile.nickname || '').trim();
+  classKey = normalizeClass(classKey || profile.classKey || '');
+  if (nickname) {
+    state.playerName = nickname;
+    state.nickname = nickname;
+  }
+  if (classKey && !String(state.cls || '').trim()) state.cls = classKey;
+  if (classKey && !String(state.classKey || '').trim()) state.classKey = classKey;
+  state.telegramId = String(telegramId);
+  state.profileTelegramId = String(telegramId);
+  state.gatewayProfileBound = true;
+  state.registrationSavedAt = Number(state.registrationSavedAt) || Date.now();
+
+  const after = JSON.stringify(state);
+  const now = Date.now();
+  if (!row) {
+    await env.DB.prepare(`
+      INSERT INTO saves (telegram_id, version, state_json, updated_at)
+      VALUES (?1, 1, ?2, ?3)
+    `).bind(telegramId, after, now).run();
+    return { version: 1, updatedAt: now, created: true };
+  }
+  if (after !== before) {
+    const version = (Number(row.version) || 0) + 1;
+    await env.DB.prepare(`
+      UPDATE saves SET version=?1, state_json=?2, updated_at=?3 WHERE telegram_id=?4
+    `).bind(version, after, now, telegramId).run();
+    return { version, updatedAt: now, updated: true };
+  }
+  return { version: Number(row.version) || 0, updatedAt: now, created: false };
+}
+
 async function registerCharacter(env, telegramId, nickname, classKey) {
+  telegramId = String(telegramId || '').trim();
   nickname = String(nickname || '').trim();
+  if (!telegramId) return { ok: false, status: 401, message: 'Telegram ID не получен. Открой игру через Telegram Mini App.' };
   if (!validNickname(nickname)) return { ok: false, status: 400, message: 'Ник должен содержать 3–18 символов: буквы, цифры и _.' };
   const key = nickKey(nickname);
   const current = await env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(telegramId).first();
@@ -159,22 +222,35 @@ async function registerCharacter(env, telegramId, nickname, classKey) {
   await env.DB.prepare(`
     UPDATE players SET nickname=?1, nickname_key=?2,
       class_key=CASE WHEN class_key IS NULL OR class_key='' THEN ?3 ELSE class_key END,
-      updated_at=?4
+      updated_at=?4,
+      last_auth_at=?4
     WHERE telegram_id=?5
   `).bind(nickname, key, normalizeClass(classKey), now, telegramId).run();
-  return { ok: true, profile: profileFromRow(await env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(telegramId).first()) };
+
+  const profile = profileFromRow(await env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(telegramId).first());
+  const save = await upsertBoundInitialSave(env, telegramId, profile, nickname, classKey);
+  return { ok: true, profile, save, telegramId: String(telegramId) };
 }
 
 async function loadSave(env, telegramId) {
+  const profile = profileFromRow(await env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(telegramId).first());
   const row = await env.DB.prepare('SELECT version, state_json, updated_at FROM saves WHERE telegram_id=?1').bind(telegramId).first();
-  if (!row) return { ok: true, version: null, state: null };
-  let state = null;
-  try { state = JSON.parse(row.state_json || 'null'); } catch (_) { state = null; }
-  return { ok: true, version: Number(row.version) || 0, state, updatedAt: Number(row.updated_at) || 0 };
+  if (!row) {
+    if (profile && profile.nickname) {
+      return { ok: true, version: 0, state: applyProfileToSaveState(profile, {}), profile, bootstrapFromProfile: true };
+    }
+    return { ok: true, version: null, state: null, profile };
+  }
+  const parsed = parseStateJson(row.state_json);
+  const state = applyProfileToSaveState(profile, parsed);
+  return { ok: true, version: Number(row.version) || 0, state, updatedAt: Number(row.updated_at) || 0, profile };
 }
 
 async function saveGameState(env, telegramId, state) {
   if (!state || typeof state !== 'object' || Array.isArray(state)) return { ok: false, status: 400, message: 'Некорректное сохранение.' };
+
+  const profile = profileFromRow(await env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(telegramId).first());
+  state = applyProfileToSaveState(profile, state);
 
   const raw = JSON.stringify(state);
   if (new TextEncoder().encode(raw).byteLength > 1_800_000) {
@@ -183,7 +259,7 @@ async function saveGameState(env, telegramId, state) {
 
   const nickname = String(state.playerName || '').trim();
   if (nickname) {
-    const registered = await registerCharacter(env, telegramId, nickname, state.cls || '');
+    const registered = await registerCharacter(env, telegramId, nickname, state.cls || state.classKey || '');
     if (!registered.ok) return registered;
   }
 
@@ -199,9 +275,9 @@ async function saveGameState(env, telegramId, state) {
       updated_at=excluded.updated_at
   `).bind(telegramId, version, raw, now).run();
 
-  if (state.cls) {
+  if (state.cls || state.classKey) {
     await env.DB.prepare(`UPDATE players SET class_key=COALESCE(NULLIF(class_key,''),?1), updated_at=?2 WHERE telegram_id=?3`)
-      .bind(normalizeClass(state.cls), now, telegramId).run();
+      .bind(normalizeClass(state.cls || state.classKey), now, telegramId).run();
   }
   return { ok: true, version, updatedAt: now };
 }
@@ -212,7 +288,11 @@ async function syncNicknameFromSave(env, telegramId, nickname) {
   const current = await env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(telegramId).first();
   if (!current) return { ok: false, status: 404, message: 'Профиль не найден.' };
   if (current.nickname_key) {
-    if (current.nickname_key === nickKey(nickname)) return { ok: true, profile: profileFromRow(current) };
+    if (current.nickname_key === nickKey(nickname)) {
+      const profile = profileFromRow(current);
+      const save = await upsertBoundInitialSave(env, telegramId, profile, nickname, current.class_key || '');
+      return { ok: true, profile, save };
+    }
     return { ok: false, status: 409, message: 'Серверный ник уже закреплён за аккаунтом.' };
   }
   return registerCharacter(env, telegramId, nickname, current.class_key || '');
@@ -242,14 +322,24 @@ async function renameWithCard(env, telegramId, newNickname, requestId) {
 
   state.renameCards = Math.max(0, Math.floor(Number(state.renameCards) || 0) - 1);
   state.playerName = newNickname;
+  state.nickname = newNickname;
+  state.telegramId = String(telegramId);
+  state.profileTelegramId = String(telegramId);
+  state.gatewayProfileBound = true;
   const now = Date.now();
   const nextVersion = (Number(save.version) || 0) + 1;
   const raw = JSON.stringify(state);
 
   await env.DB.prepare('UPDATE players SET nickname=?1,nickname_key=?2,updated_at=?3 WHERE telegram_id=?4')
     .bind(newNickname, key, now, telegramId).run();
-  await env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4')
-    .bind(nextVersion, raw, now, telegramId).run();
+  await env.DB.prepare(`
+    INSERT INTO saves (telegram_id, version, state_json, updated_at)
+    VALUES (?1, ?2, ?3, ?4)
+    ON CONFLICT(telegram_id) DO UPDATE SET
+      version=excluded.version,
+      state_json=excluded.state_json,
+      updated_at=excluded.updated_at
+  `).bind(telegramId, nextVersion, raw, now).run();
 
   const result = {
     ok: true,
