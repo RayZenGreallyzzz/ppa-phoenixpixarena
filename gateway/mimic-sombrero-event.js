@@ -13,9 +13,9 @@
   var SLOT_RU={helmet:'Шляпа Самбреро',armor:'Пончо',gloves:'Перчатки',legs:'Штаны',boots:'Сапоги'};
   var RARITY_RU={green:'зелёный',blue:'синий',epic:'эпический'};
   var DIFF={
-    20:{level:20,hp:10000,rarity:'green',rewardChance:0.35,title:'Мимик-Самбреро 20',color:'#79e66f'},
-    40:{level:40,hp:20000,rarity:'blue',rewardChance:0.25,title:'Мимик-Самбреро 40',color:'#75b9ff'},
-    60:{level:60,hp:50000,rarity:'epic',rewardChance:0.16,title:'Мимик-Самбреро 60',color:'#d58cff'}
+    20:{level:20,hp:10000,damage:30,defense:22,rarity:'green',rewardChance:0.35,title:'Мимик-Самбреро 20',color:'#79e66f'},
+    40:{level:40,hp:20000,damage:70,defense:52,rarity:'blue',rewardChance:0.25,title:'Мимик-Самбреро 40',color:'#75b9ff'},
+    60:{level:60,hp:50000,damage:160,defense:120,rarity:'epic',rewardChance:0.16,title:'Мимик-Самбреро 60',color:'#d58cff'}
   };
   var EXTRA_REWARDS={
     20:{stones:[[1,.03],[2,.007]],potion:.03},
