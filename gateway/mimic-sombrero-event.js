@@ -49,7 +49,7 @@
   function addMat(n,a){var m=matBag();if(!m)return false;m[n]=(Math.max(0,Number(m[n])||0)+Math.max(1,Math.floor(Number(a)||1)));save();return true}
   function takeMat(n,a){var m=matBag();a=Math.max(1,Math.floor(Number(a)||1));if(!m||Math.max(0,Number(m[n])||0)<a)return false;m[n]=Math.max(0,Number(m[n])||0)-a;if(m[n]<=0)delete m[n];save();return true}
   function iconData(label,bg,fg){return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" rx="18" fill="'+bg+'" stroke="#ffd36a" stroke-width="4"/><path d="M16 57h64M25 48c3-17 10-25 23-25s20 8 23 25" fill="none" stroke="'+fg+'" stroke-width="13" stroke-linecap="round"/><path d="M19 57c20 13 39 13 58 0" fill="none" stroke="#222" stroke-width="6"/><text x="48" y="82" text-anchor="middle" font-family="monospace" font-weight="900" font-size="18" fill="#fff4c8">'+label+'</text></svg>')}
-  var TICKET_SRC=iconData('БИЛЕТ','#4d2c12','#ffd36a');
+  var TICKET_SRC='/assets/mimic-sombrero-ticket.webp?v=v617';
   var GEAR_SRC={green:iconData('SET','#163b19','#78e66f'),blue:iconData('SET','#132a4d','#75b9ff'),epic:iconData('SET','#32154b','#d58cff')};
 
   function registerMaterials(){
@@ -161,7 +161,13 @@
   }
 
   function install(){registerMaterials();installDropRoll();installDropInfo();installBlackMarketFilter()}
-  registerMaterials();install();setTimeout(install,250);setTimeout(install,900);
+  registerMaterials();install();setTimeout(install,250);setTimeout(install,900);setTimeout(install,1800);
+  window.PPA_MIMIC_SOMBRERO_DIAG=function(){
+    var drop=false,info=false;
+    try{drop=!!(typeof dropLoot==='function'&&dropLoot.__ppaMimicSombreroTicket)}catch(_){}
+    try{info=!!(typeof mobDropInfo==='function'&&mobDropInfo.__ppaMimicSombreroInfo)}catch(_){}
+    return {active:active(),test:testMode(),ticketChance:testMode()?1:TICKET_CHANCE,dropHook:drop,infoHook:info,tickets:ticketCount()};
+  };
   window.PPA_MIMIC_SOMBRERO_EVENT={
     active:active,
     schedule:scheduleInfo,
