@@ -45,7 +45,7 @@
     if(document.getElementById('ppaClanBossChestStyle'))return;
     var st=document.createElement('style');st.id='ppaClanBossChestStyle';
     st.textContent=
-      '#ppaClanBossChest{position:fixed;z-index:92;display:none;pointer-events:none;transform:translate(-50%,-68%);text-align:center;filter:drop-shadow(0 8px 9px rgba(0,0,0,.72))}'+
+      '#ppaClanBossChest{position:fixed;z-index:35;display:none;pointer-events:none;transform:translate(-50%,-68%);text-align:center;filter:drop-shadow(0 8px 9px rgba(0,0,0,.72))}'+
       '#ppaClanBossChestBtn{position:relative;width:116px;height:116px;padding:0;border:0;background:transparent;pointer-events:auto;touch-action:manipulation;cursor:pointer}'+
       '#ppaClanBossChestBtn img{width:100%;height:100%;object-fit:contain;display:block;user-select:none;-webkit-user-drag:none;image-rendering:auto}'+
       '#ppaClanBossChest.closed #ppaClanBossChestBtn{animation:ppaCbChestPulse 1.35s ease-in-out infinite}'+
