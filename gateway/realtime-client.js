@@ -181,6 +181,19 @@
       });
     }catch(_){return false}
   }
+  function clanBossChestOpen(){
+    try{
+      if(!RT.clanBossRoom||!RT.clanBossId)return false;
+      return send({type:'clan-boss-chest-open',bossId:RT.clanBossId});
+    }catch(_){return false}
+  }
+  function clanBossChestComplete(){
+    try{
+      if(!RT.clanBossRoom||!RT.clanBossId)return false;
+      return send({type:'clan-boss-chest-complete',bossId:RT.clanBossId});
+    }catch(_){return false}
+  }
+
   function clanBossRewardIds(){
     try{
       var a=JSON.parse(localStorage.getItem('ppaClanBossRewardIdsV1')||'[]');
@@ -1164,6 +1177,9 @@
 
   window.PPA_RT_SEND=send;
   window.PPA_CLAN_BOSS_ENTER=clanBossEnter;
+window.PPA_CLAN_BOSS_CHEST_OPEN=clanBossChestOpen;
+window.PPA_CLAN_BOSS_CHEST_COMPLETE=clanBossChestComplete;
+window.PPA_CLAN_BOSS_SELF_PID=function(){return String(RT.selfPid||'')};
   window.PPA_CLAN_BOSS_DAMAGE=clanBossDamage;
   window.PPA_CLAN_BOSS_CHEST_OPEN=function(){return send({type:'clan-boss-chest-open',bossId:RT.clanBossId||''})};
   window.PPA_CLAN_BOSS_CHEST_COMPLETE=function(){return send({type:'clan-boss-chest-complete',bossId:RT.clanBossId||''})};
