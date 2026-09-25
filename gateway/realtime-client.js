@@ -122,7 +122,7 @@
     RT.clanBossState=Object.assign({},st);
     RT.clanBossId=String(st.bossId||RT.clanBossId||'');
     try{if(window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(RT.clanBossState)}catch(_){}
-    try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(RT.clanBossState.chest||null)}catch(_){}
+    try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(RT.clanBossState.chest||null,Number(st.serverTs)||0)}catch(_){}
     try{
       var b=clanBossEntity();
       if(b){
@@ -479,11 +479,11 @@
       return;
     }
     if(m.type==='clan-boss-chest-state'){
-      try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(m.chest||null)}catch(_){}
+      try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(m.chest||null,Number(m.ts)||0)}catch(_){}
       return;
     }
     if(m.type==='clan-boss-chest-opened'){
-      try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(m.chest||null)}catch(_){}
+      try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(m.chest||null,Number(m.ts)||0)}catch(_){}
       try{if(window.PPA_CLAN_BOSS_CHEST_OPENED)window.PPA_CLAN_BOSS_CHEST_OPENED(m||{})}catch(_){}
       return;
     }
