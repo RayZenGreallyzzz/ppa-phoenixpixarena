@@ -122,6 +122,7 @@
     RT.clanBossState=Object.assign({},st);
     RT.clanBossId=String(st.bossId||RT.clanBossId||'');
     try{if(window.PPA_SET_CLAN_BOSS_STATE)window.PPA_SET_CLAN_BOSS_STATE(RT.clanBossState)}catch(_){}
+    try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(RT.clanBossState.chest||null)}catch(_){}
     try{
       var b=clanBossEntity();
       if(b){
@@ -159,6 +160,7 @@
     try{if(sendServer!==false&&RT.clanBossRoom)send({type:'clan-boss-leave',bossId:RT.clanBossId||''})}catch(_){}
     RT.clanBossRoom='';RT.clanBossId='';RT.clanBossState=null;RT.clanBossSeq=0;
     RT.clanBossEnteringUntil=0;RT.clanBossSceneSeen=false;RT.clanBossReconnectId='';RT.clanBossDefeatShown=false;
+    try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(null)}catch(_){}
     if(RT.clanBossEnterPromise)clanBossResolve({ok:false,message:'Вход к боссу отменён'});
     commitRoom('safe');RT.lastRoomSync=0;
     return true;
@@ -174,6 +176,7 @@
       return send({
         type:'clan-boss-hit',bossId:RT.clanBossId,seq:seq,
         amount:Math.round(dmg*100)/100,
+        bx:Number(e&&e.x)||0,by:Number(e&&e.y)||0,
         kind:String(meta&&meta.kind||'').slice(0,16)
       });
     }catch(_){return false}
@@ -460,6 +463,19 @@
     }
     if(m.type==='clan-boss-reward'){
       clanBossApplyRewardPacket(m.reward||{},0);
+      return;
+    }
+    if(m.type==='clan-boss-chest-state'){
+      try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(m.chest||null)}catch(_){}
+      return;
+    }
+    if(m.type==='clan-boss-chest-opened'){
+      try{if(window.PPA_CLAN_BOSS_CHEST_STATE)window.PPA_CLAN_BOSS_CHEST_STATE(m.chest||null)}catch(_){}
+      try{if(window.PPA_CLAN_BOSS_CHEST_OPENED)window.PPA_CLAN_BOSS_CHEST_OPENED(m||{})}catch(_){}
+      return;
+    }
+    if(m.type==='clan-boss-chest-reject'){
+      try{if(typeof showPickup==='function')showPickup(String(m.reason||'Сундук недоступен'),'#ff9c72')}catch(_){}
       return;
     }
     if(m.type==='clan-boss-defeated'){
@@ -1149,6 +1165,8 @@
   window.PPA_RT_SEND=send;
   window.PPA_CLAN_BOSS_ENTER=clanBossEnter;
   window.PPA_CLAN_BOSS_DAMAGE=clanBossDamage;
+  window.PPA_CLAN_BOSS_CHEST_OPEN=function(){return send({type:'clan-boss-chest-open',bossId:RT.clanBossId||''})};
+  window.PPA_CLAN_BOSS_CHEST_COMPLETE=function(){return send({type:'clan-boss-chest-complete',bossId:RT.clanBossId||''})};
   window.PPA_CLAN_BOSS_SERVER_ACTIVE=function(){try{return !!(RT.clanBossRoom&&typeof P!=='undefined'&&P&&P.scene==='clanboss1')}catch(_){return false}};
   window.ppaClanBossTrackDamageLocal=function(amount){
     if(window.PPA_CLAN_BOSS_SERVER_ACTIVE&&window.PPA_CLAN_BOSS_SERVER_ACTIVE())return amount;
