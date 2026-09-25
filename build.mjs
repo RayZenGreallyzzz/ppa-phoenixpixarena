@@ -273,7 +273,7 @@ function ppaEscapeSrcdocCode(code) {
   if(!eventsFrameMatches.length)throw new Error('Native Events iframe target not found');
   output=output.replace(eventsFrameRe,'<iframe id="eventsMenuFrame" title="События" srcdoc="'+nativeEventsEscaped+'"></iframe>');
   console.log('[PPA BUILD] Native Events iframe instances replaced: '+eventsFrameMatches.length);
-  if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('craftRuri')||!output.includes('data-cat=&quot;game&quot;')||
+  if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('Мимик-Самбреро')||!output.includes('mimicSombreroOpen')||!output.includes('craftRuri')||!output.includes('data-cat=&quot;game&quot;')||
      !output.includes('CLAN_SIEGE_QA_TEST_OPEN=true')||!output.includes('ТЕСТ · ВОЙТИ В ОСАДУ')||!output.includes('Откат осады отключён')||!output.includes('ppaClanSiegeQaEnter')){
     throw new Error('Native tabbed Events replacement incomplete');
   }
@@ -6787,15 +6787,17 @@ function sendEventsState(){`
 ppaPatchRegex(
   'Great Ruri state in Events payload',
   /titanShards:titanShardCount\(\),\s*worldBoss:worldBossDailyStatus\(\),/,
-  "titanShards:titanShardCount(),\n        ruri:(typeof ppaRuriCraftState==='function'?ppaRuriCraftState():null),\n        worldBoss:worldBossDailyStatus(),"
+  "titanShards:titanShardCount(),\n        mimicTickets:(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount==='function'?window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount():0),\n        ruri:(typeof ppaRuriCraftState==='function'?ppaRuriCraftState():null),\n        worldBoss:worldBossDailyStatus(),"
 );
 ppaPatchRegex(
   'Great Ruri craft message route',
   /if\(d\.type==='titanShardBuy'\)\{titanShardExchange\(d\.id\);return;\}/,
-  "if(d.type==='titanShardBuy'){titanShardExchange(d.id);return;}\n  if(d.type==='ruriCraft'){ppaRuriCraftFromEvent();return;}"
+  "if(d.type==='titanShardBuy'){titanShardExchange(d.id);return;}\n  if(d.type==='ruriCraft'){ppaRuriCraftFromEvent();return;}\n  if(d.type==='mimicSombreroOpen'){try{if(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.open==='function')window.PPA_MIMIC_SOMBRERO_EVENT.open()}catch(_){ }return;}"
 );
 if(!output.includes('function ppaRuriCraftFromEvent()')||
    !output.includes("d.type==='ruriCraft'")||
+   !output.includes("d.type==='mimicSombreroOpen'")||
+   !output.includes('mimicTickets:')||
    !output.includes("Демонический кристалл']=st.resources.demonic-72")||
    !output.includes("eventRewardId:'crafted_ruri_legendary_v1'")){
   throw new Error('Great Ruri direct craft patch incomplete');
@@ -7229,6 +7231,7 @@ const filesToPublish = [
   ['gateway/clan-boss-loot.js','clan-boss-loot.js','Clan boss loot helper missing'],
   ['gateway/clan-boss-chest.js','clan-boss-chest.js','Clan boss reward chest UI missing'],
   ['gateway/ruri-event-drops.js','ruri-event-drops.js','Great Ruri event drops missing'],
+  ['gateway/mimic-sombrero-arena.js','mimic-sombrero-arena.js','Mimic Sombrero arena runtime missing'],
   ['gateway/qa-test-access.js','qa-test-access.js','QA dungeon access helper missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
   ['gateway/mobile-sprite-performance.js','mobile-sprite-performance.js','Mobile sprite performance helper missing'],
@@ -7256,6 +7259,7 @@ output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"><
 <script src="${js('clan-boss-loot.js')}"></script>
 <script src="${js('clan-boss-chest.js')}"></script>
 <script src="${js('ruri-event-drops.js')}"></script>
+<script src="${js('mimic-sombrero-arena.js')}"></script>
 <script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
@@ -7275,6 +7279,7 @@ console.log('Boss drop boost: /game/boss-drop-boost.js');
 console.log('Clan boss loot: /game/clan-boss-loot.js');
 console.log('Clan boss reward chest: /game/clan-boss-chest.js');
 console.log('Great Ruri event drops: /game/ruri-event-drops.js · TEST ACTIVE');
+console.log('Mimic Sombrero arena: /game/mimic-sombrero-arena.js · TEST MAP/IDLE');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
 console.log('Remote player sprites: /game/remote-sprite-renderer.js');
