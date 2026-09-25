@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V3)return;
-  window.__PPA_MIMIC_SOMBRERO_ARENA_V3=true;
+  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V4)return;
+  window.__PPA_MIMIC_SOMBRERO_ARENA_V4=true;
 
   var MAP_SRC='/assets/mimic-sombrero-arena.webp';
   var MASK_SRC='/assets/mimic-sombrero-walk-mask.png';
@@ -77,14 +77,17 @@
     cv.style.cssText='width:100%;height:100%;display:block;image-rendering:auto;touch-action:none;pointer-events:none';
     ctx=cv.getContext('2d',{alpha:false,desynchronized:true})||cv.getContext('2d');
 
-    var exit=document.createElement('button');exit.type='button';exit.textContent='↩ ВЫЙТИ';
-    exit.style.cssText='position:absolute;left:10px;top:10px;z-index:8;height:32px;padding:0 12px;border:1px solid #c58435;border-radius:8px;background:rgba(55,25,12,.94);color:#ffd787;font:800 10px monospace;pointer-events:auto';
-    exit.onclick=function(ev){try{ev.stopPropagation()}catch(_){}leave(false)};
+    var exit=document.createElement('button');exit.type='button';exit.id='ppaMimicArenaExit';exit.textContent='↩ ВЫЙТИ';
+    // Keep the fail-safe exit OUTSIDE the arena stacking context. Telegram
+    // WebViews can otherwise hide/block a child button when the fullscreen
+    // arena layer has pointer-events:none or when the native HUD sits above it.
+    exit.style.cssText='position:fixed;left:10px;top:calc(var(--tg-content-safe-area-inset-top,var(--tg-safe-area-inset-top,env(safe-area-inset-top,0px))) + 42px);z-index:2147483000;height:34px;padding:0 13px;border:1px solid #c58435;border-radius:8px;background:rgba(55,25,12,.97);color:#ffd787;box-shadow:0 3px 12px rgba(0,0,0,.72);font:800 10px monospace;pointer-events:auto;touch-action:manipulation;display:none';
+    exit.onclick=function(ev){try{ev.preventDefault();ev.stopPropagation()}catch(_){}safeExit()};
 
     var tag=document.createElement('div');tag.id='ppaMimicArenaTag';
     tag.style.cssText='position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:7;padding:5px 9px;border:1px solid rgba(197,132,53,.65);border-radius:7px;background:rgba(20,12,8,.80);color:#ffe0a0;font:800 10px monospace;pointer-events:none;white-space:nowrap';
 
-    root.appendChild(cv);root.appendChild(exit);root.appendChild(tag);document.body.appendChild(root);
+    root.appendChild(cv);root.appendChild(tag);document.body.appendChild(root);document.body.appendChild(exit);
 
     // The arena is only the visual layer. Native HUD input stays above it:
     // joystick/touch on mobile and the existing PC input bridge feed jX/jY.
@@ -426,7 +429,9 @@
       lastPlayerX=500;lastPlayerY=840;playerDir=0;moveTarget=null;pendingBasic=false;
       fightDone=false;playerDead=false;skillCast=null;fx.length=0;attackCaptureAt=0;
       var now=Date.now(),c=combat();nextAttackAt=now+Math.max(700,Number(c.attackEvery)||2200);nextSkillAt=now+randomSkillDelay();
-      root.style.display='block';active=true;lastTs=0;cancelAnimationFrame(raf);raf=requestAnimationFrame(drawFrame);
+      root.style.display='block';
+      try{var exitBtn=document.getElementById('ppaMimicArenaExit');if(exitBtn)exitBtn.style.display='block'}catch(_){}
+      active=true;lastTs=0;cancelAnimationFrame(raf);raf=requestAnimationFrame(drawFrame);
       toast('МИМИК '+level+' · HP '+boss.mhp.toLocaleString('ru-RU')+' · DEF '+boss.def,'#ffd36a');
       try{if(typeof saveGame==='function')saveGame()}catch(_){}
     }).catch(function(e){
@@ -442,10 +447,38 @@
     box.onclick=function(ev){var b=ev.target&&ev.target.closest?ev.target.closest('button'):null;if(!b)return;if(b.dataset.close){box.remove();return}var lv=Number(b.dataset.lv)||0;if(lv){box.remove();enter(lv)}};
     document.body.appendChild(box);
   }
+  function forceExitToSafe(){
+    // Last-resort escape hatch: works even if the arena active flag or RAF
+    // got into a bad state. It is intentionally independent from combat.
+    active=false;
+    try{cancelAnimationFrame(raf)}catch(_){}
+    raf=0;moveTarget=null;pendingBasic=false;skillCast=null;fx.length=0;
+    try{if(root)root.style.display='none'}catch(_){}
+    try{var b=document.getElementById('ppaMimicArenaExit');if(b)b.style.display='none'}catch(_){}
+    try{
+      if(P){P.tid=null;P.scene='safe'}
+      if(typeof changeScene==='function')changeScene('safe');
+    }catch(_){}
+  }
+  function safeExit(){
+    // Normal path returns to the scene we entered from. If that path fails
+    // for any reason, force a clean city exit instead of trapping the player.
+    try{
+      if(active)leave(false);
+    }catch(_){}
+    setTimeout(function(){
+      var stuck=false;
+      try{stuck=!!((root&&root.style.display!=='none')||(P&&P.scene===SCENE))}catch(_){stuck=true}
+      if(stuck)forceExitToSafe();
+    },120);
+  }
+  window.PPA_MIMIC_FORCE_EXIT=forceExitToSafe;
+
   function leave(dead){
     var q=document.getElementById('ppaMimicChoose');if(q)q.remove();
     if(!active)return;
     active=false;cancelAnimationFrame(raf);raf=0;if(root)root.style.display='none';
+    try{var exitBtn=document.getElementById('ppaMimicArenaExit');if(exitBtn)exitBtn.style.display='none'}catch(_){};
     moveTarget=null;pendingBasic=false;skillCast=null;fx.length=0;
     try{
       if(P){
@@ -512,6 +545,10 @@
       },true);
     });
   }
+
+  document.addEventListener('keydown',function(ev){
+    if(active&&String(ev&&ev.key||'')==='Escape'){try{ev.preventDefault()}catch(_){}safeExit()}
+  },true);
 
   wrapCombatHooks();bindAttackButton();
   window.PPA_MIMIC_SOMBRERO_ARENA={
