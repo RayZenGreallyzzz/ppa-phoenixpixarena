@@ -7,10 +7,10 @@ if (!fs.existsSync(indexPath)) {
   throw new Error('public/index.html not found; run node build.mjs first');
 }
 
-function findFunctionRange(src, name) {
+function findFunctionRange(src, name, from = 0) {
   const needle = `function ${name}(`;
-  const start = src.indexOf(needle);
-  if (start < 0) throw new Error(`Function not found: ${name}`);
+  const start = src.indexOf(needle, from);
+  if (start < 0) return null;
   const open = src.indexOf('{', start + needle.length);
   if (open < 0) throw new Error(`Function body not found: ${name}`);
   let depth = 0;
@@ -47,18 +47,40 @@ function findFunctionRange(src, name) {
   throw new Error(`Function close brace not found: ${name}`);
 }
 
-function replaceFunction(src, name, body) {
-  const [start, end] = findFunctionRange(src, name);
-  return src.slice(0, start) + body + src.slice(end);
+function replaceAllFunctions(src, name, body) {
+  let out = src;
+  let pos = 0;
+  let count = 0;
+  while (true) {
+    const range = findFunctionRange(out, name, pos);
+    if (!range) break;
+    const [start, end] = range;
+    out = out.slice(0, start) + body + out.slice(end);
+    pos = start + body.length;
+    count++;
+    if (count > 25) throw new Error(`Too many replacements for ${name}`);
+  }
+  if (!count) throw new Error(`Function not found: ${name}`);
+  return out;
 }
 
-function removeFunction(src, name) {
-  const [start, end] = findFunctionRange(src, name);
-  let cutEnd = end;
-  while (cutEnd < src.length && /[\t ]/.test(src[cutEnd])) cutEnd++;
-  if (src[cutEnd] === '\r') cutEnd++;
-  if (src[cutEnd] === '\n') cutEnd++;
-  return src.slice(0, start) + src.slice(cutEnd);
+function removeAllFunctions(src, name) {
+  let out = src;
+  let pos = 0;
+  let count = 0;
+  while (true) {
+    const range = findFunctionRange(out, name, pos);
+    if (!range) break;
+    let [start, end] = range;
+    while (end < out.length && /[\t ]/.test(out[end])) end++;
+    if (out[end] === '\r') end++;
+    if (out[end] === '\n') end++;
+    out = out.slice(0, start) + out.slice(end);
+    pos = start;
+    count++;
+    if (count > 25) throw new Error(`Too many removals for ${name}`);
+  }
+  return out;
 }
 
 function replaceRequired(src, before, after, label) {
@@ -80,7 +102,7 @@ html = replaceRequired(
   'PPA_SIEGE native state cache'
 );
 
-html = replaceFunction(html, 'clanSiegeEnsureHud', `function clanSiegeEnsureHud(){
+html = replaceAllFunctions(html, 'clanSiegeEnsureHud', `function clanSiegeEnsureHud(){
   if(PPA_SIEGE.hud&&PPA_SIEGE.hud.isConnected)return PPA_SIEGE.hud;
   const el=document.createElement('div');
   el.id='clanSiegeHud';
@@ -90,11 +112,9 @@ html = replaceFunction(html, 'clanSiegeEnsureHud', `function clanSiegeEnsureHud(
   return el;
 }`);
 
-if (html.includes('function clanSiegeClearCastleObstacles(')) {
-  html = removeFunction(html, 'clanSiegeClearCastleObstacles');
-}
+html = removeAllFunctions(html, 'clanSiegeClearCastleObstacles');
 
-html = replaceFunction(html, 'clanSiegeHudUpdate', `function clanSiegeHudUpdate(force=false){
+html = replaceAllFunctions(html, 'clanSiegeHudUpdate', `function clanSiegeHudUpdate(force=false){
   const h=clanSiegeEnsureHud();
   if(P.scene!=='clansiege'||!PPA_SIEGE.active){
     h.style.display='none';
@@ -158,8 +178,11 @@ const forbidden = [
 for (const token of forbidden) {
   if (html.includes(token)) throw new Error('Forbidden duplicate/hack token remains: ' + token);
 }
-if (!html.includes("if(PPA_SIEGE.phase==='castle'){") || html.includes("CLAN_SIEGE_CASTLE_COLLISION;\n    if(Math.hypot(x-c.x,y-c.y)<c.r+r)return false;\n  }\n  return true;\n}\nfunction clanSiegeSlide") === false) {
+if (!/if\(PPA_SIEGE\.phase==='castle'\)\{\s*\/\/ Compact round collision sits fully inside the castle footprint\.\s*const c=CLAN_SIEGE_CASTLE_COLLISION;\s*if\(Math\.hypot\(x-c\.x,y-c\.y\)<c\.r\+r\)return false;/.test(html)) {
   throw new Error('Castle collision phase gate validation failed');
+}
+if (/if\(PPA_SIEGE\.phase==='castle'\|\|PPA_SIEGE\.phase==='won'\)\{[\s\S]{0,160}?CLAN_SIEGE_CASTLE_COLLISION/.test(html)) {
+  throw new Error('Old castle collision won-phase gate still remains');
 }
 if (html === before) throw new Error('No changes applied to public/index.html');
 
