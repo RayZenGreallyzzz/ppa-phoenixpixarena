@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v598-clan-siege-compact-replacement-20260925';
+const CLIENT_BUILD = 'v599-clan-siege-ping-only-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -7034,6 +7034,7 @@ if(_ppaClanBossTrackCalls<1){
       !clanSiegeFix.includes('siegeHudOwnWrapper') ||
       !clanSiegeFix.includes("best.style.visibility='hidden'") ||
       !realtimeClient.includes("String(P.scene||'')==='clansiege'") ||
+      !realtimeClient.includes("if(siege)return Number.isFinite(RT.pingMs)?Math.round(RT.pingMs)+' ms':'… ms'") ||
       !realtimeClient.includes("el.style.right='8px';el.style.top='58px'")) {
     throw new Error('Clan siege capture/UI fix incomplete');
   }

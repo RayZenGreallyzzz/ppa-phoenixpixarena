@@ -72,7 +72,13 @@
     }
     return'';
   }
-  function badgeText(){var s='ONLINE · '+Math.max(1,RT.onlineCount||1);if(Number.isFinite(RT.pingMs))s+=' · '+Math.round(RT.pingMs)+' ms';return s}
+  function badgeText(){
+    var siege=false;try{siege=typeof P!=='undefined'&&P&&String(P.scene||'')==='clansiege'}catch(_){}
+    if(siege)return Number.isFinite(RT.pingMs)?Math.round(RT.pingMs)+' ms':'… ms';
+    var s='ONLINE · '+Math.max(1,RT.onlineCount||1);
+    if(Number.isFinite(RT.pingMs))s+=' · '+Math.round(RT.pingMs)+' ms';
+    return s;
+  }
 
   function disableLegacyOnline(){
     try{
@@ -100,7 +106,7 @@
         el.style.position='fixed';el.style.display='block';el.style.visibility='visible';
         if(_siege){
           el.style.left='auto';el.style.right='8px';el.style.top='58px';el.style.transform='none';
-          el.style.padding='2px 5px';el.style.fontSize='8px';el.style.lineHeight='1.05';el.style.maxWidth='145px';
+          el.style.padding='2px 4px';el.style.fontSize='8px';el.style.lineHeight='1.05';el.style.maxWidth='64px';
         }else{
           el.style.left='50%';el.style.right='auto';el.style.top='8px';el.style.transform='translateX(-50%)';
           el.style.padding='2px 6px';el.style.fontSize='9px';el.style.lineHeight='1.1';el.style.maxWidth='190px';
