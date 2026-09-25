@@ -86,6 +86,7 @@ button{font:inherit}
     <div class="sub on" data-sub="game">
       <button class="evt on" data-evt="ruri"><span class="dot"></span>Великий Рури</button>
       <button class="evt" data-evt="titan">💎 Кристальный Титан</button>
+      <button class="evt" data-evt="mimic">🎭 Мимик-Самбреро</button>
     </div>
 
     <button class="cat" data-cat="clan">🛡 КЛАНОВЫЕ</button>
@@ -119,7 +120,7 @@ button{font:inherit}
 <script>
 const RURI_ART='__PPA_RURI_CARD__';
 const TITAN_ART='__PPA_TITAN_ART__';
-const state={titanShards:0,ruri:{resources:{demonic:0,fire:0,blood:0,crystal:0},need:{demonic:72,fire:10,blood:7,crystal:11},owned:false,bagFull:false,canCraft:false},worldBoss:{available:true,killedThisCycle:false,nextResetAt:0,resetHour:18},clanSiege:{ready:true,nextAt:0,remainingMs:0,text:'ОСАДА ДОСТУПНА'}};
+const state={titanShards:0,mimicTickets:0,ruri:{resources:{demonic:0,fire:0,blood:0,crystal:0},need:{demonic:72,fire:10,blood:7,crystal:11},owned:false,bagFull:false,canCraft:false},worldBoss:{available:true,killedThisCycle:false,nextResetAt:0,resetHour:18},clanSiege:{ready:true,nextAt:0,remainingMs:0,text:'ОСАДА ДОСТУПНА'}};
 const CLAN_SIEGE_QA_TEST_OPEN=true;
 let currentCat='game',currentEvent='ruri',toastTimer=0;
 
@@ -196,6 +197,12 @@ function render(){
     document.getElementById('enterTitan').onclick=()=>{const s=titanStatus();if(s.locked){showToast(s.timer);return}parent.postMessage({type:'eventsEnter',action:'worldboss',id:'worldboss_crystal_titan_001'},'*')};
     return;
   }
+  if(currentEvent==='mimic'){
+    const tickets=Math.max(0,Number(state.mimicTickets)||0);
+    v.innerHTML='<div class="hero">'+artBlock('', '🎭','Мимик-Самбреро')+'<div class="info"><h2>🎭 Мимик-Самбреро</h2><div class="status">● ТЕСТ КАРТЫ · БИЛЕТЫ '+tickets+'</div><p>Отдельная песчаная арена события. Один Билет Мимика-Самбреро открывает один вход.</p><p><b>20 ур.</b> — зелёный сет · <b>40 ур.</b> — синий сет · <b>60 ур.</b> — эпический сет.</p><p>Сейчас тестируем новую карту, маску прохода и idle-анимацию босса 4 направления × 4 кадра.</p><button class="action" id="enterMimic" '+(tickets>0?'':'disabled')+'>'+(tickets>0?'ВОЙТИ К МИМИКУ':'НУЖЕН БИЛЕТ')+'</button></div></div>';
+    document.getElementById('enterMimic').onclick=()=>{if(tickets<1){showToast('Нужен Билет Мимика-Самбреро');return}parent.postMessage({type:'mimicSombreroOpen'},'*')};
+    return;
+  }
   if(currentEvent==='citadel'){
     const st=citadelStatus();
     v.innerHTML='<div class="hero">'+artBlock('', '🏰','Цитадель Феникса')+'<div class="info"><h2>🏰 Цитадель Феникса</h2><div class="status'+(st.locked?' locked':'')+'" id="liveStatus">'+st.label+' · '+st.timer+'</div><p>4 сильнейших клана по 8 игроков. Сначала уничтожьте 4 кристалла, затем удерживайте край замка 60 секунд.</p><p>Соклановцев атаковать нельзя. Владение замком — 3 дня.</p><h3>НАГРАДЫ ПОБЕДИТЕЛЯМ</h3><p>XP +5% · золото +5% · ресурсы +5% · скорость +3% всему клану.</p><button class="action" id="enterCitadel" '+(st.locked?'disabled':'')+'>'+(CLAN_SIEGE_QA_TEST_OPEN?'ТЕСТ · ВОЙТИ В ОСАДУ':(st.locked?'ОСАДА НА ОТКАТЕ':'ВОЙТИ В ОСАДУ'))+'</button></div></div>';
@@ -227,7 +234,7 @@ document.querySelectorAll('.cat').forEach(b=>b.onclick=()=>{
 });
 document.querySelectorAll('.evt').forEach(b=>b.onclick=()=>{
   currentEvent=b.dataset.evt;
-  if(currentEvent==='ruri'||currentEvent==='titan')currentCat='game';
+  if(currentEvent==='ruri'||currentEvent==='titan'||currentEvent==='mimic')currentCat='game';
   else if(currentEvent==='citadel')currentCat='war';
   else if(currentEvent==='updates')currentCat='updates';
   render();
@@ -246,6 +253,7 @@ window.addEventListener('message',e=>{
   const d=e.data||{};
   if(d.type==='eventsState'){
     state.titanShards=Math.max(0,Number(d.titanShards)||0);
+    state.mimicTickets=Math.max(0,Number(d.mimicTickets)||0);
     if(d.ruri&&typeof d.ruri==='object')state.ruri=d.ruri;
     if(d.worldBoss&&typeof d.worldBoss==='object')state.worldBoss=d.worldBoss;
     if(d.clanSiege&&typeof d.clanSiege==='object')state.clanSiege=d.clanSiege;
