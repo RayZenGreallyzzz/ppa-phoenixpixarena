@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v588-clan-boss-reward-chest-20260925';
+const CLIENT_BUILD = 'v589-grounded-clan-boss-chest-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -38,6 +38,11 @@ const PPA_APPROVED_SLAG_ART=ppaReadApprovedB64('fart-slag-reference.b64');
 const PPA_APPROVED_EMERALD_ART=ppaReadApprovedB64('emerald-smith-reference.b64');
 const PPA_RURI_EVENT_CARD_ART=ppaReadApprovedB64('ruri-event-card-approved.b64');
 const PPA_CLAN_BOSS_CHEST_ART=ppaReadApprovedB64('clan-boss-chest.b64');
+const PPA_CLAN_BOSS_CHEST_BUF=await sharp(PPA_CLAN_BOSS_CHEST_ART.buf)
+  .trim({threshold:8})
+  .resize({width:256,height:256,fit:'contain',background:{r:0,g:0,b:0,alpha:0}})
+  .webp({quality:94,alphaQuality:100})
+  .toBuffer();
 function ppaReadApprovedB64Parts(names){
   const b64=names.map((name)=>{
     const p=path.join(ROOT,'assets-src',name);
@@ -85,7 +90,7 @@ fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
-fs.writeFileSync(path.join(assetsDir,'clan-boss-chest.webp'),PPA_CLAN_BOSS_CHEST_ART.buf);
+fs.writeFileSync(path.join(assetsDir,'clan-boss-chest.webp'),PPA_CLAN_BOSS_CHEST_BUF);
 for(const name of PPA_RURI_RESOURCE_FILES){
   fs.copyFileSync(path.join(ROOT,'assets-src',name),path.join(assetsDir,name));
 }
@@ -7085,6 +7090,12 @@ if(_ppaClanBossTrackCalls<1){
       !clanBossChest.includes('__PPA_CLAN_BOSS_CHEST_V1') ||
       !clanBossChest.includes("CHEST_SRC='/assets/clan-boss-chest.webp'") ||
       !clanBossChest.includes('Открытие займёт 5 секунд') ||
+      !clanBossChest.includes("bottom:-10px") ||
+      !clanBossChest.includes('function blockChest(c)') ||
+      !clanBossChest.includes('minD=64') ||
+      !clanBossChest.includes("countdown.textContent=String(sec)") ||
+      !clanBossChest.includes('localOpenEnd=Date.now()+remain') ||
+      !realtimeClient.includes('Number(serverTs)||0') ||
       !clanBossChest.includes('РОЛЛ СУНДУКА ВЛАДЫЧИЦЫ') ||
       !clanBossChest.includes('PPA_CLAN_BOSS_CHEST_COMPLETE') ||
       clanBossLoot.includes('Золото') ||
