@@ -1181,8 +1181,6 @@ window.PPA_CLAN_BOSS_CHEST_OPEN=clanBossChestOpen;
 window.PPA_CLAN_BOSS_CHEST_COMPLETE=clanBossChestComplete;
 window.PPA_CLAN_BOSS_SELF_PID=function(){return String(RT.selfPid||'')};
   window.PPA_CLAN_BOSS_DAMAGE=clanBossDamage;
-  window.PPA_CLAN_BOSS_CHEST_OPEN=function(){return send({type:'clan-boss-chest-open',bossId:RT.clanBossId||''})};
-  window.PPA_CLAN_BOSS_CHEST_COMPLETE=function(){return send({type:'clan-boss-chest-complete',bossId:RT.clanBossId||''})};
   window.PPA_CLAN_BOSS_SERVER_ACTIVE=function(){try{return !!(RT.clanBossRoom&&typeof P!=='undefined'&&P&&P.scene==='clanboss1')}catch(_){return false}};
   window.ppaClanBossTrackDamageLocal=function(amount){
     if(window.PPA_CLAN_BOSS_SERVER_ACTIVE&&window.PPA_CLAN_BOSS_SERVER_ACTIVE())return amount;
