@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V5)return;
-  window.__PPA_MIMIC_SOMBRERO_ARENA_V5=true;
+  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V6)return;
+  window.__PPA_MIMIC_SOMBRERO_ARENA_V6=true;
 
   var MAP_SRC='/assets/mimic-sombrero-arena.webp';
   var MASK_SRC='/assets/mimic-sombrero-walk-mask.png';
@@ -19,6 +19,7 @@
   var moveTarget=null,pendingBasic=false,nextAttackAt=0,nextSkillAt=0,skillCast=null;
   var fightDone=false,playerDead=false,attackCaptureAt=0,lastPlayerX=500,lastPlayerY=840,playerDir=4,fx=[];
   var hiddenHud=[],controlState=[],lastControlFix=0;
+  var playerMoving=false,playerAttackStartedAt=0,playerAttackAnimUntil=0,rewardPanel=null;
 
   function eventApi(){return window.PPA_MIMIC_SOMBRERO_EVENT||null}
   function diff(){
@@ -90,6 +91,13 @@
 
     root.appendChild(cv);root.appendChild(tag);document.body.appendChild(root);document.body.appendChild(exit);
 
+    rewardPanel=document.createElement('div');rewardPanel.id='ppaMimicRewardPanel';
+    rewardPanel.style.cssText='position:fixed;inset:0;z-index:2147483645;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(8,5,3,.62);pointer-events:auto';
+    rewardPanel.innerHTML='<div id="ppaMimicRewardCard" style="width:min(440px,92vw);max-height:82vh;overflow:auto;padding:18px 16px;border:2px solid #c88736;border-radius:14px;background:linear-gradient(180deg,rgba(56,28,12,.98),rgba(20,12,8,.99));box-shadow:0 18px 55px rgba(0,0,0,.8);text-align:center;color:#f7dfae;font-family:monospace"><div style="font:900 18px Georgia,serif;color:#ffd36a;margin-bottom:8px">🎭 МИМИК-САМБРЕРО ПОВЕРЖЕН!</div><div id="ppaMimicRewardBody" style="font:800 11px/1.6 monospace;color:#f2d8a4"></div><button id="ppaMimicRewardExit" type="button" style="width:100%;min-height:40px;margin-top:13px;border:1px solid #d28b35;border-radius:8px;background:linear-gradient(#5a2d15,#2a160d);color:#ffe09a;font:900 11px monospace;touch-action:manipulation">ВЫЙТИ</button></div>';
+    document.body.appendChild(rewardPanel);
+    var rewardExit=rewardPanel.querySelector('#ppaMimicRewardExit');
+    if(rewardExit)rewardExit.onclick=function(ev){try{ev.preventDefault();ev.stopPropagation()}catch(_){}safeExit()};
+
     // The arena is only the visual layer. Native HUD input stays above it:
     // joystick/touch on mobile and the existing PC input bridge feed jX/jY.
     return root;
@@ -155,6 +163,31 @@
         controlState.length=0;
       }
     }catch(_){}
+  }
+  function drawExtendedMap(W,H,size,ox,oy){
+    ctx.fillStyle='#6c4523';ctx.fillRect(0,0,W,H);
+    try{
+      var iw=mapImg.naturalWidth||1,ih=mapImg.naturalHeight||1;
+      // First paint the same ranch art as a cover background. It is only
+      // visible outside the square play field, so the walk mask stays exact.
+      var cover=Math.max(W/iw,H/ih),dw=iw*cover,dh=ih*cover;
+      ctx.save();ctx.globalAlpha=.92;ctx.drawImage(mapImg,(W-dw)/2,(H-dh)/2,dw,dh);ctx.restore();
+
+      // Stretch only thin edge strips into the free top/bottom/side bands.
+      // This removes black bars without changing playable coordinates.
+      var sh=Math.max(1,Math.floor(ih*.16)),sw=Math.max(1,Math.floor(iw*.16));
+      if(oy>1){
+        ctx.drawImage(mapImg,0,0,iw,sh,ox,0,size,oy+2);
+        ctx.drawImage(mapImg,0,ih-sh,iw,sh,ox,oy+size-2,size,H-(oy+size)+2);
+      }
+      if(ox>1){
+        ctx.drawImage(mapImg,0,0,sw,ih,0,oy,ox+2,size);
+        ctx.drawImage(mapImg,iw-sw,0,sw,ih,ox+size-2,oy,W-(ox+size)+2,size);
+      }
+      ctx.drawImage(mapImg,ox,oy,size,size);
+    }catch(_){
+      ctx.drawImage(mapImg,ox,oy,size,size);
+    }
   }
   function resize(){
     if(!cv)return;
@@ -229,7 +262,16 @@
       }
       try{
         P.attacking=true;P.anim='attack';P.animFrame=0;P.animTimer=0;P.shootT=1;P.recoil=1;
-        var dx2=boss.x-Number(P.x);if(Math.abs(dx2)>.1)P.face=dx2<0?-1:1;
+        playerAttackStartedAt=now;playerAttackAnimUntil=now+Math.max(320,Math.min(620,Math.round(470/Math.max(.65,rate))));
+        var dx2=boss.x-Number(P.x),dy2=boss.y-Number(P.y);
+        if(Math.abs(dx2)>.1)P.face=dx2<0?-1:1;
+        if(Math.hypot(dx2,dy2)>.01){
+          var oct=Math.round(Math.atan2(dy2,dx2)/(Math.PI/4));
+          playerDir=((oct+2)+8)%8;
+        }
+        if(playerClassKey()==='gnome'){
+          fx.push({type:'cannon',x:Number(P.x),y:Number(P.y)-8,tx:boss.x,ty:boss.y-12,born:now,dur:360});
+        }
       }catch(_){}
       clearSmokeOnAttack();
       return damageBoss(roll.damage,!!roll.crit,'basic');
@@ -340,12 +382,16 @@
     }
 
     if(pendingBasic&&inBasicRange()){moveTarget=null;tryBasicAttack(true)}
-    var mx=Number(P.x)-lastPlayerX,my=Number(P.y)-lastPlayerY;
-    if(Math.hypot(mx,my)>.15){
-      if(Math.abs(mx)>Math.abs(my))playerDir=mx>0?2:6;
-      else playerDir=my>0?4:0;
+    var mx=Number(P.x)-lastPlayerX,my=Number(P.y)-lastPlayerY,md=Math.hypot(mx,my);
+    playerMoving=md>.12;
+    if(playerMoving){
+      var oct=Math.round(Math.atan2(my,mx)/(Math.PI/4));
+      playerDir=((oct+2)+8)%8;
     }else{
-      var f=Number(P.face);if(f<0)playerDir=6;else if(f>0&&(playerDir===6||playerDir===2))playerDir=2;
+      var f=Number(P.face);
+      if(f===-1)playerDir=6;
+      else if(f===1&&(playerDir===6||playerDir===2))playerDir=2;
+      else if(Number.isFinite(f)&&f>=0&&f<=7)playerDir=Math.round(f);
     }
     lastPlayerX=Number(P.x);lastPlayerY=Number(P.y);
   }
@@ -368,14 +414,15 @@
   }
   function drawPlayer(ts,ox,oy,size){
     var px=ox+Number(P.x)/WORLD*size,py=oy+Number(P.y)/WORLD*size;
-    var moving=Math.hypot(Number(P.x)-lastPlayerX,Number(P.y)-lastPlayerY)>.2||!!moveTarget;
-    var anim=(P&&P.attacking)?'attack':(moving?'run':'idle'),drawn=false,key=playerClassKey();
+    var now=Date.now(),attacking=now<playerAttackAnimUntil;
+    if(P&&P.attacking&&!attacking){try{P.attacking=false;P.anim=playerMoving?'run':'idle'}catch(_){}}
+    var anim=attacking?'attack':(playerMoving?'run':'idle'),drawn=false,key=playerClassKey();
     try{
       if(typeof v174AiSpriteCfg==='function'){
         var cfg=v174AiSpriteCfg({aiClass:key,aiAnim:anim}),a=cfg&&cfg.anim;
         if(a&&a.img&&a.img.complete&&a.img.naturalWidth){
           var dir=playerDir,row=cfg.rowMap&&cfg.rowMap[dir]!=null?cfg.rowMap[dir]:0;
-          var frame=Math.floor(ts/(1000/Math.max(1,Number(a.fps)||8)))%Math.max(1,Number(a.frames)||1);
+          var baseTs=attacking?Math.max(0,ts-playerAttackStartedAt):ts;var frame=Math.floor(baseTs/(1000/Math.max(1,Number(a.fps)||8)))%Math.max(1,Number(a.frames)||1);
           var dh=Math.max(58,Math.min(104,size*.092)),dw=dh;if(key==='gnome'){dh*=.78;dw*=.78}
           var flip=(key==='gnome'&&typeof GNOME_FLIP_BY_DIR!=='undefined')?!!GNOME_FLIP_BY_DIR[dir]:false;
           ctx.save();ctx.imageSmoothingEnabled=false;
@@ -422,9 +469,23 @@
     for(var i=fx.length-1;i>=0;i--){
       var f=fx[i],t=(now-f.born)/Math.max(1,f.dur);
       if(t>=1){fx.splice(i,1);continue}
-      var x=ox+f.x/WORLD*size,y=oy+f.y/WORLD*size,r=(24+75*t)/WORLD*size;
+      if(f.type==='cannon'){
+        var ease=1-Math.pow(1-Math.max(0,Math.min(1,t)),2);
+        var wx=f.x+(f.tx-f.x)*ease,wy=f.y+(f.ty-f.y)*ease;
+        var x=ox+wx/WORLD*size,y=oy+wy/WORLD*size;
+        var px=ox+f.x/WORLD*size,py=oy+f.y/WORLD*size;
+        ctx.save();
+        ctx.globalAlpha=.36*(1-t);ctx.strokeStyle='#ffb34f';ctx.lineWidth=Math.max(3,size*.006);
+        ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(x,y);ctx.stroke();
+        ctx.globalAlpha=1;ctx.shadowBlur=Math.max(6,size*.012);ctx.shadowColor='#ff9f35';
+        ctx.fillStyle='#261812';ctx.strokeStyle='#f1a04b';ctx.lineWidth=Math.max(1.5,size*.0025);
+        ctx.beginPath();ctx.arc(x,y,Math.max(4,size*.008),0,Math.PI*2);ctx.fill();ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+      var x2=ox+f.x/WORLD*size,y2=oy+f.y/WORLD*size,r=(24+75*t)/WORLD*size;
       ctx.save();ctx.globalAlpha=Math.max(0,1-t);ctx.strokeStyle='#d6a35d';ctx.lineWidth=Math.max(2,size*.003);
-      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.stroke();ctx.restore();
+      ctx.beginPath();ctx.arc(x2,y2,r,0,Math.PI*2);ctx.stroke();ctx.restore();
     }
   }
   function drawHud(size,W){
@@ -443,7 +504,7 @@
     updatePlayer(now,dt);bossAI(now,dt);syncProxy();
 
     var W=cv.width,H=cv.height,size=Math.min(W,H),ox=(W-size)/2,oy=(H-size)/2;
-    ctx.fillStyle='#090604';ctx.fillRect(0,0,W,H);ctx.drawImage(mapImg,ox,oy,size,size);
+    drawExtendedMap(W,H,size,ox,oy);
     drawSkill(ox,oy,size,now);drawBoss(ts,ox,oy,size);drawPlayer(ts,ox,oy,size);drawFx(ox,oy,size,now);drawHud(size,W);
 
     var tag=document.getElementById('ppaMimicArenaTag');
@@ -454,29 +515,55 @@
     raf=requestAnimationFrame(drawFrame);
   }
   function materializeExtraRewards(res){
-    if(!res||!P)return;
+    var labels=[];
+    if(!res||!P)return labels;
     var src={x:Number(P.x)||500,y:Number(P.y)||840,lvl:level,isBoss:true};
     try{
       if(Array.isArray(res.premiumStones)&&typeof pushStoneDrop==='function'){
-        res.premiumStones.forEach(function(q){pushStoneDrop(src,'premium',Math.max(1,Math.floor(Number(q)||1)))});
+        res.premiumStones.forEach(function(q){
+          q=Math.max(1,Math.floor(Number(q)||1));pushStoneDrop(src,'premium',q);
+          labels.push('💎 Премиум камень заточки ×'+q);
+        });
       }
     }catch(_){}
     try{
       if(res.premiumPotion&&typeof v232PushConsumable==='function'&&typeof PPA_V172_ART!=='undefined'){
-        if(Math.random()<.5)v232PushConsumable(src,'premiumHpRegen','Премиум банка HP',PPA_V172_ART.premiumHp,'❤','#ff6a72',1);
-        else v232PushConsumable(src,'premiumMpRegen','Премиум банка MP',PPA_V172_ART.premiumMp,'◆','#6ea7ff',1);
+        if(Math.random()<.5){v232PushConsumable(src,'premiumHpRegen','Премиум банка HP',PPA_V172_ART.premiumHp,'❤','#ff6a72',1);labels.push('❤ Премиум банка HP ×1')}
+        else{v232PushConsumable(src,'premiumMpRegen','Премиум банка MP',PPA_V172_ART.premiumMp,'◆','#6ea7ff',1);labels.push('◆ Премиум банка MP ×1')}
       }
     }catch(_){}
+    return labels;
+  }
+  function rewardTierName(lv){return Number(lv)>=60?'RARE':(Number(lv)>=40?'UNCOMMON':'COMMON')}
+  function showVictoryRewards(res,extraLabels){
+    try{
+      ensureRoot();
+      var body=document.getElementById('ppaMimicRewardBody');if(!body||!rewardPanel)return;
+      var html=[],tier=rewardTierName(level);
+      if(res&&res.gear&&res.gear.item){
+        var it=res.gear.item,where=String(res.gear.where||'премиум-хранилище');
+        html.push('<div style="margin:8px 0;padding:10px;border:1px solid rgba(255,211,106,.45);border-radius:8px;background:rgba(255,211,106,.06)"><div style="color:#ffd36a;font-size:13px">🎁 Выпала часть сета Мимика — <b>'+tier+'</b></div><div style="margin-top:4px;color:#fff0c6">'+String(it.name||'Часть сета Мимика')+'</div><div style="margin-top:5px;color:#9dff91">Шмот отправлен в '+where+'</div></div>');
+      }else{
+        html.push('<div style="margin:8px 0;color:#c8b48f">Часть сета Мимика в этот раз не выпала.</div>');
+      }
+      (extraLabels||[]).forEach(function(s){html.push('<div style="margin:5px 0;color:#cfe7ff">'+String(s)+'</div>')});
+      if(!extraLabels||!extraLabels.length)html.push('<div style="margin-top:7px;color:#a99578">Дополнительный дроп не выпал.</div>');
+      html.push('<div style="margin-top:10px;color:#b9a17f;font-size:9px">Награда уже сохранена. Можно спокойно посмотреть результат и выйти.</div>');
+      body.innerHTML=html.join('');
+      rewardPanel.style.display='flex';
+    }catch(e){console.warn('Mimic reward panel',e)}
   }
   function finishVictory(){
     if(fightDone)return;
-    fightDone=true;boss.dead=true;moveTarget=null;pendingBasic=false;skillCast=null;
+    fightDone=true;boss.dead=true;moveTarget=null;pendingBasic=false;skillCast=null;playerMoving=false;
+    try{P.attacking=false;P.anim='idle'}catch(_){}
+    setCombatControls(false);
     var res=null,a=eventApi();
     try{if(a&&typeof a.rollBossRewards==='function')res=a.rollBossRewards(level)}catch(e){console.warn('Mimic reward roll',e)}
-    materializeExtraRewards(res);
-    toast('🎭 МИМИК-САМБРЕРО ПОВЕРЖЕН · награда рассчитана','#9dff91');
+    var extraLabels=materializeExtraRewards(res);
+    toast('🎭 МИМИК-САМБРЕРО ПОВЕРЖЕН!','#9dff91');
+    showVictoryRewards(res,extraLabels);
     try{if(typeof saveGame==='function')saveGame()}catch(_){}
-    setTimeout(function(){if(active)leave(false)},2200);
   }
   function enter(lv){
     lv=[20,40,60].includes(Number(lv))?Number(lv):20;
@@ -492,6 +579,7 @@
       }catch(_){}
       lastPlayerX=500;lastPlayerY=840;playerDir=0;moveTarget=null;pendingBasic=false;
       fightDone=false;playerDead=false;skillCast=null;fx.length=0;attackCaptureAt=0;
+      playerMoving=false;playerAttackStartedAt=0;playerAttackAnimUntil=0;try{if(rewardPanel)rewardPanel.style.display='none'}catch(_){};
       var now=Date.now(),c=combat();nextAttackAt=now+Math.max(700,Number(c.attackEvery)||2200);nextSkillAt=now+randomSkillDelay();
       root.style.display='block';
       hideCurrencyHud();setCombatControls(true);lastControlFix=0;
@@ -519,6 +607,7 @@
     try{cancelAnimationFrame(raf)}catch(_){}
     raf=0;moveTarget=null;pendingBasic=false;skillCast=null;fx.length=0;
     try{if(root)root.style.display='none'}catch(_){}
+    try{if(rewardPanel)rewardPanel.style.display='none'}catch(_){}
     try{var b=document.getElementById('ppaMimicArenaExit');if(b)b.style.display='none'}catch(_){}
     restoreCurrencyHud();setCombatControls(false);
     try{
@@ -544,6 +633,7 @@
     var q=document.getElementById('ppaMimicChoose');if(q)q.remove();
     if(!active)return;
     active=false;cancelAnimationFrame(raf);raf=0;if(root)root.style.display='none';
+    try{if(rewardPanel)rewardPanel.style.display='none'}catch(_){}
     try{var exitBtn=document.getElementById('ppaMimicArenaExit');if(exitBtn)exitBtn.style.display='none'}catch(_){};
     restoreCurrencyHud();setCombatControls(false);
     moveTarget=null;pendingBasic=false;skillCast=null;fx.length=0;
