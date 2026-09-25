@@ -503,7 +503,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       rewards[p.pid]={
         rewardId:id+':'+p.pid,bossId:'clan_boss_1',
         damage:p.damage,rank:0,
-        greenResources:1,blueResources:0,normalStones:2,
+        greenResources:1,blueResources:0,normalStones:4+Math.floor(Math.random()*4),
         clanCoins:3+damageCoins,
         blueGear:false,premiumStone:false,grayRune:false,
         runeRoll:Math.floor(Math.random()*1000000000),
@@ -647,7 +647,11 @@ export class RealtimeHub extends BaseRealtimeHub {
       wsJson(ws,{type:'clan-boss-chest-reject',reason:'Подойди ближе к сундуку.',ts:now});return;
     }
     if(String(chest.state)==='opening'){
-      wsJson(ws,{type:'clan-boss-chest-state',chest:Object.assign({},chest),ts:now});return;
+      if(now>Math.max(0,Number(chest.openAt)||0)+5000){
+        chest.state='closed';chest.openerPid='';chest.openerName='';chest.openStartedAt=0;chest.openAt=0;
+      }else{
+        wsJson(ws,{type:'clan-boss-chest-state',chest:Object.assign({},chest),ts:now});return;
+      }
     }
     chest.state='opening';chest.openerPid=String(a.pid);chest.openerName=cleanName(a.name||'Игрок');
     chest.openStartedAt=now;chest.openAt=now+5000;
@@ -661,8 +665,19 @@ export class RealtimeHub extends BaseRealtimeHub {
     const st=await this.clanBossStored(a.clanId);
     if(!st||!st.chest||String(st.chest.state)!=='opening')return;
     const room=clanBossRoom(st.clanId,st.bossId);
+    if(String(st.chest.openerPid||'')!==String(a.pid||'')){
+      if(ws)wsJson(ws,{type:'clan-boss-chest-reject',reason:'Сундук открывает другой участник.',ts:now});return;
+    }
     if(now<Math.max(0,Number(st.chest.openAt)||0)){
       if(ws)wsJson(ws,{type:'clan-boss-chest-reject',reason:'Сундук ещё открывается.',ts:now});return;
+    }
+    const dx=(Number(a.x)||0)-(Number(st.chest.x)||0),dy=(Number(a.y)||0)-(Number(st.chest.y)||0);
+    if(Math.hypot(dx,dy)>150){
+      st.chest.state='closed';st.chest.openerPid='';st.chest.openerName='';st.chest.openStartedAt=0;st.chest.openAt=0;
+      st.updatedAt=now;await this.clanBossPersist(st);
+      this.roomBroadcast(room,{type:'clan-boss-chest-state',room,chest:Object.assign({},st.chest),ts:now},null);
+      if(ws)wsJson(ws,{type:'clan-boss-chest-reject',reason:'Открытие сброшено · ты отошёл от сундука.',ts:now});
+      return;
     }
     st.chest.state='opened';st.chest.openedAt=now;
     const distribution=this.clanBossBuildMistressDistribution(st,now);
