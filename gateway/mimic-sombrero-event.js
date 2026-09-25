@@ -17,6 +17,17 @@
     40:{level:40,hp:20000,damage:70,defense:52,rarity:'blue',rewardChance:0.25,title:'Мимик-Самбреро 40',color:'#75b9ff'},
     60:{level:60,hp:50000,damage:160,defense:120,rarity:'epic',rewardChance:0.16,title:'Мимик-Самбреро 60',color:'#d58cff'}
   };
+  var COMBAT={
+    attackEvery:2200,
+    critChance:0.10,
+    critMult:1.5,
+    skillMin:9000,
+    skillMax:12000,
+    skillWindup:800,
+    skillMul:1.2,
+    slowMul:0.80,
+    slowMs:2000
+  };
   var EXTRA_REWARDS={
     20:{stones:[[1,.03],[2,.007]],potion:.03},
     40:{stones:[[1,.04],[2,.01],[3,.0025]],potion:.04},
@@ -182,6 +193,7 @@
     rewardRows:rewardRows,
     rollBossRewards:rollBossRewards,
     extraRewards:EXTRA_REWARDS,
+    combat:COMBAT,
     bonus:setBonus,
     difficulties:DIFF
   };
