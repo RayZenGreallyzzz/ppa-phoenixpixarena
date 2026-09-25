@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v589-grounded-clan-boss-chest-20260925';
+const CLIENT_BUILD = 'v590-guaranteed-clan-boss-pool-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6928,6 +6928,9 @@ if(_ppaClanBossTrackCalls<1){
       !realtimeClient.includes('ТЕСТ · КЛАНОВЫЙ БОСС · ОТКАТ 10 СЕКУНД') ||
       !clanOnline.includes('const CLAN_BOSS_QA_TEST_OPEN=true') ||
       !clanOnline.includes('clanBossUiReadyAt') ||
+      !clanOnline.includes("function progUi(p,id='')") ||
+      !clanOnline.includes("personal=id?Number(by[String(id)])||0") ||
+      !clanOnline.includes('base.clanProgress=progUi(meta.progress,id)') ||
       !realtimeServer.includes("m.type === 'clan-boss-enter'") ||
       !realtimeServer.includes("m.type === 'clan-boss-hit'") ||
       !realtimeServer.includes("m.type === 'clan-boss-reward-ack'") ||
@@ -6936,9 +6939,10 @@ if(_ppaClanBossTrackCalls<1){
       !realtimeServer.includes('clanBossBuildMistressDistribution') ||
       !realtimeServer.includes('clanBossSharedRoll') ||
       !realtimeServer.includes('.filter(x=>x.damage>=5000)') ||
-      !realtimeServer.includes("'blueGear','Синий шмот / оружие',0.12") ||
-      !realtimeServer.includes("'premiumStone','Премиум камень заточки',0.04") ||
-      !realtimeServer.includes("'grayRune','Серая универсальная руна',0.10") ||
+      !realtimeServer.includes("clanBossSharedRoll(eligible,'blueGear','Синий шмот / оружие')") ||
+      !realtimeServer.includes("clanBossSharedRoll(eligible,'premiumStone','Премиум камень заточки')") ||
+      !realtimeServer.includes("clanBossSharedRoll(eligible,'grayRune','Серая универсальная руна')") ||
+      !realtimeServer.includes('const chance=1') ||
       !realtimeServer.includes('normalStones:4+Math.floor(Math.random()*4)') ||
       !realtimeServer.includes("m.type === 'clan-boss-chest-open'") ||
       !realtimeServer.includes("m.type === 'clan-boss-chest-complete'") ||
@@ -7082,9 +7086,9 @@ if(_ppaClanBossTrackCalls<1){
   if (!clanBossLoot.includes('__PPA_CLAN_BOSS_LOOT_V1') ||
       !clanBossLoot.includes("['Участие','от 5 000 урона · +1 зелёный ресурс +3 монеты клана']") ||
       !clanBossLoot.includes("['Обычный камень заточки ×4–7','100% каждому участнику']") ||
-      !clanBossLoot.includes("['Синий шмот / оружие · случайный слот и класс','12% · общий ролл']") ||
-      !clanBossLoot.includes("['Премиум камень заточки ×1','4% · общий ролл']") ||
-      !clanBossLoot.includes("['Серая универсальная руна ×1 · случайный тип','10% · общий ролл']") ||
+      !clanBossLoot.includes("['Синий шмот / оружие · случайный слот и класс','×1 гарантированно · общий ролл']") ||
+      !clanBossLoot.includes("['Премиум камень заточки','×1 гарантированно · общий ролл']") ||
+      !clanBossLoot.includes("['Серая универсальная руна · случайный тип','×1 гарантированно · общий ролл']") ||
       !clanBossLoot.includes("['Последний удар','+10 монет клана +1 синий ресурс']") ||
       !clanBossLoot.includes("['Утешительная · без редкого выигрыша','+1 зелёный ресурс +2 заточки +5 монет']") ||
       !clanBossChest.includes('__PPA_CLAN_BOSS_CHEST_V1') ||
