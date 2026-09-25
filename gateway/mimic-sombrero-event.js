@@ -165,11 +165,14 @@
     var art=(GEAR_SRC[tier]&&GEAR_SRC[tier][slot])||(GEAR_SRC.green&&GEAR_SRC.green[slot])||'';
     it.uid=uid;it.id=uid;it.slot=slot;it.kind='gear';it.type='gear';
     it.name=SLOT_RU[slot]+' Самбреро';it.n=it.name;
-    it.level=level;it.lvl=level;it.rarity=nativeRarity(tier);it.mimicTier=tier;
+    // Stats are generated from the event tier's reference level, but Mimic
+    // equipment itself has NO level label/requirement.
+    delete it.level;delete it.lvl;delete it.reqLevel;delete it.requiredLevel;delete it.minLevel;delete it.needLevel;delete it.levelReq;
+    it.rarity=nativeRarity(tier);it.mimicTier=tier;
     it.classKey='all';it.className='Все классы';it.cls='all';
     it.setId='mimic_sombrero';it.ppaMimicSombrero=true;it.ppaMimicNativeV1=true;
     it.enh=oldEnh;it.sell=0;it.img=art;it.src=art;it.image=art;it.art=art;it.iconArt=art;it.cardArt=art;
-    it.desc='Ивентовый общий сет Мимика-Самбреро · статы как у обычного шмота этой редкости и уровня · подходит всем классам.';
+    it.desc='Ивентовый общий сет Мимика-Самбреро · статы как у обычного шмота этой редкости · подходит всем классам.';
     it.bonusText='Сет Мимика-Самбреро · каждая часть даёт бонус золота и дропа по редкости.';
     try{if(typeof applyEnhancementStats==='function')applyEnhancementStats(it)}catch(_){}
     try{if(typeof syncItemBM==='function')syncItemBM(it)}catch(_){}
@@ -199,7 +202,7 @@
     var changed=false;
     function one(it){
       if(!it||!it.ppaMimicSombrero||it.ppaMimicNativeV1)return;
-      hydrateMimicItem(it,it.level||it.lvl,eventTierFromItem(it),it.slot);changed=true;
+      hydrateMimicItem(it,eventTierFromItem(it)==='epic'?60:(eventTierFromItem(it)==='blue'?40:20),eventTierFromItem(it),it.slot);changed=true;
     }
     function arr(a){if(!Array.isArray(a))return;a.forEach(one)}
     try{
