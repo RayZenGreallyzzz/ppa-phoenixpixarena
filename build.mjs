@@ -95,6 +95,21 @@ for(const name of PPA_RURI_RESOURCE_FILES){
   fs.copyFileSync(path.join(ROOT,'assets-src',name),path.join(assetsDir,name));
 }
 
+const PPA_MIMIC_ARENA_FILES=[
+  'mimic-sombrero-arena.webp',
+  'mimic-sombrero-walk-mask.png',
+  'mimic-sombrero-idle-4x4.webp'
+];
+let ppaMimicArenaAssetCount=0;
+for(const name of PPA_MIMIC_ARENA_FILES){
+  const src=path.join(ROOT,'assets-src',name);
+  if(fs.existsSync(src)&&fs.statSync(src).size>500){
+    fs.copyFileSync(src,path.join(assetsDir,name));
+    ppaMimicArenaAssetCount++;
+  }
+}
+console.log('[PPA BUILD] Mimic Sombrero arena assets: '+ppaMimicArenaAssetCount+'/'+PPA_MIMIC_ARENA_FILES.length+(ppaMimicArenaAssetCount===PPA_MIMIC_ARENA_FILES.length?' ready':' pending upload'));
+
 // V531: canonical Great Ruri poster file itself gets the approved current crystal.
 // No CSS/DOM marker or overlay is needed in the Events UI.
 {
