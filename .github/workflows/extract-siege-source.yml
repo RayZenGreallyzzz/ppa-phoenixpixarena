@@ -1,0 +1,18 @@
+name: Extract siege source
+on:
+  push:
+    branches:
+      - diag-siege-source-20260925
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/extract-siege-context.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: siege-context
+          path: siege-context.txt
