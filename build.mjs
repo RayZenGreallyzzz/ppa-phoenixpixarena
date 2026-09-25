@@ -6812,9 +6812,18 @@ ppaPatchRegex(
 
     try{
       if(typeof showPickup==='function'){
-        var msg='ВЛАДЫЧИЦА · НАГРАДА';
-        if(Number(pkt.clanCoins)>0)msg+=' · монеты клана +'+Math.floor(Number(pkt.clanCoins)||0);
+        var msg='ВЛАДЫЧИЦА · заточка ×'+stones;
+        if(green>0)msg+=' · зел. ×'+green;
+        if(blue>0)msg+=' · син. ×'+blue;
+        if(Number(pkt.clanCoins)>0)msg+=' · монеты +'+Math.floor(Number(pkt.clanCoins)||0);
         showPickup(msg,'#ffd36a');
+        if(pkt.topBonus||pkt.killBonus||pkt.consolation){
+          var extra=[];
+          if(pkt.topBonus)extra.push(String(pkt.topBonus));
+          if(pkt.killBonus)extra.push('последний удар');
+          if(pkt.consolation)extra.push('утешительная');
+          if(extra.length)setTimeout(function(){try{showPickup(extra.join(' · '),'#a9e6ff')}catch(_){}},420);
+        }
       }
     }catch(_){}
     return true;
