@@ -468,9 +468,10 @@ export class RealtimeHub extends BaseRealtimeHub {
       .sort((a,b)=>b.damage-a.damage||String(a.pid).localeCompare(String(b.pid)));
   }
 
-  clanBossSharedRoll(eligible,kind,label,chance) {
-    const dropped=Math.random()<chance;
-    if(!dropped||!eligible.length)return{kind,label,chance,dropped:false,winnerPid:'',winnerName:'',winnerRoll:0,rolls:[]};
+  clanBossSharedRoll(eligible,kind,label) {
+    const chance=1;
+    const dropped=eligible.length>0;
+    if(!dropped)return{kind,label,chance,dropped:false,winnerPid:'',winnerName:'',winnerRoll:0,rolls:[]};
     const rolls=eligible.map(x=>({
       pid:x.pid,name:x.name,damage:x.damage,
       roll:1+Math.floor(Math.random()*100),
@@ -491,9 +492,9 @@ export class RealtimeHub extends BaseRealtimeHub {
     const eligible=this.clanBossEligible(st);
     const id='cbd:'+String(st.clanId||'')+':'+String(st.bossId||'')+':'+String(st.defeatedAt||now);
     const shared=[
-      this.clanBossSharedRoll(eligible,'blueGear','Синий шмот / оружие',0.12),
-      this.clanBossSharedRoll(eligible,'premiumStone','Премиум камень заточки',0.04),
-      this.clanBossSharedRoll(eligible,'grayRune','Серая универсальная руна',0.10)
+      this.clanBossSharedRoll(eligible,'blueGear','Синий шмот / оружие'),
+      this.clanBossSharedRoll(eligible,'premiumStone','Премиум камень заточки'),
+      this.clanBossSharedRoll(eligible,'grayRune','Серая универсальная руна')
     ];
     const rewards={};
     const rareWins={};
