@@ -647,7 +647,12 @@ export class RealtimeHub extends BaseRealtimeHub {
       wsJson(ws,{type:'clan-boss-chest-reject',reason:'Подойди ближе к сундуку.',ts:now});return;
     }
     if(String(chest.state)==='opening'){
-      if(now>Math.max(0,Number(chest.openAt)||0)+5000){
+      const openAt=Math.max(0,Number(chest.openAt)||0);
+      const openerPid=String(chest.openerPid||'');
+      if(now>=openAt&&openerPid===String(a.pid||'')){
+        await this.clanBossFinalizeChest(ws,a,now);return;
+      }
+      if(now>=openAt&&!this.pidInRoom(openerPid,room)){
         chest.state='closed';chest.openerPid='';chest.openerName='';chest.openStartedAt=0;chest.openAt=0;
       }else{
         wsJson(ws,{type:'clan-boss-chest-state',chest:Object.assign({},chest),ts:now});return;
