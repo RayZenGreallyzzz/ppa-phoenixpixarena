@@ -3,7 +3,7 @@
   "private": true,
   "version": "278.0.0",
   "scripts": {
-    "build": "node build.mjs && node tools/postbuild-clan-siege-native-20260925.mjs && node tools/postbuild-pc-input-20260925.mjs && node tools/postbuild-hide-clan-siege-duplicate-leave-20260925.mjs && node tools/postbuild-clan-boss-cerberus-rewards-v2-20260925.mjs && node tools/postbuild-mimic-sombrero-event-20260925.mjs",
+    "build": "node build.mjs && node tools/postbuild-clan-siege-native-20260925.mjs && node tools/postbuild-pc-input-20260925.mjs && node tools/postbuild-hide-clan-siege-duplicate-leave-20260925.mjs && node tools/postbuild-clan-boss-cerberus-rewards-v2-20260925.mjs",
     "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
