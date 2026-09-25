@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V4)return;
-  window.__PPA_MIMIC_SOMBRERO_ARENA_V4=true;
+  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V5)return;
+  window.__PPA_MIMIC_SOMBRERO_ARENA_V5=true;
 
   var MAP_SRC='/assets/mimic-sombrero-arena.webp';
   var MASK_SRC='/assets/mimic-sombrero-walk-mask.png';
@@ -18,6 +18,7 @@
   var bossProxy={__ppaMimicBoss:true,__ppaArenaPlayer:true,isBoss:true,isAiFighter:false,hasPos:true};
   var moveTarget=null,pendingBasic=false,nextAttackAt=0,nextSkillAt=0,skillCast=null;
   var fightDone=false,playerDead=false,attackCaptureAt=0,lastPlayerX=500,lastPlayerY=840,playerDir=4,fx=[];
+  var hiddenHud=[],controlState=[],lastControlFix=0;
 
   function eventApi(){return window.PPA_MIMIC_SOMBRERO_EVENT||null}
   function diff(){
@@ -81,7 +82,7 @@
     // Keep the fail-safe exit OUTSIDE the arena stacking context. Telegram
     // WebViews can otherwise hide/block a child button when the fullscreen
     // arena layer has pointer-events:none or when the native HUD sits above it.
-    exit.style.cssText='position:fixed;left:10px;top:calc(var(--tg-content-safe-area-inset-top,var(--tg-safe-area-inset-top,env(safe-area-inset-top,0px))) + 42px);z-index:2147483000;height:34px;padding:0 13px;border:1px solid #c58435;border-radius:8px;background:rgba(55,25,12,.97);color:#ffd787;box-shadow:0 3px 12px rgba(0,0,0,.72);font:800 10px monospace;pointer-events:auto;touch-action:manipulation;display:none';
+    exit.style.cssText='position:fixed;left:10px;top:76px;z-index:2147483646;height:36px;padding:0 14px;border:1px solid #d18b3b;border-radius:8px;background:rgba(67,28,12,.98);color:#ffe0a0;box-shadow:0 3px 14px rgba(0,0,0,.82);font:900 10px monospace;pointer-events:auto!important;touch-action:manipulation;display:none'
     exit.onclick=function(ev){try{ev.preventDefault();ev.stopPropagation()}catch(_){}safeExit()};
 
     var tag=document.createElement('div');tag.id='ppaMimicArenaTag';
@@ -92,6 +93,68 @@
     // The arena is only the visual layer. Native HUD input stays above it:
     // joystick/touch on mobile and the existing PC input bridge feed jX/jY.
     return root;
+  }
+  function hideCurrencyHud(){
+    hiddenHud.length=0;
+    try{
+      var nodes=Array.prototype.slice.call(document.querySelectorAll('body *')),cand=[];
+      for(var i=0;i<nodes.length;i++){
+        var el=nodes[i];
+        if(!el||el===root||el===cv||el.id==='ppaMimicArenaExit'||el.id==='ppaMimicArenaTag')continue;
+        var txt=String(el.textContent||'').replace(/\s+/g,' ').trim();
+        if(!txt||txt.length>140||txt.indexOf('БМ')<0)continue;
+        var rr=el.getBoundingClientRect();
+        if(rr.width<8||rr.height<8||rr.top>innerHeight*.28||rr.left<innerWidth*.48)continue;
+        cand.push({el:el,area:rr.width*rr.height});
+      }
+      cand.sort(function(a,b){return a.area-b.area});
+      if(cand.length){
+        var target=cand[0].el;
+        for(var j=0;j<3&&target.parentElement&&target.parentElement!==document.body;j++){
+          var p=target.parentElement,pr=p.getBoundingClientRect(),pt=String(p.textContent||'').replace(/\s+/g,' ').trim();
+          if(pr.top<=innerHeight*.30&&pr.left>=innerWidth*.45&&pr.width<=260&&pr.height<=130&&pt.indexOf('БМ')>=0)target=p;else break;
+        }
+        hiddenHud.push({el:target,display:target.style.display,visibility:target.style.visibility});
+        target.style.setProperty('display','none','important');
+      }
+    }catch(_){}
+  }
+  function restoreCurrencyHud(){
+    try{
+      hiddenHud.forEach(function(x){
+        if(!x||!x.el)return;
+        x.el.style.display=x.display||'';
+        x.el.style.visibility=x.visibility||'';
+      });
+    }catch(_){}
+    hiddenHud.length=0;
+  }
+  function rememberControl(el){
+    if(!el)return;
+    for(var i=0;i<controlState.length;i++)if(controlState[i].el===el)return;
+    controlState.push({el:el,disabled:!!el.disabled,pointer:el.style.pointerEvents,opacity:el.style.opacity});
+  }
+  function setCombatControls(on){
+    try{
+      ['bAtk','s1','s2','s3','s4'].forEach(function(id){
+        var el=document.getElementById(id);if(!el)return;
+        rememberControl(el);
+        if(on){
+          try{el.disabled=false}catch(_){}
+          el.style.setProperty('pointer-events','auto','important');
+          el.style.setProperty('opacity','1','important');
+        }
+      });
+      if(!on){
+        controlState.forEach(function(x){
+          if(!x||!x.el)return;
+          try{x.el.disabled=!!x.disabled}catch(_){}
+          x.el.style.pointerEvents=x.pointer||'';
+          x.el.style.opacity=x.opacity||'';
+        });
+        controlState.length=0;
+      }
+    }catch(_){}
   }
   function resize(){
     if(!cv)return;
@@ -376,6 +439,7 @@
     resize();
     var dt=lastTs?Math.max(0,Math.min(50,ts-lastTs)):16;lastTs=ts;
     var now=Date.now();
+    if(now-lastControlFix>500){lastControlFix=now;setCombatControls(true)}
     updatePlayer(now,dt);bossAI(now,dt);syncProxy();
 
     var W=cv.width,H=cv.height,size=Math.min(W,H),ox=(W-size)/2,oy=(H-size)/2;
@@ -430,7 +494,8 @@
       fightDone=false;playerDead=false;skillCast=null;fx.length=0;attackCaptureAt=0;
       var now=Date.now(),c=combat();nextAttackAt=now+Math.max(700,Number(c.attackEvery)||2200);nextSkillAt=now+randomSkillDelay();
       root.style.display='block';
-      try{var exitBtn=document.getElementById('ppaMimicArenaExit');if(exitBtn)exitBtn.style.display='block'}catch(_){}
+      hideCurrencyHud();setCombatControls(true);lastControlFix=0;
+      try{var exitBtn=document.getElementById('ppaMimicArenaExit');if(exitBtn){exitBtn.style.display='block';exitBtn.style.visibility='visible';exitBtn.style.opacity='1'}}catch(_){}
       active=true;lastTs=0;cancelAnimationFrame(raf);raf=requestAnimationFrame(drawFrame);
       toast('МИМИК '+level+' · HP '+boss.mhp.toLocaleString('ru-RU')+' · DEF '+boss.def,'#ffd36a');
       try{if(typeof saveGame==='function')saveGame()}catch(_){}
@@ -455,6 +520,7 @@
     raf=0;moveTarget=null;pendingBasic=false;skillCast=null;fx.length=0;
     try{if(root)root.style.display='none'}catch(_){}
     try{var b=document.getElementById('ppaMimicArenaExit');if(b)b.style.display='none'}catch(_){}
+    restoreCurrencyHud();setCombatControls(false);
     try{
       if(P){P.tid=null;P.scene='safe'}
       if(typeof changeScene==='function')changeScene('safe');
@@ -479,6 +545,7 @@
     if(!active)return;
     active=false;cancelAnimationFrame(raf);raf=0;if(root)root.style.display='none';
     try{var exitBtn=document.getElementById('ppaMimicArenaExit');if(exitBtn)exitBtn.style.display='none'}catch(_){};
+    restoreCurrencyHud();setCombatControls(false);
     moveTarget=null;pendingBasic=false;skillCast=null;fx.length=0;
     try{
       if(P){
@@ -494,11 +561,13 @@
   }
 
   function wrapCombatHooks(){
-    if(window.__PPA_MIMIC_COMBAT_HOOKS_V3)return;
-    window.__PPA_MIMIC_COMBAT_HOOKS_V3=true;
+    if(window.__PPA_MIMIC_COMBAT_HOOKS_V5)return;
+    window.__PPA_MIMIC_COMBAT_HOOKS_V5=true;
     var baseTarget=window.PPA_ARENA_SKILL_TARGET;
     var baseAround=window.PPA_ARENA_AROUND_TARGET;
     var baseHit=window.PPA_ARENA_SKILL_HIT;
+    var baseTrigger=window.triggerAttackInput;
+    var baseQueue=window.queueAttack;
 
     window.PPA_ARENA_SKILL_TARGET=function(maxRange){
       if(active&&!fightDone&&!boss.dead){
@@ -526,10 +595,18 @@
       }
       return typeof baseHit==='function'?baseHit.apply(this,arguments):false;
     };
+    window.triggerAttackInput=function(){
+      if(active)return tryBasicAttack(false);
+      return typeof baseTrigger==='function'?baseTrigger.apply(this,arguments):false;
+    };
+    window.queueAttack=function(){
+      if(active)return tryBasicAttack(false);
+      return typeof baseQueue==='function'?baseQueue.apply(this,arguments):false;
+    };
   }
   function bindAttackButton(){
-    if(window.__PPA_MIMIC_ATTACK_CAPTURE_V3)return;
-    window.__PPA_MIMIC_ATTACK_CAPTURE_V3=true;
+    if(window.__PPA_MIMIC_ATTACK_CAPTURE_V5)return;
+    window.__PPA_MIMIC_ATTACK_CAPTURE_V5=true;
     var blockUntil=0;
     function hit(ev){
       try{var t=ev&&ev.target;return !!(t&&((t.id==='bAtk')||(t.closest&&t.closest('#bAtk'))))}catch(_){return false}
