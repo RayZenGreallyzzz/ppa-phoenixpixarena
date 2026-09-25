@@ -3,7 +3,7 @@
   if(window.__PPA_CLAN_SIEGE_FIX_V1)return;
   window.__PPA_CLAN_SIEGE_FIX_V1=true;
 
-  var captured=false,wrappedHandler=null,exitBtn=null,compactHud=null,hudSource=null,qaBtn=null,nativeHudShifted=null;
+  var captured=false,wrappedHandler=null,exitBtn=null,compactHud=null,hudSource=null,qaBtn=null;
   var drawInstalled=false,castleImage=null,candidates=new Map(),lastScene='';
   var CLAN_SIEGE_QA_TEST_OPEN=true;
   window.PPA_CLAN_SIEGE_QA_TEST_OPEN=CLAN_SIEGE_QA_TEST_OPEN;
@@ -137,45 +137,6 @@
     if(compactHud)compactHud.style.display='none';
   }
 
-  function restoreNativeSiegeHud(){
-    try{
-      if(nativeHudShifted&&nativeHudShifted.isConnected&&nativeHudShifted.dataset.ppaSiegeShifted==='1'){
-        nativeHudShifted.style.translate=nativeHudShifted.dataset.ppaSiegeOldTranslate||'';
-        delete nativeHudShifted.dataset.ppaSiegeShifted;
-        delete nativeHudShifted.dataset.ppaSiegeOldTranslate;
-      }
-    }catch(_){}
-    nativeHudShifted=null;
-  }
-
-  function shiftNativeSiegeHud(){
-    if(!inSiege()){restoreNativeSiegeHud();return null}
-    try{
-      var nodes=document.querySelectorAll('div,section,aside,header');
-      var best=null,bestScore=-1;
-      for(var i=0;i<nodes.length;i++){
-        var el=nodes[i],t='';
-        try{t=String(el.textContent||'').replace(/\s+/g,' ').trim().toUpperCase()}catch(_){continue}
-        if(!t||t.length>220)continue;
-        var siegeText=t.indexOf('КРИСТАЛЛ')>=0||(t.indexOf('ЗАХВАТ')>=0&&(t.indexOf('ATK')>=0||t.indexOf('DEF')>=0));
-        if(!siegeText)continue;
-        var r;try{r=el.getBoundingClientRect()}catch(_){continue}
-        if(r.top>145||r.bottom<0||r.width<220||r.width>620||r.height<16||r.height>120)continue;
-        var score=r.width-(r.height*1.5)-Math.abs(r.top-6)*1.5;
-        if(score>bestScore){best=el;bestScore=score}
-      }
-      if(!best)return null;
-      if(nativeHudShifted&&nativeHudShifted!==best)restoreNativeSiegeHud();
-      nativeHudShifted=best;
-      if(best.dataset.ppaSiegeShifted!=='1'){
-        best.dataset.ppaSiegeOldTranslate=best.style.translate||'';
-        best.dataset.ppaSiegeShifted='1';
-      }
-      best.style.translate='-30px 0px';
-      return best;
-    }catch(_){return null}
-  }
-
   function captureHudCandidate(){
     if(!inSiege())return null;
     if(hudSource&&hudSource.isConnected)return hudSource;
@@ -184,7 +145,7 @@
     for(var i=0;i<nodes.length;i++){
       var el=nodes[i],t='';
       try{t=String(el.textContent||'').replace(/\s+/g,' ').trim()}catch(_){continue}
-      if(t.indexOf('ЗАХВАТ')<0||t.indexOf('ATK')<0||t.indexOf('DEF')<0)continue;
+      var capturePhase=t.indexOf('ЗАХВАТ')>=0&&(t.indexOf('ATK')>=0||t.indexOf('DEF')>=0);\n      var crystalPhase=t.indexOf('КРИСТАЛЛ')>=0;\n      if(!capturePhase&&!crystalPhase)continue;
       var r;try{r=el.getBoundingClientRect()}catch(_){continue}
       if(r.top>145||r.bottom<0||r.width<240||r.height<18||r.height>115)continue;
       var score=r.width-(r.height*1.8);
@@ -334,10 +295,9 @@
     wrapSiegeHandler();installDrawGuard();
     if(inSiege()){
       var now=Date.now();
-      if(now-scanAt>180){scanAt=now;shiftNativeSiegeHud();updateCompactHud();if(captured)removeCastleEntities();installQaButton()}
+      if(now-scanAt>180){scanAt=now;updateCompactHud();if(captured)removeCastleEntities();installQaButton()}
       if(captured&&exitBtn)exitBtn.style.display='block';
     }else{
-      restoreNativeSiegeHud();
       if(exitBtn)exitBtn.style.display='none';
       var now2=Date.now();if(now2-scanAt>220){scanAt=now2;installQaButton()}
     }

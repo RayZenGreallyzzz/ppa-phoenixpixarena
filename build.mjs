@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v595-clan-siege-native-hud-left-30-20260925';
+const CLIENT_BUILD = 'v596-clan-siege-compact-hud-shift-only-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -7030,8 +7030,8 @@ if(_ppaClanBossTrackCalls<1){
       !clanSiegeFix.includes('PPA_CLAN_SIEGE_QA_ENTER=qaEnterSiege') ||
       !clanSiegeFix.includes("changeScene('clansiege')") ||
       !clanSiegeFix.includes('ТЕСТ · ВОЙТИ СНОВА') ||
-      !clanSiegeFix.includes('shiftNativeSiegeHud') ||
-      !clanSiegeFix.includes("best.style.translate='-30px 0px'") ||
+      !clanSiegeFix.includes("var crystalPhase=t.indexOf('КРИСТАЛЛ')>=0") ||
+      !clanSiegeFix.includes('left:calc(60% - 30px)') ||
       !realtimeClient.includes("String(P.scene||'')==='clansiege'") ||
       !realtimeClient.includes("el.style.right='8px';el.style.top='58px'")) {
     throw new Error('Clan siege capture/UI fix incomplete');
