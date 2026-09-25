@@ -92,13 +92,13 @@ let html = fs.readFileSync(indexPath, 'utf8');
 const before = html;
 
 // Force a fresh client cache key for this clean native siege build.
-html = html.split('v602-clan-siege-exit-visible-20260925').join('v603-clan-siege-native-clean-20260925');
+html = html.split('v602-clan-siege-exit-visible-20260925').join('v604-clan-siege-native-leave-20260925');
 
-// Remove the duplicate generated exit button state. The original siege exit button remains native.
+// Remove the old duplicate exit button state, then install one native leave button owned by the HUD.
 html = replaceRequired(
   html,
   "baseStats:null,hud:null,exitBtn:null,hudHtml:'',hudLastAt:0,castleCleared:false",
-  "baseStats:null,hud:null,hudHtml:'',hudLastAt:0",
+  "baseStats:null,hud:null,leaveBtn:null,hudHtml:'',hudLastAt:0",
   'PPA_SIEGE native state cache'
 );
 
@@ -109,6 +109,16 @@ html = replaceAllFunctions(html, 'clanSiegeEnsureHud', `function clanSiegeEnsure
   el.style.cssText='position:fixed;z-index:48;left:calc(60% - 30px);top:6px;transform:translateX(-50%);width:min(330px,54vw);max-width:330px;min-height:29px;box-sizing:border-box;padding:4px 8px;border:1px solid rgba(195,128,45,.7);border-radius:7px;background:rgba(21,18,12,.82);box-shadow:0 2px 9px rgba(0,0,0,.58);color:#e8d9ad;font:700 8px/1.25 monospace;text-align:center;white-space:normal;pointer-events:none;display:none';
   document.body.appendChild(el);
   PPA_SIEGE.hud=el;
+  if(!PPA_SIEGE.leaveBtn||!PPA_SIEGE.leaveBtn.isConnected){
+    const b=document.createElement('button');
+    b.id='clanSiegeLeaveBtn';
+    b.type='button';
+    b.textContent='↩ ВЫЙТИ';
+    b.style.cssText='position:fixed;left:calc(60% - 30px);top:42px;transform:translateX(-50%);z-index:58;display:none;min-width:86px;height:28px;padding:0 10px;border:1px solid #c58435;border-radius:8px;background:linear-gradient(#542815,#2b160d);color:#ffd787;box-shadow:0 3px 12px rgba(0,0,0,.65);font:800 9px monospace;touch-action:manipulation';
+    b.onclick=()=>changeScene('safe');
+    document.body.appendChild(b);
+    PPA_SIEGE.leaveBtn=b;
+  }
   return el;
 }`);
 
@@ -116,14 +126,17 @@ html = removeAllFunctions(html, 'clanSiegeClearCastleObstacles');
 
 html = replaceAllFunctions(html, 'clanSiegeHudUpdate', `function clanSiegeHudUpdate(force=false){
   const h=clanSiegeEnsureHud();
+  const leave=PPA_SIEGE.leaveBtn||null;
   if(P.scene!=='clansiege'||!PPA_SIEGE.active){
     h.style.display='none';
+    if(leave)leave.style.display='none';
     return;
   }
   const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
   if(!force&&now-(PPA_SIEGE.hudLastAt||0)<200)return;
   PPA_SIEGE.hudLastAt=now;
   h.style.display='block';
+  if(leave)leave.style.display='block';
   const alive=EN.filter(e=>e&&e.isClanSiegeCrystal&&e.hp>0).length;
   const b=PPA_SIEGE.bonuses;
   const badges=[
@@ -152,7 +165,7 @@ html = replaceRequired(
 html = replaceRequired(
   html,
   "const h=clanSiegeEnsureHud();h.style.display='none';if(PPA_SIEGE.exitBtn)PPA_SIEGE.exitBtn.style.display='none';",
-  "const h=clanSiegeEnsureHud();h.style.display='none';",
+  "const h=clanSiegeEnsureHud();h.style.display='none';if(PPA_SIEGE.leaveBtn)PPA_SIEGE.leaveBtn.style.display='none';",
   'siege leave duplicate exit hide'
 );
 
@@ -178,6 +191,9 @@ const forbidden = [
 for (const token of forbidden) {
   if (html.includes(token)) throw new Error('Forbidden duplicate/hack token remains: ' + token);
 }
+if (!html.includes("id='clanSiegeLeaveBtn'") || !html.includes('PPA_SIEGE.leaveBtn') || !html.includes("if(leave)leave.style.display='block'") || !html.includes("b.onclick=()=>changeScene('safe')")) {
+  throw new Error('Native clan siege leave button validation failed');
+}
 if (!/if\(PPA_SIEGE\.phase==='castle'\)\{\s*\/\/ Compact round collision sits fully inside the castle footprint\.\s*const c=CLAN_SIEGE_CASTLE_COLLISION;\s*if\(Math\.hypot\(x-c\.x,y-c\.y\)<c\.r\+r\)return false;/.test(html)) {
   throw new Error('Castle collision phase gate validation failed');
 }
@@ -187,5 +203,5 @@ if (/if\(PPA_SIEGE\.phase==='castle'\|\|PPA_SIEGE\.phase==='won'\)\{[\s\S]{0,160
 if (html === before) throw new Error('No changes applied to public/index.html');
 
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] clean native clan siege applied: original exit only, castle collision only in castle phase.');
+console.log('[PPA POSTBUILD] clean native clan siege applied: single leave button, castle collision only in castle phase.');
 console.log('[PPA POSTBUILD] index.html: '+(Buffer.byteLength(html)/1024/1024).toFixed(2)+' MiB');
