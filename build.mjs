@@ -112,6 +112,12 @@ for(const pair of PPA_MIMIC_ARENA_FILES){
   }
 }
 console.log('[PPA BUILD] Mimic Sombrero arena assets: '+ppaMimicArenaAssetCount+'/'+PPA_MIMIC_ARENA_FILES.length+(ppaMimicArenaAssetCount===PPA_MIMIC_ARENA_FILES.length?' ready':' pending .bin upload'));
+const PPA_MIMIC_EVENT_CARD_PATH=path.join(ROOT,'assets-src','mimic-sombrero-event-card.webp');
+if(!fs.existsSync(PPA_MIMIC_EVENT_CARD_PATH)||fs.statSync(PPA_MIMIC_EVENT_CARD_PATH).size<1000){
+  throw new Error('Mimic Sombrero event card missing/invalid: assets-src/mimic-sombrero-event-card.webp');
+}
+fs.copyFileSync(PPA_MIMIC_EVENT_CARD_PATH,path.join(assetsDir,'mimic-sombrero-event-card.webp'));
+console.log('[PPA BUILD] Mimic Sombrero event card: ready');
 
 // V531: canonical Great Ruri poster file itself gets the approved current crystal.
 // No CSS/DOM marker or overlay is needed in the Events UI.
@@ -282,9 +288,11 @@ function ppaEscapeSrcdocCode(code) {
   const titanArtMatch=output.match(/id:&#x27;worldboss_crystal_titan_001&#x27;[\s\S]{0,1600}?bossArt:&#x27;([^&]+?)&#x27;/);
   const titanArt=titanArtMatch?String(titanArtMatch[1]).replace(/^\.\//,'/'):'';
   const ruriArt='/assets/ruri-event-card.webp?v='+CLIENT_BUILD;
+  const mimicArt='/assets/mimic-sombrero-event-card.webp?v='+CLIENT_BUILD;
   let nativeEventsHtml=fs.readFileSync(nativeEventsSrcPath,'utf8')
     .replace(/__PPA_RURI_CARD__/g,ruriArt)
-    .replace(/__PPA_TITAN_ART__/g,titanArt);
+    .replace(/__PPA_TITAN_ART__/g,titanArt)
+    .replace(/__PPA_MIMIC_CARD__/g,mimicArt);
   const nativeEventsEscaped=ppaEscapeSrcdocCode(nativeEventsHtml);
   const eventsFrameRe=/<iframe id="eventsMenuFrame" title="События" srcdoc="[\s\S]*?"><\/iframe>/g;
   const eventsFrameMatches=output.match(eventsFrameRe)||[];
@@ -6810,11 +6818,12 @@ ppaPatchRegex(
 ppaPatchRegex(
   'Great Ruri craft message route',
   /if\(d\.type==='titanShardBuy'\)\{titanShardExchange\(d\.id\);return;\}/,
-  "if(d.type==='titanShardBuy'){titanShardExchange(d.id);return;}\n  if(d.type==='ruriCraft'){ppaRuriCraftFromEvent();return;}\n  if(d.type==='mimicSombreroOpen'){try{if(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.open==='function')window.PPA_MIMIC_SOMBRERO_EVENT.open()}catch(_){ }return;}"
+  "if(d.type==='titanShardBuy'){titanShardExchange(d.id);return;}\n  if(d.type==='ruriCraft'){ppaRuriCraftFromEvent();return;}\n  if(d.type==='mimicSombreroTestToggle'){try{if(typeof window.PPA_SET_MIMIC_SOMBRERO_TEST_MODE==='function')window.PPA_SET_MIMIC_SOMBRERO_TEST_MODE(d.enabled===true);if(typeof sendEventsState==='function')sendEventsState();if(typeof showPickup==='function')showPickup(d.enabled===true?'🎭 МИМИК · ТЕСТ РЕЖИМ ВКЛ':'🎭 МИМИК · ТЕСТ РЕЖИМ ВЫКЛ',d.enabled===true?'#ffd36a':'#b7c0cc')}catch(_){ }return;}\n  if(d.type==='mimicSombreroOpen'){try{if(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.open==='function')window.PPA_MIMIC_SOMBRERO_EVENT.open()}catch(_){ }return;}"
 );
 if(!output.includes('function ppaRuriCraftFromEvent()')||
    !output.includes("d.type==='ruriCraft'")||
    !output.includes("d.type==='mimicSombreroOpen'")||
+   !output.includes("d.type==='mimicSombreroTestToggle'")||
    !output.includes('mimicTickets:')||
    !output.includes('mimicEvent:')||
    !output.includes("Демонический кристалл']=st.resources.demonic-72")||
@@ -7250,6 +7259,7 @@ const filesToPublish = [
   ['gateway/clan-boss-loot.js','clan-boss-loot.js','Clan boss loot helper missing'],
   ['gateway/clan-boss-chest.js','clan-boss-chest.js','Clan boss reward chest UI missing'],
   ['gateway/ruri-event-drops.js','ruri-event-drops.js','Great Ruri event drops missing'],
+  ['gateway/mimic-sombrero-event.js','mimic-sombrero-event.js','Mimic Sombrero event runtime missing'],
   ['gateway/mimic-sombrero-arena.js','mimic-sombrero-arena.js','Mimic Sombrero arena runtime missing'],
   ['gateway/qa-test-access.js','qa-test-access.js','QA dungeon access helper missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
@@ -7278,6 +7288,7 @@ output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"><
 <script src="${js('clan-boss-loot.js')}"></script>
 <script src="${js('clan-boss-chest.js')}"></script>
 <script src="${js('ruri-event-drops.js')}"></script>
+<script src="${js('mimic-sombrero-event.js')}"></script>
 <script src="${js('mimic-sombrero-arena.js')}"></script>
 <script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
@@ -7298,6 +7309,7 @@ console.log('Boss drop boost: /game/boss-drop-boost.js');
 console.log('Clan boss loot: /game/clan-boss-loot.js');
 console.log('Clan boss reward chest: /game/clan-boss-chest.js');
 console.log('Great Ruri event drops: /game/ruri-event-drops.js · TEST ACTIVE');
+console.log('Mimic Sombrero event: /game/mimic-sombrero-event.js · monthly 5-day + QA test mode');
 console.log('Mimic Sombrero arena: /game/mimic-sombrero-arena.js · TEST MAP/IDLE');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
