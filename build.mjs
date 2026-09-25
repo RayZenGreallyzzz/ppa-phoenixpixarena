@@ -4994,7 +4994,8 @@ ppaPatchRegex(
   'rune fusion lexical bridge on blacksmith state',
   /function\s+sendBlacksmithState\(\)\s*\{/,
   `function sendBlacksmithState(){
-  try{ppaInstallRuneFusionLexical()}catch(_){}`
+  try{ppaInstallRuneFusionLexical()}catch(_){}
+  try{if(window.PPA_MIMIC_SOMBRERO_NORMALIZE_GEAR)window.PPA_MIMIC_SOMBRERO_NORMALIZE_GEAR()}catch(_){}`
 );
 
 if(!output.includes("function ppaInstallRuneFusionLexical()") ||
@@ -6723,7 +6724,7 @@ if (!output.includes("const V189_RANK=[0,1,2,3];") ||
 ppaPatchRegex(
   'Great Ruri explicit blacksmith sharpenability',
   /function\s+isSharpenable\(it\)\{return !!\(it&amp;&amp;SHARPENABLE_SLOTS\.includes\(it\.slot\)\);\}/,
-  "function isSharpenable(it){return !!(it&amp;&amp;(SHARPENABLE_SLOTS.includes(it.slot)||it.ruriLegendary===true||it.petName===&#x27;Великий Рури&#x27;));}"
+  "function isSharpenable(it){return !!(it&amp;&amp;(SHARPENABLE_SLOTS.includes(it.slot)||it.ruriLegendary===true||it.petName===&#x27;Великий Рури&#x27;||it.ppaMimicSombrero===true));}"
 );
 ppaPatchRegex(
   'legendary and Great Ruri never burn on sharpening failure',
@@ -6741,8 +6742,9 @@ ppaPatchRegex(
 );
 if(!output.includes("_ppaSafeName") ||
    !output.includes("it.petName===&#x27;Великий Рури&#x27;") ||
+   !output.includes("it.ppaMimicSombrero===true") ||
    output.includes("}else if(it.rarity==='epic'){\n    it.enh=Math.max(0,it.enh-1);")){
-  throw new Error('Legendary / Great Ruri blacksmith safety patch incomplete');
+  throw new Error('Legendary / Great Ruri / Mimic blacksmith safety patch incomplete');
 }
 /* ======================================================================== */
 
