@@ -95,13 +95,22 @@
   function fixOnlineBadge(){
     try{
       var el=document.getElementById('ppaOnlineBadge');if(!el)return;
+      var _siege=false;try{_siege=typeof P!=='undefined'&&P&&String(P.scene||'')==='clansiege'}catch(_){}
       if(mobileUi()){
         el.style.position='fixed';el.style.display='block';el.style.visibility='visible';
-        el.style.left='50%';el.style.right='auto';el.style.top='8px';el.style.transform='translateX(-50%)';
-        el.style.padding='2px 6px';el.style.fontSize='9px';el.style.lineHeight='1.1';el.style.maxWidth='190px';el.style.whiteSpace='nowrap';
-        el.style.opacity='0.95';el.style.pointerEvents='none';el.style.zIndex='9999';
+        if(_siege){
+          el.style.left='auto';el.style.right='8px';el.style.top='58px';el.style.transform='none';
+          el.style.padding='2px 5px';el.style.fontSize='8px';el.style.lineHeight='1.05';el.style.maxWidth='145px';
+        }else{
+          el.style.left='50%';el.style.right='auto';el.style.top='8px';el.style.transform='translateX(-50%)';
+          el.style.padding='2px 6px';el.style.fontSize='9px';el.style.lineHeight='1.1';el.style.maxWidth='190px';
+        }
+        el.style.whiteSpace='nowrap';el.style.opacity='0.95';el.style.pointerEvents='none';el.style.zIndex='9999';
       }else{
-        el.style.position='fixed';el.style.left='8px';el.style.right='auto';el.style.top='8px';el.style.transform='none';
+        el.style.position='fixed';
+        if(_siege){el.style.left='auto';el.style.right='8px';el.style.top='58px';}
+        else{el.style.left='8px';el.style.right='auto';el.style.top='8px';}
+        el.style.transform='none';
         el.style.padding='5px 8px';el.style.fontSize='10px';el.style.lineHeight='normal';el.style.maxWidth='none';el.style.whiteSpace='normal';el.style.opacity='1';el.style.pointerEvents='auto';
       }
     }catch(_){}
