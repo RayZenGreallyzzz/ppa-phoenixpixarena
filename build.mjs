@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v600-clan-siege-native-hud-no-runtime-hacks-20260925';
+const CLIENT_BUILD = 'v600-native-clan-siege-hud-fps-20260925';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -281,23 +281,59 @@ function ppaEscapeSrcdocCode(code) {
 }
 /* ======================================================================== */
 
-
-/* === CLAN SIEGE NATIVE HUD CLEANUP ====================================== */
-// Do not mirror/scan the runtime DOM. Patch the original clan siege HUD once
-// during build so the game creates the compact panel directly.
+/* === NATIVE CLAN SIEGE HUD / PERFORMANCE ================================ */
+// Patch the original V240 siege runtime at build time. No runtime DOM scanners,
+// requestAnimationFrame overlays, or CanvasRenderingContext2D monkey-patching.
 ppaPatchRegex(
-  'native clan siege hud compact style',
-  /el\.style\.cssText='position:fixed;z-index:48;left:50%;top:8px;transform:translateX\(-50%\);min-width:min\(92vw,520px\);max-width:94vw;padding:7px 10px;border:1px solid rgba\(231,177,82,\.62\);border-radius:9px;background:rgba\(7,8,10,\.86\);box-shadow:0 4px 20px rgba\(0,0,0,\.45\);color:#ead8b1;font:9px\/1\.35 monospace;text-align:center;pointer-events:none;display:none'/,
-  "el.style.cssText='position:fixed;z-index:48;left:calc(60% - 30px);top:6px;transform:translateX(-50%);width:min(330px,54vw);max-width:330px;min-height:29px;box-sizing:border-box;padding:4px 8px;border:1px solid rgba(195,128,45,.7);border-radius:7px;background:rgba(21,18,12,.82);box-shadow:0 2px 9px rgba(0,0,0,.58);color:#e8d9ad;font:700 8px/1.25 monospace;text-align:center;white-space:normal;text-shadow:0 1px 2px #000;pointer-events:none;display:none'"
+  'native clan siege state cache',
+  /baseStats:null,hud:null/,
+  "baseStats:null,hud:null,exitBtn:null,hudHtml:'',hudLastAt:0"
 );
-if(output.includes('min-width:min(92vw,520px);max-width:94vw;padding:7px 10px')){
-  throw new Error('Clan siege native wide HUD style still present');
-}
-if(!output.includes('width:min(330px,54vw)')||!output.includes('font:700 8px/1.25 monospace')){
-  throw new Error('Clan siege native compact HUD style missing');
+
+ppaPatchRegex(
+  'native compact clan siege HUD',
+  /function\s+clanSiegeEnsureHud\(\)\{[\s\S]*?document\.body\.appendChild\(el\);PPA_SIEGE\.hud=el;return el;\s*\}/,
+  "function clanSiegeEnsureHud(){\n  if(PPA_SIEGE.hud&&PPA_SIEGE.hud.isConnected)return PPA_SIEGE.hud;\n  const el=document.createElement('div');\n  el.id='clanSiegeHud';\n  el.style.cssText='position:fixed;z-index:48;left:calc(60% - 30px);top:6px;transform:translateX(-50%);width:min(330px,54vw);max-width:330px;min-height:29px;box-sizing:border-box;padding:4px 8px;border:1px solid rgba(195,128,45,.7);border-radius:7px;background:rgba(21,18,12,.82);box-shadow:0 2px 9px rgba(0,0,0,.58);color:#e8d9ad;font:700 8px/1.25 monospace;text-align:center;white-space:normal;pointer-events:none;display:none';\n  document.body.appendChild(el);\n  PPA_SIEGE.hud=el;\n  if(!PPA_SIEGE.exitBtn||!PPA_SIEGE.exitBtn.isConnected){\n    const b=document.createElement('button');\n    b.id='clanSiegeExitNative';b.type='button';b.textContent='↩ ВЫЙТИ';\n    b.style.cssText='position:fixed;right:12px;top:108px;z-index:58;display:none;min-width:96px;height:34px;padding:0 11px;border:1px solid #c58435;border-radius:8px;background:linear-gradient(#542815,#2b160d);color:#ffd787;box-shadow:0 3px 12px rgba(0,0,0,.65);font:800 10px monospace;touch-action:manipulation';\n    b.onclick=()=>changeScene('safe');\n    document.body.appendChild(b);PPA_SIEGE.exitBtn=b;\n  }\n  return el;\n}"
+);
+
+ppaPatchRegex(
+  'native throttled clan siege HUD update',
+  /function\s+clanSiegeHudUpdate\(\)\{[\s\S]*?h\.innerHTML='<b>'\+phase\+'<\/b><br><span style="color:#aeb7bd">'\+badges\+'<\/span>';\s*\}/,
+  "function clanSiegeHudUpdate(force=false){\n  const h=clanSiegeEnsureHud();\n  const exit=PPA_SIEGE.exitBtn;\n  if(P.scene!=='clansiege'||!PPA_SIEGE.active){\n    h.style.display='none';\n    if(exit)exit.style.display='none';\n    return;\n  }\n  const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();\n  if(!force&&now-(PPA_SIEGE.hudLastAt||0)<200)return;\n  PPA_SIEGE.hudLastAt=now;\n  h.style.display='block';\n  if(exit)exit.style.display=PPA_SIEGE.phase==='won'?'block':'none';\n  const alive=EN.filter(e=>e&&e.isClanSiegeCrystal&&e.hp>0).length;\n  const b=PPA_SIEGE.bonuses;\n  const badges=[\n    b.attack?'🔴+10% ATK':'⚫ СИЛА',\n    b.defense?'🔵+10% DEF':'⚫ ЗАЩИТА',\n    b.hp?'🟢+12% HP':'⚫ ЖИЗНЬ',\n    b.atkspd?'🟣+8% ASPD':'⚫ БЕЗДНА'\n  ].join(' · ');\n  const phase=alive>0?('КРИСТАЛЛЫ: '+alive+' / 4'):\n    (PPA_SIEGE.phase==='won'?('🏰 ЗАМОК ЗАХВАЧЕН · '+PPA_SIEGE.winner):\n      ('🏰 ЗАХВАТ ЗАМКА · '+Math.floor(PPA_SIEGE.captureProgress)+' / '+CLAN_SIEGE_CAPTURE.seconds+' сек · '+(PPA_SIEGE.captureActive?'ИДЁТ ЗАХВАТ':'ВСТАНЬ У КРАЯ')));\n  const html='<b>'+phase+'</b><br><span style=\"color:#aeb7bd\">'+badges+'</span>';\n  if(PPA_SIEGE.hudHtml!==html){\n    PPA_SIEGE.hudHtml=html;\n    h.innerHTML=html;\n  }\n}"
+);
+
+ppaPatchRegex(
+  'native siege HUD reset cache',
+  /PPA_SIEGE\.captureLastAt=Date\.now\(\);PPA_SIEGE\.enemyInZone=false;PPA_SIEGE\.winner='';PPA_SIEGE\.castleShownAt=0;/,
+  "PPA_SIEGE.captureLastAt=Date.now();PPA_SIEGE.enemyInZone=false;PPA_SIEGE.winner='';PPA_SIEGE.castleShownAt=0;PPA_SIEGE.hudHtml='';PPA_SIEGE.hudLastAt=0;"
+);
+
+ppaPatchRegex(
+  'native siege leave hides exit',
+  /const h=clanSiegeEnsureHud\(\);h\.style\.display='none';/,
+  "const h=clanSiegeEnsureHud();h.style.display='none';if(PPA_SIEGE.exitBtn)PPA_SIEGE.exitBtn.style.display='none';"
+);
+
+ppaPatchRegex(
+  'native siege no per-frame HUD work during crystals',
+  /if\(PPA_SIEGE\.phase!=='castle'\)\{PPA_SIEGE\.captureActive=false;clanSiegeHudUpdate\(\);return\}/,
+  "if(PPA_SIEGE.phase!=='castle'){PPA_SIEGE.captureActive=false;return}"
+);
+
+ppaPatchRegex(
+  'native castle disappears after capture',
+  /(function\s+drawClanSiegeWorld\(\)\{[\s\S]{0,500}?)if\(PPA_SIEGE\.phase==='castle'\|\|PPA_SIEGE\.phase==='won'\)\{/,
+  "$1if(PPA_SIEGE.phase==='castle'){"
+);
+
+if(!output.includes("id='clanSiegeHud'") ||
+   !output.includes("id='clanSiegeExitNative'") ||
+   !output.includes("PPA_SIEGE.hudLastAt") ||
+   !output.includes("left:calc(60% - 30px)") ||
+   !output.includes("if(PPA_SIEGE.phase!=='castle'){PPA_SIEGE.captureActive=false;return}")){
+  throw new Error('Native clan siege HUD/performance patch incomplete');
 }
 /* ======================================================================== */
-
 /* === TIGHT MELEE BASIC RANGES =========================================== */
 // Basic melee is intentionally short. These values are center-to-center
 // acquisition/hit ranges before the small target-body allowance below.
@@ -6901,7 +6937,6 @@ if(_ppaClanBossTrackCalls<1){
   const bossDropBoost=fs.readFileSync(path.join(ROOT,'gateway/boss-drop-boost.js'),'utf8');
   const clanBossLoot=fs.readFileSync(path.join(ROOT,'gateway/clan-boss-loot.js'),'utf8');
   const clanBossChest=fs.readFileSync(path.join(ROOT,'gateway/clan-boss-chest.js'),'utf8');
-  const clanSiegeFix=fs.readFileSync(path.join(ROOT,'gateway/clan-siege-fixes.js'),'utf8');
   const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
   const mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');
@@ -7038,15 +7073,12 @@ if(_ppaClanBossTrackCalls<1){
       !output.includes("o.img=a;o.image=a;o.art=a")) {
     throw new Error('Legendary real-file all-UI runtime incomplete');
   }
-  if (!clanSiegeFix.includes('__PPA_CLAN_SIEGE_FIX_DISABLED_V600') ||
-      clanSiegeFix.includes('requestAnimationFrame(tick)') ||
-      clanSiegeFix.includes('querySelectorAll') ||
-      clanSiegeFix.includes('CanvasRenderingContext2D') ||
-      !output.includes('width:min(330px,54vw)') ||
-      output.includes('min-width:min(92vw,520px);max-width:94vw;padding:7px 10px') ||
-      !realtimeClient.includes("if(siege)return Number.isFinite(RT.pingMs)?Math.round(RT.pingMs)+' ms':'… ms'") ||
-      !realtimeClient.includes("el.style.right='8px';el.style.top='58px'")) {
-    throw new Error('Clan siege native HUD cleanup incomplete');
+  if (!output.includes("id='clanSiegeExitNative'") ||
+      !output.includes("PPA_SIEGE.hudLastAt") ||
+      output.includes('/game/clan-siege-fixes.js') ||
+      !realtimeClient.includes("String(P.scene||'')==='clansiege'") ||
+      !realtimeClient.includes("if(siege)return Number.isFinite(RT.pingMs)?Math.round(RT.pingMs)+' ms':'… ms'")) {
+    throw new Error('Native clan siege UI/performance integration incomplete');
   }
   if (!worldCombat.includes('ppaPlayerPkBtn') ||
       !worldCombat.includes('PPA_PK_ACTIVE') ||
@@ -7192,7 +7224,6 @@ const filesToPublish = [
   ['gateway/boss-drop-boost.js','boss-drop-boost.js','Boss drop boost helper missing'],
   ['gateway/clan-boss-loot.js','clan-boss-loot.js','Clan boss loot helper missing'],
   ['gateway/clan-boss-chest.js','clan-boss-chest.js','Clan boss reward chest UI missing'],
-  ['gateway/clan-siege-fixes.js','clan-siege-fixes.js','Clan siege capture/UI fix missing'],
   ['gateway/ruri-event-drops.js','ruri-event-drops.js','Great Ruri event drops missing'],
   ['gateway/qa-test-access.js','qa-test-access.js','QA dungeon access helper missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
@@ -7220,7 +7251,6 @@ output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"><
 <script src="${js('boss-drop-boost.js')}"></script>
 <script src="${js('clan-boss-loot.js')}"></script>
 <script src="${js('clan-boss-chest.js')}"></script>
-<script src="${js('clan-siege-fixes.js')}"></script>
 <script src="${js('ruri-event-drops.js')}"></script>
 <script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
@@ -7240,7 +7270,6 @@ console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
 console.log('Boss drop boost: /game/boss-drop-boost.js');
 console.log('Clan boss loot: /game/clan-boss-loot.js');
 console.log('Clan boss reward chest: /game/clan-boss-chest.js');
-console.log('Clan siege capture/UI fix: /game/clan-siege-fixes.js');
 console.log('Great Ruri event drops: /game/ruri-event-drops.js · TEST ACTIVE');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
