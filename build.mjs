@@ -7060,7 +7060,9 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
    !output.includes("admin_qa_premium_stone_500_v2") ||
    !output.includes("admin_qa_premium_rune_500_v2") ||
    !output.includes("name:'Премиум камень заточки',kind:'stone',refId:'premium'") ||
-   !output.includes("name:'Премиум руна заточки',kind:'stone',refId:'rune'") ||\n   !output.includes("function findQaStone(refId,name,id)") ||\n   !output.includes("return {ok:true,added:added,repaired:repaired||0,total:box.length}")) {
+   !output.includes("name:'Премиум руна заточки',kind:'stone',refId:'rune'") ||
+   !output.includes("function findQaStone(refId,name,id)") ||
+   !output.includes("return {ok:true,added:added,repaired:repaired||0,total:box.length}")) {
   throw new Error('Great Ruri / event reward stock patch incomplete');
 }
 /* ======================================================================== */
