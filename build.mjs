@@ -3555,20 +3555,28 @@ function ppaMimicTapBonusRows(it){
   }catch(_){}
 }
 `);
+  const _ppaMimicTapOpenCountBefore=(output.match(/function\\s+openItemPopup\\(it,[^)]*\\)\\s*\\{/g)||[]).length;
   ppaPatchRegex(
     'character Mimic simple-tap gold/drop stat rows',
-    /function\s+openItemPopup\(it,[^)]*\)\s*\{/,
-    _ppaMimicTapHelper+'/* === HOLD PREVIEW RELEASE + WEBVIEW LONGPRESS =========================== */'+ppaEscapeSrcdocCode(`
+    /function\\s+openItemPopup\\(it,[^)]*\\)\\s*\\{/,
+    function(match){
+      return _ppaMimicTapHelper+match+ppaEscapeSrcdocCode(`
   if(it&&it.ppaMimicSombrero===true){
     queueMicrotask(function(){ppaMimicTapBonusRows(it)});
   }
-`)
+`);
+    }
   );
+  const _ppaMimicTapOpenCountAfter=(output.match(/function\\s+openItemPopup\\(it,[^)]*\\)\\s*\\{/g)||[]).length;
+  if(!_ppaMimicTapOpenCountBefore||_ppaMimicTapOpenCountAfter!==_ppaMimicTapOpenCountBefore){
+    throw new Error('Character openItemPopup structure changed while adding Mimic stat rows');
+  }
 }
 if(!output.includes('PPA_MIMIC_TAP_STATS_V4') ||
    !output.includes(ppaEscapeSrcdocCode("add('Бонус золота',fmt(gold))")) ||
-   !output.includes(ppaEscapeSrcdocCode("add('Бонус дропа',fmt(drop))"))) {
-  throw new Error('Character Mimic simple-tap stat rows did not apply');
+   !output.includes(ppaEscapeSrcdocCode("add('Бонус дропа',fmt(drop))")) ||
+   !(output.match(/function\\s+openItemPopup\\(it,[^)]*\\)\\s*\\{/g)||[]).length) {
+  throw new Error('Character Mimic simple-tap stat rows did not apply without preserving native popup');
 }
 /* ======================================================================== */
 

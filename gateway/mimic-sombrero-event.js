@@ -231,17 +231,10 @@
       if(SLOTS.indexOf(slot)<0)slot=SLOTS[0];
       var wanted=(GEAR_SRC[tier]&&GEAR_SRC[tier][slot])||(GEAR_SRC.green&&GEAR_SRC.green[slot])||'';
       var current=String(it.img||it.src||it.image||it.art||it.iconArt||it.cardArt||'');
-      if(it.ppaMimicNativeV1&&Number(it.ppaMimicArtV)===2&&Number(it.ppaMimicStatsV)===3&&current===wanted){
-        try{
-          if(it.enhBaseStats&&typeof it.enhBaseStats==='object'&&typeof applyEnhancementStats==='function'){
-            var _before=JSON.stringify(it.stats||{});
-            applyEnhancementStats(it);
-            if(typeof syncItemBM==='function')syncItemBM(it);
-            if(JSON.stringify(it.stats||{})!==_before)changed=true;
-          }
-        }catch(_){}
-        return;
-      }
+      // Already-normalized Mimic gear is a zero-work fast path.
+      // Enhancement recalculation belongs to hydrateMimicItem() and the native
+      // blacksmith success/failure path only, never to startup/maintenance scans.
+      if(it.ppaMimicNativeV1&&Number(it.ppaMimicArtV)===2&&Number(it.ppaMimicStatsV)===3&&current===wanted)return;
       var lvl=tier==='epic'?60:(tier==='blue'?40:20);
       hydrateMimicItem(it,lvl,tier,slot);
       changed=true;
