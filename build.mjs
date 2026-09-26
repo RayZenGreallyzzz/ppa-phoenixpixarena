@@ -140,21 +140,35 @@ for(const [rarity,cfg] of Object.entries(PPA_MIMIC_GEAR_STRIPS)){
   const src=path.join(ROOT,'assets-src',cfg.file);
   if(!fs.existsSync(src))throw new Error('Approved Mimic gear strip missing: assets-src/'+cfg.file);
   const meta=await sharp(src).metadata();
-  if(meta.format!=='png'||meta.width!==cfg.width||meta.height!==cfg.height||!meta.hasAlpha){
-    throw new Error('Approved Mimic gear strip must be transparent PNG '+cfg.width+'x'+cfg.height+': '+cfg.file);
+  if(meta.format!=='png'||!meta.width||!meta.height){
+    throw new Error('Approved Mimic gear strip must be a valid PNG: '+cfg.file);
   }
   if(!Array.isArray(cfg.cuts)||cfg.cuts.length!==6||cfg.cuts[0]!==0||cfg.cuts[5]!==cfg.width){
     throw new Error('Invalid Mimic gear slice map: '+rarity);
   }
+
+  // The user's approved PNG may be re-encoded by GitHub/Telegram tooling with
+  // slightly different pixel dimensions. Use the approved master coordinates
+  // as ratios, then map them onto the actual decoded image dimensions.
+  const xScale=meta.width/cfg.width;
+  const liveCuts=cfg.cuts.map((x,idx)=>{
+    if(idx===0)return 0;
+    if(idx===cfg.cuts.length-1)return meta.width;
+    return Math.max(1,Math.min(meta.width-1,Math.round(x*xScale)));
+  });
+  console.log('[PPA BUILD] Mimic '+rarity+' strip: '+meta.width+'x'+meta.height+
+    ' alpha='+(meta.hasAlpha?'yes':'no')+' cuts='+liveCuts.join(','));
+
   for(let i=0;i<PPA_MIMIC_GEAR_SLOTS.length;i++){
     const slot=PPA_MIMIC_GEAR_SLOTS[i];
-    const left=cfg.cuts[i],right=cfg.cuts[i+1];
+    const left=liveCuts[i],right=liveCuts[i+1];
+    if(right<=left)throw new Error('Invalid live Mimic slice '+rarity+' '+slot+': '+left+'..'+right);
     const outPath=path.join(PPA_MIMIC_GEAR_DIR,'mimic-sombrero-'+rarity+'-'+slot+'.webp');
     // Keep extract and trim in separate Sharp pipelines. Sharp may reorder
     // geometry operations inside one lazy pipeline, which can make extract run
     // against the already-trimmed canvas and throw "extract_area: bad extract area".
     const slice=await sharp(src)
-      .extract({left:left,top:0,width:right-left,height:cfg.height})
+      .extract({left:left,top:0,width:right-left,height:meta.height})
       .png()
       .toBuffer();
     const piece=await sharp(slice)
