@@ -34,9 +34,6 @@ function finite(v, min, max, fallback = 0) {
 }
 
 const CLAN_BOSS_RESPAWN_MS = 12 * 60 * 60 * 1000;
-const CLAN_BOSS_QA_TEST_OPEN = true;
-const CLAN_BOSS_QA_RESPAWN_MS = 10 * 1000;
-function clanBossRespawnMs(){return CLAN_BOSS_QA_TEST_OPEN?CLAN_BOSS_QA_RESPAWN_MS:CLAN_BOSS_RESPAWN_MS}
 const CLAN_BOSS_CONFIG = Object.freeze({
   clan_boss_1: Object.freeze({ id:'clan_boss_1', mhp:5000000 }),
   clan_boss_2: Object.freeze({ id:'clan_boss_2', mhp:45000000 }),
@@ -403,8 +400,8 @@ export class RealtimeHub extends BaseRealtimeHub {
       status:active?'fighting':(respawnAt>now?'cooldown':'ready'),
       startedAt:Number(st.startedAt)||0,updatedAt:Number(st.updatedAt)||0,
       defeatedAt:Number(st.defeatedAt)||0,cooldownUntil:respawnAt,bossReadyAt:respawnAt,
-      lastEvent:active?'Рейд идёт':(respawnAt>now?(CLAN_BOSS_QA_TEST_OPEN?'ТЕСТ · босс восстанавливается 10 секунд':'Босс повержен · откат 12 часов'):'Босс готов'),
-      qaTest:CLAN_BOSS_QA_TEST_OPEN,respawnMs:clanBossRespawnMs(),
+      lastEvent:active?'Рейд идёт':(respawnAt>now?'Босс повержен · откат 12 часов':'Босс готов'),
+      respawnMs:CLAN_BOSS_RESPAWN_MS,
       chest,
       enterScene:'clanboss1'
     };
@@ -441,11 +438,8 @@ export class RealtimeHub extends BaseRealtimeHub {
       return;
     }
 
-    const metaCooldown=CLAN_BOSS_QA_TEST_OPEN?0:await this.clanBossCooldownFromMeta(member.clanId);
+    const metaCooldown=await this.clanBossCooldownFromMeta(member.clanId);
     let st=await this.clanBossStored(member.clanId);
-    // QA must start from a clean realtime raid, not inherit a stale 12h state
-    // created by an older production-style build.
-    if(CLAN_BOSS_QA_TEST_OPEN&&st&&st.qaMode!==true)st=null;
     if(st&&String(st.status)==='active'&&Number(st.hp)>0&&String(st.bossId)!==cfg.id){
       wsJson(ws,{type:'clan-boss-reject',requestId,reason:'Другой клановый босс уже активен.',bossState:this.clanBossPublicState(st,clanBossRoom(st.clanId,st.bossId),a,now),ts:now});
       return;
@@ -472,7 +466,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     const storedCooldown=st?Math.max(0,Number(st.respawnAt)||0):0;
     const cooldown=Math.max(metaCooldown,storedCooldown);
     if(cooldown>now&&!(st&&String(st.status)==='active'&&Number(st.hp)>0)){
-      const coolState=st||{clanId:member.clanId,bossId:cfg.id,hp:0,mhp:cfg.mhp,status:'cooldown',startedAt:0,updatedAt:now,defeatedAt:cooldown-clanBossRespawnMs(),respawnAt:cooldown,damageByPid:{},telegramByPid:{},nameByPid:{},rewardsByPid:{},qaMode:CLAN_BOSS_QA_TEST_OPEN};
+      const coolState=st||{clanId:member.clanId,bossId:cfg.id,hp:0,mhp:cfg.mhp,status:'cooldown',startedAt:0,updatedAt:now,defeatedAt:cooldown-CLAN_BOSS_RESPAWN_MS,respawnAt:cooldown,damageByPid:{},telegramByPid:{},nameByPid:{},rewardsByPid:{}};
       coolState.status='cooldown';coolState.respawnAt=cooldown;
       if(st)await this.sendClanBossReward(ws,a,st,now);
       wsJson(ws,{type:'clan-boss-reject',requestId,reason:'Босс ещё восстанавливается.',bossState:this.clanBossPublicState(coolState,clanBossRoom(member.clanId,cfg.id),a,now),ts:now});
@@ -485,8 +479,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         hp:cfg.mhp,mhp:cfg.mhp,status:'active',
         startedAt:now,updatedAt:now,defeatedAt:0,respawnAt:0,
         damageByPid:{},telegramByPid:{},nameByPid:{},rewardsByPid:{},
-        chest:null,distribution:null,lastHitPid:'',rewardProgressApplied:false,
-        qaMode:CLAN_BOSS_QA_TEST_OPEN
+        chest:null,distribution:null,lastHitPid:'',rewardProgressApplied:false
       };
       await this.clanBossPersist(st);
     }
@@ -651,7 +644,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       events.unshift({
         id:'ce_'+crypto.randomUUID(),type:'clanBossDefeated',
         playerId:String(a&&a.telegramId||''),playerName:cleanName(a&&a.name||'Игрок'),
-        text:(CLAN_BOSS_QA_TEST_OPEN?'ТЕСТ · клановый босс повержен · откат 10 секунд':'Клановый босс повержен · откат 12 часов')+' · появился сундук',ts:now
+        text:'Клановый босс повержен · откат 12 часов · появился сундук',ts:now
       });
       await this.env.DB.prepare('UPDATE clan_meta SET progress_json=?1,events_json=?2,updated_at=?3 WHERE clan_id=?4')
         .bind(JSON.stringify(progress),JSON.stringify(events.slice(0,300)),now,String(st.clanId)).run();
@@ -802,7 +795,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     let defeated=false;
     if(st.hp<=0){
       defeated=true;
-      st.hp=0;st.status='cooldown';st.defeatedAt=now;st.respawnAt=now+clanBossRespawnMs();st.qaMode=CLAN_BOSS_QA_TEST_OPEN;
+      st.hp=0;st.status='cooldown';st.defeatedAt=now;st.respawnAt=now+CLAN_BOSS_RESPAWN_MS;
       st.lastHitPid=pid;
       st.rewardsByPid={};st.distribution=null;st.rewardProgressApplied=false;
       st.chest={
