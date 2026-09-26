@@ -166,11 +166,15 @@
     if(SLOTS.indexOf(slot)<0)slot=SLOTS[0];
 
     var oldUid=String(it.uid||it.id||''),oldEnh=Math.max(0,Math.floor(Number(it.enh)||0));
-    var native=nativeGearForSlot(level,tier,slot);
+    var native=nativeGearForSlot(level,tier,slot),nativeBaseStats=null;
     if(native&&typeof native==='object'){
+      var _base=(native.enhBaseStats&&typeof native.enhBaseStats==='object')?native.enhBaseStats:native.stats;
+      if(_base&&typeof _base==='object')nativeBaseStats=Object.assign({},_base);
       Object.keys(native).forEach(function(k){it[k]=native[k]});
+      if(nativeBaseStats)it.enhBaseStats=Object.assign({},nativeBaseStats);
     }else{
       if(!it.stats||typeof it.stats!=='object')it.stats={};
+      if(oldEnh<=0&&!it.enhBaseStats)it.enhBaseStats=Object.assign({},it.stats);
     }
 
     var uid=oldUid||('mimic:'+level+':'+slot+':'+Date.now().toString(36)+':'+Math.random().toString(36).slice(2,7));
@@ -227,7 +231,17 @@
       if(SLOTS.indexOf(slot)<0)slot=SLOTS[0];
       var wanted=(GEAR_SRC[tier]&&GEAR_SRC[tier][slot])||(GEAR_SRC.green&&GEAR_SRC.green[slot])||'';
       var current=String(it.img||it.src||it.image||it.art||it.iconArt||it.cardArt||'');
-      if(it.ppaMimicNativeV1&&Number(it.ppaMimicArtV)===2&&Number(it.ppaMimicStatsV)===3&&current===wanted)return;
+      if(it.ppaMimicNativeV1&&Number(it.ppaMimicArtV)===2&&Number(it.ppaMimicStatsV)===3&&current===wanted){
+        try{
+          if(it.enhBaseStats&&typeof it.enhBaseStats==='object'&&typeof applyEnhancementStats==='function'){
+            var _before=JSON.stringify(it.stats||{});
+            applyEnhancementStats(it);
+            if(typeof syncItemBM==='function')syncItemBM(it);
+            if(JSON.stringify(it.stats||{})!==_before)changed=true;
+          }
+        }catch(_){}
+        return;
+      }
       var lvl=tier==='epic'?60:(tier==='blue'?40:20);
       hydrateMimicItem(it,lvl,tier,slot);
       changed=true;

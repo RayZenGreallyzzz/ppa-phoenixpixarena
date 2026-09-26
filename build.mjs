@@ -3508,6 +3508,70 @@ if(!output.includes('PPA_MIMIC_INSPECT_STATS_V3') ||
 }
 /* ======================================================================== */
 
+/* === MIMIC SOMBRERO BONUS ROWS IN CHARACTER TAP POPUP ================== */
+// Character inventory has its own srcdoc popup (openItemPopup), separate from
+// the parent long-hold inspector. Render the exact same two numeric rows there.
+{
+  const _ppaMimicTapHelper=ppaEscapeSrcdocCode(`/* PPA_MIMIC_TAP_STATS_V4 */
+function ppaMimicTapBonusRows(it){
+  try{
+    if(!it||it.ppaMimicSombrero!==true)return;
+    document.querySelectorAll('[data-ppa-mimic-tap-bonus="1"]').forEach(function(x){try{x.remove()}catch(_){}});
+    var gold=Number(it.mimicGoldBonusPct),drop=Number(it.mimicDropBonusPct);
+    if(!Number.isFinite(gold))gold=(Number(it.mimicGoldBonus)||0)*100;
+    if(!Number.isFinite(drop))drop=(Number(it.mimicDropBonus)||0)*100;
+    function fmt(v){
+      v=Math.round((Number(v)||0)*10)/10;
+      return '+'+(Math.abs(v-Math.round(v))<1e-9?String(Math.round(v)):v.toFixed(1))+'%';
+    }
+    var label=null,els=document.querySelectorAll('div,span,label,b');
+    for(var i=0;i<els.length;i++){
+      var el=els[i];
+      if(String(el.textContent||'').trim()!=='Боевая мощь')continue;
+      var r=el.getBoundingClientRect();
+      if(r.width<=0||r.height<=0)continue;
+      label=el;break;
+    }
+    if(!label)return;
+    var row=label.parentElement;
+    while(row&&row.parentElement&&row.children.length<2)row=row.parentElement;
+    if(!row||!row.parentElement)return;
+    var host=row.parentElement;
+    function add(name,value){
+      var clone=row.cloneNode(true);
+      clone.setAttribute('data-ppa-mimic-tap-bonus','1');
+      Array.prototype.forEach.call(clone.querySelectorAll('[id]'),function(x){x.removeAttribute('id')});
+      var kids=clone.children;
+      if(kids&&kids.length>=2){
+        kids[0].textContent=name;
+        kids[kids.length-1].textContent=value;
+      }else{
+        clone.textContent=name+' '+value;
+      }
+      host.insertBefore(clone,row);
+    }
+    add('Бонус золота',fmt(gold));
+    add('Бонус дропа',fmt(drop));
+  }catch(_){}
+}
+`);
+  ppaPatchRegex(
+    'character Mimic simple-tap gold/drop stat rows',
+    /function\s+openItemPopup\(it,[^)]*\)\s*\{/,
+    _ppaMimicTapHelper+'/* === HOLD PREVIEW RELEASE + WEBVIEW LONGPRESS =========================== */'+ppaEscapeSrcdocCode(`
+  if(it&&it.ppaMimicSombrero===true){
+    queueMicrotask(function(){ppaMimicTapBonusRows(it)});
+  }
+`)
+  );
+}
+if(!output.includes('PPA_MIMIC_TAP_STATS_V4') ||
+   !output.includes(ppaEscapeSrcdocCode("add('Бонус золота',fmt(gold))")) ||
+   !output.includes(ppaEscapeSrcdocCode("add('Бонус дропа',fmt(drop))"))) {
+  throw new Error('Character Mimic simple-tap stat rows did not apply');
+}
+/* ======================================================================== */
+
 /* === HOLD PREVIEW RELEASE + WEBVIEW LONGPRESS =========================== */
 // Hold preview lifecycle:
 //  - item card hold start -> parent marks preview mode
