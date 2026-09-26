@@ -53,6 +53,71 @@ function isClanBossRoom(v){return cleanRoom(v).startsWith('clanboss-')}
 function jsonObj(v){try{const x=JSON.parse(String(v||'{}'));return x&&typeof x==='object'&&!Array.isArray(x)?x:{}}catch(_){return{}}}
 function jsonArr(v){try{const x=JSON.parse(String(v||'[]'));return Array.isArray(x)?x:[]}catch(_){return[]}}
 
+const PLAYER_VISIT_SESSION_GAP_MS = 10 * 60 * 1000;
+let playerVisitSchemaReady = false;
+
+async function ensurePlayerVisitSchema(env) {
+  if (playerVisitSchemaReady) return true;
+  if (!env || !env.DB) return false;
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS player_visit_stats (
+      telegram_id TEXT PRIMARY KEY,
+      nickname TEXT NOT NULL DEFAULT '',
+      first_seen_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      login_count INTEGER NOT NULL DEFAULT 1
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS player_visit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id TEXT NOT NULL,
+      nickname TEXT NOT NULL DEFAULT '',
+      entered_at INTEGER NOT NULL
+    )`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_player_visit_stats_last_seen ON player_visit_stats(last_seen_at DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_player_visit_log_entered ON player_visit_log(entered_at DESC)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_player_visit_log_user_entered ON player_visit_log(telegram_id, entered_at DESC)')
+  ]);
+  playerVisitSchemaReady = true;
+  return true;
+}
+
+async function recordPlayerVisit(env, telegramId, nickname, now = Date.now()) {
+  telegramId = String(telegramId || '').trim();
+  nickname = cleanName(nickname || 'Игрок');
+  if (!telegramId || !(await ensurePlayerVisitSchema(env))) return false;
+
+  const prev = await env.DB.prepare(
+    'SELECT last_seen_at FROM player_visit_stats WHERE telegram_id=?1'
+  ).bind(telegramId).first();
+
+  if (!prev) {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO player_visit_stats
+        (telegram_id,nickname,first_seen_at,last_seen_at,login_count)
+        VALUES(?1,?2,?3,?3,1)`).bind(telegramId,nickname,now),
+      env.DB.prepare(`INSERT INTO player_visit_log(telegram_id,nickname,entered_at)
+        VALUES(?1,?2,?3)`).bind(telegramId,nickname,now)
+    ]);
+    return true;
+  }
+
+  const isNewSession = now - Math.max(0, Number(prev.last_seen_at) || 0) >= PLAYER_VISIT_SESSION_GAP_MS;
+  if (isNewSession) {
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE player_visit_stats
+        SET nickname=?2,last_seen_at=?3,login_count=login_count+1
+        WHERE telegram_id=?1`).bind(telegramId,nickname,now),
+      env.DB.prepare(`INSERT INTO player_visit_log(telegram_id,nickname,entered_at)
+        VALUES(?1,?2,?3)`).bind(telegramId,nickname,now)
+    ]);
+  } else {
+    await env.DB.prepare(`UPDATE player_visit_stats
+      SET nickname=?2,last_seen_at=?3
+      WHERE telegram_id=?1`).bind(telegramId,nickname,now).run();
+  }
+  return isNewSession;
+}
+
 const DUNGEON_CAPACITY = 40;
 const DUNGEON_RESERVE_MS = 90_000;
 const DUNGEON_MOB_RESPAWN_MS = 14_000;
@@ -1897,6 +1962,11 @@ export class RealtimeHub extends BaseRealtimeHub {
     const clanName = String(request.headers.get('x-ppa-clan-name') || '').trim().slice(0, 24);
     const classKey = String(request.headers.get('x-ppa-class-key') || '').slice(0, 24);
     if (!pid || !telegramId) return new Response('Unauthorized', { status: 401 });
+
+    // Persist a real game visit at successful realtime handshake. Telegram/WebView
+    // reconnects inside ten minutes refresh last_seen_at but do not inflate sessions.
+    try { await recordPlayerVisit(this.env, telegramId, name, Date.now()); }
+    catch (err) { console.warn('PPA player visit log:', err); }
 
     const oldSockets = [];
     for (const old of this.sockets()) {
