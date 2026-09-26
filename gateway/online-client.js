@@ -223,9 +223,23 @@
       window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED=!!(access&&access.authorized);
       try{if(typeof sendEventsState==='function')sendEventsState()}catch(_){}
       if(!window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED)return;
+
+      // One-time QA grant for the authorized admin account.
+      // Use the game's native auction-return path so the exact stone/rune
+      // counters used by the blacksmith are updated, rather than guessing INV keys.
+      var qaSmithGrant=false;
+      try{
+        if(typeof INV==='object'&&INV&&INV.__ppaAdminSmithGrantV632!==true&&typeof auctionReturnPayload==='function'){
+          auctionReturnPayload({kind:'stone',refId:'premium',name:'Премиум камень заточки'},500);
+          auctionReturnPayload({kind:'stone',refId:'rune',name:'Премиум руна заточки'},500);
+          INV.__ppaAdminSmithGrantV632=true;
+          qaSmithGrant=true;
+        }
+      }catch(e){console.warn('Admin QA smith grant',e)}
+
       var seeded=window.PPA_ADMIN_EVENT_REWARD_STOCK();
       var added=Math.max(0,Number(seeded&&seeded.added)||0);
-      if(!added)return;
+      if(!added&&!qaSmithGrant)return;
       try{saveGame()}catch(_){}
       try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}
       try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
@@ -235,7 +249,10 @@
         var version=window.PPA_CLOUD&&Number.isFinite(Number(PPA_CLOUD.version))?Number(PPA_CLOUD.version):null;
         if(snap&&PPA.ppaSaveGame)await PPA.ppaSaveGame(snap,version);
       }catch(e){console.warn('Admin reward stock cloud save',e)}
-      try{showPickup('ПРЕМИУМ ХРАНИЛИЩЕ · ДОБАВЛЕНО '+added+' НАГРАД','#ffcf63')}catch(_){}
+      try{
+        if(qaSmithGrant)showPickup('ТЕСТ · +500 ПРЕМИУМ ЗАТОЧЕК · +500 ПРЕМИУМ РУН','#ffcf63');
+        else if(added)showPickup('ПРЕМИУМ ХРАНИЛИЩЕ · ДОБАВЛЕНО '+added+' НАГРАД','#ffcf63');
+      }catch(_){}
     }catch(e){
       if(Number(e&&e.status)!==403)console.warn('Admin event reward stock',e);
     }
