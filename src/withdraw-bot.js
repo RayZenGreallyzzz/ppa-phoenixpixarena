@@ -29,6 +29,21 @@ async function ensureSchema(env) {
   try { await env.DB.prepare('ALTER TABLE withdraw_requests ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0').run(); } catch (_) {}
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_withdraw_requests_status_created ON withdraw_requests(status, created_at)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_withdraw_requests_user ON withdraw_requests(telegram_id, created_at)').run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS player_visit_stats (
+    telegram_id TEXT PRIMARY KEY,
+    nickname TEXT NOT NULL DEFAULT '',
+    first_seen_at INTEGER NOT NULL,
+    last_seen_at INTEGER NOT NULL,
+    login_count INTEGER NOT NULL DEFAULT 1
+  )`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS player_visit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegram_id TEXT NOT NULL,
+    nickname TEXT NOT NULL DEFAULT '',
+    entered_at INTEGER NOT NULL
+  )`).run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_player_visit_stats_last_seen ON player_visit_stats(last_seen_at DESC)').run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_player_visit_log_entered ON player_visit_log(entered_at DESC)').run();
 }
 
 async function tg(env, method, payload) {
@@ -51,6 +66,53 @@ function fmtAmount(v) {
 function fmtTime(ms) {
   try { return new Date(Number(ms) || Date.now()).toISOString().replace('T', ' ').replace('.000Z', ' UTC'); }
   catch (_) { return ''; }
+}
+function fmtKyivTime(ms) {
+  try {
+    return new Intl.DateTimeFormat('ru-RU',{
+      timeZone:'Europe/Kyiv',day:'2-digit',month:'2-digit',year:'2-digit',
+      hour:'2-digit',minute:'2-digit',hourCycle:'h23'
+    }).format(new Date(Number(ms)||Date.now()));
+  } catch (_) { return fmtTime(ms); }
+}
+
+async function listPlayerVisits(env, chatId) {
+  const since24h=Date.now()-24*60*60*1000;
+  const [total,unique24h,sessions24h,recent]=await Promise.all([
+    env.DB.prepare('SELECT COUNT(*) AS n FROM player_visit_stats').first(),
+    env.DB.prepare('SELECT COUNT(DISTINCT telegram_id) AS n FROM player_visit_log WHERE entered_at>=?1').bind(since24h).first(),
+    env.DB.prepare('SELECT COUNT(*) AS n FROM player_visit_log WHERE entered_at>=?1').bind(since24h).first(),
+    env.DB.prepare(`
+      SELECT s.telegram_id,
+             COALESCE(NULLIF(p.nickname,''),NULLIF(s.nickname,''),NULLIF(p.telegram_first_name,''),NULLIF(p.telegram_username,''),'ID '||s.telegram_id) AS nickname,
+             s.last_seen_at,s.login_count
+      FROM player_visit_stats s
+      LEFT JOIN players p ON p.telegram_id=s.telegram_id
+      ORDER BY s.last_seen_at DESC
+      LIMIT 15
+    `).all()
+  ]);
+  const rows=recent.results||[];
+  const lines=[
+    '👥 PPA · ПОСЕЩЕНИЯ ИГРЫ','',
+    'Уникальных игроков всего: '+(Number(total&&total.n)||0),
+    'Уникальных за 24 часа: '+(Number(unique24h&&unique24h.n)||0),
+    'Входов за 24 часа: '+(Number(sessions24h&&sessions24h.n)||0),''
+  ];
+  if(!rows.length){
+    lines.push('Журнал пока пуст. Первый реальный realtime-вход появится здесь автоматически.');
+  }else{
+    lines.push('Последние игроки:');
+    for(const r of rows){
+      lines.push(
+        '• '+String(r.nickname||('ID '+r.telegram_id)).slice(0,24)+
+        ' · '+fmtKyivTime(r.last_seen_at)+
+        ' · входов: '+Math.max(0,Number(r.login_count)||0)+
+        '\n  TG ID: '+String(r.telegram_id||'')
+      );
+    }
+  }
+  await tg(env,'sendMessage',{chat_id:chatId,text:lines.join('\n')});
 }
 function statusText(status) {
   if (status === 'pending') return '🟡 ОЖИДАЕТ';
@@ -162,6 +224,7 @@ async function handleMessage(env, message) {
     await tg(env, 'sendMessage', { chat_id: chatId, text: '⛔ Доступ закрыт.\n\nТвой Telegram ID: ' + fromId + '\nДобавь его в Cloudflare secret WITHDRAW_ADMIN_IDS.' });
     return;
   }
+  if (/^\/(?:players|visits)(?:@\w+)?$/i.test(text)) return listPlayerVisits(env, chatId);
   if (/^\/pending(?:@\w+)?$/i.test(text)) return listRequests(env, chatId, 'pending');
   if (/^\/approved(?:@\w+)?$/i.test(text)) return listRequests(env, chatId, 'approved');
   if (/^\/testwithdraw(?:@\w+)?$/i.test(text)) {
@@ -180,7 +243,7 @@ async function handleMessage(env, message) {
     chat_id: chatId,
     text: '🤖 PPA Withdraw Admin\n\nОжидают решения: ' + (Number(pending && pending.n) || 0) +
       '\nОдобрены, ждут выплаты: ' + (Number(approved && approved.n) || 0) +
-      '\n\n/pending — новые заявки\n/approved — одобренные заявки\n/testwithdraw — тестовая заявка 15 Gram без списания'
+      '\n\n/players — кто заходил в игру\n/visits — последние посещения\n/pending — новые заявки\n/approved — одобренные заявки\n/testwithdraw — тестовая заявка 15 Gram без списания'
   });
 }
 
@@ -221,6 +284,8 @@ export async function handleWithdrawBotRequest(request, env) {
       await tg(env, 'setMyCommands', {
         commands: [
           { command: 'start', description: 'Статус бота и твой доступ' },
+          { command: 'players', description: 'Кто заходил в игру' },
+          { command: 'visits', description: 'Последние посещения игроков' },
           { command: 'pending', description: 'Новые заявки на вывод' },
           { command: 'approved', description: 'Одобренные заявки к выплате' },
           { command: 'testwithdraw', description: 'Тестовая заявка 15 Gram без списания' }
