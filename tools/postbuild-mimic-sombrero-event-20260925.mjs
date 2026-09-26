@@ -40,7 +40,7 @@ html = html
   .split('v631-mimic-sombrero-tap-stats-enh-base-20260926').join(key)
   .split('v632-admin-500-premium-smith-resources-20260926').join(key)
   .split('v633-admin-smith-resources-premium-storage-20260926').join(key)
-  .split('v634-character-menu-native-fps-recovery-20260926').join(key);
+  .split('v634-character-menu-native-fps-recovery-20260926').join(key)
   .split('v635-blacksmith-sharpen-fps-20260926').join(key);
 
 if (!html.includes(marker)) {
