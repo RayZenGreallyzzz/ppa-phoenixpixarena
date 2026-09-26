@@ -17,6 +17,16 @@ let html = fs.readFileSync(indexPath, 'utf8');
 const before = html;
 
 const KEY = 'v610-pc-telegram-desktop-20260925';
+
+// Always derive the active build key from the canonical value emitted by build.mjs.
+// This keeps the postbuild independent from whatever feature most recently bumped
+// CLIENT_BUILD (Mimic art, clans, UI, etc.) and updates all matching asset URLs too.
+const activeBuildMatch = html.match(/window\\.PPA_CLIENT_BUILD=(["'])([^"']+)\\1;/);
+if (activeBuildMatch && activeBuildMatch[2] && activeBuildMatch[2] !== KEY) {
+  html = html.split(activeBuildMatch[2]).join(KEY);
+}
+
+// Compatibility for older generated clients that predate the canonical build marker.
 html = html
   .split('v602-clan-siege-exit-visible-20260925').join(KEY)
   .split('v603-clan-siege-native-clean-20260925').join(KEY)
@@ -231,15 +241,19 @@ if (!html.includes('V610 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT')) {
   html = insertBeforeLastScriptClose(html, PC_INPUT_CODE);
 }
 
-if (!html.includes(KEY) ||
-    !html.includes('function ppaPcDesktopTelegram()') ||
-    !html.includes('function ppaPcBindCanvas()') ||
-    !html.includes('PPA_PC_POINTER_SEEN') ||
-    !html.includes('window.PPA_PC_INPUT_DEBUG') ||
-    !html.includes('ppaPcHudSkill(skill,e)') ||
-    !html.includes('ppaPcSetMoveTarget(e.clientX,e.clientY)') ||
-    !html.includes('requestAnimationFrame(loop)')) {
-  throw new Error('PC Telegram mouse/hotkey validation failed');
+const validation = [
+  [KEY,'cache key'],
+  ['function ppaPcDesktopTelegram()','desktop detector'],
+  ['function ppaPcBindCanvas()','canvas binding'],
+  ['PPA_PC_POINTER_SEEN','pointer state'],
+  ['window.PPA_PC_INPUT_DEBUG','debug bridge'],
+  ['ppaPcHudSkill(skill,e)','skill hotkeys'],
+  ['ppaPcSetMoveTarget(e.clientX,e.clientY)','mouse movement'],
+  ['requestAnimationFrame(loop)','movement loop']
+];
+const missingValidation = validation.filter(([needle])=>!html.includes(needle)).map(([,label])=>label);
+if (missingValidation.length) {
+  throw new Error('PC Telegram mouse/hotkey validation failed: missing '+missingValidation.join(', '));
 }
 if (html === before) throw new Error('No changes applied to public/index.html');
 
