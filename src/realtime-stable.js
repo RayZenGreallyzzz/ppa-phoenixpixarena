@@ -125,12 +125,6 @@ const DUNGEON_PHOENIX_RESPAWN_MS = 2 * 60 * 60 * 1000;
 const DUNGEON_LORD40_RESPAWN_MS = 6 * 60 * 60 * 1000;
 const DUNGEON_BOSS60_RESPAWN_MS = 6 * 60 * 60 * 1000;
 
-// TEMP QA: while PPA_BOSS_TEST_OPEN is enabled in the client build, let the
-// Crystal Titan be fought repeatedly without waiting for the 18:00 cycle.
-// Turn this off together with the client QA flag before release.
-const WORLD_BOSS_QA_TEST_OPEN = true;
-const WORLD_BOSS_QA_RESPAWN_MS = 4_000;
-
 function mobAuthorityRoom(v) {
   const room = cleanRoom(v);
   return room.startsWith('dungeon-') || room === 'worldboss';
@@ -142,7 +136,6 @@ function mobRespawnAt(key, rec, now = Date.now()) {
   if (key === 'b40') return now + DUNGEON_LORD40_RESPAWN_MS;
   if (key === 'b60') return now + DUNGEON_BOSS60_RESPAWN_MS;
   if (key === 'wtitan') {
-    if (WORLD_BOSS_QA_TEST_OPEN) return now + WORLD_BOSS_QA_RESPAWN_MS;
     const resetAt = Math.max(0, Number(rec && rec.resetAt) || 0);
     return resetAt > now ? resetAt : now + 24 * 60 * 60 * 1000;
   }
@@ -1257,16 +1250,6 @@ export class RealtimeHub extends BaseRealtimeHub {
     let changed = false;
     for (const [ck, d] of [...dead.entries()]) {
       if (!d || d.room !== room) continue;
-      // A Titan tombstone from the normal daily cycle can survive a Worker
-      // deployment in Durable Object storage. During QA, collapse only those
-      // old long tombstones immediately; fresh QA kills still stay dead for
-      // WORLD_BOSS_QA_RESPAWN_MS so death/loot UI can complete once.
-      if (WORLD_BOSS_QA_TEST_OPEN && room === 'worldboss' && d.key === 'wtitan' &&
-          Number(d.at) - now > 30_000) {
-        d.at = now;
-        dead.set(ck, d);
-        changed = true;
-      }
       if (Number(d.at) > now) continue;
       const rec = health.get(ck);
       if (!rec) { dead.delete(ck); changed = true; continue; }
