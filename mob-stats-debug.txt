@@ -1,4 +1,130 @@
 
+===== dungeon21ReferenceStats =====
+
+function dungeon21ReferenceStats(baseLvl,roomOrd){
+  const lv=Math.max(21,Math.min(40,Math.max(1,Math.min(20,Number(baseLvl)||1))+20));
+  const v=DUNGEON21_ARCHETYPES[(Number(roomOrd)||0)%DUNGEON21_ARCHETYPES.length];
+
+  var minHp,maxHp,t;
+  if(lv<=25){minHp=900;maxHp=1300;t=(lv-21)/4;}
+  else if(lv<=30){minHp=1300;maxHp=1800;t=(lv-26)/4;}
+  else if(lv<=35){minHp=2000;maxHp=3000;t=(lv-31)/4;}
+  else {minHp=3000;maxHp=4500;t=(lv-36)/4;}
+  t=Math.max(0,Math.min(1,t));
+  var hpBase=minHp+(maxHp-minHp)*t;
+  var archetypeMul=v.key==='tough'?1.10:(v.key==='berserk'?0.92:1.00);
+  var hp=Math.round(Math.max(minHp,Math.min(maxHp,hpBase*archetypeMul)));
+  hp+=(lv<=30)?250:210;
+
+  var defSteps=Math.max(0,Math.floor((lv-30)/5));
+  var baseDef=Math.round(Math.max(20,lv-1)*(1+defSteps*0.05));
+  if(lv>=30)baseDef+=6;
+  var def=(v.key==='armored')?baseDef*2:baseDef;
+
+  return {lvl:lv,hp:hp,def:def,dmg:v.dmg,v:v};
+}
+
+function applyDungeon21MobStats(e,si){
+  if(DUNGEON_MODE!=='21+'||!e||e.isBoss)return e;
+  const p=DG_ACTIVE_SPAWNS[si]||null;
+  const room=p?Number(p[2]||0):0;
+  // Keep the old 1–20 sprite identity, but DISPLAY the 21+ dungeon as levels 21–40.
+  const baseLvl=Math.max(1,Math.min(20,Number(e.lvl)||1));
+  e.baseLvl=baseLvl;
+  e.lvl=baseLvl+20;
+
+  // V216: cycle archetypes INSIDE each room so ЖИВУЧИЙ / БРОНИРОВАННЫЙ /
+  // БЕРСЕРК обязательно встречаются в каждой нормальной пачке.
+  let roomOrd=0;
+  for(let j=0;j<(Number(si)||0);j++){
+    const pj=DG_ACTIVE_SPAWNS[j];
+    if(pj&&Number(pj[2]||0)===room)roomOrd++;
+  }
+  const v=DUNGEON21_ARCHETYPES[roomOrd%DUNGEON21_ARCHETYPES.length];
+  const originalName=(e.type&&e.type.n)||'МОБ';
+  e.type=Object.assign({},e.type||{}, {n:v.label+' · '+originalName});
+
+  // V173 progression: post-30 mobs start above 2,000 HP so +5/+7 gear has real content to fight.
+  var minHp,maxHp,t;
+  if(e.lvl<=25){minHp=900;maxHp=1300;t=(e.lvl-21)/4;}
+  else if(e.lvl<=30){minHp=1300;maxHp=1800;t=(e.lvl-26)/4;}
+  else if(e.lvl<=35){minHp=2000;maxHp=3000;t=(e.lvl-31)/4;}
+  else if(e.lvl<=40){minHp=3000;maxHp=4500;t=(e.lvl-36)/4;}
+  else if(e.lvl<=45){minHp=4500;maxHp=6500;t=(e.lvl-41)/4;}
+  else {minHp=6500;maxHp=9000;t=Math.min(1,(e.lvl-46)/4);}
+  t=Math.max(0,Math.min(1,t));
+  var hpBase=minHp+(maxHp-minHp)*t;
+  var archetypeMul=v.key==='tough'?1.10:(v.key==='berserk'?0.92:1.00);
+  e.hp=Math.round(Math.max(minHp,Math.min(maxHp,hpBase*archetypeMul)));
+  // V212 flat HP rebalance: +250 for levels 21-30, +210 for levels 31-40.
+  var hpBonus=(e.lvl<=30)?250:((e.lvl<=40)?210:0);
+  e.hp+=hpBonus;
+  e.mhp=e.hp;
+
+  // V216 DEF:
+  // - levels 30–40 receive +6 DEF over the previous curve;
+  // - БРОНИРОВАННЫЙ has exactly x2 DEF versus the normal archetype.
+  var defSteps=Math.max(0,Math.floor((e.lvl-30)/5));
+  var baseDef=Math.round(Math.max(20,e.lvl-1)*(1+defSteps*0.05));
+  if(e.lvl>=30&&e.lvl<=40)baseDef+=6;
+  e.def=(v.key==='armored')?baseDef*2:baseDef;
+  e.dmg=v.dmg;
+
+  e.dungeon21=true;e.dungeon21Kind=v.key;e.dungeon21HpBonus=hpBonus;
+  // Visuals/sprites stay EXACTLY the same to avoid increasing game weight.
+  return e;
+}
+function applyDungeon41MobStats(e,si){
+  if(DUNGEON_MODE!=='41-60'||!e||e.isBoss)return e;
+  const p=DG_ACTIVE_SPAWNS[si]||null;
+  const room=p?Number(p[2]||0):0;
+  const baseLvl=Math.max(1,Math.min(20,Number(e.lvl)||1));
+
+  let roomOrd=0;
+  for(let j=0;j<(Number(si)||0);j++){
+    const pj=DG_ACTIVE_SPAWNS[j];
+    if(pj&&Number(pj[2]||0)===room)roomOrd++;
+  }
+
+  const ref=dungeon21ReferenceStats(baseLvl,roomOrd);
+  const originalName=(e.type&&e.type.n)||'МОБ';
+  e.type=Object.assign({},e.type||{}, {n:ref.v.label+' · '+originalName});
+
+  e.baseLvl=baseLvl;
+  e.lvl=baseLvl+40;              // displayed level 41–60
+  e.hp=Math.round(ref.hp*3);
+  e.mhp=e.hp;
+  e.def=Math.round(ref.def*3);
+  e.dmg=Math.round(ref.dmg*3);
+
+  e.dungeon41=true;
+  e.dungeon41Kind=ref.v.key;
+  e.dungeonReferenceLevel=ref.lvl;
+  return e;
+}
+
+function dungeonDisplayName(){
+  if(DUNGEON_MODE==='41-60')return 'ПОДЗЕМЕЛЬЕ 41–60';
+  if(DUNGEON_MODE==='21+')return 'ПОДЗЕМЕЛЬЕ 21–40';
+  return 'ПОДЗЕМЕЛЬЕ';
+}
+function dungeonDisplaySub(){
+  if(DUNGEON_MODE==='41-60')
+    return 'Уровни 41–60';
+  if(DUNGEON_MODE==='21+')
+    return 'Уровни 21–40 · Владыка Скверны';
+  return 'Уровни 1–20 · Зал Феникса';
+}
+
+// === V117 ВЛАДЫКА СКВЕРНЫ · БОСС ДАНЖА 21+ ================================
+const DUNGEON21_BOSS_HP=9000;
+const DUNGEON21_BOSS_DEF=110;
+const DUNGEON21_BOSS_STAFF_DMG=190;  // physical
+const DUNGEON21_BOSS_AOE_DMG=26;     // magic
+const DUNGEON21_BOSS_AOE_RADIUS=180;
+const DUNGEON21_BOSS_DRAW=250;
+const DUNGEON21_BOSS_ATLAS_SRC='data:image/png;base64,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
+
 ===== applyDungeon21MobStats =====
 
 function applyDungeon21MobStats(e,si){
