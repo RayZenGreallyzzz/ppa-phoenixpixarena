@@ -4201,7 +4201,7 @@ if(output.includes("function fixGuardMenu(e)") ||
 }
 
 if(output.includes("Object.keys(RES).forEach(name=&gt;{\n    const count=(BS_STATE.materials") ||
-   !output.includes("function ppaSmithRefreshCanvasArt()") ||
+   !output.includes("function ppaSmithRefreshCanvasArt(root)") ||
    !output.includes("__ppaCanvasizingSrc===src") ||
    !output.includes("if(src.indexOf('/assets/legendary/')>=0)") ||
    !output.includes("img.id==='enhSrcImg'||img.id==='enhDstImg'") ||
@@ -4209,6 +4209,9 @@ if(output.includes("Object.keys(RES).forEach(name=&gt;{\n    const count=(BS_STA
    !output.includes("if(rarity==='legendary') return 'откат −1, легендарный не сгорает'") ||
    !output.includes("it.petName==='Великий Рури'||it.name==='Великий Рури'") ||
    !output.includes("attributeFilter:['src','srcset']") ||
+   !output.includes("Initial paint once. Further work is strictly mutation-driven.") ||
+   output.includes("document.addEventListener('click',function(){ppaSmithRefreshCanvasArt()},true)") ||
+   output.includes("setInterval(ppaRefreshSmithCustomSelects,700)") ||
    !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v514'") ||
    !output.includes("s.onclick=function(){if(s.__ppaHeld){s.__ppaHeld=false;return}if(sharpenable)selectSmithGear(c.idx)};")) {
   throw new Error('Blacksmith pre-legend stable selection / canonical craft art fix did not apply');
