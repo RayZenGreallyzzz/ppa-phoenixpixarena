@@ -3447,6 +3447,67 @@ if(!/function\s+classGearArt\s*\([^)]*\)\s*\{/.test(output) ||
 }
 /* ======================================================================== */
 
+/* === MIMIC SOMBRERO BONUS ROWS IN ITEM STATS ============================ */
+// Display the per-piece event bonuses in the SAME stats list as Defense/HP/etc.
+// No extra banner/description box: the item itself carries exact numeric values.
+ppaPatchRegex(
+  'mimic set bonuses in canonical item inspect stats',
+  /function\s+openItem\(it,context\)\s*\{/,
+  `/* PPA_MIMIC_INSPECT_STATS_V3 */
+function ppaMimicInspectBonusRows(it){
+  try{
+    if(!it||it.ppaMimicSombrero!==true)return;
+    var root=document.getElementById('ppaItemInspect');
+    if(!root)return;
+    root.querySelectorAll('[data-ppa-mimic-bonus-row="1"]').forEach(function(x){try{x.remove()}catch(_){}});
+    var gold=Number(it.mimicGoldBonusPct);
+    var drop=Number(it.mimicDropBonusPct);
+    if(!Number.isFinite(gold))gold=(Number(it.mimicGoldBonus)||0)*100;
+    if(!Number.isFinite(drop))drop=(Number(it.mimicDropBonus)||0)*100;
+    function fmt(v){
+      v=Math.round((Number(v)||0)*10)/10;
+      return '+'+(Math.abs(v-Math.round(v))<1e-9?String(Math.round(v)):v.toFixed(1))+'%';
+    }
+    var label=null;
+    Array.prototype.some.call(root.querySelectorAll('*'),function(el){
+      if(String(el.textContent||'').trim()==='Боевая мощь'){label=el;return true}
+      return false;
+    });
+    if(!label||!label.parentElement||!label.parentElement.parentElement)return;
+    var template=label.parentElement;
+    var host=template.parentElement;
+    function addRow(name,value){
+      var row=template.cloneNode(true);
+      row.setAttribute('data-ppa-mimic-bonus-row','1');
+      row.removeAttribute('id');
+      Array.prototype.forEach.call(row.querySelectorAll('[id]'),function(x){x.removeAttribute('id')});
+      var children=row.children;
+      if(children&&children.length>=2){
+        children[0].textContent=name;
+        children[children.length-1].textContent=value;
+      }else{
+        row.textContent=name+' '+value;
+      }
+      host.insertBefore(row,template);
+    }
+    addRow('Бонус золота',fmt(gold));
+    addRow('Бонус дропа',fmt(drop));
+  }catch(_){}
+}
+function openItem(it,context){
+  if(it&&it.ppaMimicSombrero===true){
+    // openItem renders synchronously; run immediately after its DOM write.
+    queueMicrotask(function(){ppaMimicInspectBonusRows(it)});
+  }`
+);
+
+if(!output.includes('PPA_MIMIC_INSPECT_STATS_V3') ||
+   !output.includes("addRow('Бонус золота',fmt(gold))") ||
+   !output.includes("addRow('Бонус дропа',fmt(drop))")) {
+  throw new Error('Mimic item inspect stat rows did not apply');
+}
+/* ======================================================================== */
+
 /* === HOLD PREVIEW RELEASE + WEBVIEW LONGPRESS =========================== */
 // Hold preview lifecycle:
 //  - item card hold start -> parent marks preview mode

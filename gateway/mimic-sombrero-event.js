@@ -188,7 +188,12 @@
     var pieceRate=tier==='epic'?0.014:(tier==='blue'?0.01:0.004);
     it.mimicGoldBonus=pieceRate;
     it.mimicDropBonus=pieceRate;
-    it.bonusText='Сет Мимика-Самбреро · эта часть: +'+(pieceRate*100).toFixed(pieceRate===0.004?1:0)+'% золота и +'+(pieceRate*100).toFixed(pieceRate===0.004?1:0)+'% дропа.';
+    it.mimicGoldBonusPct=pieceRate*100;
+    it.mimicDropBonusPct=pieceRate*100;
+    it.ppaMimicStatsV=3;
+    // Bonus is rendered as two normal stat rows in the item card.
+    // Keep bonusText empty so the old explanatory box is not shown.
+    it.bonusText='';
     try{if(typeof applyEnhancementStats==='function')applyEnhancementStats(it)}catch(_){}
     try{if(typeof syncItemBM==='function')syncItemBM(it)}catch(_){}
     return it;
@@ -222,7 +227,7 @@
       if(SLOTS.indexOf(slot)<0)slot=SLOTS[0];
       var wanted=(GEAR_SRC[tier]&&GEAR_SRC[tier][slot])||(GEAR_SRC.green&&GEAR_SRC.green[slot])||'';
       var current=String(it.img||it.src||it.image||it.art||it.iconArt||it.cardArt||'');
-      if(it.ppaMimicNativeV1&&Number(it.ppaMimicArtV)===2&&current===wanted)return;
+      if(it.ppaMimicNativeV1&&Number(it.ppaMimicArtV)===2&&Number(it.ppaMimicStatsV)===3&&current===wanted)return;
       var lvl=tier==='epic'?60:(tier==='blue'?40:20);
       hydrateMimicItem(it,lvl,tier,slot);
       changed=true;
