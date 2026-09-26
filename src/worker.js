@@ -246,34 +246,109 @@ async function loadSave(env, telegramId) {
   return { ok: true, version: Number(row.version) || 0, state, updatedAt: Number(row.updated_at) || 0, profile };
 }
 
-async function saveGameState(env, telegramId, state) {
-  if (!state || typeof state !== 'object' || Array.isArray(state)) return { ok: false, status: 400, message: 'Некорректное сохранение.' };
-
-  const profile = profileFromRow(await env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(telegramId).first());
-  state = applyProfileToSaveState(profile, state);
-
-  const raw = JSON.stringify(state);
-  if (new TextEncoder().encode(raw).byteLength > 1_800_000) {
-    return { ok: false, status: 413, message: 'Сохранение слишком большое.' };
+async function saveGameState(env, telegramId, state, expectedVersion) {
+  if (!state || typeof state !== 'object' || Array.isArray(state)) {
+    return { ok: false, status: 400, code: 'BAD_SAVE_STATE', message: 'Некорректное сохранение.' };
   }
 
+  // A save is a versioned document. Never let an older tab/build silently
+  // overwrite a newer cloud snapshot. The client must save the version it
+  // actually loaded; queued saves on the same client advance that version.
+  const existing = await env.DB.prepare(
+    'SELECT version, state_json, updated_at FROM saves WHERE telegram_id=?1'
+  ).bind(telegramId).first();
+  const currentVersion = Number(existing && existing.version) || 0;
+  const hasExpected = expectedVersion !== null && expectedVersion !== undefined &&
+    expectedVersion !== '' && Number.isFinite(Number(expectedVersion));
+  const expected = hasExpected ? Math.max(0, Math.floor(Number(expectedVersion))) : null;
+
+  if ((existing && (!hasExpected || expected !== currentVersion)) ||
+      (!existing && hasExpected && expected !== 0)) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'SAVE_VERSION_CONFLICT',
+      message: 'Облачное сохранение уже новее. Старый клиент не может его перезаписать.',
+      currentVersion,
+      updatedAt: Number(existing && existing.updated_at) || 0
+    };
+  }
+
+  const previous = parseStateJson(existing && existing.state_json) || {};
+  state = { ...state };
+
+  // Character level is monotonic in PPA. A stale/partially restored client is
+  // never allowed to lower it during an ordinary save.
+  for (const key of ['lvl', 'level']) {
+    const oldLevel = Number(previous[key]);
+    const nextLevel = Number(state[key]);
+    if (Number.isFinite(oldLevel) && oldLevel >= 1 &&
+        (!Number.isFinite(nextLevel) || nextLevel < oldLevel)) {
+      state[key] = oldLevel;
+    }
+  }
+
+  const profile = profileFromRow(await env.DB.prepare(
+    'SELECT * FROM players WHERE telegram_id=?1'
+  ).bind(telegramId).first());
+  state = applyProfileToSaveState(profile, state);
+
   const nickname = String(state.playerName || '').trim();
-  if (nickname) {
+  if (nickname && (!profile || !profile.nickname || nickKey(profile.nickname) !== nickKey(nickname))) {
     const registered = await registerCharacter(env, telegramId, nickname, state.cls || state.classKey || '');
     if (!registered.ok) return registered;
   }
 
-  const existing = await env.DB.prepare('SELECT version FROM saves WHERE telegram_id=?1').bind(telegramId).first();
-  const version = (Number(existing && existing.version) || 0) + 1;
+  const raw = JSON.stringify(state);
+  if (new TextEncoder().encode(raw).byteLength > 1_800_000) {
+    return { ok: false, status: 413, code: 'SAVE_TOO_LARGE', message: 'Сохранение слишком большое.' };
+  }
+
   const now = Date.now();
-  await env.DB.prepare(`
-    INSERT INTO saves (telegram_id, version, state_json, updated_at)
-    VALUES (?1, ?2, ?3, ?4)
-    ON CONFLICT(telegram_id) DO UPDATE SET
-      version=excluded.version,
-      state_json=excluded.state_json,
-      updated_at=excluded.updated_at
-  `).bind(telegramId, version, raw, now).run();
+  let version;
+
+  if (existing) {
+    version = currentVersion + 1;
+    const write = await env.DB.prepare(`
+      UPDATE saves
+      SET version=?1, state_json=?2, updated_at=?3
+      WHERE telegram_id=?4 AND version=?5
+    `).bind(version, raw, now, telegramId, currentVersion).run();
+    const changes = Number(write && write.meta && write.meta.changes) || 0;
+    if (changes !== 1) {
+      const fresh = await env.DB.prepare(
+        'SELECT version, updated_at FROM saves WHERE telegram_id=?1'
+      ).bind(telegramId).first();
+      return {
+        ok: false,
+        status: 409,
+        code: 'SAVE_VERSION_CONFLICT',
+        message: 'Облачное сохранение изменилось во время записи. Данные старого клиента не записаны.',
+        currentVersion: Number(fresh && fresh.version) || currentVersion,
+        updatedAt: Number(fresh && fresh.updated_at) || 0
+      };
+    }
+  } else {
+    version = 1;
+    const write = await env.DB.prepare(`
+      INSERT OR IGNORE INTO saves (telegram_id, version, state_json, updated_at)
+      VALUES (?1, ?2, ?3, ?4)
+    `).bind(telegramId, version, raw, now).run();
+    const changes = Number(write && write.meta && write.meta.changes) || 0;
+    if (changes !== 1) {
+      const fresh = await env.DB.prepare(
+        'SELECT version, updated_at FROM saves WHERE telegram_id=?1'
+      ).bind(telegramId).first();
+      return {
+        ok: false,
+        status: 409,
+        code: 'SAVE_VERSION_CONFLICT',
+        message: 'Облачное сохранение уже создано другим клиентом. Старые данные не записаны.',
+        currentVersion: Number(fresh && fresh.version) || 0,
+        updatedAt: Number(fresh && fresh.updated_at) || 0
+      };
+    }
+  }
 
   if (state.cls || state.classKey) {
     await env.DB.prepare(`UPDATE players SET class_key=COALESCE(NULLIF(class_key,''),?1), updated_at=?2 WHERE telegram_id=?3`)
@@ -378,7 +453,7 @@ async function handleApi(request, env) {
       return json(await loadSave(env, telegramId));
     }
     if (url.pathname === '/api/save') {
-      const result = await saveGameState(env, telegramId, body.state);
+      const result = await saveGameState(env, telegramId, body.state, body.version);
       return json(result, result.ok ? 200 : (result.status || 400));
     }
     if (url.pathname === '/api/profile/sync-nickname') {

@@ -5,6 +5,8 @@
   var cachedAuth=null;
   var lastSaveAt=0;
   var saveQueue=Promise.resolve();
+  var knownSaveVersion=null;
+  var saveConflict=null;
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var x=tg();return x&&x.initData?String(x.initData):''}
@@ -86,15 +88,55 @@
     return result;
   }
 
+  function noteSaveVersion(v){
+    v=Number(v);
+    if(!Number.isFinite(v)||v<0)return;
+    knownSaveVersion=Math.floor(v);
+    try{if(window.PPA_CLOUD)window.PPA_CLOUD.version=knownSaveVersion}catch(_){}
+  }
+
+  async function resolveSaveVersion(hint){
+    if(Number.isFinite(Number(knownSaveVersion)))return Number(knownSaveVersion);
+    if(hint!==null&&hint!==undefined&&hint!==''&&Number.isFinite(Number(hint))){
+      noteSaveVersion(hint);
+      return Number(knownSaveVersion);
+    }
+    var loaded=await call('/api/save/load');
+    noteSaveVersion(loaded&&loaded.version!=null?loaded.version:0);
+    return Number(knownSaveVersion)||0;
+  }
+
   function queueSave(state,version){
     saveQueue=saveQueue.catch(function(){}).then(async function(){
       var now=Date.now();
       var wait=Math.max(0,1200-(now-lastSaveAt));
       if(wait)await new Promise(function(resolve){setTimeout(resolve,wait)});
-      var result=await call('/api/save',{state:state,version:version==null?null:Number(version)});
-      lastSaveAt=Date.now();
-      try{if(window.PPA_CLOUD&&Number.isFinite(Number(result&&result.version)))window.PPA_CLOUD.version=Number(result.version)}catch(_){}
-      return result;
+      var expected=await resolveSaveVersion(version);
+      try{
+        var result=await call('/api/save',{state:state,version:expected});
+        lastSaveAt=Date.now();
+        saveConflict=null;
+        noteSaveVersion(result&&result.version);
+        return result;
+      }catch(err){
+        if(err&&err.code==='SAVE_VERSION_CONFLICT'){
+          saveConflict={
+            at:Date.now(),
+            expectedVersion:expected,
+            currentVersion:Number(err.data&&err.data.currentVersion)||null
+          };
+          try{
+            if(window.PPA_CLOUD){
+              window.PPA_CLOUD.saveConflict=saveConflict;
+              window.PPA_CLOUD.ready=false;
+            }
+          }catch(_){}
+          try{
+            if(typeof showPickup==='function')showPickup('СЕЙВ ЗАЩИЩЁН · старые данные НЕ перезаписали облако','#ffb36b');
+          }catch(_){}
+        }
+        throw err;
+      }
     });
     return saveQueue;
   }
@@ -118,7 +160,7 @@
     isAvailable:available,
     ppaAuthTelegram:auth,
     ppaLoadProfile:loadProfileWithSafeFirstMigration,
-    ppaLoadSave:async function(){await auth();return call('/api/save/load')},
+    ppaLoadSave:async function(){await auth();var r=await call('/api/save/load');noteSaveVersion(r&&r.version!=null?r.version:0);return r},
     ppaSaveGame:async function(state,version){await auth();return queueSave(state,version)},
     ppaRegisterCharacter:async function(nickname,classKey){return authed('/api/character/register',{nickname:nickname,classKey:classKey||''})},
     ppaSyncNicknameFromSave:async function(){return authed('/api/profile/sync-nickname',{nickname:localNickname()})},
@@ -140,6 +182,7 @@
     ppaWalletUnlink:function(){return authed('/api/wallet/unlink')},
     ppaWalletDeposit:function(payload){return authed('/api/wallet/deposit',payload||{})},
     ppaWalletWithdraw:function(payload){return authed('/api/wallet/withdraw',payload||{})},
-    ppaResetOwnTestGram:function(){return authed('/api/wallet/reset-test-gram',{confirm:'RESET_ONLY_GRAM'})}
+    ppaResetOwnTestGram:function(){return authed('/api/wallet/reset-test-gram',{confirm:'RESET_ONLY_GRAM'})},
+    ppaSaveProtectionDiag:function(){return {knownVersion:knownSaveVersion,conflict:saveConflict}}
   });
 })();
