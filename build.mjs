@@ -1590,6 +1590,36 @@ ppaPatchRegex(
 );
 /* ======================================================================== */
 
+/* === PREMIUM STAT-POINT ENTITLEMENT ==================================== */
+// Premium stat packs are permanent account value. Track their lifetime total
+// separately from the current free/allocated point balance.
+ppaPatchRegex(
+  'premium stat points lifetime entitlement',
+  /}else if\(g\.kind==='statPoints'\)\{\s*P\.statPts=Math\.max\(0,Math\.floor\(Number\(P\.statPts\)\|\|0\)\)\+Math\.max\(0,Math\.floor\(Number\(g\.qty\)\|\|0\)\);\s*\}/,
+  `}else if(g.kind==='statPoints'){
+    var _ppaPaidStatQty=Math.max(0,Math.floor(Number(g.qty)||0));
+    P.statPts=Math.max(0,Math.floor(Number(P.statPts)||0))+_ppaPaidStatQty;
+    if(!INV.premiumShop||typeof INV.premiumShop!=='object')INV.premiumShop={purchasedBundles:{}};
+    INV.premiumShop.statPointsPurchased=Math.max(0,Math.floor(Number(INV.premiumShop.statPointsPurchased)||0))+_ppaPaidStatQty;
+  }`
+);
+
+ppaPatchRegex(
+  'stat repair includes premium entitlement',
+  /var current=P\.statPts\+allocatedStatPointCount\(\);\s*var minimum=minimumEarnedStatPool\(\);\s*if\(current<minimum\)P\.statPts\+=minimum-current;/,
+  `var current=P.statPts+allocatedStatPointCount();
+  var premiumBought=Math.max(0,Math.floor(Number(INV&&INV.premiumShop&&INV.premiumShop.statPointsPurchased)||0));
+  var minimum=minimumEarnedStatPool()+premiumBought;
+  if(current<minimum)P.statPts+=minimum-current;`
+);
+
+if (!output.includes('statPointsPurchased') ||
+    !output.includes('_ppaPaidStatQty') ||
+    !output.includes('minimumEarnedStatPool()+premiumBought')) {
+  throw new Error('Premium stat-point lifetime entitlement patch did not apply');
+}
+/* ======================================================================== */
+
 /* === PREMIUM AUTO-ATTACK ENTITLEMENT =================================== */
 // AUTO is a permanent account convenience once the player buys any Premium
 // subscription, or makes a single Premium-shop purchase costing at least 5 Gram.

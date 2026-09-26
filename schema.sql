@@ -36,3 +36,17 @@ CREATE TABLE IF NOT EXISTS rename_requests (
 
 CREATE INDEX IF NOT EXISTS idx_rename_requests_created_at
   ON rename_requests(created_at);
+
+
+-- Rolling cloud-save recovery window. Runtime also creates this table lazily
+-- so existing D1 databases gain protection without a destructive migration.
+CREATE TABLE IF NOT EXISTS save_history (
+  telegram_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  state_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  archived_at INTEGER NOT NULL,
+  PRIMARY KEY (telegram_id, version)
+);
+CREATE INDEX IF NOT EXISTS idx_save_history_user_archived
+  ON save_history(telegram_id, archived_at DESC);

@@ -246,6 +246,175 @@ async function loadSave(env, telegramId) {
   return { ok: true, version: Number(row.version) || 0, state, updatedAt: Number(row.updated_at) || 0, profile };
 }
 
+let saveHistorySchemaReady = false;
+
+function saveNonNegativeInt(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+}
+
+function savedStatAllocationTotal(state) {
+  if (!state || !state.statAlloc || typeof state.statAlloc !== 'object' || Array.isArray(state.statAlloc)) return 0;
+  let total = 0;
+  for (const value of Object.values(state.statAlloc)) total += saveNonNegativeInt(value);
+  return total;
+}
+
+function savedStatPointPool(state) {
+  if (!state || typeof state !== 'object') return 0;
+  return saveNonNegativeInt(state.statPts) + savedStatAllocationTotal(state);
+}
+
+function preserveDurablePremiumEntitlements(previous, next) {
+  const oldShop = previous && previous.premiumShop && typeof previous.premiumShop === 'object' && !Array.isArray(previous.premiumShop)
+    ? previous.premiumShop : {};
+  const nextShop = next && next.premiumShop && typeof next.premiumShop === 'object' && !Array.isArray(next.premiumShop)
+    ? { ...next.premiumShop } : {};
+
+  // Lifetime/account entitlements may grow, but an older/partial save cannot erase them.
+  nextShop.statPointsPurchased = Math.max(
+    saveNonNegativeInt(oldShop.statPointsPurchased),
+    saveNonNegativeInt(nextShop.statPointsPurchased)
+  );
+  nextShop.auctionSlotGram = Math.max(
+    Math.max(0, Number(oldShop.auctionSlotGram) || 0),
+    Math.max(0, Number(nextShop.auctionSlotGram) || 0)
+  );
+  nextShop.autoAttackUnlocked = oldShop.autoAttackUnlocked === true || nextShop.autoAttackUnlocked === true;
+
+  const oldBundles = oldShop.purchasedBundles && typeof oldShop.purchasedBundles === 'object' && !Array.isArray(oldShop.purchasedBundles)
+    ? oldShop.purchasedBundles : {};
+  const nextBundles = nextShop.purchasedBundles && typeof nextShop.purchasedBundles === 'object' && !Array.isArray(nextShop.purchasedBundles)
+    ? nextShop.purchasedBundles : {};
+  nextShop.purchasedBundles = { ...oldBundles, ...nextBundles };
+
+  if (Number(oldShop.lastPremiumPurchaseAt) > Number(nextShop.lastPremiumPurchaseAt || 0)) {
+    nextShop.lastPremiumPurchaseAt = Number(oldShop.lastPremiumPurchaseAt);
+  }
+  next.premiumShop = nextShop;
+
+  for (const key of ['lifetimePaidGram', 'gramSpentLifetime']) {
+    const oldValue = Math.max(0, Number(previous && previous[key]) || 0);
+    const newValue = Math.max(0, Number(next && next[key]) || 0);
+    if (oldValue > newValue) next[key] = oldValue;
+  }
+}
+
+function preserveCharacterProgress(previous, next) {
+  previous = previous && typeof previous === 'object' ? previous : {};
+  next = next && typeof next === 'object' ? next : {};
+
+  const oldRebirths = saveNonNegativeInt(previous.rebirths);
+  let nextRebirths = saveNonNegativeInt(next.rebirths);
+  if (nextRebirths < oldRebirths) {
+    nextRebirths = oldRebirths;
+    next.rebirths = oldRebirths;
+  }
+  const legitimateRebirth = nextRebirths > oldRebirths;
+
+  // A real rebirth is the only normal operation allowed to lower level/XP.
+  if (!legitimateRebirth) {
+    for (const key of ['lvl', 'level']) {
+      const oldLevel = Number(previous[key]);
+      const newLevel = Number(next[key]);
+      if (Number.isFinite(oldLevel) && oldLevel >= 1 &&
+          (!Number.isFinite(newLevel) || newLevel < oldLevel)) {
+        next[key] = oldLevel;
+      }
+    }
+
+    const oldLevel = Number(previous.lvl);
+    const newLevel = Number(next.lvl);
+    const oldXp = Number(previous.xp);
+    const newXp = Number(next.xp);
+    if (Number.isFinite(oldLevel) && Number.isFinite(newLevel) && newLevel === oldLevel &&
+        Number.isFinite(oldXp) && oldXp >= 0 &&
+        (!Number.isFinite(newXp) || newXp < oldXp)) {
+      next.xp = oldXp;
+    }
+  }
+
+  // Free + allocated characteristic points form one lifetime pool.
+  // Spending/reset/class-change only move points inside that pool, so it must never shrink.
+  if (previous.statAlloc && typeof previous.statAlloc === 'object' &&
+      (!next.statAlloc || typeof next.statAlloc !== 'object' || Array.isArray(next.statAlloc))) {
+    next.statAlloc = { ...previous.statAlloc };
+  }
+  if (previous.statPts != null && next.statPts == null) {
+    next.statPts = saveNonNegativeInt(previous.statPts);
+  }
+
+  const oldPool = savedStatPointPool(previous);
+  const newPool = savedStatPointPool(next);
+  if (oldPool > newPool) {
+    next.statPts = saveNonNegativeInt(next.statPts) + (oldPool - newPool);
+  }
+
+  preserveDurablePremiumEntitlements(previous, next);
+  return next;
+}
+
+async function ensureSaveHistorySchema(env) {
+  if (saveHistorySchemaReady) return true;
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS save_history (
+        telegram_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        state_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        archived_at INTEGER NOT NULL,
+        PRIMARY KEY (telegram_id, version)
+      )
+    `).run();
+    await env.DB.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_save_history_user_archived ON save_history(telegram_id, archived_at DESC)'
+    ).run();
+    saveHistorySchemaReady = true;
+    return true;
+  } catch (err) {
+    console.warn('PPA save history schema:', err);
+    return false;
+  }
+}
+
+async function archivePreviousSave(env, telegramId, row) {
+  if (!row || !(await ensureSaveHistorySchema(env))) return false;
+  try {
+    await env.DB.prepare(`
+      INSERT OR IGNORE INTO save_history (telegram_id, version, state_json, updated_at, archived_at)
+      VALUES (?1, ?2, ?3, ?4, ?5)
+    `).bind(
+      telegramId,
+      Number(row.version) || 0,
+      String(row.state_json || '{}'),
+      Number(row.updated_at) || 0,
+      Date.now()
+    ).run();
+    return true;
+  } catch (err) {
+    console.warn('PPA save history archive:', err);
+    return false;
+  }
+}
+
+async function pruneSaveHistory(env, telegramId) {
+  if (!saveHistorySchemaReady) return;
+  try {
+    await env.DB.prepare(`
+      DELETE FROM save_history
+      WHERE telegram_id=?1 AND version NOT IN (
+        SELECT version FROM save_history
+        WHERE telegram_id=?1
+        ORDER BY version DESC
+        LIMIT 10
+      )
+    `).bind(telegramId).run();
+  } catch (err) {
+    console.warn('PPA save history prune:', err);
+  }
+}
+
 async function saveGameState(env, telegramId, state, expectedVersion) {
   if (!state || typeof state !== 'object' || Array.isArray(state)) {
     return { ok: false, status: 400, code: 'BAD_SAVE_STATE', message: 'Некорректное сохранение.' };
@@ -275,18 +444,7 @@ async function saveGameState(env, telegramId, state, expectedVersion) {
   }
 
   const previous = parseStateJson(existing && existing.state_json) || {};
-  state = { ...state };
-
-  // Character level is monotonic in PPA. A stale/partially restored client is
-  // never allowed to lower it during an ordinary save.
-  for (const key of ['lvl', 'level']) {
-    const oldLevel = Number(previous[key]);
-    const nextLevel = Number(state[key]);
-    if (Number.isFinite(oldLevel) && oldLevel >= 1 &&
-        (!Number.isFinite(nextLevel) || nextLevel < oldLevel)) {
-      state[key] = oldLevel;
-    }
-  }
+  state = preserveCharacterProgress(previous, { ...state });
 
   const profile = profileFromRow(await env.DB.prepare(
     'SELECT * FROM players WHERE telegram_id=?1'
@@ -309,6 +467,8 @@ async function saveGameState(env, telegramId, state, expectedVersion) {
 
   if (existing) {
     version = currentVersion + 1;
+    // Archive the currently authoritative snapshot before replacing it.
+    await archivePreviousSave(env, telegramId, existing);
     const write = await env.DB.prepare(`
       UPDATE saves
       SET version=?1, state_json=?2, updated_at=?3
@@ -354,6 +514,7 @@ async function saveGameState(env, telegramId, state, expectedVersion) {
     await env.DB.prepare(`UPDATE players SET class_key=COALESCE(NULLIF(class_key,''),?1), updated_at=?2 WHERE telegram_id=?3`)
       .bind(normalizeClass(state.cls || state.classKey), now, telegramId).run();
   }
+  if (existing) await pruneSaveHistory(env, telegramId);
   return { ok: true, version, updatedAt: now };
 }
 
