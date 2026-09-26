@@ -171,7 +171,7 @@
               Math.max(1,Number(typeof DUNGEON21_BOSS_STAFF_DMG!=='undefined'?DUNGEON21_BOSS_STAFF_DMG:190)||190)
             ]);
           }else if(typeof DUNGEON_MODE!=='undefined'&&DUNGEON_MODE==='41-60'){
-            rows.push(['b60',67000,bx,by,1.05,180,180]);
+            rows.push(['b60',103700,bx,by,1.05,180,180]);
           }
         }
         if(rows.length){catalogCount=rows.length;return rows;}
