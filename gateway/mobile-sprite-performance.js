@@ -17,7 +17,19 @@
   var animCache=typeof WeakMap!=='undefined'?new WeakMap():null;
   var imageCache=typeof WeakMap!=='undefined'?new WeakMap():null;
 
-  function factor(){return .5}
+  function qualityFactor(){return .5}
+  function motionFactor(){
+    try{
+      var side=Math.min(window.innerWidth||9999,window.innerHeight||9999);
+      return side<=620?.36:.42;
+    }catch(_){return .42}
+  }
+  function factor(){return qualityFactor()}
+  function animFactor(name,isAi){
+    var n=String(name||'').toLowerCase();
+    if(isAi||n==='run'||n==='walk'||n==='move')return motionFactor();
+    return qualityFactor();
+  }
   function markCanvas(c){
     try{c.complete=true}catch(_){}
     try{c.naturalWidth=c.width}catch(_){}
@@ -48,11 +60,16 @@
       return cv;
     }catch(_){return null}
   }
-  function lowResAnim(a){
+  function lowResAnim(a,f){
     try{
       if(!a||!a.img||a.__ppaLowRes||!(Number(a.fw)>=192)||!(Number(a.fh)>=192))return a;
-      if(animCache&&animCache.has(a))return animCache.get(a);
-      var f=factor(),cv=scaledImage(a.img,f);
+      f=Number(f)||qualityFactor();
+      var key=String(Math.round(f*1000));
+      if(animCache){
+        var cached=animCache.get(a);
+        if(cached&&cached[key])return cached[key];
+      }
+      var cv=scaledImage(a.img,f);
       if(!cv)return a;
       var b={};
       for(var k in a)b[k]=a[k];
@@ -60,7 +77,11 @@
       b.fw=Math.max(1,Math.round(Number(a.fw)*f));
       b.fh=Math.max(1,Math.round(Number(a.fh)*f));
       b.__ppaLowRes=true;
-      if(animCache)animCache.set(a,b);
+      b.__ppaLowResFactor=f;
+      if(animCache){
+        var bag=animCache.get(a)||{};
+        bag[key]=b;animCache.set(a,bag);
+      }
       return b;
     }catch(_){return a}
   }
@@ -72,8 +93,14 @@
       var base=playerAnimDef;
       var fn=function(name){
         var a=base.apply(this,arguments);
-        try{if(typeof playerUsesGnomeSprites==='function'&&playerUsesGnomeSprites())return a}catch(_){}
-        return lowResAnim(a);
+        var animName=String(name||'').toLowerCase();
+        var isGnome=false;
+        try{isGnome=typeof playerUsesGnomeSprites==='function'&&playerUsesGnomeSprites()}catch(_){}
+        // Keep the sharp 50% idle atlas. Only movement uses the proven v472
+        // mobile factor, so camera/joystick motion no longer drags the GPU.
+        // Gnome keeps native idle art but may use the lighter run atlas.
+        if(isGnome&&animName!=='run'&&animName!=='walk'&&animName!=='move')return a;
+        return lowResAnim(a,animFactor(animName,false));
       };
       fn.__ppaLowRes=1;playerAnimDef=fn;
       try{window.playerAnimDef=fn}catch(_){}
@@ -88,9 +115,11 @@
       var fn=function(e){
         var cfg=base.apply(this,arguments);
         if(!cfg||!cfg.anim)return cfg;
-        try{if(e&&String(e.aiClass||'')==='gnome')return cfg}catch(_){}
+        var animName=String(e&&e.aiAnim||'').toLowerCase();
+        var isGnome=!!(e&&String(e.aiClass||'').toLowerCase()==='gnome');
+        if(isGnome&&animName!=='run'&&animName!=='walk'&&animName!=='move')return cfg;
         var out={};for(var k in cfg)out[k]=cfg[k];
-        out.anim=lowResAnim(cfg.anim);
+        out.anim=lowResAnim(cfg.anim,animFactor(animName,true));
         return out;
       };
       fn.__ppaLowRes=1;v174AiSpriteCfg=fn;
@@ -107,6 +136,6 @@
   install();
 
   window.PPA_SPRITE_PERF_DIAG=function(){
-    return{mobile:mobile(),enabled:true,mode:'cached-scaled-atlas',factor:factor()};
+    return{mobile:mobile(),enabled:true,mode:'adaptive-cached-atlas',idleFactor:qualityFactor(),motionFactor:motionFactor()};
   };
 })();
