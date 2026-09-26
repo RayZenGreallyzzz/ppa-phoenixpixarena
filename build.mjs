@@ -150,8 +150,14 @@ for(const [rarity,cfg] of Object.entries(PPA_MIMIC_GEAR_STRIPS)){
     const slot=PPA_MIMIC_GEAR_SLOTS[i];
     const left=cfg.cuts[i],right=cfg.cuts[i+1];
     const outPath=path.join(PPA_MIMIC_GEAR_DIR,'mimic-sombrero-'+rarity+'-'+slot+'.webp');
-    const piece=await sharp(src)
+    // Keep extract and trim in separate Sharp pipelines. Sharp may reorder
+    // geometry operations inside one lazy pipeline, which can make extract run
+    // against the already-trimmed canvas and throw "extract_area: bad extract area".
+    const slice=await sharp(src)
       .extract({left:left,top:0,width:right-left,height:cfg.height})
+      .png()
+      .toBuffer();
+    const piece=await sharp(slice)
       .trim({threshold:1})
       .resize({width:456,height:456,fit:'contain',background:{r:0,g:0,b:0,alpha:0}})
       .extend({top:28,bottom:28,left:28,right:28,background:{r:0,g:0,b:0,alpha:0}})
