@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v602-clan-siege-exit-visible-20260925';
+const CLIENT_BUILD = 'v603-mimic-epic-art-exact-20260926';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -6173,10 +6173,12 @@ function itemVisual(it,size){
   }
   if(it&&it.img){
     var sc=1,flt='none';
-    if(it.rarity==='epic'&&it.slot==='weapon'){
+    // Legacy epic recolor is only for old generic equipment.
+    // Mimic-Sombrero already has approved rarity-specific art and must be drawn verbatim.
+    if(!it.ppaMimicSombrero&&it.rarity==='epic'&&it.slot==='weapon'){
       sc=1.20;
       flt='sepia(.30) saturate(2.9) hue-rotate(232deg) brightness(1.16) contrast(1.08) drop-shadow(0 0 3px rgba(208,108,255,.72))';
-    }else if(it.rarity==='epic'&&it.slot==='boots'){
+    }else if(!it.ppaMimicSombrero&&it.rarity==='epic'&&it.slot==='boots'){
       sc=1.16;
       flt='sepia(.28) saturate(2.7) hue-rotate(232deg) brightness(1.13) contrast(1.07) drop-shadow(0 0 3px rgba(208,108,255,.68))';
     }
