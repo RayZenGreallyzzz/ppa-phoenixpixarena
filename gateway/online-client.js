@@ -222,20 +222,26 @@
       var access=await PPA.ppaAdminEventRewardStockAccess();
       window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED=!!(access&&access.authorized);
       try{if(typeof sendEventsState==='function')sendEventsState()}catch(_){}
-      if(!window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED)return;
+      if(!window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED||access.seedRequired===false)return;
       var seeded=window.PPA_ADMIN_EVENT_REWARD_STOCK();
-      var added=Math.max(0,Number(seeded&&seeded.added)||0);
-      if(!added)return;
-      try{saveGame()}catch(_){}
-      try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}
-      try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
-      try{if(typeof updateUI==='function')updateUI()}catch(_){}
-      try{
-        var snap=typeof window.ppaBuildSaveObject==='function'?window.ppaBuildSaveObject():null;
-        var version=window.PPA_CLOUD&&Number.isFinite(Number(PPA_CLOUD.version))?Number(PPA_CLOUD.version):null;
-        if(snap&&PPA.ppaSaveGame)await PPA.ppaSaveGame(snap,version);
-      }catch(e){console.warn('Admin reward stock cloud save',e)}
-      try{showPickup('ПРЕМИУМ ХРАНИЛИЩЕ · ДОБАВЛЕНО '+added+' НАГРАД','#ffcf63')}catch(_){}
+      if(!seeded||seeded.ok===false||seeded.error)return;
+      var added=Math.max(0,Number(seeded.added)||0);
+      var repaired=Math.max(0,Number(seeded.repaired)||0);
+      if(added||repaired){
+        try{saveGame()}catch(_){}
+        try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}
+        try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
+        try{if(typeof updateUI==='function')updateUI()}catch(_){}
+        try{
+          var snap=typeof window.ppaBuildSaveObject==='function'?window.ppaBuildSaveObject():null;
+          var version=window.PPA_CLOUD&&Number.isFinite(Number(PPA_CLOUD.version))?Number(PPA_CLOUD.version):null;
+          if(snap&&PPA.ppaSaveGame)await PPA.ppaSaveGame(snap,version);
+        }catch(e){console.warn('Admin reward stock cloud save',e);return}
+      }
+      try{await PPA.ppaAdminEventRewardStockAccess({action:'ack'})}catch(e){console.warn('Admin reward stock ack',e);return}
+      if(added>0){
+        try{showPickup('ПРЕМИУМ ХРАНИЛИЩЕ · ДОБАВЛЕНО '+added+' НАГРАД','#ffcf63')}catch(_){}
+      }
     }catch(e){
       if(Number(e&&e.status)!==403)console.warn('Admin event reward stock',e);
     }

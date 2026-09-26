@@ -124,7 +124,7 @@
     ppaSyncNicknameFromSave:async function(){return authed('/api/profile/sync-nickname',{nickname:localNickname()})},
     ppaRequestNicknameChange:renameWithSyncedCard,
 
-    ppaAdminEventRewardStockAccess:function(){return authed('/api/admin/event-reward-stock-access')},
+    ppaAdminEventRewardStockAccess:function(payload){return authed('/api/admin/event-reward-stock-access',payload||{})},
 
     ppaClanState:function(){return authed('/api/clan/state')},
     ppaClanAction:function(req){return authed('/api/clan/action',req||{})},

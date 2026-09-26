@@ -216,7 +216,13 @@ async function ensureOnlineSchema(env) {
       paid_at INTEGER NOT NULL DEFAULT 0
     )`,
     `CREATE INDEX IF NOT EXISTS idx_withdraw_requests_status_created ON withdraw_requests(status, created_at)`,
-    `CREATE INDEX IF NOT EXISTS idx_withdraw_requests_user ON withdraw_requests(telegram_id, created_at)`
+    `CREATE INDEX IF NOT EXISTS idx_withdraw_requests_user ON withdraw_requests(telegram_id, created_at)`,
+    `CREATE TABLE IF NOT EXISTS admin_event_reward_grants (
+      telegram_id TEXT NOT NULL,
+      grant_key TEXT NOT NULL,
+      claimed_at INTEGER NOT NULL,
+      PRIMARY KEY (telegram_id, grant_key)
+    )`
   ];
   for (const q of sql) await env.DB.prepare(q).run();
   schemaReady = true;
@@ -725,7 +731,15 @@ export async function handleOnlineRoute(path, ctx) {
   if (path === '/api/admin/event-reward-stock-access') {
     const ids = String(env.WITHDRAW_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean);
     if (!ids.includes(telegramId)) return out({ ok: false, code: 'ADMIN_ONLY', message: 'Admin only' }, 403);
-    return out({ ok: true, authorized: true });
+    const grantKey = 'event-reward-stock-v636';
+    if (String(body && body.action || '') === 'ack') {
+      await env.DB.prepare('INSERT OR IGNORE INTO admin_event_reward_grants(telegram_id,grant_key,claimed_at) VALUES(?1,?2,?3)')
+        .bind(telegramId, grantKey, Date.now()).run();
+      return out({ ok: true, authorized: true, seedRequired: false, grantKey });
+    }
+    const claimed = await env.DB.prepare('SELECT 1 AS ok FROM admin_event_reward_grants WHERE telegram_id=?1 AND grant_key=?2 LIMIT 1')
+      .bind(telegramId, grantKey).first();
+    return out({ ok: true, authorized: true, seedRequired: !claimed, grantKey });
   }
 
   if (path === '/api/clan/state') return out({ ok: true, state: await clanState(env, telegramId, player) });
