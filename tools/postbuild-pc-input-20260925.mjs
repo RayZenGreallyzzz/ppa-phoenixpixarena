@@ -21,7 +21,7 @@ const KEY = 'v610-pc-telegram-desktop-20260925';
 // Always derive the active build key from the canonical value emitted by build.mjs.
 // This keeps the postbuild independent from whatever feature most recently bumped
 // CLIENT_BUILD (Mimic art, clans, UI, etc.) and updates all matching asset URLs too.
-const activeBuildMatch = html.match(/window\\.PPA_CLIENT_BUILD=(["'])([^"']+)\\1;/);
+const activeBuildMatch = html.match(/window\.PPA_CLIENT_BUILD\s*=\s*(["'])([^"']+)\1\s*;/);
 if (activeBuildMatch && activeBuildMatch[2] && activeBuildMatch[2] !== KEY) {
   html = html.split(activeBuildMatch[2]).join(KEY);
 }
