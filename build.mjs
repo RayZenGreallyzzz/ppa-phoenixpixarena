@@ -1459,51 +1459,6 @@ if (!output.includes("function dungeonTeleportDisplayLabel(i)")) {
 
 /* ======================================================================== */
 
-/* === FRAME-TIME PLAYER MOVEMENT ========================================= */
-// The packed V278 update loop moves the hero by P.sp pixels PER FRAME.
-// That makes real running speed collapse together with FPS (60 -> 30 FPS =
-// roughly half speed; 60 -> 15 FPS = roughly quarter speed).
-//
-// Keep combat/balance ticks untouched. Only player world displacement is
-// normalized to real elapsed frame time. Long tab/background pauses reset to
-// 1x so the hero can never teleport when the app resumes.
-ppaPatchRegex(
-  'frame-time player movement clock',
-  /let __ppaHudNextAt=0;\s*function update\(\)\{/,
-  `let __ppaHudNextAt=0;
-let __ppaPlayerMoveClock=0;
-function ppaPlayerMoveFrameScale(){
-  const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
-  if(!Number.isFinite(__ppaPlayerMoveClock)||__ppaPlayerMoveClock<=0){
-    __ppaPlayerMoveClock=now;
-    return 1;
-  }
-  const elapsed=now-__ppaPlayerMoveClock;
-  __ppaPlayerMoveClock=now;
-  // A normal 60 Hz frame is 16.667 ms. Ignore long visibility/resume gaps.
-  if(!Number.isFinite(elapsed)||elapsed<=0||elapsed>120)return 1;
-  return Math.max(.20,Math.min(4.25,elapsed/(1000/60)));
-}
-function update(){`
-);
-
-ppaPatchRegex(
-  'frame-time normalized player displacement',
-  /P\.vx=_moveX\*P\.sp\*shopSpeedMul\(\)\*_aiMoveMul;\s*P\.vy=_moveY\*P\.sp\*shopSpeedMul\(\)\*_aiMoveMul;\s*let nx=P\.x\+P\.vx, ny=P\.y\+P\.vy;/,
-  `const _moveFrameScale=ppaPlayerMoveFrameScale();
-  P.vx=_moveX*P.sp*shopSpeedMul()*_aiMoveMul;
-  P.vy=_moveY*P.sp*shopSpeedMul()*_aiMoveMul;
-  let nx=P.x+P.vx*_moveFrameScale, ny=P.y+P.vy*_moveFrameScale;`
-);
-
-if(!output.includes('function ppaPlayerMoveFrameScale()') ||
-   !output.includes('P.x+P.vx*_moveFrameScale') ||
-   !output.includes('elapsed>120)return 1')) {
-  throw new Error('Frame-time player movement patch incomplete');
-}
-
-/* ======================================================================== */
-
 /* === FART ZONE MINE-ANCHORED AUTO ===================================== */
 // AUTO combat may move the hero back to the locked mine after its own guards
 // are cleared. Manual joystick input still wins because the client helper
