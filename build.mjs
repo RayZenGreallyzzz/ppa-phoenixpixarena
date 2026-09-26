@@ -2043,11 +2043,31 @@ if(!_ppaEliteAudit.drop1_40||!_ppaEliteAudit.drop41_60||!_ppaEliteAudit.info1_40
 
 /* ======================================================================== */
 
+/* === DUNGEON 31-40 BALANCE ============================================= */
+ppaPatchRegex(
+  '31-40 ordinary mob hp +2000',
+  /var hpBonus=\(e\.lvl<=30\)\?250:\(\(e\.lvl<=40\)\?210:0\);/,
+  "var hpBonus=(e.lvl<=30)?250:((e.lvl<=40)?2210:0);"
+);
+
+ppaPatchRegex(
+  '31-40 ordinary mob def +43',
+  /e\.def=\(v\.key==='armored'\)\?baseDef\*2:baseDef;\s*e\.dmg=v\.dmg;/,
+  "e.def=(v.key==='armored')?baseDef*2:baseDef;\n  if(e.lvl>=31&&e.lvl<=40)e.def+=43;\n  e.dmg=v.dmg;"
+);
+
+if(!output.includes("var hpBonus=(e.lvl<=30)?250:((e.lvl<=40)?2210:0);") ||
+   !output.includes("if(e.lvl>=31&&e.lvl<=40)e.def+=43;")) {
+  throw new Error('31-40 ordinary mob HP/DEF balance did not apply');
+}
+
+/* ======================================================================== */
+
 /* === DUNGEON 41-60 BALANCE ============================================= */
 ppaPatchRegex(
-  '41-60 mob stats +2000 hp +50 atk +40 def',
+  '41-60 mob stats current +8000 hp +120 def',
   /e\.hp=Math\.round\(ref\.hp\*3\);\s*e\.mhp=e\.hp;\s*e\.def=Math\.round\(ref\.def\*3\);\s*e\.dmg=Math\.round\(ref\.dmg\*3\);/,
-  "e.hp=Math.round(ref.hp*1.10)+2000;\n  e.mhp=e.hp;\n  e.def=Math.round(ref.def*1.07)+40;\n  e.dmg=Math.round(ref.dmg*1.13)+50;"
+  "e.hp=Math.round(ref.hp*1.10)+10000;\n  e.mhp=e.hp;\n  e.def=Math.round(ref.def*1.07)+160;\n  e.dmg=Math.round(ref.dmg*1.13)+50;"
 );
 
 /* ======================================================================== */
@@ -2227,14 +2247,14 @@ if (!output.includes("e.isDungeon60Boss?'ДРАКОН ПЕПЛА'")) {
 ppaPatchRegex(
   'dragon60 keeper card text',
   /Те же типы мобов · усиление ×3 · без босса/g,
-  "Те же типы мобов · усиление ×3 · босс: Дракон Пепла · 36 700 HP",
+  "Те же типы мобов · усиление ×3 · босс: Дракон Пепла · 67 000 HP",
   true
 );
 
 ppaPatchRegex(
   'dragon60 dungeon subtitle',
   /Уровни 41–60 · те же типы мобов · HP \/ DEF \/ ATK ×3 от 21–40 · БОССА НЕТ/g,
-  "Уровни 41–60 · мобы ×3 · Дракон Пепла · 36 700 HP · урон 180",
+  "Уровни 41–60 · мобы ×3 · Дракон Пепла · 67 000 HP · урон 180",
   true
 );
 
