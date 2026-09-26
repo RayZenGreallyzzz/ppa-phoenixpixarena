@@ -3172,126 +3172,55 @@ ppaPatchRegex(
   el.addEventListener('pointerleave',cancel,{passive:true});
 }
 var PPA_SMITH_EMERALD_IMG='${PPA_APPROVED_EMERALD_ART.data}';
-function ppaSmithCanvasize(root){
+function ppaSmithApplyArt(img){
   try{
-    var host=root&&root.querySelectorAll?root:document;
-    var imgs=[];
-    if(root&&root.tagName==='IMG')imgs.push(root);
-    host.querySelectorAll('img').forEach(function(x){imgs.push(x)});
-    imgs.forEach(function(img){
-      if(!img||img.__ppaCanvasized)return;
-      if(img.id==='enhSrcImg'||img.id==='enhDstImg'){
-        img.__ppaCanvasizingSrc=String(img.currentSrc||img.getAttribute('src')||img.src||'');
-        img.style.setProperty('object-fit','contain','important');
-        img.style.setProperty('image-rendering','auto','important');
-        return;
+    if(!img||img.tagName!=='IMG')return;
+    if(img.id==='enhSrcImg'||img.id==='enhDstImg'){
+      img.style.setProperty('object-fit','contain','important');
+      img.style.setProperty('image-rendering','auto','important');
+      return;
+    }
+    var matSlot=null,matName='',isEmerald=false;
+    try{
+      matSlot=img.closest?img.closest('[data-ppa-material-name]'):null;
+      matName=String(matSlot&&matSlot.dataset&&matSlot.dataset.ppaMaterialName||'');
+      isEmerald=/изумруд/i.test(matName);
+      if(isEmerald){
+        if(String(img.getAttribute('src')||'')!==PPA_SMITH_EMERALD_IMG)img.setAttribute('src',PPA_SMITH_EMERALD_IMG);
+        if(matSlot)matSlot.style.setProperty('overflow','hidden','important');
       }
-      var matSlot=null,matName='',isEmerald=false;
-      try{
-        matSlot=img.closest?img.closest('[data-ppa-material-name]'):null;
-        matName=String(matSlot&&matSlot.dataset&&matSlot.dataset.ppaMaterialName||'');
-        isEmerald=/изумруд/i.test(matName);
-        if(isEmerald){
-          if(String(img.getAttribute('src')||'')!==PPA_SMITH_EMERALD_IMG)img.setAttribute('src',PPA_SMITH_EMERALD_IMG);
-          img.style.setProperty('max-width','100%','important');
-          img.style.setProperty('max-height','100%','important');
-          img.style.setProperty('object-fit','contain','important');
-          if(matSlot)matSlot.style.setProperty('overflow','hidden','important');
-        }
-      }catch(_){}
-      var src=String(img.currentSrc||img.getAttribute('src')||img.src||'');
-      if(!src)return;
-
-      // Canonical legendary art is a live 256px file. Keep it as <img> so
-      // blacksmith selection can freely change src on every rerender.
-      if(src.indexOf('/assets/legendary/')>=0){
-        img.__ppaCanvasizingSrc=src;
-        img.style.setProperty('object-fit','contain','important');
-        img.style.setProperty('image-rendering','auto','important');
-        return;
-      }
-
-      // Dynamic smith tabs hydrate rare/legendary art just after render.
-      // Never replace the image until THIS exact source has loaded successfully.
-      if(img.__ppaCanvasizingSrc===src)return;
-      img.__ppaCanvasizingSrc=src;
-
-      var im=new Image();
-      im.onload=function(){
-        try{
-          if(!img||!img.parentNode){return}
-          var liveSrc=String(img.currentSrc||img.getAttribute('src')||img.src||'');
-          if(liveSrc!==src){
-            img.__ppaCanvasizingSrc='';
-            requestAnimationFrame(function(){ppaSmithCanvasize(img)});
-            return;
-          }
-
-          var c=document.createElement('canvas');
-          c.className=img.className||'';
-          c.style.cssText=img.style.cssText||'';
-          try{
-            var cs=getComputedStyle(img);
-            if(!c.style.width)c.style.width=cs.width;
-            if(!c.style.height)c.style.height=cs.height;
-            c.style.objectFit='contain';
-          }catch(_){}
-          c.setAttribute('aria-hidden','true');
-          c.style.pointerEvents='none';
-
-          var rect=img.getBoundingClientRect();
-          var w=Math.max(24,Math.round(rect.width||img.width||48));
-          var h=Math.max(24,Math.round(rect.height||img.height||48));
-          if(isEmerald&&matSlot){
-            try{
-              var mr=matSlot.getBoundingClientRect();
-              var side=Math.max(24,Math.floor(Math.min(Number(mr.width)||48,Number(mr.height)||48)-6));
-              w=Math.min(w,side);h=Math.min(h,side);
-              c.style.setProperty('width',side+'px','important');
-              c.style.setProperty('height',side+'px','important');
-              c.style.setProperty('max-width','100%','important');
-              c.style.setProperty('max-height','100%','important');
-              c.style.margin='auto';
-            }catch(_){}
-          }
-          var dpr=Math.min(2,window.devicePixelRatio||1);
-          c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
-
-          var ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);
-          var iw=Math.max(1,im.naturalWidth||im.width||1),ih=Math.max(1,im.naturalHeight||im.height||1);
-          var fit=Math.min(c.width/iw,c.height/ih),dw=iw*fit,dh=ih*fit;
-          ctx.drawImage(im,(c.width-dw)/2,(c.height-dh)/2,dw,dh);
-
-          img.__ppaCanvasized=true;
-          if(img.parentNode)img.parentNode.replaceChild(c,img);
-        }catch(_){
-          try{img.__ppaCanvasizingSrc=''}catch(__){}
-        }
-      };
-      im.onerror=function(){
-        try{img.__ppaCanvasizingSrc=''}catch(_){}
-      };
-      im.src=src;
-    });
+    }catch(_){}
+    img.style.setProperty('max-width','100%','important');
+    img.style.setProperty('max-height','100%','important');
+    img.style.setProperty('object-fit','contain','important');
+    img.style.setProperty('image-rendering','auto','important');
+    // Keep thumbnails as native IMG elements. Re-rasterizing each one into a
+    // fresh canvas on every smith rerender was the source of sharpen frame spikes.
+    img.__ppaSmithArtReady=true;
   }catch(_){}
 }
-var _ppaSmithCanvasQueue=[];
-var _ppaSmithCanvasRaf=0;
+var _ppaSmithArtQueue=[];
+var _ppaSmithArtRaf=0;
+function ppaSmithQueueArt(img){
+  if(!img||img.tagName!=='IMG'||img.__ppaSmithArtQueued)return;
+  img.__ppaSmithArtQueued=true;
+  _ppaSmithArtQueue.push(img);
+}
 function ppaSmithRefreshCanvasArt(root){
-  var target=root&&root.nodeType===1?root:document.documentElement;
-  // Collapse duplicate/nested mutation roots before the next frame. A full
-  // blacksmith rerender can otherwise schedule dozens of canvas scans at once.
-  for(var i=_ppaSmithCanvasQueue.length-1;i>=0;i--){
-    var q=_ppaSmithCanvasQueue[i];
-    if(q===target||(q.contains&&q.contains(target)))return;
-    if(target.contains&&target.contains(q))_ppaSmithCanvasQueue.splice(i,1);
-  }
-  _ppaSmithCanvasQueue.push(target);
-  if(_ppaSmithCanvasRaf)return;
-  _ppaSmithCanvasRaf=requestAnimationFrame(function(){
-    _ppaSmithCanvasRaf=0;
-    var batch=_ppaSmithCanvasQueue.splice(0,_ppaSmithCanvasQueue.length);
-    for(var i=0;i<batch.length;i++)ppaSmithCanvasize(batch[i]);
+  try{
+    if(root&&root.tagName==='IMG')ppaSmithQueueArt(root);
+    var host=root&&root.querySelectorAll?root:null;
+    if(host)host.querySelectorAll('img').forEach(ppaSmithQueueArt);
+  }catch(_){}
+  if(_ppaSmithArtRaf)return;
+  _ppaSmithArtRaf=requestAnimationFrame(function(){
+    _ppaSmithArtRaf=0;
+    var batch=_ppaSmithArtQueue.splice(0,_ppaSmithArtQueue.length);
+    for(var i=0;i<batch.length;i++){
+      var img=batch[i];
+      try{img.__ppaSmithArtQueued=false}catch(_){}
+      ppaSmithApplyArt(img);
+    }
   });
 }
 try{
@@ -3299,17 +3228,18 @@ try{
     for(var i=0;i<ms.length;i++){
       var m=ms[i];
       if(m.type==='attributes'&&m.target&&m.target.tagName==='IMG'){
-        try{m.target.__ppaCanvasizingSrc=''}catch(_){}
         ppaSmithRefreshCanvasArt(m.target);
         continue;
       }
-      // Queue the mutation container once, not every added child. The container
-      // already contains all new item images and is much cheaper to scan once.
-      if(m.type==='childList'&&m.target&&m.target.nodeType===1)ppaSmithRefreshCanvasArt(m.target);
+      var nodes=m.addedNodes||[];
+      for(var j=0;j<nodes.length;j++){
+        var n=nodes[j];
+        if(n&&n.nodeType===1)ppaSmithRefreshCanvasArt(n);
+      }
     }
   });
   _ppaSmithCanvasObserver.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','srcset']});
-  // Initial paint once. Further work is batched and mutation-driven.
+  // Initial normalization once; later smith rerenders only style the new IMG nodes.
   ppaSmithRefreshCanvasArt(document.documentElement);
 }catch(_){}
 function inspectSmithItem(it,context){`
@@ -4215,17 +4145,15 @@ if(output.includes("function fixGuardMenu(e)") ||
 
 if(output.includes("Object.keys(RES).forEach(name=&gt;{\n    const count=(BS_STATE.materials") ||
    !output.includes("function ppaSmithRefreshCanvasArt(root)") ||
-   !output.includes("__ppaCanvasizingSrc===src") ||
-   !output.includes("if(src.indexOf('/assets/legendary/')>=0)") ||
+   !output.includes("function ppaSmithApplyArt(img)") ||
+   !output.includes("var _ppaSmithArtQueue=[]") ||
+   !output.includes("img.__ppaSmithArtReady=true") ||
+   !output.includes("Keep thumbnails as native IMG elements") ||
    !output.includes("img.id==='enhSrcImg'||img.id==='enhDstImg'") ||
    !output.includes("_ppaLegendOpt.textContent=&#x27;Легендарный&#x27;") ||
    !output.includes("if(rarity==='legendary') return 'откат −1, легендарный не сгорает'") ||
    !output.includes("it.petName==='Великий Рури'||it.name==='Великий Рури'") ||
    !output.includes("attributeFilter:['src','srcset']") ||
-   !output.includes("Initial paint once. Further work is batched and mutation-driven.") ||
-   !output.includes("var _ppaSmithCanvasQueue=[]") ||
-   !output.includes("if(_ppaSmithCanvasRaf)return") ||
-   !output.includes("if(m.type==='childList'&&m.target&&m.target.nodeType===1)ppaSmithRefreshCanvasArt(m.target)") ||
    output.includes("document.addEventListener('click',function(){ppaSmithRefreshCanvasArt()},true)") ||
    output.includes("setInterval(ppaRefreshSmithCustomSelects,700)") ||
    !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v514'") ||
@@ -4233,14 +4161,14 @@ if(output.includes("Object.keys(RES).forEach(name=&gt;{\n    const count=(BS_STA
   throw new Error('Blacksmith pre-legend stable selection / canonical craft art fix did not apply');
 }
 
-if(!output.includes("function ppaSmithCanvasize(root)") ||
-   !output.includes("img.parentNode.replaceChild(c,img)") ||
+if(!output.includes("function ppaSmithApplyArt(img)") ||
    !output.includes("new MutationObserver(function(ms)") ||
    !output.includes("PPA_SMITH_EMERALD_IMG='data:image/webp;base64,") ||
    !output.includes("s.dataset.ppaMaterialName=c.name") ||
    !output.includes("img.closest('[data-ppa-material-name]')") ||
-   !output.includes("isEmerald=/изумруд/i.test(matName)")) {
-  throw new Error('Blacksmith canvas/emerald one-slot guard did not apply');
+   !output.includes("isEmerald=/изумруд/i.test(matName)") ||
+   output.includes("img.parentNode.replaceChild(c,img)")) {
+  throw new Error('Blacksmith native-image / emerald one-slot guard did not apply');
 }
 /* ======================================================================== */
 

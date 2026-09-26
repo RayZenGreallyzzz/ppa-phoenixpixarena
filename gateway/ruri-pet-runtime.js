@@ -386,7 +386,11 @@
     if(now-lastRenderAt<RURI_RENDER_INTERVAL)return;
     lastRenderAt=now;
     var it=equipped();
-    if(!it||typeof P==='undefined'||!P||P.dead){
+    var sc=scene();
+    if(!it||typeof P==='undefined'||!P||P.dead||sc==='mimic_sombrero_arena'){
+      // Mimic arena owns its own WORLD=1000 canvas and renders local Ruri there.
+      // Never project arena coordinates through the main-world cam/cv overlay.
+      if(attackState)stopAttack();
       try{if(lx&&layer)lx.clearRect(0,0,layer.width,layer.height)}catch(_){}
       return;
     }

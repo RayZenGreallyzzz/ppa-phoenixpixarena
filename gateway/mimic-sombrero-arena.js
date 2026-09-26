@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V7)return;
-  window.__PPA_MIMIC_SOMBRERO_ARENA_V7=true;
+  if(window.__PPA_MIMIC_SOMBRERO_ARENA_V8)return;
+  window.__PPA_MIMIC_SOMBRERO_ARENA_V8=true;
 
   var MAP_SRC='/assets/mimic-sombrero-arena.webp';
   var MASK_SRC='/assets/mimic-sombrero-walk-mask.png';
@@ -20,6 +20,15 @@
   var fightDone=false,playerDead=false,attackCaptureAt=0,lastPlayerX=500,lastPlayerY=840,playerDir=4,fx=[];
   var hiddenHud=[],controlState=[],lastControlFix=0;
   var playerMoving=false,playerAttackStartedAt=0,playerAttackAnimUntil=0,rewardPanel=null;
+  // Physical separation is expressed in arena world units (WORLD=1000).
+  // It is shared by player movement and boss AI, so neither side can enter
+  // the other's visual body during an attack.
+  var PLAYER_BODY_RADIUS=28,BOSS_BODY_RADIUS=62,BODY_GAP=16;
+  var MIN_BODY_DISTANCE=PLAYER_BODY_RADIUS+BOSS_BODY_RADIUS+BODY_GAP;
+  var BOSS_MELEE_REACH=MIN_BODY_DISTANCE+10;
+  var RURI_MOVE_SRC='/assets/ruri-move.webp',ruriMoveImg=new Image();
+  ruriMoveImg.src=RURI_MOVE_SRC;
+  var arenaPetX=NaN,arenaPetY=NaN,arenaPetDir='S';
 
   function eventApi(){return window.PPA_MIMIC_SOMBRERO_EVENT||null}
   function diff(){
@@ -216,6 +225,47 @@
     return bossProxy;
   }
   function playerDistanceToBoss(){try{return Math.hypot(Number(P.x)-boss.x,Number(P.y)-boss.y)}catch(_){return Infinity}}
+  function mimicRuriEquipped(){
+    try{
+      var it=typeof INV!=='undefined'&&INV&&INV.equipped?INV.equipped.pet:null;
+      return !!(it&&(it.ruriLegendary===true||String(it.petName||it.name||'')==='Великий Рури'));
+    }catch(_){return false}
+  }
+  function mimicPetFollowPoint(){
+    var f=Number(P&&P.face);if(!Number.isFinite(f))f=1;
+    var side=f<0?1:-1;
+    return{x:Number(P&&P.x||500)+side*34,y:Number(P&&P.y||840)+16};
+  }
+  function mimicPetDir(dx,dy){
+    if(Math.abs(dy)>Math.abs(dx)&&Math.abs(dy)>.12)return dy>0?'S':'N';
+    if(Math.abs(dx)>.12)return dx<0?'W':'E';
+    return arenaPetDir||'S';
+  }
+  function updateArenaPet(dt){
+    if(!mimicRuriEquipped()){arenaPetX=NaN;arenaPetY=NaN;return}
+    var fp=mimicPetFollowPoint();
+    if(!Number.isFinite(arenaPetX)||!Number.isFinite(arenaPetY)||Math.hypot(arenaPetX-fp.x,arenaPetY-fp.y)>240){
+      arenaPetX=fp.x;arenaPetY=fp.y;return;
+    }
+    var dx=fp.x-arenaPetX,dy=fp.y-arenaPetY,dist=Math.hypot(dx,dy);
+    if(dist>.25){
+      var alpha=1-Math.exp(-Math.max(1,Number(dt)||16)/95);
+      arenaPetX+=dx*alpha;arenaPetY+=dy*alpha;arenaPetDir=mimicPetDir(dx,dy);
+    }
+  }
+  function drawArenaPet(ts,ox,oy,size){
+    if(!mimicRuriEquipped()||!Number.isFinite(arenaPetX)||!Number.isFinite(arenaPetY))return;
+    if(!ruriMoveImg.complete||ruriMoveImg.naturalWidth<256||ruriMoveImg.naturalHeight<256)return;
+    var px=ox+arenaPetX/WORLD*size,py=oy+arenaPetY/WORLD*size;
+    var fp=mimicPetFollowPoint(),moving=Math.hypot(fp.x-arenaPetX,fp.y-arenaPetY)>.8;
+    var dir=arenaPetDir||'S',row=dir==='N'?1:(dir==='W'?2:(dir==='E'?3:0));
+    var frame=moving?(Math.floor(Number(ts||0)/120)%4):0;
+    var ds=Math.max(48,Math.min(70,size*.064));
+    ctx.save();ctx.imageSmoothingEnabled=false;ctx.globalAlpha=.96;
+    ctx.fillStyle='rgba(0,0,0,.28)';ctx.beginPath();ctx.ellipse(px,py+ds*.30,ds*.24,ds*.075,0,0,Math.PI*2);ctx.fill();
+    ctx.drawImage(ruriMoveImg,frame*64,row*64,64,64,Math.round(px-ds/2),Math.round(py-ds*.80),Math.round(ds),Math.round(ds));
+    ctx.restore();
+  }
   function basicRange(){
     try{
       var n=typeof playerBasicRange==='function'?Number(playerBasicRange()):Number(P&&P.attackRange);
@@ -246,7 +296,7 @@
       if(!inBasicRange()){
         pendingBasic=true;
         var dx=boss.x-Number(P.x),dy=boss.y-Number(P.y),d=Math.max(1,Math.hypot(dx,dy));
-        var stop=Math.max(80,basicRange()+30);
+        var stop=Math.max(MIN_BODY_DISTANCE,basicRange()+30);
         moveTarget={x:boss.x-dx/d*stop,y:boss.y-dy/d*stop};
         if(!fromPending)toast('МИМИК · подхожу к цели','#e3c58c');
         return true;
@@ -340,8 +390,15 @@
     boss.dir=Math.abs(dx)>Math.abs(dy)?(dx<0?1:2):(dy<0?3:0);
     if(Number(P.smokeUntil)>now)return;
     if(now>=nextSkillAt&&d<=430){startSkill(now);return}
-    if(d>86){
-      var speed=54,step=Math.min(Math.max(0,d-82),speed*Math.max(0,dt)/1000);
+    // Resolve any overlap first. The boss may chase the player, but its body
+    // can never occupy the player's body coordinates.
+    if(d<MIN_BODY_DISTANCE){
+      var ux=dx/d,uy=dy/d;
+      var sepX=px-ux*MIN_BODY_DISTANCE,sepY=py-uy*MIN_BODY_DISTANCE;
+      if(canWalkWorld(sepX,sepY)){boss.x=sepX;boss.y=sepY;dx=px-boss.x;dy=py-boss.y;d=Math.max(.001,Math.hypot(dx,dy))}
+    }
+    if(d>BOSS_MELEE_REACH){
+      var speed=54,step=Math.min(Math.max(0,d-BOSS_MELEE_REACH),speed*Math.max(0,dt)/1000);
       var nx=boss.x+dx/d*step,ny=boss.y+dy/d*step;
       if(canWalkWorld(nx,ny)){boss.x=nx;boss.y=ny}
       return;
@@ -379,6 +436,12 @@
       var slow=(now<Number(P.aiSlowUntil||0))?Math.max(.25,Math.min(1,Number(P.aiSlowMul)||.8)):1;
       var speed=(80+Math.max(0,Number(P.spd)||3)*18)*slow;
       var step=speed*Math.max(0,dt)/1000,nx=px+ix*step,ny=py+iy*step;
+      var bdx=nx-boss.x,bdy=ny-boss.y,bd=Math.hypot(bdx,bdy);
+      if(!boss.dead&&bd<MIN_BODY_DISTANCE){
+        if(bd<.001){bdx=0;bdy=1;bd=1}
+        nx=boss.x+bdx/bd*MIN_BODY_DISTANCE;
+        ny=boss.y+bdy/bd*MIN_BODY_DISTANCE;
+      }
       if(canWalkWorld(nx,ny)){P.x=nx;P.y=ny}
       else if(!manual){moveTarget=null;pendingBasic=false}
     }
@@ -503,11 +566,11 @@
     var dt=lastTs?Math.max(0,Math.min(50,ts-lastTs)):16;lastTs=ts;
     var now=Date.now();
     if(!fightDone&&now-lastControlFix>500){lastControlFix=now;setCombatControls(true)}
-    updatePlayer(now,dt);bossAI(now,dt);syncProxy();
+    updatePlayer(now,dt);bossAI(now,dt);syncProxy();updateArenaPet(dt);
 
     var W=cv.width,H=cv.height,size=Math.min(W,H),ox=(W-size)/2,oy=(H-size)/2;
     drawExtendedMap(W,H,size,ox,oy);
-    drawSkill(ox,oy,size,now);drawBoss(ts,ox,oy,size);drawPlayer(ts,ox,oy,size);drawFx(ox,oy,size,now);drawHud(size,W);
+    drawSkill(ox,oy,size,now);drawBoss(ts,ox,oy,size);drawArenaPet(ts,ox,oy,size);drawPlayer(ts,ox,oy,size);drawFx(ox,oy,size,now);drawHud(size,W);
 
     var tag=document.getElementById('ppaMimicArenaTag');
     if(tag){
@@ -579,7 +642,7 @@
         prevScene=String(P&&P.scene||'safe');prevX=Number(P&&P.x)||0;prevY=Number(P&&P.y)||0;prevTid=P?P.tid:null;
         P.scene=SCENE;P.x=500;P.y=840;P.tid=null;P.dead=false;
       }catch(_){}
-      lastPlayerX=500;lastPlayerY=840;playerDir=0;moveTarget=null;pendingBasic=false;
+      lastPlayerX=500;lastPlayerY=840;playerDir=0;moveTarget=null;pendingBasic=false;arenaPetX=NaN;arenaPetY=NaN;arenaPetDir='S';
       fightDone=false;playerDead=false;skillCast=null;fx.length=0;attackCaptureAt=0;
       playerMoving=false;playerAttackStartedAt=0;playerAttackAnimUntil=0;try{if(rewardPanel)rewardPanel.style.display='none'}catch(_){};
       var now=Date.now(),c=combat();nextAttackAt=now+Math.max(700,Number(c.attackEvery)||2200);nextSkillAt=now+randomSkillDelay();
@@ -607,7 +670,7 @@
     // got into a bad state. It is intentionally independent from combat.
     active=false;
     try{cancelAnimationFrame(raf)}catch(_){}
-    raf=0;moveTarget=null;pendingBasic=false;skillCast=null;fx.length=0;
+    raf=0;moveTarget=null;pendingBasic=false;skillCast=null;fx.length=0;arenaPetX=NaN;arenaPetY=NaN;
     try{if(root)root.style.display='none'}catch(_){}
     try{if(rewardPanel)rewardPanel.style.display='none'}catch(_){}
     try{var b=document.getElementById('ppaMimicArenaExit');if(b)b.style.display='none'}catch(_){}
