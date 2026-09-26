@@ -3275,9 +3275,24 @@ function ppaSmithCanvasize(root){
     });
   }catch(_){}
 }
+var _ppaSmithCanvasQueue=[];
+var _ppaSmithCanvasRaf=0;
 function ppaSmithRefreshCanvasArt(root){
-  var target=root&&root.nodeType===1?root:document;
-  requestAnimationFrame(function(){ppaSmithCanvasize(target)});
+  var target=root&&root.nodeType===1?root:document.documentElement;
+  // Collapse duplicate/nested mutation roots before the next frame. A full
+  // blacksmith rerender can otherwise schedule dozens of canvas scans at once.
+  for(var i=_ppaSmithCanvasQueue.length-1;i>=0;i--){
+    var q=_ppaSmithCanvasQueue[i];
+    if(q===target||(q.contains&&q.contains(target)))return;
+    if(target.contains&&target.contains(q))_ppaSmithCanvasQueue.splice(i,1);
+  }
+  _ppaSmithCanvasQueue.push(target);
+  if(_ppaSmithCanvasRaf)return;
+  _ppaSmithCanvasRaf=requestAnimationFrame(function(){
+    _ppaSmithCanvasRaf=0;
+    var batch=_ppaSmithCanvasQueue.splice(0,_ppaSmithCanvasQueue.length);
+    for(var i=0;i<batch.length;i++)ppaSmithCanvasize(batch[i]);
+  });
 }
 try{
   var _ppaSmithCanvasObserver=new MutationObserver(function(ms){
@@ -3288,15 +3303,13 @@ try{
         ppaSmithRefreshCanvasArt(m.target);
         continue;
       }
-      var nodes=m.addedNodes||[];
-      for(var j=0;j<nodes.length;j++){
-        var n=nodes[j];
-        if(n&&n.nodeType===1)ppaSmithRefreshCanvasArt(n);
-      }
+      // Queue the mutation container once, not every added child. The container
+      // already contains all new item images and is much cheaper to scan once.
+      if(m.type==='childList'&&m.target&&m.target.nodeType===1)ppaSmithRefreshCanvasArt(m.target);
     }
   });
   _ppaSmithCanvasObserver.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','srcset']});
-  // Initial paint once. Further work is strictly mutation-driven.
+  // Initial paint once. Further work is batched and mutation-driven.
   ppaSmithRefreshCanvasArt(document.documentElement);
 }catch(_){}
 function inspectSmithItem(it,context){`
@@ -4209,7 +4222,10 @@ if(output.includes("Object.keys(RES).forEach(name=&gt;{\n    const count=(BS_STA
    !output.includes("if(rarity==='legendary') return 'откат −1, легендарный не сгорает'") ||
    !output.includes("it.petName==='Великий Рури'||it.name==='Великий Рури'") ||
    !output.includes("attributeFilter:['src','srcset']") ||
-   !output.includes("Initial paint once. Further work is strictly mutation-driven.") ||
+   !output.includes("Initial paint once. Further work is batched and mutation-driven.") ||
+   !output.includes("var _ppaSmithCanvasQueue=[]") ||
+   !output.includes("if(_ppaSmithCanvasRaf)return") ||
+   !output.includes("if(m.type==='childList'&&m.target&&m.target.nodeType===1)ppaSmithRefreshCanvasArt(m.target)") ||
    output.includes("document.addEventListener('click',function(){ppaSmithRefreshCanvasArt()},true)") ||
    output.includes("setInterval(ppaRefreshSmithCustomSelects,700)") ||
    !output.includes("return '/assets/legendary/'+_ppaC+'-'+_ppaS+'.webp?v=v514'") ||
