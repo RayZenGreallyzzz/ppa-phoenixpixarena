@@ -222,7 +222,23 @@ async function ensureOnlineSchema(env) {
       grant_key TEXT NOT NULL,
       claimed_at INTEGER NOT NULL,
       PRIMARY KEY (telegram_id, grant_key)
-    )`
+    )`,
+    `CREATE TABLE IF NOT EXISTS player_visit_stats (
+      telegram_id TEXT PRIMARY KEY,
+      nickname TEXT NOT NULL DEFAULT '',
+      first_seen_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      login_count INTEGER NOT NULL DEFAULT 1
+    )`,
+    `CREATE TABLE IF NOT EXISTS player_visit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id TEXT NOT NULL,
+      nickname TEXT NOT NULL DEFAULT '',
+      entered_at INTEGER NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_player_visit_stats_last_seen ON player_visit_stats(last_seen_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_player_visit_log_entered ON player_visit_log(entered_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_player_visit_log_user_entered ON player_visit_log(telegram_id, entered_at DESC)`
   ];
   for (const q of sql) await env.DB.prepare(q).run();
   schemaReady = true;
@@ -727,6 +743,39 @@ export async function handleOnlineRoute(path, ctx) {
   const { env, body, auth, player } = ctx;
   const telegramId = String(auth.user.id);
   await ensureOnlineSchema(env);
+
+  if (path === '/api/admin/player-visits') {
+    const ids = String(env.WITHDRAW_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean);
+    if (!ids.includes(telegramId)) return out({ ok: false, code: 'ADMIN_ONLY', message: 'Admin only' }, 403);
+    const since24h = Date.now() - 24 * 60 * 60 * 1000;
+    const [total, unique24h, sessions24h, recent] = await Promise.all([
+      env.DB.prepare('SELECT COUNT(*) AS n FROM player_visit_stats').first(),
+      env.DB.prepare('SELECT COUNT(DISTINCT telegram_id) AS n FROM player_visit_log WHERE entered_at>=?1').bind(since24h).first(),
+      env.DB.prepare('SELECT COUNT(*) AS n FROM player_visit_log WHERE entered_at>=?1').bind(since24h).first(),
+      env.DB.prepare(`
+        SELECT s.telegram_id,
+               COALESCE(NULLIF(p.nickname,''),NULLIF(s.nickname,''),NULLIF(p.telegram_first_name,''),NULLIF(p.telegram_username,''),'ID '||s.telegram_id) AS nickname,
+               s.first_seen_at,s.last_seen_at,s.login_count
+        FROM player_visit_stats s
+        LEFT JOIN players p ON p.telegram_id=s.telegram_id
+        ORDER BY s.last_seen_at DESC
+        LIMIT 50
+      `).all()
+    ]);
+    return out({
+      ok: true,
+      totalUnique: Number(total && total.n) || 0,
+      unique24h: Number(unique24h && unique24h.n) || 0,
+      sessions24h: Number(sessions24h && sessions24h.n) || 0,
+      recent: (recent.results || []).map((r) => ({
+        telegramId: String(r.telegram_id || ''),
+        nickname: cleanName(r.nickname || ('ID ' + r.telegram_id), 24),
+        firstSeenAt: Number(r.first_seen_at) || 0,
+        lastSeenAt: Number(r.last_seen_at) || 0,
+        loginCount: Math.max(0, Number(r.login_count) || 0)
+      }))
+    });
+  }
 
   if (path === '/api/admin/event-reward-stock-access') {
     const ids = String(env.WITHDRAW_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean);
