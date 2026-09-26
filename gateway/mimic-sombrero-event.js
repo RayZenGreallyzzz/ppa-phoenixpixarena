@@ -185,7 +185,10 @@
     it.setId='mimic_sombrero';it.ppaMimicSombrero=true;it.ppaMimicNativeV1=true;it.ppaMimicArtV=2;
     it.enh=oldEnh;it.sell=0;it.img=art;it.src=art;it.image=art;it.art=art;it.iconArt=art;it.cardArt=art;
     it.desc='Ивентовый общий сет Мимика-Самбреро · статы как у обычного шмота этой редкости · подходит всем классам.';
-    it.bonusText='Сет Мимика-Самбреро · каждая часть даёт бонус золота и дропа по редкости.';
+    var pieceRate=tier==='epic'?0.014:(tier==='blue'?0.01:0.004);
+    it.mimicGoldBonus=pieceRate;
+    it.mimicDropBonus=pieceRate;
+    it.bonusText='Сет Мимика-Самбреро · эта часть: +'+(pieceRate*100).toFixed(pieceRate===0.004?1:0)+'% золота и +'+(pieceRate*100).toFixed(pieceRate===0.004?1:0)+'% дропа.';
     try{if(typeof applyEnhancementStats==='function')applyEnhancementStats(it)}catch(_){}
     try{if(typeof syncItemBM==='function')syncItemBM(it)}catch(_){}
     return it;
@@ -259,6 +262,117 @@
   window.PPA_MIMIC_SOMBRERO_SET_BONUS=setBonus;
   window.PPA_MIMIC_SOMBRERO_NORMALIZE_GEAR=normalizeOwnedMimicGear;
 
+  // Real set bonuses, not UI-only:
+  // green 0.4%/piece = 2% full set
+  // blue  1.0%/piece = 5% full set
+  // epic  1.4%/piece = 7% full set
+  function setBonusSafe(){
+    try{
+      var b=setBonus();
+      return{
+        gold:Math.max(0,Math.min(.07,Number(b&&b.gold)||0)),
+        drop:Math.max(0,Math.min(.07,Number(b&&b.drop)||0))
+      };
+    }catch(_){return{gold:0,drop:0}}
+  }
+
+  function installSetDropBonus(){
+    try{
+      if(typeof rewardDropMul!=='function'||rewardDropMul.__ppaMimicSetDropBonus)return false;
+      var base=rewardDropMul;
+      var wrapped=function(){
+        var v=Number(base.apply(this,arguments));
+        if(!Number.isFinite(v))v=1;
+        return v*(1+setBonusSafe().drop);
+      };
+      wrapped.__ppaMimicSetDropBonus=1;
+      wrapped.__ppaMimicSetDropBase=base;
+      try{rewardDropMul=wrapped}catch(_){}
+      try{window.rewardDropMul=wrapped}catch(_){}
+      return true;
+    }catch(_){return false}
+  }
+
+  var _goldCarry=0;
+  function goldRef(){
+    var roots=[];
+    try{if(typeof INV==='object'&&INV)roots.push(INV)}catch(_){}
+    try{if(typeof P==='object'&&P)roots.push(P)}catch(_){}
+    var keys=['gold','coins','money','coin','zoloto'];
+    for(var i=0;i<roots.length;i++){
+      var o=roots[i];
+      for(var j=0;j<keys.length;j++){
+        var k=keys[j];
+        if(typeof o[k]==='number'&&Number.isFinite(o[k]))return{obj:o,key:k};
+      }
+    }
+    return null;
+  }
+  function isGoldLoot(q){
+    if(!q||typeof q!=='object')return false;
+    var kind=String(q.kind||q.type||'').toLowerCase();
+    var name=String(q.name||q.n||q.title||'').toLowerCase();
+    return kind==='gold'||kind==='coin'||kind==='coins'||kind==='money'||/золот|gold/.test(name);
+  }
+  function addGoldExtra(base,rate){
+    base=Math.max(0,Number(base)||0);
+    var raw=base*rate+_goldCarry;
+    var extra=Math.floor(raw+1e-9);
+    _goldCarry=raw-extra;
+    return extra;
+  }
+  function scaleGoldLootFrom(start,rate){
+    var changed=false;
+    try{
+      if(typeof LOOT==='undefined'||!Array.isArray(LOOT))return false;
+      start=Math.max(0,Math.min(LOOT.length,Number(start)||0));
+      for(var i=start;i<LOOT.length;i++){
+        var q=LOOT[i];
+        if(!isGoldLoot(q))continue;
+        var keys=['amount','qty','count','value','gold'];
+        for(var j=0;j<keys.length;j++){
+          var k=keys[j];
+          if(typeof q[k]==='number'&&Number.isFinite(q[k])&&q[k]>0){
+            q[k]+=addGoldExtra(q[k],rate);
+            changed=true;
+            break;
+          }
+        }
+      }
+    }catch(_){}
+    return changed;
+  }
+  function installSetGoldBonus(){
+    try{
+      if(typeof dropLoot!=='function'||dropLoot.__ppaMimicSetGoldBonus)return false;
+      var base=dropLoot;
+      var wrapped=function(){
+        var rate=setBonusSafe().gold;
+        if(rate<=0)return base.apply(this,arguments);
+        var start=0;
+        try{if(typeof LOOT!=='undefined'&&Array.isArray(LOOT))start=LOOT.length}catch(_){}
+        var ref=goldRef(),before=ref?Number(ref.obj[ref.key])||0:0;
+        var result=base.apply(this,arguments);
+        var lootAdjusted=scaleGoldLootFrom(start,rate);
+        if(!lootAdjusted&&ref){
+          var after=Number(ref.obj[ref.key])||0;
+          var gained=after-before;
+          if(gained>0)ref.obj[ref.key]=after+addGoldExtra(gained,rate);
+        }
+        return result;
+      };
+      wrapped.__ppaMimicSetGoldBonus=1;
+      wrapped.__ppaMimicSetGoldBase=base;
+      try{dropLoot=wrapped}catch(_){}
+      try{window.dropLoot=wrapped}catch(_){}
+      return true;
+    }catch(_){return false}
+  }
+  function installSetRewardBonuses(){
+    installSetDropBonus();
+    installSetGoldBonus();
+  }
+
   function pct(v){return (Math.round(Number(v||0)*10000)/100).toFixed((Number(v||0)*100)%1?2:0)+'%'}
   function rewardRows(lv){
     var d=DIFF[Number(lv)]||DIFF[20],ex=EXTRA_REWARDS[d.level]||{stones:[],potion:0};
@@ -287,13 +401,16 @@
     return false;
   }
 
-  function install(){registerMaterials();normalizeOwnedMimicGear();installDropRoll();installDropInfo();installBlackMarketFilter()}
-  registerMaterials();install();setTimeout(install,250);setTimeout(install,900);setTimeout(install,1800);
+  function install(){registerMaterials();normalizeOwnedMimicGear();installDropRoll();installDropInfo();installBlackMarketFilter();installSetRewardBonuses()}
+  registerMaterials();install();setTimeout(install,250);setTimeout(install,900);setTimeout(install,1800);setTimeout(install,3200);
   window.PPA_MIMIC_SOMBRERO_DIAG=function(){
     var drop=false,info=false;
     try{drop=!!(typeof dropLoot==='function'&&dropLoot.__ppaMimicSombreroTicket)}catch(_){}
     try{info=!!(typeof mobDropInfo==='function'&&mobDropInfo.__ppaMimicSombreroInfo)}catch(_){}
-    return {active:active(),test:testMode(),ticketChance:testMode()?1:TICKET_CHANCE,dropHook:drop,infoHook:info,tickets:ticketCount()};
+    var setDrop=false,setGold=false;
+    try{setDrop=!!(typeof rewardDropMul==='function'&&rewardDropMul.__ppaMimicSetDropBonus)}catch(_){}
+    try{setGold=!!(typeof dropLoot==='function'&&dropLoot.__ppaMimicSetGoldBonus)}catch(_){}
+    return {active:active(),test:testMode(),ticketChance:testMode()?1:TICKET_CHANCE,dropHook:drop,infoHook:info,setDropHook:setDrop,setGoldHook:setGold,setBonus:setBonus(),tickets:ticketCount()};
   };
   window.PPA_MIMIC_SOMBRERO_EVENT={
     active:active,
