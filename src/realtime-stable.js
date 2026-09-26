@@ -1356,12 +1356,26 @@ export class RealtimeHub extends BaseRealtimeHub {
   }
 
   eliteWindow(now = Date.now()) {
-    // TEMP LIVE TEST: keep the server-owned elite active continuously so QA can
-    // run through 1–20, 21–40 and 41–60 immediately. One elite per dungeon room
-    // per 30-minute test key; killing it does not respawn another until the key changes.
-    const testBucket=Math.floor(now/(30*60*1000));
-    const testEnd=(testBucket+1)*(30*60*1000);
-    return{key:'elite-test-'+testBucket,active:true,end:testEnd};
+    let year=0,month=0,day=0,hour=0,minute=0,second=0;
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB',{
+        timeZone:'Europe/Kyiv',year:'numeric',month:'2-digit',day:'2-digit',
+        hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+      }).formatToParts(new Date(now));
+      const p={};
+      for(const q of parts) if(q.type!=='literal')p[q.type]=q.value;
+      year=Number(p.year)||0;month=Number(p.month)||0;day=Number(p.day)||0;
+      hour=Number(p.hour)||0;minute=Number(p.minute)||0;second=Number(p.second)||0;
+    } catch (_) {
+      const d=new Date(now);
+      year=d.getUTCFullYear();month=d.getUTCMonth()+1;day=d.getUTCDate();
+      hour=d.getUTCHours();minute=d.getUTCMinutes();second=d.getUTCSeconds();
+    }
+    const slotHour=Math.floor(hour/2)*2;
+    const key=year+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0')+'-'+String(slotHour).padStart(2,'0');
+    const active=hour===slotHour&&minute<30;
+    const remainSec=active?Math.max(1,(30-minute)*60-second):0;
+    return{key,active,end:active?now+remainSec*1000:0};
   }
 
   eliteHash(str) {
