@@ -875,6 +875,21 @@ ppaPatchRegex(
 
 /* ======================================================================== */
 
+/* === RELEASE DUNGEON ACCESS ============================================= */
+// Dungeon 1–20 is the permanent starter/revisit dungeon and stays open at any
+// character level. Higher brackets keep their native level requirements.
+ppaPatchRegex(
+  'release dungeon 1-20 open all levels',
+  /function\s+dungeon1Unlocked\(\)\s*\{[\s\S]*?return\s+lv>=1&&lv<=20\s*;\s*\}/,
+  "function dungeon1Unlocked(){return true;}"
+);
+
+if(!output.includes("function dungeon1Unlocked(){return true;}")){
+  throw new Error('Release dungeon 1-20 access rule did not apply');
+}
+
+/* ======================================================================== */
+
 /* === V335 AUCTION PREMIUM ART ============================================ */
 ppaPatchRegex(
   'auction keep inventory art',
