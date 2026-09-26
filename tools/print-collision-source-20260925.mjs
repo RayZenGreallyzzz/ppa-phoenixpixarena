@@ -1,25 +1,47 @@
 import fs from 'node:fs';
 import zlib from 'node:zlib';
+
 const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
 const src=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
-function excerpt(label,pos,pre=2600,post=5000){
+
+function excerpt(label,pos,pre=1800,post=4200){
   console.log('\n===== '+label+' @ '+pos+' =====');
-  console.log(src.slice(Math.max(0,pos-pre), Math.min(src.length,pos+post)));
+  console.log(src.slice(Math.max(0,pos-pre),Math.min(src.length,pos+post)));
 }
+
 const terms=[
-  'function clanSiegeSlide','clanSiegeSlide(','CLAN_SIEGE_CAPTURE','CLAN_SIEGE_CASTLE','clanSiegeInsideCapture','function clanSiegeInsideCapture',
-  'function hitWall','function collide','function collision','function blocked','function canMove','function movePlayer','function updatePlayer','tryMove','solidAt','isWall','isBlocked','isSolid','collideRect','wallAt',
-  'leaveBtn','ВЫЙТИ В ГОРОД','ВЫЙТИ','можно выйти',
-  'drawClanSiegeWorld','clanSiegeUpdate','CLAN_SIEGE'
+  'function updateSmartAttackInput','updateSmartAttackInput()',
+  'const _moveX','const _moveY',
+  'jX','jY','joy','joystick',
+  'requestAnimationFrame','performance.now','Date.now()',
+  'deltaTime','delta','dt',
+  'P.x+=','P.y+=','P.x -=','P.y -=',
+  'P.x =','P.y =',
+  'speed','moveSpeed','walkSpeed',
+  'function hitWall','function collide','function collision','function blocked',
+  'function canMove','function movePlayer','function updatePlayer','tryMove',
+  'solidAt','isWall','isBlocked','isSolid','collideRect','wallAt',
+  'cam.x','cam.y','cameraZoom'
 ];
+
 for(const term of terms){
   let pos=0,count=0;
-  while((pos=src.indexOf(term,pos))>=0 && count<12){ excerpt(term+' hit '+(++count),pos); pos+=term.length; }
+  while((pos=src.indexOf(term,pos))>=0&&count<20){
+    excerpt(term+' hit '+(++count),pos);
+    pos+=Math.max(1,term.length);
+  }
 }
-const re=/function\s+([A-Za-z0-9_$]*(?:clanSiege|move|Move|wall|Wall|solid|Solid|collid|Collid|block|Block|leave|Leave)[A-Za-z0-9_$]*)\s*\([^)]*\)\s*\{/g;
-let m, names=[];
-while((m=re.exec(src)) && names.length<120){names.push({name:m[1],pos:m.index});}
-console.log('\n===== LIKELY FUNCTIONS =====');
-for(const n of names) console.log(n.pos+' '+n.name);
-for(const n of names.slice(0,50)) excerpt('FUNC '+n.name,n.pos,1000,2200);
-// trigger exact clanSiegeSlide 20260925-1427
+
+console.log('\n===== LIKELY MOVEMENT FUNCTIONS =====');
+const re=/function\s+([A-Za-z0-9_$]*(?:move|Move|update|Update|loop|Loop|tick|Tick|wall|Wall|solid|Solid|collid|Collid|block|Block|camera|Camera)[A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*\{/g;
+let m,n=0;
+while((m=re.exec(src))&&n<180){
+  const name=m[1];
+  if(/move|update|loop|tick|wall|solid|collid|block|camera/i.test(name)){
+    console.log(m.index+' '+name+'('+m[2]+')');
+    excerpt('FUNC '+name,m.index,1000,2600);
+    n++;
+  }
+}
+
+// movement FPS source audit 20260926
