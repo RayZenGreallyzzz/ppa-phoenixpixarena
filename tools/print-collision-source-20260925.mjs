@@ -8,3 +8,5 @@ for(const name of ['applyDungeon21MobStats','applyDungeon41MobStats']){
   console.log('\n===== '+name+' =====\n');
   console.log(src.slice(p,Math.min(src.length,p+9000)));
 }
+
+// trigger dungeon mob stats exact 20260927
