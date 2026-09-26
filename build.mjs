@@ -3275,25 +3275,29 @@ function ppaSmithCanvasize(root){
     });
   }catch(_){}
 }
-function ppaSmithRefreshCanvasArt(){
-  requestAnimationFrame(function(){ppaSmithCanvasize(document)});
-  setTimeout(function(){ppaSmithCanvasize(document)},80);
-  setTimeout(function(){ppaSmithCanvasize(document)},240);
+function ppaSmithRefreshCanvasArt(root){
+  var target=root&&root.nodeType===1?root:document;
+  requestAnimationFrame(function(){ppaSmithCanvasize(target)});
 }
 try{
-  new MutationObserver(function(ms){
-    ms.forEach(function(m){
-      (m.addedNodes||[]).forEach(function(n){
-        if(n&&n.nodeType===1)requestAnimationFrame(function(){ppaSmithCanvasize(n)})
-      });
+  var _ppaSmithCanvasObserver=new MutationObserver(function(ms){
+    for(var i=0;i<ms.length;i++){
+      var m=ms[i];
       if(m.type==='attributes'&&m.target&&m.target.tagName==='IMG'){
         try{m.target.__ppaCanvasizingSrc=''}catch(_){}
-        requestAnimationFrame(function(){ppaSmithCanvasize(m.target)});
+        ppaSmithRefreshCanvasArt(m.target);
+        continue;
       }
-    });
-  }).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','srcset']});
-  document.addEventListener('click',function(){ppaSmithRefreshCanvasArt()},true);
-  ppaSmithRefreshCanvasArt();
+      var nodes=m.addedNodes||[];
+      for(var j=0;j<nodes.length;j++){
+        var n=nodes[j];
+        if(n&&n.nodeType===1)ppaSmithRefreshCanvasArt(n);
+      }
+    }
+  });
+  _ppaSmithCanvasObserver.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','srcset']});
+  // Initial paint once. Further work is strictly mutation-driven.
+  ppaSmithRefreshCanvasArt(document.documentElement);
 }catch(_){}
 function inspectSmithItem(it,context){`
 );
@@ -5189,8 +5193,7 @@ ppaPatchRegex(
   'rune fusion lexical bridge on blacksmith state',
   /function\s+sendBlacksmithState\(\)\s*\{/,
   `function sendBlacksmithState(){
-  try{ppaInstallRuneFusionLexical()}catch(_){}
-  try{if(window.PPA_MIMIC_SOMBRERO_NORMALIZE_GEAR)window.PPA_MIMIC_SOMBRERO_NORMALIZE_GEAR()}catch(_){}`
+  try{ppaInstallRuneFusionLexical()}catch(_){}`
 );
 
 if(!output.includes("function ppaInstallRuneFusionLexical()") ||
@@ -5510,7 +5513,6 @@ ppaPatchRegex(
   }
 
   ppaRefreshSmithCustomSelects();
-  if(!window.__ppaSmithSelectTimer)window.__ppaSmithSelectTimer=setInterval(ppaRefreshSmithCustomSelects,700);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ppaInstallSmithCustomSelects);
 else setTimeout(ppaInstallSmithCustomSelects,0);
