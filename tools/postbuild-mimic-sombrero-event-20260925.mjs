@@ -10,7 +10,7 @@ if (!fs.existsSync(eventPath)) throw new Error('gateway/mimic-sombrero-event.js 
 let html = fs.readFileSync(indexPath, 'utf8');
 const code = fs.readFileSync(eventPath, 'utf8');
 const marker = '<!-- PPA_MIMIC_SOMBRERO_EVENT_V2 -->';
-const key = 'v632-admin-500-premium-smith-resources-20260926';
+const key = 'v633-admin-smith-resources-premium-storage-20260926';
 html = html
   .split('v602-clan-siege-exit-visible-20260925').join(key)
   .split('v606-clan-siege-city-exit-20260925').join(key)
@@ -37,7 +37,8 @@ html = html
   .split('v628-mimic-sombrero-approved-set-art-20260926').join(key)
   .split('v629-mimic-sombrero-set-bonuses-20260926').join(key)
   .split('v630-mimic-sombrero-stat-rows-20260926').join(key)
-  .split('v631-mimic-sombrero-tap-stats-enh-base-20260926').join(key);
+  .split('v631-mimic-sombrero-tap-stats-enh-base-20260926').join(key)
+  .split('v632-admin-500-premium-smith-resources-20260926').join(key);
 
 if (!html.includes(marker)) {
   const script = `${marker}\n<script>\n${code}\n</script>`;
@@ -64,5 +65,5 @@ for (const required of [
   if (!html.includes(required)) throw new Error('Mimic Sombrero validation missing: ' + required);
 }
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] v632: authorized admin QA grant +500 premium stones / +500 premium sharpening runes.');
+console.log('[PPA POSTBUILD] v633: QA stones/runes seeded safely into premium storage only.');
 console.log('[PPA POSTBUILD] index.html: ' + (Buffer.byteLength(html) / 1024 / 1024).toFixed(2) + ' MiB');
