@@ -124,6 +124,48 @@ if(!fs.existsSync(PPA_MIMIC_TICKET_ART_PATH)||fs.statSync(PPA_MIMIC_TICKET_ART_P
 fs.copyFileSync(PPA_MIMIC_TICKET_ART_PATH,path.join(assetsDir,'mimic-sombrero-ticket.webp'));
 console.log('[PPA BUILD] Mimic Sombrero event card + ticket art: ready');
 
+// Canonical Mimic-Sombrero equipment art.
+// Three approved transparent strips are the only source files.
+// Build time deterministically slices 5 slots per rarity and emits 15 normalized
+// 512x512 lossless WebP icons. Runtime never crops, overlays or substitutes art.
+const PPA_MIMIC_GEAR_STRIPS={
+  green:{file:'mimic-sombrero-green-strip.png',width:1912,height:330,cuts:[0,408,757,1236,1632,1912]},
+  blue:{file:'mimic-sombrero-blue-strip.png',width:2048,height:682,cuts:[0,423,845,1259,1648,2048]},
+  epic:{file:'mimic-sombrero-epic-strip.png',width:2048,height:682,cuts:[0,454,879,1281,1667,2048]}
+};
+const PPA_MIMIC_GEAR_SLOTS=['helmet','armor','gloves','legs','boots'];
+const PPA_MIMIC_GEAR_DIR=path.join(assetsDir,'mimic-sombrero');
+fs.mkdirSync(PPA_MIMIC_GEAR_DIR,{recursive:true});
+for(const [rarity,cfg] of Object.entries(PPA_MIMIC_GEAR_STRIPS)){
+  const src=path.join(ROOT,'assets-src',cfg.file);
+  if(!fs.existsSync(src))throw new Error('Approved Mimic gear strip missing: assets-src/'+cfg.file);
+  const meta=await sharp(src).metadata();
+  if(meta.format!=='png'||meta.width!==cfg.width||meta.height!==cfg.height||!meta.hasAlpha){
+    throw new Error('Approved Mimic gear strip must be transparent PNG '+cfg.width+'x'+cfg.height+': '+cfg.file);
+  }
+  if(!Array.isArray(cfg.cuts)||cfg.cuts.length!==6||cfg.cuts[0]!==0||cfg.cuts[5]!==cfg.width){
+    throw new Error('Invalid Mimic gear slice map: '+rarity);
+  }
+  for(let i=0;i<PPA_MIMIC_GEAR_SLOTS.length;i++){
+    const slot=PPA_MIMIC_GEAR_SLOTS[i];
+    const left=cfg.cuts[i],right=cfg.cuts[i+1];
+    const outPath=path.join(PPA_MIMIC_GEAR_DIR,'mimic-sombrero-'+rarity+'-'+slot+'.webp');
+    const piece=await sharp(src)
+      .extract({left:left,top:0,width:right-left,height:cfg.height})
+      .trim({threshold:1})
+      .resize({width:456,height:456,fit:'contain',background:{r:0,g:0,b:0,alpha:0}})
+      .extend({top:28,bottom:28,left:28,right:28,background:{r:0,g:0,b:0,alpha:0}})
+      .webp({lossless:true,alphaQuality:100,effort:4})
+      .toBuffer();
+    const outMeta=await sharp(piece).metadata();
+    if(outMeta.width!==512||outMeta.height!==512||!outMeta.hasAlpha){
+      throw new Error('Mimic gear output invalid: '+rarity+' '+slot);
+    }
+    fs.writeFileSync(outPath,piece);
+  }
+}
+console.log('[PPA BUILD] Mimic Sombrero gear: 15 approved 512px icons generated from canonical strips.');
+
 // V531: canonical Great Ruri poster file itself gets the approved current crystal.
 // No CSS/DOM marker or overlay is needed in the Events UI.
 {

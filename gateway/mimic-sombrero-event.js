@@ -59,17 +59,29 @@
   function matCount(n){var m=matBag();return m?Math.max(0,Number(m[n])||0):0}
   function addMat(n,a){var m=matBag();if(!m)return false;m[n]=(Math.max(0,Number(m[n])||0)+Math.max(1,Math.floor(Number(a)||1)));save();return true}
   function takeMat(n,a){var m=matBag();a=Math.max(1,Math.floor(Number(a)||1));if(!m||Math.max(0,Number(m[n])||0)<a)return false;m[n]=Math.max(0,Number(m[n])||0)-a;if(m[n]<=0)delete m[n];save();return true}
-  function iconData(label,bg,fg){return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" rx="18" fill="'+bg+'" stroke="#ffd36a" stroke-width="4"/><path d="M16 57h64M25 48c3-17 10-25 23-25s20 8 23 25" fill="none" stroke="'+fg+'" stroke-width="13" stroke-linecap="round"/><path d="M19 57c20 13 39 13 58 0" fill="none" stroke="#222" stroke-width="6"/><text x="48" y="82" text-anchor="middle" font-family="monospace" font-weight="900" font-size="18" fill="#fff4c8">'+label+'</text></svg>')}
   var TICKET_SRC='/assets/mimic-sombrero-ticket.webp?v=v617';
+  var MIMIC_ART_VERSION='v628-approved-set';
   var GEAR_SRC={
     green:{
-      helmet:iconData('ШЛ','#163b19','#78e66f'),armor:iconData('ПН','#163b19','#78e66f'),gloves:iconData('ПР','#163b19','#78e66f'),legs:iconData('ШТ','#163b19','#78e66f'),boots:iconData('СА','#163b19','#78e66f')
+      helmet:'/assets/mimic-sombrero/mimic-sombrero-green-helmet.webp?v='+MIMIC_ART_VERSION,
+      armor:'/assets/mimic-sombrero/mimic-sombrero-green-armor.webp?v='+MIMIC_ART_VERSION,
+      gloves:'/assets/mimic-sombrero/mimic-sombrero-green-gloves.webp?v='+MIMIC_ART_VERSION,
+      legs:'/assets/mimic-sombrero/mimic-sombrero-green-legs.webp?v='+MIMIC_ART_VERSION,
+      boots:'/assets/mimic-sombrero/mimic-sombrero-green-boots.webp?v='+MIMIC_ART_VERSION
     },
     blue:{
-      helmet:iconData('ШЛ','#132a4d','#75b9ff'),armor:iconData('ПН','#132a4d','#75b9ff'),gloves:iconData('ПР','#132a4d','#75b9ff'),legs:iconData('ШТ','#132a4d','#75b9ff'),boots:iconData('СА','#132a4d','#75b9ff')
+      helmet:'/assets/mimic-sombrero/mimic-sombrero-blue-helmet.webp?v='+MIMIC_ART_VERSION,
+      armor:'/assets/mimic-sombrero/mimic-sombrero-blue-armor.webp?v='+MIMIC_ART_VERSION,
+      gloves:'/assets/mimic-sombrero/mimic-sombrero-blue-gloves.webp?v='+MIMIC_ART_VERSION,
+      legs:'/assets/mimic-sombrero/mimic-sombrero-blue-legs.webp?v='+MIMIC_ART_VERSION,
+      boots:'/assets/mimic-sombrero/mimic-sombrero-blue-boots.webp?v='+MIMIC_ART_VERSION
     },
     epic:{
-      helmet:iconData('ШЛ','#32154b','#d58cff'),armor:iconData('ПН','#32154b','#d58cff'),gloves:iconData('ПР','#32154b','#d58cff'),legs:iconData('ШТ','#32154b','#d58cff'),boots:iconData('СА','#32154b','#d58cff')
+      helmet:'/assets/mimic-sombrero/mimic-sombrero-epic-helmet.webp?v='+MIMIC_ART_VERSION,
+      armor:'/assets/mimic-sombrero/mimic-sombrero-epic-armor.webp?v='+MIMIC_ART_VERSION,
+      gloves:'/assets/mimic-sombrero/mimic-sombrero-epic-gloves.webp?v='+MIMIC_ART_VERSION,
+      legs:'/assets/mimic-sombrero/mimic-sombrero-epic-legs.webp?v='+MIMIC_ART_VERSION,
+      boots:'/assets/mimic-sombrero/mimic-sombrero-epic-boots.webp?v='+MIMIC_ART_VERSION
     }
   };
 
@@ -170,7 +182,7 @@
     delete it.level;delete it.lvl;delete it.reqLevel;delete it.requiredLevel;delete it.minLevel;delete it.needLevel;delete it.levelReq;
     it.rarity=nativeRarity(tier);it.mimicTier=tier;
     it.classKey='all';it.className='Все классы';it.cls='all';
-    it.setId='mimic_sombrero';it.ppaMimicSombrero=true;it.ppaMimicNativeV1=true;
+    it.setId='mimic_sombrero';it.ppaMimicSombrero=true;it.ppaMimicNativeV1=true;it.ppaMimicArtV=2;
     it.enh=oldEnh;it.sell=0;it.img=art;it.src=art;it.image=art;it.art=art;it.iconArt=art;it.cardArt=art;
     it.desc='Ивентовый общий сет Мимика-Самбреро · статы как у обычного шмота этой редкости · подходит всем классам.';
     it.bonusText='Сет Мимика-Самбреро · каждая часть даёт бонус золота и дропа по редкости.';
@@ -201,8 +213,16 @@
   function normalizeOwnedMimicGear(){
     var changed=false;
     function one(it){
-      if(!it||!it.ppaMimicSombrero||it.ppaMimicNativeV1)return;
-      hydrateMimicItem(it,eventTierFromItem(it)==='epic'?60:(eventTierFromItem(it)==='blue'?40:20),eventTierFromItem(it),it.slot);changed=true;
+      if(!it||!it.ppaMimicSombrero)return;
+      var tier=eventTierFromItem(it);
+      var slot=String(it.slot||SLOTS[0]).toLowerCase();
+      if(SLOTS.indexOf(slot)<0)slot=SLOTS[0];
+      var wanted=(GEAR_SRC[tier]&&GEAR_SRC[tier][slot])||(GEAR_SRC.green&&GEAR_SRC.green[slot])||'';
+      var current=String(it.img||it.src||it.image||it.art||it.iconArt||it.cardArt||'');
+      if(it.ppaMimicNativeV1&&Number(it.ppaMimicArtV)===2&&current===wanted)return;
+      var lvl=tier==='epic'?60:(tier==='blue'?40:20);
+      hydrateMimicItem(it,lvl,tier,slot);
+      changed=true;
     }
     function arr(a){if(!Array.isArray(a))return;a.forEach(one)}
     try{
@@ -212,6 +232,9 @@
         if(INV.equipped)Object.keys(INV.equipped).forEach(function(k){one(INV.equipped[k])});
         if(INV.equip)Object.keys(INV.equip).forEach(function(k){one(INV.equip[k])});
         if(INV.mimicSombreroGear)arr(INV.mimicSombreroGear.items);
+        if(Array.isArray(INV.auctionLots))INV.auctionLots.forEach(function(lot){
+          try{var g=lot&&lot.item&&(lot.item.gear||lot.item);one(g)}catch(_){}
+        });
       }
     }catch(_){}
     if(changed)save();
