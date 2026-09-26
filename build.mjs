@@ -7447,7 +7447,7 @@ if(_ppaClanBossTrackCalls<1){
   }
   if (!dungeonMobEvents.includes("rows.push(['p20',3913") ||
       !dungeonMobEvents.includes("DUNGEON21_BOSS_HP:9000)||9000)+5350") ||
-      !dungeonMobEvents.includes("rows.push(['b60',36700") ||
+      !dungeonMobEvents.includes("rows.push(['b60',103700") ||
       !output.includes('__ppaFartHp24000=true') ||
       !output.includes('_fg.mhp=24000')) {
     throw new Error('Boss/Fart HP balance patch incomplete');
