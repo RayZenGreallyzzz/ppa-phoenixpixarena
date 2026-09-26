@@ -16,27 +16,6 @@
     return'';
   }
 
-  var spriteCfgCache=Object.create(null);
-  var frameStamp=-1,frameZoom=1,frameVw=0,frameVh=0;
-
-  function remoteSpriteCfg(key,anim){
-    var ck=String(key||'')+'|'+String(anim||'');
-    var cached=spriteCfgCache[ck];
-    if(cached&&cached.anim&&cached.anim.img&&cached.anim.img.complete&&cached.anim.img.naturalWidth)return cached;
-    var cfg=v174AiSpriteCfg({aiClass:key,aiAnim:anim});
-    if(cfg&&cfg.anim&&cfg.anim.img&&cfg.anim.img.complete&&cfg.anim.img.naturalWidth)spriteCfgCache[ck]=cfg;
-    return cfg;
-  }
-
-  function refreshFrameView(now){
-    var stamp=Number(now)||0;
-    if(stamp===frameStamp)return;
-    frameStamp=stamp;
-    frameZoom=Math.max(.1,Number(cameraZoom())||1);
-    frameVw=cv.width/frameZoom;
-    frameVh=cv.height/frameZoom;
-  }
-
   function remoteDir(r,dx,dy){
     // Movement owns facing; attack FX must not rotate a player who is still running.
     var d=Math.hypot(dx,dy),face=Number(r&&r.face);
@@ -103,14 +82,13 @@
         var moving=Math.hypot(mdx,mdy)>.55||String(r.anim||'')==='run';
         var anim=String(r.anim||'').toLowerCase();
         if(!['idle','run','attack'].includes(anim))anim=moving?'run':'idle';
-        var cfg=remoteSpriteCfg(key,anim);
+        var cfg=v174AiSpriteCfg({aiClass:key,aiAnim:anim});
         if(!cfg||!cfg.anim||!cfg.anim.img||!cfg.anim.img.complete||!cfg.anim.img.naturalWidth)return fallback(r,now,nearCount);
 
         var dt=Math.max(0,Math.min(100,now-(r.lastDrawAt||now)));r.lastDrawAt=now;
         var alpha=1-Math.exp(-dt/105);r.x+=(r.tx-r.x)*alpha;r.y+=(r.ty-r.y)*alpha;
-        refreshFrameView(now);
         var sx=r.x-cam.x,sy=r.y-cam.y;
-        var vw=frameVw,vh=frameVh;
+        var vw=cv.width/cameraZoom(),vh=cv.height/cameraZoom();
         if(sx<-100||sy<-150||sx>vw+100||sy>vh+150)return false;
 
         var sc=(P.scene==='clansiege'&&typeof CLAN_SIEGE_PLAYER_VISUAL_SCALE==='number')?CLAN_SIEGE_PLAYER_VISUAL_SCALE:1;
