@@ -4,44 +4,54 @@ import zlib from 'node:zlib';
 const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
 const src=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
 
-function excerpt(label,pos,pre=1800,post=4200){
+function out(label,pos,pre=5000,post=12000){
   console.log('\n===== '+label+' @ '+pos+' =====');
   console.log(src.slice(Math.max(0,pos-pre),Math.min(src.length,pos+post)));
 }
 
-const terms=[
-  'function updateSmartAttackInput','updateSmartAttackInput()',
-  'const _moveX','const _moveY',
-  'jX','jY','joy','joystick',
-  'requestAnimationFrame','performance.now','Date.now()',
-  'deltaTime','delta','dt',
-  'P.x+=','P.y+=','P.x -=','P.y -=',
-  'P.x =','P.y =',
-  'speed','moveSpeed','walkSpeed',
-  'function hitWall','function collide','function collision','function blocked',
-  'function canMove','function movePlayer','function updatePlayer','tryMove',
-  'solidAt','isWall','isBlocked','isSolid','collideRect','wallAt',
-  'cam.x','cam.y','cameraZoom'
+const anchors=[
+  'const _smartMove=updateSmartAttackInput();',
+  'const _moveX=_smartMove',
+  'const _moveY=_smartMove',
+  'updateSmartAttackInput()'
 ];
+for(const a of anchors){
+  const p=src.indexOf(a);
+  if(p>=0)out(a,p);
+}
 
-for(const term of terms){
-  let pos=0,count=0;
-  while((pos=src.indexOf(term,pos))>=0&&count<20){
-    excerpt(term+' hit '+(++count),pos);
-    pos+=Math.max(1,term.length);
+console.log('\n===== JX/JY CONTEXTS =====');
+for(const term of ['jX','jY']){
+  let pos=0,n=0;
+  while((pos=src.indexOf(term,pos))>=0&&n<12){
+    const lo=Math.max(0,pos-1200),hi=Math.min(src.length,pos+2600);
+    const frag=src.slice(lo,hi);
+    if(/P\.x|P\.y|speed|spd|move|collid|wall|block|cam/i.test(frag)){
+      console.log('\n--- '+term+' '+(++n)+' @ '+pos+' ---\n'+frag);
+    }
+    pos+=term.length;
   }
 }
 
-console.log('\n===== LIKELY MOVEMENT FUNCTIONS =====');
-const re=/function\s+([A-Za-z0-9_$]*(?:move|Move|update|Update|loop|Loop|tick|Tick|wall|Wall|solid|Solid|collid|Collid|block|Block|camera|Camera)[A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*\{/g;
+console.log('\n===== PLAYER POSITION WRITE CONTEXTS =====');
+const posRe=/P\.(?:x|y)\s*(?:\+=|-=|=)/g;
 let m,n=0;
-while((m=re.exec(src))&&n<180){
-  const name=m[1];
-  if(/move|update|loop|tick|wall|solid|collid|block|camera/i.test(name)){
-    console.log(m.index+' '+name+'('+m[2]+')');
-    excerpt('FUNC '+name,m.index,1000,2600);
-    n++;
+while((m=posRe.exec(src))&&n<40){
+  const lo=Math.max(0,m.index-1000),hi=Math.min(src.length,m.index+2200);
+  const frag=src.slice(lo,hi);
+  if(/jX|jY|_moveX|_moveY|speed|spd|move|collid|wall|block|cam|delta|\bdt\b/i.test(frag)){
+    console.log('\n--- POSWRITE '+(++n)+' @ '+m.index+' ---\n'+frag);
   }
 }
 
-// movement FPS source audit 20260926
+console.log('\n===== LOOP / FRAME CANDIDATES =====');
+for(const term of ['requestAnimationFrame','performance.now()','deltaTime','function loop','function update']){
+  let pos=0,n=0;
+  while((pos=src.indexOf(term,pos))>=0&&n<10){
+    const frag=src.slice(Math.max(0,pos-1400),Math.min(src.length,pos+3000));
+    if(/P\.x|P\.y|jX|jY|_moveX|_moveY|updateSmartAttackInput/i.test(frag)){
+      console.log('\n--- '+term+' '+(++n)+' @ '+pos+' ---\n'+frag);
+    }
+    pos+=term.length;
+  }
+}
