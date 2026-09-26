@@ -292,7 +292,7 @@ if (!output.includes('data-ppa-tonconnect="1"')) {
 }
 
 if (!output.includes('<head>')) throw new Error('PPA <head> not found');
-output = output.replace('<head>', `<head>\n<script>window.PPA_CLIENT_BUILD=${JSON.stringify(CLIENT_BUILD)};window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=true;window.PPA_TEST_ALL_DUNGEONS=true;</script>`);
+output = output.replace('<head>', `<head>\n<script>window.PPA_CLIENT_BUILD=${JSON.stringify(CLIENT_BUILD)};window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=false;window.PPA_TEST_ALL_DUNGEONS=false;</script>`);
 
 const legacyInitNeedle = 'async function PPAOnlineInit(){\n';
 if (!output.includes(legacyInitNeedle)) throw new Error('Legacy PPAOnlineInit patch target not found');
@@ -874,60 +874,6 @@ ppaPatchRegex(
 );
 
 /* ======================================================================== */
-
-/* === TEMP QA: ALL DUNGEONS OPEN ========================================== */
-// Temporary tester switch. Remove after boss QA.
-ppaPatchRegex(
-  'temporary unlock dungeon functions',
-  /function\s+dungeon1Unlocked\(\)\s*\{[\s\S]*?\}\s*function\s+dungeon21Unlocked\(\)\s*\{[\s\S]*?\}\s*function\s+dungeon41Unlocked\(\)\s*\{[\s\S]*?\}/,
-  "function dungeon1Unlocked(){if(window.PPA_TEST_ALL_DUNGEONS===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=1&&lv<=20;}"+
-  "function dungeon21Unlocked(){if(window.PPA_TEST_ALL_DUNGEONS===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=21&&lv<=40;}"+
-  "function dungeon41Unlocked(){if(window.PPA_TEST_ALL_DUNGEONS===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=DUNGEON41_LEVEL_REQ&&lv<=DUNGEON41_LEVEL_MAX;}"
-);
-
-ppaPatchRegex(
-  'temporary unlock dungeon gate status',
-  /const\s+ok1=dungeon1Unlocked\(\),ok21=dungeon21Unlocked\(\),ok41=dungeon41Unlocked\(\);/,
-  "const ok1=true,ok21=true,ok41=true;"
-);
-
-ppaPatchRegex(
-  'temporary unlock dungeon 1 click',
-  /if\(!dungeon1Unlocked\(\)\)\{updateDungeonGateMenu\(\);return\}/,
-  "if(window.PPA_TEST_ALL_DUNGEONS!==true&&!dungeon1Unlocked()){updateDungeonGateMenu();return}"
-);
-ppaPatchRegex(
-  'temporary unlock dungeon 21 click',
-  /if\(!dungeon21Unlocked\(\)\)\{updateDungeonGateMenu\(\);return\}/,
-  "if(window.PPA_TEST_ALL_DUNGEONS!==true&&!dungeon21Unlocked()){updateDungeonGateMenu();return}"
-);
-ppaPatchRegex(
-  'temporary unlock dungeon 41 click',
-  /if\(!dungeon41Unlocked\(\)\)\{updateDungeonGateMenu\(\);return\}/,
-  "if(window.PPA_TEST_ALL_DUNGEONS!==true&&!dungeon41Unlocked()){updateDungeonGateMenu();return}"
-);
-
-ppaPatchRegex(
-  'temporary unlock hard scene gate',
-  /if\(!allowed\)\{\s*showPickup\('Подземелье недоступно для текущего уровня','#ff9b72'\);\s*return;\s*\}/,
-  "if(window.PPA_TEST_ALL_DUNGEONS!==true&&!allowed){showPickup('Подземелье недоступно для текущего уровня','#ff9b72');return;}"
-);
-
-ppaPatchRegex(
-  'temporary dungeon test status text',
-  /st\.textContent='Твой уровень: '\+lv\+' · доступные диапазоны отмечены выше\.';/,
-  "st.textContent='ТЕСТ · ограничения по уровню временно отключены · ур. '+lv;"
-);
-
-/* ======================================================================== */
-
-// QA mode must never silently miss the release gates: fail the build instead.
-if (!output.includes("const ok1=true,ok21=true,ok41=true;")) {
-  throw new Error('QA dungeon menu unlock patch did not apply');
-}
-if (!output.includes("window.PPA_TEST_ALL_DUNGEONS!==true&&!allowed")) {
-  throw new Error('QA hard dungeon scene gate patch did not apply');
-}
 
 /* === V335 AUCTION PREMIUM ART ============================================ */
 ppaPatchRegex(
@@ -2068,30 +2014,6 @@ ppaPatchRegex(
   '41-60 mob stats current +8000 hp +120 def',
   /e\.hp=Math\.round\(ref\.hp\*3\);\s*e\.mhp=e\.hp;\s*e\.def=Math\.round\(ref\.def\*3\);\s*e\.dmg=Math\.round\(ref\.dmg\*3\);/,
   "e.hp=Math.round(ref.hp*1.10)+10000;\n  e.mhp=e.hp;\n  e.def=Math.round(ref.def*1.07)+160;\n  e.dmg=Math.round(ref.dmg*1.13)+50;"
-);
-
-/* ======================================================================== */
-
-/* === TEMP BOSS ACCESS FOR LIVE TESTING =================================== */
-// Temporary QA switch: all dungeon brackets + Crystal Titan can be entered
-// regardless of character level / daily world-boss lock. Remove the flag or
-// set it to false to restore release restrictions.
-ppaPatchRegex(
-  'test unlock dungeon 21-40',
-  /function\s+dungeon21Unlocked\(\)\s*\{[\s\S]*?return\s+lv>=21&&lv<=40\s*;\s*\}/,
-  "function dungeon21Unlocked(){if(window.PPA_BOSS_TEST_OPEN===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=21&&lv<=40;}"
-);
-
-ppaPatchRegex(
-  'test unlock dungeon 41-60',
-  /function\s+dungeon41Unlocked\(\)\s*\{[\s\S]*?return\s+lv>=DUNGEON41_LEVEL_REQ&&lv<=DUNGEON41_LEVEL_MAX\s*;\s*\}/,
-  "function dungeon41Unlocked(){if(window.PPA_BOSS_TEST_OPEN===true)return true;const lv=Math.floor(Number(P&&P.lvl)||1);return lv>=DUNGEON41_LEVEL_REQ&&lv<=DUNGEON41_LEVEL_MAX;}"
-);
-
-ppaPatchRegex(
-  'test unlock world boss daily entry',
-  /const\s+available\s*=\s*String\(st\.killedCycle\|\|['"]['"]\)!==cycle\s*;/,
-  "const available=window.PPA_BOSS_TEST_OPEN===true||String(st.killedCycle||'')!==cycle;"
 );
 
 /* ======================================================================== */
