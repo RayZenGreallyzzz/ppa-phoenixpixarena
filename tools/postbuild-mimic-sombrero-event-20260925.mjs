@@ -10,7 +10,7 @@ if (!fs.existsSync(eventPath)) throw new Error('gateway/mimic-sombrero-event.js 
 let html = fs.readFileSync(indexPath, 'utf8');
 const code = fs.readFileSync(eventPath, 'utf8');
 const marker = '<!-- PPA_MIMIC_SOMBRERO_EVENT_V2 -->';
-const key = 'v649-dungeon1-open-all-levels-20260927';
+const key = 'v650-dungeon1-native-hard-gate-open-20260927';
 html = html
   .split('v602-clan-siege-exit-visible-20260925').join(key)
   .split('v606-clan-siege-city-exit-20260925').join(key)
@@ -55,6 +55,7 @@ html = html
   .split('v647-dragon60-plus-67000-20260927').join(key)
     .split('v646-dungeon-mob-durability-20260927').join(key)
 .split('v648-release-dungeon-elite-schedule-20260927').join(key)
+  .split('v649-dungeon1-open-all-levels-20260927').join(key)
   .split('v603-mimic-epic-art-exact-20260926').join(key);
 
 if (!html.includes(marker)) {
@@ -82,5 +83,5 @@ for (const required of [
   if (!html.includes(required)) throw new Error('Mimic Sombrero validation missing: ' + required);
 }
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] v649: dungeon 1-20 open at all levels; higher brackets keep release gates.');
+console.log('[PPA POSTBUILD] v650: dungeon 1-20 native hard gate open at all levels.');
 console.log('[PPA POSTBUILD] index.html: ' + (Buffer.byteLength(html) / 1024 / 1024).toFixed(2) + ' MiB');
