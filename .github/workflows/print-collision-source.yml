@@ -1,0 +1,22 @@
+name: Print collision source
+on:
+  push:
+    branches: [main]
+jobs:
+  print:
+    if: contains(github.event.head_commit.message, 'Run collision source printer')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/print-collision-source-20260925.mjs > mob-stats-debug.txt
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mob-stats-debug.txt
+          git commit -m "Diagnostic dungeon mob stat source" || exit 0
+          git push
