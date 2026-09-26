@@ -884,7 +884,14 @@ ppaPatchRegex(
   "function dungeon1Unlocked(){return true;}"
 );
 
-if(!output.includes("function dungeon1Unlocked(){return true;}")){
+ppaPatchRegex(
+  'release dungeon 1-20 hard scene gate open all levels',
+  /if\(!allowed\)\{\s*showPickup\('Подземелье недоступно для текущего уровня','#ff9b72'\);\s*return;\s*\}/,
+  "if(DUNGEON_MODE!=='1-20'&&!allowed){showPickup('Подземелье недоступно для текущего уровня','#ff9b72');return;}"
+);
+
+if(!output.includes("function dungeon1Unlocked(){return true;}") ||
+   !output.includes("if(DUNGEON_MODE!=='1-20'&&!allowed){showPickup('Подземелье недоступно для текущего уровня','#ff9b72');return;}")){
   throw new Error('Release dungeon 1-20 access rule did not apply');
 }
 
