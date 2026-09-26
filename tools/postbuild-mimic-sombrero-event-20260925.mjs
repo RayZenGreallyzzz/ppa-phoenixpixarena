@@ -10,7 +10,7 @@ if (!fs.existsSync(eventPath)) throw new Error('gateway/mimic-sombrero-event.js 
 let html = fs.readFileSync(indexPath, 'utf8');
 const code = fs.readFileSync(eventPath, 'utf8');
 const marker = '<!-- PPA_MIMIC_SOMBRERO_EVENT_V2 -->';
-const key = 'v641-save-progression-stat-entitlement-history-20260926';
+const key = 'v642-joystick-movement-fps-recovery-20260926';
 html = html
   .split('v602-clan-siege-exit-visible-20260925').join(key)
   .split('v606-clan-siege-city-exit-20260925').join(key)
@@ -47,6 +47,7 @@ html = html
   .split('v638-smith-native-img-mimic-spacing-ruri-arena-20260926').join(key)
   .split('v639-admin-local-stress-panel-20260926').join(key)
   .split('v640-save-version-lock-level-floor-20260926').join(key)
+  .split('v641-save-progression-stat-entitlement-history-20260926').join(key)
   .split('v603-mimic-epic-art-exact-20260926').join(key);
 
 if (!html.includes(marker)) {
@@ -74,5 +75,5 @@ for (const required of [
   if (!html.includes(required)) throw new Error('Mimic Sombrero validation missing: ' + required);
 }
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] v641: progression guard + Premium stat entitlement + save history.');
+console.log('[PPA POSTBUILD] v642: joystick movement FPS recovery · sharp idle + adaptive run atlas + remote frame cache.');
 console.log('[PPA POSTBUILD] index.html: ' + (Buffer.byteLength(html) / 1024 / 1024).toFixed(2) + ' MiB');
