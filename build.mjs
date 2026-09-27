@@ -6965,17 +6965,18 @@ function sendEventsState(){`
 ppaPatchRegex(
   'Great Ruri state in Events payload',
   /titanShards:titanShardCount\(\),\s*worldBoss:worldBossDailyStatus\(\),/,
-  "titanShards:titanShardCount(),\n        mimicTickets:(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount==='function'?window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount():0),\n        mimicEvent:(function(){try{var a=window.PPA_MIMIC_SOMBRERO_EVENT,s=a&&typeof a.schedule==='function'?a.schedule():null;return s?{active:!!a.active(),test:!!(a.testMode&&a.testMode()),adminTestAllowed:window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED===true,end:Number(s.end)||0,nextStart:Number(s.nextStart)||0,days:Number(s.days)||5,startDay:Number(s.startDay)||25}:{active:false,test:false,adminTestAllowed:window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED===true,end:0,nextStart:0,days:5,startDay:25}}catch(_){return{active:false,test:false,adminTestAllowed:false,end:0,nextStart:0,days:5,startDay:25}}})(),\n        ruriEvent:(function(){try{var rs=window.PPA_RURI_EVENT_SCHEDULE&&window.PPA_RURI_EVENT_SCHEDULE();var ra=window.PPA_RURI_EVENT_IS_ACTIVE&&window.PPA_RURI_EVENT_IS_ACTIVE();return rs?{active:!!ra,end:Number(rs.end)||0,nextStart:Number(rs.nextStart)||0,days:Number(rs.days)||10,startDay:Number(rs.startDay)||1,serverNow:(window.PPA_SERVER_NOW?Number(window.PPA_SERVER_NOW())||0:0)}:{active:false,end:0,nextStart:0,days:10,startDay:1,serverNow:0}}catch(_){return{active:false,end:0,nextStart:0,days:10,startDay:1,serverNow:0}}})(),\n        ruri:(typeof ppaRuriCraftState==='function'?ppaRuriCraftState():null),\n        worldBoss:worldBossDailyStatus(),"
+  "titanShards:titanShardCount(),\n        mimicTickets:(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount==='function'?window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount():0),\n        mimicEvent:(function(){try{var a=window.PPA_MIMIC_SOMBRERO_EVENT,s=a&&typeof a.schedule==='function'?a.schedule():null;var sn=(window.PPA_SERVER_NOW?Number(window.PPA_SERVER_NOW())||0:0);return s?{active:!!a.active(),end:Number(s.end)||0,nextStart:Number(s.nextStart)||0,days:Number(s.days)||5,startDay:Number(s.startDay)||25,serverNow:sn}:{active:false,end:0,nextStart:0,days:5,startDay:25,serverNow:sn}}catch(_){return{active:false,end:0,nextStart:0,days:5,startDay:25,serverNow:0}}})(),\n        ruriEvent:(function(){try{var rs=window.PPA_RURI_EVENT_SCHEDULE&&window.PPA_RURI_EVENT_SCHEDULE();var ra=window.PPA_RURI_EVENT_IS_ACTIVE&&window.PPA_RURI_EVENT_IS_ACTIVE();return rs?{active:!!ra,end:Number(rs.end)||0,nextStart:Number(rs.nextStart)||0,days:Number(rs.days)||10,startDay:Number(rs.startDay)||1,serverNow:(window.PPA_SERVER_NOW?Number(window.PPA_SERVER_NOW())||0:0)}:{active:false,end:0,nextStart:0,days:10,startDay:1,serverNow:0}}catch(_){return{active:false,end:0,nextStart:0,days:10,startDay:1,serverNow:0}}})(),\n        ruri:(typeof ppaRuriCraftState==='function'?ppaRuriCraftState():null),\n        worldBoss:worldBossDailyStatus(),"
 );
 ppaPatchRegex(
   'Great Ruri craft message route',
   /if\(d\.type==='titanShardBuy'\)\{titanShardExchange\(d\.id\);return;\}/,
-  "if(d.type==='titanShardBuy'){titanShardExchange(d.id);return;}\n  if(d.type==='ruriCraft'){ppaRuriCraftFromEvent();return;}\n  if(d.type==='mimicSombreroTestToggle'){try{var _enable=d.enabled===true;if(!window.PPA||typeof PPA.ppaAdminEventRewardStockAccess!=='function'){if(typeof showPickup==='function')showPickup('ТЕСТ МИМИКА · НЕТ ДОСТУПА','#ff7b72');return;}PPA.ppaAdminEventRewardStockAccess().then(function(_acc){if(!_acc||!_acc.authorized){window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED=false;if(typeof sendEventsState==='function')sendEventsState();if(typeof showPickup==='function')showPickup('ТЕСТ МИМИКА · НЕТ ДОСТУПА','#ff7b72');return;}window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED=true;if(typeof window.PPA_SET_MIMIC_SOMBRERO_TEST_MODE==='function')window.PPA_SET_MIMIC_SOMBRERO_TEST_MODE(_enable);if(typeof sendEventsState==='function')sendEventsState();if(typeof showPickup==='function')showPickup(_enable?'🎭 МИМИК · ТЕСТ РЕЖИМ ВКЛ':'🎭 МИМИК · ТЕСТ РЕЖИМ ВЫКЛ',_enable?'#ffd36a':'#b7c0cc')}).catch(function(){if(typeof showPickup==='function')showPickup('ТЕСТ МИМИКА · ОШИБКА ПРОВЕРКИ','#ff7b72')});}catch(_){ }return;}\n  if(d.type==='mimicSombreroOpen'){try{if(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.open==='function')window.PPA_MIMIC_SOMBRERO_EVENT.open()}catch(_){ }return;}"
+  "if(d.type==='titanShardBuy'){titanShardExchange(d.id);return;}\n  if(d.type==='ruriCraft'){ppaRuriCraftFromEvent();return;}\n  if(d.type==='mimicSombreroOpen'){try{if(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.open==='function')window.PPA_MIMIC_SOMBRERO_EVENT.open()}catch(_){ }return;}"
 );
 if(!output.includes('function ppaRuriCraftFromEvent()')||
    !output.includes("d.type==='ruriCraft'")||
    !output.includes("d.type==='mimicSombreroOpen'")||
-   !output.includes("d.type==='mimicSombreroTestToggle'")||
+   output.includes("d.type==='mimicSombreroTestToggle'")||
+   output.includes('PPA_SET_MIMIC_SOMBRERO_TEST_MODE')||
    !output.includes('mimicTickets:')||
    !output.includes('mimicEvent:')||
    !output.includes('ruriEvent:')||
@@ -7551,7 +7552,7 @@ console.log('Boss drop boost: /game/boss-drop-boost.js');
 console.log('Clan boss loot: /game/clan-boss-loot.js');
 console.log('Clan boss reward chest: /game/clan-boss-chest.js');
 console.log('Great Ruri event drops: /game/ruri-event-drops.js · monthly days 1-10 · server clock');
-console.log('Mimic Sombrero event: /game/mimic-sombrero-event.js · monthly 5-day + QA test mode');
+console.log('Mimic Sombrero event: /game/mimic-sombrero-event.js · monthly days 25-29 · server clock');
 console.log('Mimic Sombrero arena: /game/mimic-sombrero-arena.js · REAL COMBAT V2');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
 console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
