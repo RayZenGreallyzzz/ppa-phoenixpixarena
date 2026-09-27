@@ -262,17 +262,20 @@ const STAT_CHEST_CONFIG = Object.freeze({
   emerald: Object.freeze({
     tier:'emerald',name:'Изумрудный сундук ОХ',refId:'stat_chest_emerald',
     min:2,max:50,jackpot:50,minGram:3,minPpa:3000,
-    buckets:[[55,2,2],[25,3,5],[12,6,10],[5,11,20],[2,21,30],[0.8,31,49],[0.2,50,50]]
+    // 2 ОХ guaranteed. One extra-tier roll can replace it with a higher total.
+    bonusBuckets:[[12.5,3,5],[6,6,10],[2.5,11,20],[1,21,30],[0.4,31,49],[0.1,50,50]]
   }),
   sapphire: Object.freeze({
     tier:'sapphire',name:'Сапфировый сундук ОХ',refId:'stat_chest_sapphire',
     min:5,max:80,jackpot:80,minGram:7,minPpa:7000,
-    buckets:[[55,5,5],[20,6,10],[12,11,20],[7,21,35],[3,36,50],[2.6,51,79],[0.4,80,80]]
+    // 5 ОХ guaranteed.
+    bonusBuckets:[[10,6,10],[6,11,20],[3.5,21,35],[1.5,36,50],[1.3,51,79],[0.2,80,80]]
   }),
   amethyst: Object.freeze({
     tier:'amethyst',name:'Аметистовый сундук ОХ',refId:'stat_chest_amethyst',
     min:10,max:110,jackpot:110,minGram:17,minPpa:17000,
-    buckets:[[49,10,10],[15,11,20],[12,21,35],[9,36,50],[6,51,70],[4,71,90],[4.5,91,109],[0.5,110,110]]
+    // 10 ОХ guaranteed.
+    bonusBuckets:[[7.5,11,20],[6,21,35],[4.5,36,50],[3,51,70],[2,71,90],[2.25,91,109],[0.25,110,110]]
   })
 });
 
@@ -308,14 +311,19 @@ function secureRandomInt(min, max) {
 function rollStatChest(tier) {
   const cfg = STAT_CHEST_CONFIG[normalizeStatChestTier(tier)];
   if (!cfg) return null;
+
+  // Guaranteed floor first. The extra bands intentionally do NOT sum to 100%;
+  // missing probability means the player receives exactly the guaranteed floor.
+  let amount = cfg.min;
   const r = secureRandomUnit() * 100;
   let edge = 0;
-  let chosen = cfg.buckets[cfg.buckets.length - 1];
-  for (const b of cfg.buckets) {
+  for (const b of cfg.bonusBuckets) {
     edge += Number(b[0]) || 0;
-    if (r < edge) { chosen = b; break; }
+    if (r < edge) {
+      amount = secureRandomInt(b[1], b[2]);
+      break;
+    }
   }
-  const amount = secureRandomInt(chosen[1], chosen[2]);
   return { tier:cfg.tier, amount, jackpot:amount === cfg.jackpot, min:cfg.min, max:cfg.max };
 }
 function statChestStackCount(it) {
