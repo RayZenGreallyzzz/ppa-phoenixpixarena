@@ -7,22 +7,25 @@
       tier:'emerald',name:'Изумрудный сундук ОХ',rarity:'uncommon',
       min:2,max:50,jackpot:50,price:3,minGram:3,minPpa:3000,
       refId:'stat_chest_emerald',img:'/assets/stat-chest-emerald.png',color:'#74e58a',
-      odds:'2 ОХ — 55% · 3–5 — 25% · 6–10 — 12% · 11–20 — 5% · 21–30 — 2% · 31–49 — 0.8% · 50 — 0.2%',
-      chanceRows:[['3–5 ОХ','25%'],['6–10 ОХ','12%'],['11–20 ОХ','5%'],['21–30 ОХ','2%'],['31–49 ОХ','0.8%']]
+      odds:'Гарантировано 2 ОХ — 100% · дополнительно: 3–5 — 12.5% · 6–10 — 6% · 11–20 — 2.5% · 21–30 — 1% · 31–49 — 0.4% · 50 — 0.1%',
+      jackpotChance:'0.1%',
+      chanceRows:[['3–5 ОХ','12.5%'],['6–10 ОХ','6%'],['11–20 ОХ','2.5%'],['21–30 ОХ','1%'],['31–49 ОХ','0.4%']]
     },
     sapphire:{
       tier:'sapphire',name:'Сапфировый сундук ОХ',rarity:'rare',
       min:5,max:80,jackpot:80,price:7,minGram:7,minPpa:7000,
       refId:'stat_chest_sapphire',img:'/assets/stat-chest-sapphire.png',color:'#67a8ff',
-      odds:'5 ОХ — 55% · 6–10 — 20% · 11–20 — 12% · 21–35 — 7% · 36–50 — 3% · 51–79 — 2.6% · 80 — 0.4%',
-      chanceRows:[['6–10 ОХ','20%'],['11–20 ОХ','12%'],['21–35 ОХ','7%'],['36–50 ОХ','3%'],['51–79 ОХ','2.6%']]
+      odds:'Гарантировано 5 ОХ — 100% · дополнительно: 6–10 — 10% · 11–20 — 6% · 21–35 — 3.5% · 36–50 — 1.5% · 51–79 — 1.3% · 80 — 0.2%',
+      jackpotChance:'0.2%',
+      chanceRows:[['6–10 ОХ','10%'],['11–20 ОХ','6%'],['21–35 ОХ','3.5%'],['36–50 ОХ','1.5%'],['51–79 ОХ','1.3%']]
     },
     amethyst:{
       tier:'amethyst',name:'Аметистовый сундук ОХ',rarity:'epic',
       min:10,max:110,jackpot:110,price:17,minGram:17,minPpa:17000,
       refId:'stat_chest_amethyst',img:'/assets/stat-chest-amethyst.png',color:'#c47aff',
-      odds:'10 ОХ — 49% · 11–20 — 15% · 21–35 — 12% · 36–50 — 9% · 51–70 — 6% · 71–90 — 4% · 91–109 — 4.5% · 110 — 0.5%',
-      chanceRows:[['11–20 ОХ','15%'],['21–35 ОХ','12%'],['36–50 ОХ','9%'],['51–70 ОХ','6%'],['71–90 ОХ','4%'],['91–109 ОХ','4.5%']]
+      odds:'Гарантировано 10 ОХ — 100% · дополнительно: 11–20 — 7.5% · 21–35 — 6% · 36–50 — 4.5% · 51–70 — 3% · 71–90 — 2% · 91–109 — 2.25% · 110 — 0.25%',
+      jackpotChance:'0.25%',
+      chanceRows:[['11–20 ОХ','7.5%'],['21–35 ОХ','6%'],['36–50 ОХ','4.5%'],['51–70 ОХ','3%'],['71–90 ОХ','2%'],['91–109 ОХ','2.25%']]
     }
   };
 
@@ -398,9 +401,7 @@
       el.appendChild(reward);el.appendChild(chance);rows.appendChild(el);
     });
 
-    document.getElementById('ppaOxChestJackpot').textContent=c.jackpot+' ОХ — '+(
-      c.tier==='emerald'?'0.2%':(c.tier==='sapphire'?'0.4%':'0.5%')
-    );
+    document.getElementById('ppaOxChestJackpot').textContent=c.jackpot+' ОХ — '+(c.jackpotChance||'');
 
     root.style.display='flex';
     try{document.getElementById('ppaOxChestOpen').focus({preventScroll:true})}catch(_){}
