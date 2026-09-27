@@ -188,11 +188,11 @@
       return false;
     }
 
-    // Do not block a valid server-authoritative open just because an old
-    // client stack cannot be found by the newest metadata fields.
-    var lock=it&&typeof it==='object'?it:null;
-    if(lock&&lock.__ppaOpening)return false;
-    if(lock)lock.__ppaOpening=true;
+    // Lock only in runtime memory. Do NOT write a transient "__ppaOpening"
+    // property onto the item because ppaStatChestOpen() snapshots the bag
+    // before the server call.
+    if(chestOpeningTier[c.tier])return false;
+    chestOpeningTier[c.tier]=true;
 
     try{
       var requestId='ox_'+c.tier+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10);
@@ -224,16 +224,22 @@
       try{showPickup(String((e&&e.message)||'Не удалось открыть сундук'),'#ff7777')}catch(_){}
       return false;
     }finally{
+      chestOpeningTier[c.tier]=false;
+      // Repair old saves created by the previous transient-item lock.
       try{
-        if(lock)lock.__ppaOpening=false;
         var x=findLocalChest(c,it);
-        if(x)x.__ppaOpening=false;
+        if(x&&Object.prototype.hasOwnProperty.call(x,'__ppaOpening'))delete x.__ppaOpening;
+        if(it&&typeof it==='object'&&Object.prototype.hasOwnProperty.call(it,'__ppaOpening'))delete it.__ppaOpening;
       }catch(_){}
     }
   }
 
   var chestModalItem=null;
   var chestModalBusy=false;
+  // Runtime-only lock. Never store this on an inventory item: inventory objects
+  // are serialized to cloud before opening, so a transient flag can become
+  // permanently saved and make one chest stop responding after a failed open.
+  var chestOpeningTier=Object.create(null);
 
   function chestModalTheme(c){
     if(c.tier==='emerald')return {
@@ -542,6 +548,11 @@
       if(!c)return 0;
       var art=c.img;
       var changed=0;
+      // v671 could persist this transient flag into the cloud save. It must
+      // never affect opening and is removed as soon as the chest is hydrated.
+      if(Object.prototype.hasOwnProperty.call(it,'__ppaOpening')){
+        try{delete it.__ppaOpening;changed++}catch(_){it.__ppaOpening=false}
+      }
       ['img','image','art','cardArt','iconArt','iconImg','src'].forEach(function(k){
         if(it[k]!==art){it[k]=art;changed++}
       });
