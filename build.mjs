@@ -969,6 +969,18 @@ function auctionSourceInventoryItem(it){
 function auctionRestoreUiArt(it){
   if(!it||typeof it!=='object')return it;
   try{
+    var _oxSrc=auctionSourceInventoryItem(it)||it;
+    if(_oxSrc&&(_oxSrc.statChest===true||String(_oxSrc.refId||'').indexOf('stat_chest_')===0||String(_oxSrc.uid||'').indexOf('stat_chest_')===0)){
+      var _oxTier=String(_oxSrc.statChestTier||_oxSrc.refId||_oxSrc.uid||'').toLowerCase().replace('stat_chest_','');
+      if(_oxTier==='emerald'||_oxTier==='sapphire'||_oxTier==='amethyst'){
+        var _oxArt='/assets/stat-chest-'+_oxTier+'.png';
+        it.statChest=true;it.statChestTier=_oxTier;
+        it.img=_oxArt;it.image=_oxArt;it.art=_oxArt;it.cardArt=_oxArt;it.iconArt=_oxArt;it.iconImg=_oxArt;it.src=_oxArt;
+        return it;
+      }
+    }
+  }catch(_){}
+  try{
     var srcItem=auctionSourceInventoryItem(it);
     var _ppaLegendArt='';
     if(srcItem&&String(srcItem.img||'').indexOf('/assets/legendary/')>=0)_ppaLegendArt=String(srcItem.img);
@@ -3888,6 +3900,20 @@ function fartHasPickaxe`
 );
 
 ppaPatchRegex(
+  'storage OX chest PNG art',
+  /function\s+storageItemForUi\(it\)\s*\{/,
+  `function storageItemForUi(it){
+  if(it&&(it.statChest===true||String(it.refId||'').indexOf('stat_chest_')===0||String(it.uid||'').indexOf('stat_chest_')===0)){
+    var _ct=String(it.statChestTier||it.refId||it.uid||'').toLowerCase().replace('stat_chest_','');
+    if(_ct==='emerald'||_ct==='sapphire'||_ct==='amethyst'){
+      var _ca='/assets/stat-chest-'+_ct+'.png';
+      it.statChest=true;it.statChestTier=_ct;
+      it.img=_ca;it.image=_ca;it.art=_ca;it.cardArt=_ca;it.iconArt=_ca;it.iconImg=_ca;it.src=_ca;
+    }
+  }`
+);
+
+ppaPatchRegex(
   'hide pickaxe from storage deposit inventory',
   /\(INV\.bag\|\|\[\]\)\.forEach\(function\(it,idx\)\{\s*if\(!it\)return;\s*var x=storageItemForUi\(it\);x\.kind='gear';x\.refId=String\(idx\);x\.storageRef='gear:'\+idx;out\.push\(x\);/,
   `(INV.bag||[]).forEach(function(it,idx){
@@ -6484,7 +6510,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'character invstate hydrates slag image',
   /(type:'invState',\s*inv:\{\s*equipped:INV\.equipped,\s*bag:)INV\.bag,/,
-  "$1(INV.bag||[]).map(function(it){var o=(it&&typeof it==='object')?Object.assign({},it):it;try{if(window.PPA_LEGENDARY_GEAR_ITEM_ART&&o){var a=window.PPA_LEGENDARY_GEAR_ITEM_ART(o);if(a){o.img=a;o.image=a;o.art=a;}}}catch(_){}if(o&&(o.fartSlag===true||o.uid==='fart_slag'||o.refId==='fart_slag'||String(o.name||'')==='Шлак')){o.fartSlag=true;o.kind='resource';o.img='/assets/fart-slag.webp';}return o}),"
+  "$1(INV.bag||[]).map(function(it){var o=(it&&typeof it==='object')?Object.assign({},it):it;try{if(window.PPA_LEGENDARY_GEAR_ITEM_ART&&o){var a=window.PPA_LEGENDARY_GEAR_ITEM_ART(o);if(a){o.img=a;o.image=a;o.art=a;}}}catch(_){}if(o&&(o.fartSlag===true||o.uid==='fart_slag'||o.refId==='fart_slag'||String(o.name||'')==='Шлак')){o.fartSlag=true;o.kind='resource';o.img='/assets/fart-slag.webp';}if(o&&(o.statChest===true||String(o.refId||'').indexOf('stat_chest_')===0||String(o.uid||'').indexOf('stat_chest_')===0)){var t=String(o.statChestTier||o.refId||o.uid||'').toLowerCase().replace('stat_chest_','');if(t==='emerald'||t==='sapphire'||t==='amethyst'){var ca='/assets/stat-chest-'+t+'.png';o.statChest=true;o.statChestTier=t;o.img=ca;o.image=ca;o.art=ca;o.cardArt=ca;o.iconArt=ca;o.iconImg=ca;o.src=ca;}}return o}),"
 );
 
 ppaPatchRegex(
