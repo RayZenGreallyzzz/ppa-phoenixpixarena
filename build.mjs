@@ -7009,66 +7009,129 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
 /* ======================================================================== */
 
 /* === CLAN BOSS REWARD LEXICAL BRIDGE ==================================== */
-// Realtime server owns the reward roll. This bridge only materializes that
-// already-decided reward through the game's native loot factories.
+// Realtime server owns every reward roll. This bridge only materializes the
+// already-decided packet through the game's native loot/item factories.
 ppaPatchRegex(
   'clan boss reward lexical bridge',
   /function\s+runeUiState\(\)\s*\{/,
-  `function ppaClanBossSpawnReward(pkt){
+  \`function ppaClanBossRewardCount(pkt,countKey,boolKey,max){
+  var n=Math.floor(Number(pkt&&pkt[countKey])||0);
+  if(n<=0&&boolKey&&pkt&&pkt[boolKey])n=1;
+  return Math.max(0,Math.min(Number(max)||20,n));
+}
+function ppaClanBossPushGear(e,rarity,count){
+  count=Math.max(0,Math.min(6,Math.floor(Number(count)||0)));
+  for(var n=0;n<count;n++){
+    if(typeof v232PushGear==='function'){v232PushGear(e,rarity);continue}
+    if(typeof genItem==='function'&&typeof LOOT!=='undefined'&&Array.isArray(LOOT)){
+      var it=genItem(Math.max(1,Number(e&&e.lvl)||30),false,rarity);
+      if(it)LOOT.push({x:Number(e.x||0)+(Math.random()-.5)*30,y:Number(e.y||0)+(Math.random()-.5)*30,kind:'gear',item:it,gear:it,bob:Math.random()*6});
+    }
+  }
+}
+function ppaClanBossPushRune(e,rarity,count,seed){
+  if(typeof RUNE_TYPES==='undefined'||typeof runeKey!=='function'||typeof runeDefByKey!=='function'||typeof LOOT==='undefined'||!Array.isArray(LOOT))return false;
+  var types=Object.keys(RUNE_TYPES||{});if(!types.length)return false;
+  count=Math.max(0,Math.min(6,Math.floor(Number(count)||0)));
+  var seeded=Number.isFinite(Number(seed)),base=seeded?Math.abs(Math.floor(Number(seed)||0)):0;
+  for(var n=0;n<count;n++){
+    var idx=seeded?(base+n)%types.length:Math.floor(Math.random()*types.length);
+    var d=runeDefByKey(runeKey(types[idx],rarity));
+    if(d)LOOT.push({
+      x:Number(e.x||0)+(Math.random()-.5)*34,y:Number(e.y||0)+(Math.random()-.5)*34,
+      kind:'statRune',runeKey:d.key,name:d.name,icon:d.icon,img:d.img,
+      rarity:d.rarity,amount:1,bob:Math.random()*6
+    });
+  }
+  return true;
+}
+function ppaClanBossPushEventMaterial(e,name,count){
+  if(typeof LOOT==='undefined'||!Array.isArray(LOOT))return false;
+  count=Math.max(0,Math.min(10,Math.floor(Number(count)||0)));if(!count)return true;
+  var fallback={
+    'Кровь монстра':'/assets/ruri-monster-blood.webp?v=ruri-icons-v1',
+    'Огненные осколки':'/assets/ruri-fire-shards.webp?v=ruri-icons-v1',
+    'Демонический кристалл':'/assets/ruri-demonic-crystal.webp?v=ruri-icons-v1',
+    'Хрустальный кристалл':'/assets/ruri-crystal.webp?v=ruri-icons-v1'
+  };
+  var d=(typeof MATERIAL_DB==='object'&&MATERIAL_DB&&MATERIAL_DB[name])||{};
+  for(var n=0;n<count;n++)LOOT.push({
+    x:Number(e.x||0)+(Math.random()-.5)*34,y:Number(e.y||0)+(Math.random()-.5)*34,
+    kind:'material',name:name,rarity:d.rarity||'legendary',src:d.src||fallback[name]||'',
+    amount:1,bob:Math.random()*6,ruriEventResource:true,eventId:'great_ruri_monthly'
+  });
+  return true;
+}
+function ppaClanBossPushRank2Book(e,type){
+  if(typeof v232RollTypedBook!=='function')return false;
+  if(type==='active')v232RollTypedBook(e,1,0,1,function(){return 2});
+  else v232RollTypedBook(e,0,1,1,function(){return 2});
+  return true;
+}
+function ppaClanBossSpawnReward(pkt){
   try{
     pkt=pkt&&typeof pkt==='object'?pkt:{};
-    if(String(pkt.bossId||'')!=='clan_boss_1')return false;
-    var e=null;
+    var bossId=String(pkt.bossId||'');
+    if(bossId!=='clan_boss_1'&&bossId!=='clan_boss_2')return false;
+    var cerberus=bossId==='clan_boss_2',e=null;
     try{
       if(typeof EN!=='undefined'&&Array.isArray(EN)){
         for(var i=0;i<EN.length;i++)if(EN[i]&&EN[i].isClanBoss){e=EN[i];break}
       }
     }catch(_){}
-    if(!e)e={x:(typeof P!=='undefined'&&P?Number(P.x)||0:0),y:(typeof P!=='undefined'&&P?Number(P.y)||0:0),lvl:30,isClanBoss:true};
+    if(!e)e={x:(typeof P!=='undefined'&&P?Number(P.x)||0:0),y:(typeof P!=='undefined'&&P?Number(P.y)||0:0),lvl:cerberus?60:30,isClanBoss:true,bossId:bossId};
 
     var green=Math.max(0,Math.min(20,Math.floor(Number(pkt.greenResources)||0)));
     var blue=Math.max(0,Math.min(20,Math.floor(Number(pkt.blueResources)||0)));
-    var stones=Math.max(0,Math.min(20,Math.floor(Number(pkt.normalStones)||0)));
+    var stones=Math.max(0,Math.min(40,Math.floor(Number(pkt.normalStones)||0)));
+    var premium=ppaClanBossRewardCount(pkt,'premiumStoneCount','premiumStone',6);
+    var blueGear=ppaClanBossRewardCount(pkt,'blueGearCount','blueGear',6);
+    var grayRune=ppaClanBossRewardCount(pkt,'grayRuneCount','grayRune',6);
+    var epicGear=ppaClanBossRewardCount(pkt,'epicGearCount','epicGear',6);
+    var greenRune=ppaClanBossRewardCount(pkt,'greenRuneCount','greenRune',6);
+    var blueRune=ppaClanBossRewardCount(pkt,'blueRuneCount','blueRune',6);
 
     for(var g=0;g<green;g++)if(typeof pushMaterialDrop==='function')pushMaterialDrop(e,'uncommon',1);
     for(var b=0;b<blue;b++)if(typeof pushMaterialDrop==='function')pushMaterialDrop(e,'rare',1);
     if(stones>0&&typeof pushStoneDrop==='function')pushStoneDrop(e,'normal',stones);
-    if(pkt.premiumStone&&typeof pushStoneDrop==='function')pushStoneDrop(e,'premium',1);
+    if(premium>0&&typeof pushStoneDrop==='function')pushStoneDrop(e,'premium',premium);
 
-    if(pkt.blueGear){
-      if(typeof v232PushGear==='function')v232PushGear(e,'rare');
-      else if(typeof genItem==='function'&&typeof LOOT!=='undefined'&&Array.isArray(LOOT)){
-        var it=genItem(30,false,'rare');
-        if(it)LOOT.push({x:e.x+(Math.random()-.5)*30,y:e.y+(Math.random()-.5)*30,kind:'gear',item:it,gear:it,bob:Math.random()*6});
-      }
-    }
+    ppaClanBossPushGear(e,'rare',blueGear);
+    ppaClanBossPushGear(e,'epic',epicGear);
+    ppaClanBossPushRune(e,'common',grayRune,pkt.runeRoll);
+    ppaClanBossPushRune(e,'uncommon',greenRune,null);
+    ppaClanBossPushRune(e,'rare',blueRune,null);
 
-    if(pkt.grayRune&&typeof RUNE_TYPES!=='undefined'&&typeof runeKey==='function'&&typeof runeDefByKey==='function'&&typeof LOOT!=='undefined'&&Array.isArray(LOOT)){
-      var types=Object.keys(RUNE_TYPES||{});
-      if(types.length){
-        var idx=Math.abs(Math.floor(Number(pkt.runeRoll)||0))%types.length;
-        var d=runeDefByKey(runeKey(types[idx],'common'));
-        if(d)LOOT.push({
-          x:e.x+(Math.random()-.5)*34,y:e.y+(Math.random()-.5)*34,
-          kind:'statRune',runeKey:d.key,name:d.name,icon:d.icon,img:d.img,
-          rarity:d.rarity,amount:1,bob:Math.random()*6
-        });
-      }
-    }
+    if(pkt.activeBookRank2)ppaClanBossPushRank2Book(e,'active');
+    if(pkt.passiveBookRank2)ppaClanBossPushRank2Book(e,'passive');
+
+    ppaClanBossPushEventMaterial(e,'Кровь монстра',pkt.monsterBlood);
+    ppaClanBossPushEventMaterial(e,'Огненные осколки',pkt.fireShards);
+    ppaClanBossPushEventMaterial(e,'Демонический кристалл',pkt.demonicCrystal);
+    ppaClanBossPushEventMaterial(e,'Хрустальный кристалл',pkt.ruriCrystal);
 
     try{
       if(typeof showPickup==='function'){
-        var msg='ВЛАДЫЧИЦА · заточка ×'+stones;
+        var msg=(cerberus?'ЦЕРБЕР':'ВЛАДЫЧИЦА')+' · заточка ×'+stones;
         if(green>0)msg+=' · зел. ×'+green;
         if(blue>0)msg+=' · син. ×'+blue;
         if(Number(pkt.clanCoins)>0)msg+=' · монеты +'+Math.floor(Number(pkt.clanCoins)||0);
         showPickup(msg,'#ffd36a');
+        var rare=[];
+        if(blueGear)rare.push('синий шмот ×'+blueGear);
+        if(epicGear)rare.push('эпик ×'+epicGear);
+        if(premium)rare.push('прем. заточка ×'+premium);
+        if(grayRune+greenRune+blueRune)rare.push('руны ×'+(grayRune+greenRune+blueRune));
+        if(pkt.activeBookRank2)rare.push('активная книга II');
+        if(pkt.passiveBookRank2)rare.push('пассивная книга II');
+        if(Number(pkt.monsterBlood)||Number(pkt.fireShards)||Number(pkt.demonicCrystal)||Number(pkt.ruriCrystal))rare.push('ивентовый ресурс');
+        if(rare.length)setTimeout(function(){try{showPickup(rare.join(' · '),'#c8a7ff')}catch(_){}},260);
         if(pkt.topBonus||pkt.killBonus||pkt.consolation){
           var extra=[];
           if(pkt.topBonus)extra.push(String(pkt.topBonus));
           if(pkt.killBonus)extra.push('последний удар');
-          if(pkt.consolation)extra.push('утешительная');
-          if(extra.length)setTimeout(function(){try{showPickup(extra.join(' · '),'#a9e6ff')}catch(_){}},420);
+          if(pkt.consolation)extra.push('страховка редкого пула');
+          if(extra.length)setTimeout(function(){try{showPickup(extra.join(' · '),'#a9e6ff')}catch(_){}},520);
         }
       }
     }catch(_){}
@@ -7079,14 +7142,16 @@ ppaPatchRegex(
   }
 }
 window.PPA_CLAN_BOSS_SPAWN_REWARD=ppaClanBossSpawnReward;
-function runeUiState(){`
+function runeUiState(){\`
 );
 if(!output.includes('function ppaClanBossSpawnReward(pkt)')||
-   !output.includes("pushMaterialDrop(e,'uncommon',1)")||
-   !output.includes("pushMaterialDrop(e,'rare',1)")||
-   !output.includes("pushStoneDrop(e,'normal',stones)")||
-   !output.includes("v232PushGear(e,'rare')")||
-   !output.includes("runeKey(types[idx],'common')")||
+   !output.includes("bossId!=='clan_boss_1'&&bossId!=='clan_boss_2'")||
+   !output.includes("ppaClanBossRewardCount(pkt,'blueGearCount','blueGear',6)")||
+   !output.includes("ppaClanBossPushGear(e,'epic',epicGear)")||
+   !output.includes("ppaClanBossPushRune(e,'uncommon',greenRune,null)")||
+   !output.includes("ppaClanBossPushRune(e,'rare',blueRune,null)")||
+   !output.includes("v232RollTypedBook(e,1,0,1,function(){return 2})")||
+   !output.includes("ppaClanBossPushEventMaterial(e,'Хрустальный кристалл',pkt.ruriCrystal)")||
    !output.includes('window.PPA_CLAN_BOSS_SPAWN_REWARD=ppaClanBossSpawnReward')){
   throw new Error('Clan boss reward lexical bridge did not apply');
 }
