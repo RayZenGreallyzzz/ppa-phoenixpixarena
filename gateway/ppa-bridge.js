@@ -185,7 +185,7 @@
     ppaAuctionList:function(){return authed('/api/auction/list')},
     ppaAuctionPlace:function(payload){return authed('/api/auction/place',payload||{})},
     ppaAuctionCancel:function(payload){return authed('/api/auction/cancel',payload||{})},
-    ppaAuctionBuy:function(payload){return authed('/api/auction/buy',payload||{})},
+    ppaAuctionBuy:async function(payload){var r=await authed('/api/auction/buy',payload||{});if(r&&r.version!=null)noteSaveVersion(r.version);return r},
     ppaAuctionAckCredits:function(ids){return authed('/api/auction/ack-credits',{ids:Array.isArray(ids)?ids:[]})},
 
     ppaWalletState:function(){return authed('/api/wallet/state')},
