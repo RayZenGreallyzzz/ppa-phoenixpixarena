@@ -37,11 +37,14 @@
     if(typeof value==='string')return CFG[tier(value)]||null;
     if(!value||typeof value!=='object')return null;
     var x=value.gear&&typeof value.gear==='object'?value.gear:value;
-    var looks=x.statChest===true||
-      String(x.refId||'').indexOf('stat_chest_')===0||
-      String(x.uid||'').indexOf('stat_chest_')===0;
-    if(!looks)return null;
-    return CFG[tier(x.statChestTier||x.refId||x.uid)]||null;
+    var t=tier(x.statChestTier||x.refId||x.uid);
+    if(!t){
+      var hint=String((x.name||'')+' '+(x.title||'')+' '+(x.img||'')+' '+(x.image||'')).toLowerCase();
+      if(hint.indexOf('stat-chest-emerald')>=0||(/изумрудн/.test(hint)&&/сундук/.test(hint)))t='emerald';
+      else if(hint.indexOf('stat-chest-sapphire')>=0||(/сапфиров/.test(hint)&&/сундук/.test(hint)))t='sapphire';
+      else if(hint.indexOf('stat-chest-amethyst')>=0||(/аметистов/.test(hint)&&/сундук/.test(hint)))t='amethyst';
+    }
+    return t?CFG[t]:null;
   }
 
   function count(it){
@@ -233,7 +236,7 @@
     var style=document.createElement('style');
     style.id='ppaOxChestModalStyle';
     style.textContent=
-      '#ppaOxChestModal{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:calc(12px + env(safe-area-inset-top,0px)) 10px calc(12px + env(safe-area-inset-bottom,0px));background:radial-gradient(circle at 50% 44%,rgba(5,7,10,.22),rgba(0,0,0,.82) 72%);backdrop-filter:blur(2.5px);-webkit-backdrop-filter:blur(2.5px);box-sizing:border-box;font-family:Georgia,\'Times New Roman\',serif}'+
+      '#ppaOxChestModal{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:calc(12px + env(safe-area-inset-top,0px)) 10px calc(12px + env(safe-area-inset-bottom,0px));background:radial-gradient(circle at 50% 44%,rgba(5,7,10,.30),rgba(0,0,0,.84) 72%);box-sizing:border-box;font-family:Georgia,\'Times New Roman\',serif}'+
       '#ppaOxChestModal *{box-sizing:border-box}'+
       '.ppa-ox-card{position:relative;width:min(52vw,340px);max-height:min(72vh,520px);overflow:auto;padding:14px 12px 10px;border:3px solid #d9a94d;border-radius:4px;color:#f7ecd0;background:radial-gradient(circle at 50% 15%,var(--ox-glow),transparent 32%),linear-gradient(180deg,#071019 0%,#05090d 45%,#020406 100%);box-shadow:0 0 0 2px #5f3d13,0 0 0 5px rgba(220,167,73,.22),0 20px 54px rgba(0,0,0,.84),0 0 34px var(--ox-glow),inset 0 0 60px rgba(0,0,0,.66);-webkit-overflow-scrolling:touch}'+
       '.ppa-ox-card:before,.ppa-ox-card:after{content:\'✦\';position:absolute;top:-7px;width:24px;height:24px;display:grid;place-items:center;color:#ffcf62;font-size:17px;text-shadow:0 0 10px #ffb12f,0 0 18px rgba(255,177,47,.65)}'+
@@ -545,78 +548,18 @@
     return changed;
   }
 
-  function installChestUiArtHooks(){
-    var installed=false;
-
-    ['sendInvState','sendStorageState','sendAuctionState'].forEach(function(name){
-      var base=window[name];
-      if(typeof base!=='function'||base.__ppaOxArtWrapped)return;
-      var wrap=function(){
-        refreshChestArtEverywhere();
-        return base.apply(this,arguments);
-      };
-      wrap.__ppaOxArtWrapped=true;
-      window[name]=wrap;
-      installed=true;
-    });
-
-    if(typeof window.storageItemForUi==='function'&&!window.storageItemForUi.__ppaOxArtWrapped){
-      var storageBase=window.storageItemForUi;
-      var storageWrap=function(it){
-        hydrateChestVisual(it);
-        var x=storageBase.apply(this,arguments);
-        hydrateChestVisual(x);
-        return x;
-      };
-      storageWrap.__ppaOxArtWrapped=true;
-      window.storageItemForUi=storageWrap;
-      installed=true;
-    }
-
-    if(typeof window.auctionLotForUi==='function'&&!window.auctionLotForUi.__ppaOxArtWrapped){
-      var lotBase=window.auctionLotForUi;
-      var lotWrap=function(){
-        var x=lotBase.apply(this,arguments);
-        try{if(x&&x.item)hydrateChestVisual(x.item)}catch(_){}
-        return x;
-      };
-      lotWrap.__ppaOxArtWrapped=true;
-      window.auctionLotForUi=lotWrap;
-      installed=true;
-    }
-
-    window.__PPA_STAT_CHEST_ART_HOOKS_V667=true;
-    return installed||true;
-  }
-
   function bootAuction(){
-    var changed=refreshChestArtEverywhere();
+    refreshChestArtEverywhere();
     var a=installAuctionHooks();
     var b=installStorageHooks();
-    installChestUiArtHooks();
-    if(changed){
-      try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
-      try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}
-      try{if(typeof sendAuctionState==='function')sendAuctionState()}catch(_){}
-    }
     if(a&&b)return;
     setTimeout(bootAuction,350);
   }
 
-  // Cloud state can arrive after this runtime. Re-hydrate a few times so old
-  // saved chest stacks immediately switch from the placeholder SVG to PNG art.
-  var _ppaChestArtBootTicks=0;
-  var _ppaChestArtBootTimer=setInterval(function(){
-    _ppaChestArtBootTicks++;
-    var changed=refreshChestArtEverywhere();
-    installChestUiArtHooks();
-    if(changed){
-      try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
-      try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}
-      try{if(typeof sendAuctionState==='function')sendAuctionState()}catch(_){}
-    }
-    if(_ppaChestArtBootTicks>=10)clearInterval(_ppaChestArtBootTimer);
-  },700);
+  // Two light repair passes are enough for old cloud saves. UI serializers
+  // already hydrate chest art by refId, so avoid permanent wrappers/intervals.
+  setTimeout(refreshChestArtEverywhere,900);
+  setTimeout(refreshChestArtEverywhere,2400);
 
   window.PPA_REFRESH_STAT_CHEST_ART=refreshChestArtEverywhere;
   window.PPA_STAT_CHEST_STACK_MAX=STACK_MAX;
