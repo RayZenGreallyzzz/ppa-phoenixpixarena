@@ -76,7 +76,7 @@
     root=document.createElement('div');root.id='ppaClanBossChest';root.className='closed';
     button=document.createElement('button');button.id='ppaClanBossChestBtn';button.type='button';button.setAttribute('aria-label','Открыть сундук кланового босса');
     var im=document.createElement('img');im.src=CHEST_SRC;im.alt='';button.appendChild(im);
-    label=document.createElement('div');label.id='ppaClanBossChestLabel';label.textContent='СУНДУК ВЛАДЫЧИЦЫ';
+    label=document.createElement('div');label.id='ppaClanBossChestLabel';label.textContent='СУНДУК КЛАНОВОГО БОССА';
     who=document.createElement('div');who.id='ppaClanBossChestWho';
     barWrap=document.createElement('div');barWrap.id='ppaClanBossChestBarWrap';
     bar=document.createElement('div');bar.id='ppaClanBossChestBar';barWrap.appendChild(bar);
@@ -147,7 +147,7 @@
           if(typeof window.PPA_CLAN_BOSS_CHEST_COMPLETE==='function')window.PPA_CLAN_BOSS_CHEST_COMPLETE();
         }
       }else{
-        label.textContent=nearChest(chest)?'НАЖМИ · ОТКРЫТЬ':'СУНДУК ВЛАДЫЧИЦЫ';
+        label.textContent=nearChest(chest)?'НАЖМИ · ОТКРЫТЬ':'СУНДУК КЛАНОВОГО БОССА';
         who.textContent=nearChest(chest)?'Открытие займёт 5 секунд':'Подойди ближе';
         barWrap.style.display='none';bar.style.width='0%';countdown.style.display='none';countdown.textContent='';
       }
@@ -181,7 +181,7 @@
     var eligible=Array.isArray(d.eligible)?d.eligible:[];
     var shared=Array.isArray(d.shared)?d.shared:[];
     var top=eligible.slice(0,3);
-    var html='<div class="ttl">🎁 РОЛЛ СУНДУКА ВЛАДЫЧИЦЫ</div>'+
+    var bossTitle=String(d.bossTitle||((String(d.bossId||'')==='clan_boss_2')?'Цербер':'Владычица'));\n    var html='<div class="ttl">🎁 РОЛЛ СУНДУКА '+esc(bossTitle.toUpperCase())+'</div>'+
       '<div class="sub">Участники от '+esc(d.minDamage||5000)+' урона · редкий дроп распределяет сервер</div>';
     if(top.length){
       html+='<div class="rank"><b>Урон:</b> '+top.map(function(x,i){return (i+1)+'. '+esc(x.name)+' — '+Math.round(Number(x.damage)||0).toLocaleString('ru-RU')}).join(' · ')+'</div>';
