@@ -199,6 +199,9 @@ function ppaPcBindCanvas(){
 function ppaPcBindInput(){
   if(window.__PPA_PC_MOUSE_HOTKEYS_BOUND__)return;
   window.__PPA_PC_MOUSE_HOTKEYS_BOUND__=true;
+  // Mobile/tablet already use the native joystick. Do not install the desktop
+  // pointer listeners, retry timer or an extra requestAnimationFrame loop there.
+  if(ppaPcMobileLike())return;
   window.addEventListener('pointermove',ppaPcMarkPointer,{passive:true});
   window.addEventListener('mousemove',function(){PPA_PC_POINTER_SEEN=true},{passive:true});
   window.addEventListener('pointerdown',function(e){
@@ -249,7 +252,8 @@ const validation = [
   ['window.PPA_PC_INPUT_DEBUG','debug bridge'],
   ['ppaPcHudSkill(skill,e)','skill hotkeys'],
   ['ppaPcSetMoveTarget(e.clientX,e.clientY)','mouse movement'],
-  ['requestAnimationFrame(loop)','movement loop']
+  ['if(ppaPcMobileLike())return;','mobile runtime gate'],
+  ['requestAnimationFrame(loop)','desktop movement loop']
 ];
 const missingValidation = validation.filter(([needle])=>!html.includes(needle)).map(([,label])=>label);
 if (missingValidation.length) {
@@ -258,5 +262,5 @@ if (missingValidation.length) {
 if (html === before) throw new Error('No changes applied to public/index.html');
 
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] PC input applied for Telegram Desktop/browser: left click move, right click/Space attack, 1-4 skills; Android/iOS touch disabled.');
+console.log('[PPA POSTBUILD] PC input applied only on desktop; mobile/tablet skip desktop pointer listeners and rAF loop.');
 console.log('[PPA POSTBUILD] index.html: '+(Buffer.byteLength(html)/1024/1024).toFixed(2)+' MiB');
