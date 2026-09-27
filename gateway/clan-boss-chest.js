@@ -181,7 +181,8 @@
     var eligible=Array.isArray(d.eligible)?d.eligible:[];
     var shared=Array.isArray(d.shared)?d.shared:[];
     var top=eligible.slice(0,3);
-    var bossTitle=String(d.bossTitle||((String(d.bossId||'')==='clan_boss_2')?'Цербер':'Владычица'));\n    var html='<div class="ttl">🎁 РОЛЛ СУНДУКА '+esc(bossTitle.toUpperCase())+'</div>'+
+    var bossTitle=String(d.bossTitle||((String(d.bossId||'')==='clan_boss_2')?'Цербер':'Владычица'));
+    var html='<div class="ttl">🎁 РОЛЛ СУНДУКА '+esc(bossTitle.toUpperCase())+'</div>'+
       '<div class="sub">Участники от '+esc(d.minDamage||5000)+' урона · редкий дроп распределяет сервер</div>';
     if(top.length){
       html+='<div class="rank"><b>Урон:</b> '+top.map(function(x,i){return (i+1)+'. '+esc(x.name)+' — '+Math.round(Number(x.damage)||0).toLocaleString('ru-RU')}).join(' · ')+'</div>';
