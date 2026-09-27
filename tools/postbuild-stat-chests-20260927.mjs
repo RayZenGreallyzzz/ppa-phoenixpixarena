@@ -49,9 +49,9 @@ fs.writeFileSync(path.join(assetsDir,'stat-chest-amethyst.svg'),svg('#7430a8','#
 // User-approved transparent chest renders uploaded to repo root.
 // 21_34_02 is the combined/reference composition and is not used as an item icon.
 const uploadedChestArt={
-  emerald:'Изображение ChatGPT 27 сент. 2026 г., 21_33_30.png',
+  emerald:'Изображение ChatGPT 27 сент. 2026 г., 21_33_51.png',
   sapphire:'Изображение ChatGPT 27 сент. 2026 г., 21_33_41.png',
-  amethyst:'Изображение ChatGPT 27 сент. 2026 г., 21_33_51.png'
+  amethyst:'Изображение ChatGPT 27 сент. 2026 г., 21_33_30.png'
 };
 for(const [tier,file] of Object.entries(uploadedChestArt)){
   const src=path.join(ROOT,file);
