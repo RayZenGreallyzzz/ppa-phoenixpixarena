@@ -20,6 +20,32 @@
   var fightDone=false,playerDead=false,attackCaptureAt=0,lastPlayerX=500,lastPlayerY=840,playerDir=4,fx=[];
   var hiddenHud=[],controlState=[],lastControlFix=0;
   var playerMoving=false,playerAttackStartedAt=0,playerAttackAnimUntil=0,rewardPanel=null;
+  var RUN_KEY='ppa_mimic_sombrero_run_v1',RUN_MAX_AGE=30*60*1000,pauseStartedAt=0,resumeAttempted=false;
+  function clearRunSnapshot(){try{localStorage.removeItem(RUN_KEY)}catch(_){}}
+  function runSnapshot(){
+    if(!active||fightDone||playerDead||boss.dead||!P)return null;
+    var now=Date.now();
+    return {
+      v:1,savedAt:now,level:level,
+      prevScene:String(prevScene||'safe'),prevX:Number(prevX)||0,prevY:Number(prevY)||0,prevTid:prevTid==null?null:prevTid,
+      player:{x:Number(P.x)||500,y:Number(P.y)||840,hp:Math.max(1,Number(P.hp)||1)},
+      boss:{x:Number(boss.x)||500,y:Number(boss.y)||500,hp:Math.max(1,Number(boss.hp)||1),mhp:Math.max(1,Number(boss.mhp)||1)},
+      nextAttackIn:Math.max(0,Number(nextAttackAt)||0-now),
+      nextSkillIn:Math.max(0,Number(nextSkillAt)||0-now)
+    };
+  }
+  function saveRunSnapshot(){
+    try{var snap=runSnapshot();if(snap)localStorage.setItem(RUN_KEY,JSON.stringify(snap))}catch(_){}
+  }
+  function readRunSnapshot(){
+    try{
+      var raw=localStorage.getItem(RUN_KEY);if(!raw)return null;
+      var x=JSON.parse(raw),age=Date.now()-Math.max(0,Number(x&&x.savedAt)||0);
+      if(!x||x.v!==1||![20,40,60].includes(Number(x.level))||age<0||age>RUN_MAX_AGE){clearRunSnapshot();return null}
+      if(!x.player||!x.boss||Number(x.boss.hp)<=0||Number(x.player.hp)<=0){clearRunSnapshot();return null}
+      return x;
+    }catch(_){clearRunSnapshot();return null}
+  }
   // Physical separation is expressed in arena world units (WORLD=1000).
   // It is shared by player movement and boss AI, so neither side can enter
   // the other's visual body during an attack.
@@ -286,6 +312,7 @@
     var dmg=Math.max(1,Math.round(Number(amount)||1));
     boss.hp=Math.max(0,boss.hp-dmg);boss.flashUntil=Date.now()+120;
     syncProxy();
+    if(boss.hp>0)saveRunSnapshot();
     toast((crit?'КРИТ · ':'')+(kind==='skill'?'НАВЫК · −':'УДАР · −')+dmg,crit?'#ffd36a':'#ffb57a');
     if(boss.hp<=0)finishVictory();
     return true;
@@ -341,12 +368,12 @@
     try{if(typeof playerDmg==='function')dealt=Math.max(1,Math.round(Number(playerDmg(dealt,'physical'))||1))}catch(_){}
     P.hp=Math.max(0,Number(P.hp||0)-dealt);
     toast((crit?'КРИТ МИМИКА · −':(kind==='skill'?'ПЫЛЬНЫЙ ПЛЕВОК · −':'МИМИК · −'))+dealt,crit?'#ffcf63':'#ff8b72');
-    if(P.hp<=0)killPlayer();
+    if(P.hp<=0)killPlayer();else saveRunSnapshot();
     return true;
   }
   function killPlayer(){
     if(playerDead||fightDone)return;
-    playerDead=true;moveTarget=null;pendingBasic=false;skillCast=null;
+    playerDead=true;clearRunSnapshot();moveTarget=null;pendingBasic=false;skillCast=null;
     try{P.hp=0;P.dead=true;P.attacking=false}catch(_){}
     toast('МИМИК-САМБРЕРО · ты повержен','#ff786f');
     setTimeout(function(){
@@ -562,6 +589,8 @@
   }
   function drawFrame(ts){
     if(!active)return;
+    if(document.hidden){raf=requestAnimationFrame(drawFrame);return}
+    try{if(P&&!fightDone&&!playerDead&&P.scene!==SCENE)P.scene=SCENE}catch(_){}
     resize();
     var dt=lastTs?Math.max(0,Math.min(50,ts-lastTs)):16;lastTs=ts;
     var now=Date.now();
@@ -574,8 +603,7 @@
 
     var tag=document.getElementById('ppaMimicArenaTag');
     if(tag){
-      var a=eventApi(),tm=!!(a&&typeof a.testMode==='function'&&a.testMode());
-      tag.textContent='🎭 '+level+' ур. · ATK '+boss.dmg+' · DEF '+boss.def+(tm?' · ТЕСТ БЕЗ БИЛЕТА':'');
+      tag.textContent='🎭 '+level+' ур. · ATK '+boss.dmg+' · DEF '+boss.def;
     }
     raf=requestAnimationFrame(drawFrame);
   }
@@ -620,7 +648,7 @@
   }
   function finishVictory(){
     if(fightDone)return;
-    fightDone=true;boss.dead=true;moveTarget=null;pendingBasic=false;skillCast=null;playerMoving=false;
+    fightDone=true;boss.dead=true;clearRunSnapshot();moveTarget=null;pendingBasic=false;skillCast=null;playerMoving=false;
     try{P.attacking=false;P.anim='idle'}catch(_){}
     setCombatControls(false);
     var res=null,a=eventApi();
@@ -633,10 +661,9 @@
   function enter(lv){
     lv=[20,40,60].includes(Number(lv))?Number(lv):20;
     var a=eventApi();if(!a||typeof a.consumeTicket!=='function'){toast('Событие Мимика ещё не готово','#ff9c72');return}
-    var tm=!!(a&&typeof a.testMode==='function'&&a.testMode());
-    if(!tm&&count()<1){toast('Нужен Билет Мимика-Самбреро','#ff9c72');return}
+    if(count()<1){toast('Нужен Билет Мимика-Самбреро','#ff9c72');return}
     preload().then(function(){
-      if(!tm&&!a.consumeTicket(1)){toast('Нужен Билет Мимика-Самбреро','#ff9c72');return}
+      if(!a.consumeTicket(1)){toast('Нужен Билет Мимика-Самбреро','#ff9c72');return}
       ensureRoot();level=lv;resetBoss();
       try{
         prevScene=String(P&&P.scene||'safe');prevX=Number(P&&P.x)||0;prevY=Number(P&&P.y)||0;prevTid=P?P.tid:null;
@@ -650,6 +677,7 @@
       hideCurrencyHud();setCombatControls(true);lastControlFix=0;
       try{var exitBtn=document.getElementById('ppaMimicArenaExit');if(exitBtn){exitBtn.style.display='block';exitBtn.style.visibility='visible';exitBtn.style.opacity='1'}}catch(_){}
       active=true;lastTs=0;cancelAnimationFrame(raf);raf=requestAnimationFrame(drawFrame);
+      saveRunSnapshot();
       toast('МИМИК '+level+' · HP '+boss.mhp.toLocaleString('ru-RU')+' · DEF '+boss.def,'#ffd36a');
       try{if(typeof saveGame==='function')saveGame()}catch(_){}
     }).catch(function(e){
@@ -668,6 +696,7 @@
   function forceExitToSafe(){
     // Last-resort escape hatch: works even if the arena active flag or RAF
     // got into a bad state. It is intentionally independent from combat.
+    clearRunSnapshot();
     active=false;
     try{cancelAnimationFrame(raf)}catch(_){}
     raf=0;moveTarget=null;pendingBasic=false;skillCast=null;fx.length=0;arenaPetX=NaN;arenaPetY=NaN;
@@ -698,6 +727,7 @@
   function leave(dead){
     var q=document.getElementById('ppaMimicChoose');if(q)q.remove();
     if(!active)return;
+    clearRunSnapshot();
     active=false;cancelAnimationFrame(raf);raf=0;if(root)root.style.display='none';
     try{if(rewardPanel)rewardPanel.style.display='none'}catch(_){}
     try{var exitBtn=document.getElementById('ppaMimicArenaExit');if(exitBtn)exitBtn.style.display='none'}catch(_){};
@@ -716,6 +746,68 @@
     if(dead){try{if(typeof changeScene==='function')changeScene('safe')}catch(_){}}
     setTimeout(refreshNativeHud,0);setTimeout(refreshNativeHud,120);
   }
+
+  function resumeRunSnapshot(snap){
+    if(active||!snap||!P)return false;
+    var lv=[20,40,60].includes(Number(snap.level))?Number(snap.level):20;
+    preload().then(function(){
+      if(active)return;
+      ensureRoot();level=lv;resetBoss();
+      prevScene=String(snap.prevScene||'safe');prevX=Number(snap.prevX)||0;prevY=Number(snap.prevY)||0;prevTid=snap.prevTid==null?null:snap.prevTid;
+      boss.x=Number(snap.boss.x)||500;boss.y=Number(snap.boss.y)||500;
+      boss.hp=Math.max(1,Math.min(boss.mhp,Number(snap.boss.hp)||boss.mhp));boss.dead=false;syncProxy();
+      try{
+        P.scene=SCENE;P.x=Number(snap.player.x)||500;P.y=Number(snap.player.y)||840;P.hp=Math.max(1,Number(snap.player.hp)||1);P.tid=null;P.dead=false;
+      }catch(_){}
+      lastPlayerX=Number(P.x)||500;lastPlayerY=Number(P.y)||840;playerDir=0;moveTarget=null;pendingBasic=false;arenaPetX=NaN;arenaPetY=NaN;arenaPetDir='S';
+      fightDone=false;playerDead=false;skillCast=null;fx.length=0;attackCaptureAt=0;playerMoving=false;playerAttackStartedAt=0;playerAttackAnimUntil=0;
+      try{if(rewardPanel)rewardPanel.style.display='none'}catch(_){}
+      var now=Date.now(),c=combat();
+      nextAttackAt=now+Math.max(350,Number(snap.nextAttackIn)||Math.max(700,Number(c.attackEvery)||2200));
+      nextSkillAt=now+Math.max(700,Number(snap.nextSkillIn)||randomSkillDelay());
+      root.style.display='block';hideCurrencyHud();setCombatControls(true);lastControlFix=0;
+      try{var exitBtn=document.getElementById('ppaMimicArenaExit');if(exitBtn){exitBtn.style.display='block';exitBtn.style.visibility='visible';exitBtn.style.opacity='1'}}catch(_){}
+      active=true;lastTs=0;cancelAnimationFrame(raf);raf=requestAnimationFrame(drawFrame);
+      saveRunSnapshot();
+      toast('🎭 БОЙ С МИМИКОМ ВОССТАНОВЛЕН','#9dff91');
+    }).catch(function(e){console.warn('Mimic resume',e)});
+    return true;
+  }
+  function tryResumePending(){
+    if(active||resumeAttempted)return;
+    var snap=readRunSnapshot();if(!snap)return;
+    if(typeof P==='undefined'||!P){setTimeout(tryResumePending,500);return}
+    resumeAttempted=true;resumeRunSnapshot(snap);
+  }
+  function pauseForBackground(){
+    if(!active||fightDone||playerDead)return;
+    pauseStartedAt=Date.now();saveRunSnapshot();
+  }
+  function resumeFromBackground(){
+    if(active&&!fightDone&&!playerDead){
+      var now=Date.now(),gap=pauseStartedAt?Math.max(0,now-pauseStartedAt):0;pauseStartedAt=0;
+      if(gap>0){
+        nextAttackAt+=gap;nextSkillAt+=gap;
+        if(skillCast){skillCast.start+=gap;skillCast.end+=gap}
+        boss.attackUntil+=gap;boss.flashUntil+=gap;
+        try{
+          if(Number(P.smokeUntil)>now-gap)P.smokeUntil+=gap;
+          if(Number(P.aiSlowUntil)>now-gap)P.aiSlowUntil+=gap;
+          if(Number(P.__ppaMimicSlowUntil)>now-gap)P.__ppaMimicSlowUntil+=gap;
+        }catch(_){}
+      }
+      lastTs=0;
+      try{if(P.scene!==SCENE)P.scene=SCENE}catch(_){}
+      saveRunSnapshot();
+      return;
+    }
+    resumeAttempted=false;tryResumePending();
+  }
+  document.addEventListener('visibilitychange',function(){if(document.hidden)pauseForBackground();else resumeFromBackground()},true);
+  window.addEventListener('pagehide',pauseForBackground,true);
+  window.addEventListener('pageshow',function(){resumeFromBackground()},true);
+  setTimeout(tryResumePending,700);
+  setTimeout(tryResumePending,2200);
 
   function wrapCombatHooks(){
     if(window.__PPA_MIMIC_COMBAT_HOOKS_V5)return;
@@ -788,6 +880,7 @@
   window.PPA_MIMIC_SOMBRERO_ARENA={
     open:chooser,enter:enter,leave:leave,preload:preload,isActive:function(){return active},scene:SCENE,
     boss:function(){return {level:level,hp:boss.hp,mhp:boss.mhp,damage:boss.dmg,defense:boss.def,skill:!!skillCast}},
+    pending:function(){return readRunSnapshot()},
     tryBasicAttack:tryBasicAttack
   };
 })();
