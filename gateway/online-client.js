@@ -302,8 +302,79 @@
       clanSetMemberPermission=function(memberId,perm){clanCall({action:'setPermissions',memberId:memberId,permissions:perm||{}}).then(function(r){clanNotice((r&&r.message)||'Права склада сохранены')}).catch(function(e){clanNotice(msg(e))});return true};
     }catch(e){console.warn('Clan admin hooks',e)}
 
+    var _auctionReturnPayload=auctionReturnPayload;
+    auctionReturnPayload=function(payload,qty){
+      try{
+        var raw=payload&&payload.gear&&typeof payload.gear==='object'?payload.gear:payload;
+        var cfg=window.PPA_STAT_CHEST_CONFIG_FROM_ITEM&&window.PPA_STAT_CHEST_CONFIG_FROM_ITEM(raw);
+        if(cfg&&window.PPA_GIVE_STAT_CHEST){
+          return window.PPA_GIVE_STAT_CHEST(cfg.tier,Math.max(1,Math.floor(Number(qty)||1)),true);
+        }
+      }catch(_){}
+      return _auctionReturnPayload.apply(this,arguments);
+    };
+
     var _auctionPlace=auctionPlaceLot;
     auctionPlaceLot=function(ref,qty,price,currency,durationHours){
+      var chest=null,cfg=null,bagIndex=Number(ref);
+      try{
+        if(Number.isFinite(bagIndex)&&bagIndex>=0&&Array.isArray(INV.bag)){
+          chest=INV.bag[bagIndex]||null;
+          cfg=window.PPA_STAT_CHEST_CONFIG_FROM_ITEM&&window.PPA_STAT_CHEST_CONFIG_FROM_ITEM(chest);
+        }
+      }catch(_){chest=null;cfg=null}
+
+      if(chest&&cfg){
+        qty=Math.max(1,Math.floor(Number(qty)||1));
+        var available=window.PPA_STAT_CHEST_COUNT?window.PPA_STAT_CHEST_COUNT(chest):Math.max(0,Math.floor(Number(chest.count)||0));
+        if(qty>available){auctionNotice('Недостаточно сундуков в сумке');return false}
+        currency=currency==='gram'?'gram':'ppa';
+        price=Number(price);
+        var minimum=currency==='gram'?Number(cfg.minGram):Number(cfg.minPpa);
+        if(!Number.isFinite(price)||price<minimum){
+          auctionNotice('Минимум для «'+cfg.name+'» — '+minimum+' '+currency.toUpperCase());
+          return false;
+        }
+        try{
+          if(typeof accountAuctionSlots==='function'&&(INV.auctionLots||[]).length>=accountAuctionSlots()){
+            auctionNotice('Все слоты аукциона заняты');
+            return false;
+          }
+        }catch(_){}
+
+        var now=Date.now();
+        var hours=Math.max(1,Math.min(48,Number(durationHours)||24));
+        var item=Object.assign({},chest);
+        if(window.PPA_SET_STAT_CHEST_COUNT)window.PPA_SET_STAT_CHEST_COUNT(item,qty);else{item.count=qty;item.qty=qty;item.amount=qty}
+        var lot={
+          id:'lot_ox_'+now.toString(36)+'_'+Math.random().toString(36).slice(2,9),
+          item:item,qty:qty,price:price,currency:currency,
+          createdAt:now,expiresAt:now+hours*3600000
+        };
+
+        var left=available-qty;
+        if(left>0){
+          if(window.PPA_SET_STAT_CHEST_COUNT)window.PPA_SET_STAT_CHEST_COUNT(chest,left);else{chest.count=left;chest.qty=left;chest.amount=left}
+        }else{
+          INV.bag.splice(bagIndex,1);
+        }
+        if(!Array.isArray(INV.auctionLots))INV.auctionLots=[];
+        INV.auctionLots.push(lot);
+        try{saveGame();sendInvState();sendAuctionState();updateUI()}catch(_){}
+
+        if(!PPA.ppaAuctionPlace)return true;
+        PPA.ppaAuctionPlace({lot:lot,uiLot:auctionLotForUi(lot)}).then(function(){refreshAuction()}).catch(function(e){
+          var i=(INV.auctionLots||[]).findIndex(function(x){return x&&x.id===lot.id});
+          if(i>=0){
+            auctionReturnPayload(INV.auctionLots[i].item,INV.auctionLots[i].qty||1);
+            INV.auctionLots.splice(i,1);
+            try{saveGame();sendInvState();sendAuctionState();updateUI()}catch(_){}
+          }
+          auctionNotice('Сервер не принял лот: '+msg(e));
+        });
+        return true;
+      }
+
       var before=new Set((INV.auctionLots||[]).map(function(x){return x&&x.id}));
       _auctionPlace(ref,qty,price,currency,durationHours);
       var lot=(INV.auctionLots||[]).find(function(x){return x&&!before.has(x.id)});if(!lot||!PPA.ppaAuctionPlace)return;
