@@ -346,6 +346,33 @@ function ppaEscapeSrcdocCode(code) {
     .replace(/'/g, '&#x27;');
 }
 
+/* === OVAL DUNGEON ACTIVE ZONE · FPS TEST =============================== */
+// Isolated/reversible test: only untouched, non-aggro standard dungeon mobs use
+// the new ellipse for full-rate client AI. Combat mobs, damaged mobs and bosses
+// stay fully active. Rendering/network authority are unchanged.
+ppaPatchRegex(
+  'dungeon oval AI sleep radius constants',
+  /const AGGRO_R=110, LEASH_R=260;/,
+  `const AGGRO_R=110, LEASH_R=260;
+const PPA_DUNGEON_ACTIVE_RX=360;
+const PPA_DUNGEON_ACTIVE_RY=620;`
+);
+
+ppaPatchRegex(
+  'dungeon oval AI sleep gate',
+  /if\(P\.scene==='dungeon'&&!e\.isBoss&&!e\.aggro&&e\.hp===e\.mhp&&d2>250000\)\{/,
+  `if(P.scene==='dungeon'&&!e.isBoss&&!e.aggro&&e.hp===e.mhp&&
+     ((dx*dx)/(PPA_DUNGEON_ACTIVE_RX*PPA_DUNGEON_ACTIVE_RX)+(dy*dy)/(PPA_DUNGEON_ACTIVE_RY*PPA_DUNGEON_ACTIVE_RY)>1)){`
+);
+
+if(!output.includes('const PPA_DUNGEON_ACTIVE_RX=360;') ||
+   !output.includes('const PPA_DUNGEON_ACTIVE_RY=620;') ||
+   !output.includes('(dy*dy)/(PPA_DUNGEON_ACTIVE_RY*PPA_DUNGEON_ACTIVE_RY)>1')) {
+  throw new Error('Dungeon oval active-zone patch incomplete');
+}
+console.log('[PPA BUILD] Dungeon oval active zone: 360 x 620 radii; combat/bosses exempt');
+/* ======================================================================== */
+
 /* === NATIVE TABBED EVENTS CENTER ======================================== */
 // Replace the legacy events iframe at build time instead of trying to overlay it
 // at runtime. Parent-side event mechanics/messages remain unchanged.
