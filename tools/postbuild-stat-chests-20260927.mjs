@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 
 const ROOT=process.cwd();
 const indexPath=path.join(ROOT,'public','index.html');
@@ -56,7 +57,10 @@ const uploadedChestArt={
 for(const [tier,file] of Object.entries(uploadedChestArt)){
   const src=path.join(ROOT,file);
   if(!fs.existsSync(src))throw new Error('OX chest uploaded art missing: '+file);
-  fs.copyFileSync(src,path.join(assetsDir,'stat-chest-'+tier+'.png'));
+  await sharp(src)
+    .resize({width:384,height:384,fit:'inside',withoutEnlargement:true})
+    .png({compressionLevel:9,adaptiveFiltering:true})
+    .toFile(path.join(assetsDir,'stat-chest-'+tier+'.png'));
 }
 
 let html=fs.readFileSync(indexPath,'utf8');
@@ -154,7 +158,7 @@ const bagOld=esc([
 ].join('\n'));
 const bagNew=esc([
   "  ppaSetBagVisualSelection(i);",
-  "  if(v.it&&v.it.statChest===true){",
+  "  if(v.it&&(v.it.statChest===true||String(v.it.refId||'').indexOf('stat_chest_')===0||String(v.it.uid||'').indexOf('stat_chest_')===0||/сундук\\s+ох/i.test(String(v.it.name||'')))){",
   "    _sel=-1;",
   "    try{if(parent&&typeof parent.PPA_OPEN_STAT_CHEST==='function')parent.PPA_OPEN_STAT_CHEST(v.it)}catch(_){}",
   "    return;",
@@ -188,7 +192,7 @@ const adminPatch=[
 if(html.indexOf(adminReturn)<0)throw new Error('OX chests: admin reward stock return target not found');
 html=html.replace(adminReturn,adminPatch);
 
-const scriptTag='<script src="/game/stat-chests-runtime.js?v=v670-ox-fix-green-purple-map-20260927"></script>';
+const scriptTag='<script src="/game/stat-chests-runtime.js?v=v671-ox-sapphire-fps-20260927"></script>';
 if(html.indexOf(scriptTag)<0){
   const bodyEnd=html.lastIndexOf('</body>');
   if(bodyEnd<0)throw new Error('OX chests: parent body end missing');
@@ -199,7 +203,7 @@ const required=[
   'statChestEmerald','statChestSapphire','statChestAmethyst',
   '/assets/stat-chest-emerald.png','/assets/stat-chest-sapphire.png','/assets/stat-chest-amethyst.png',
   "g.kind==='statChest'","PPA_OPEN_STAT_CHEST","admin_qa_stat_chest_emerald_100_v1",
-  'stat-chests-runtime.js?v=v670-ox-fix-green-purple-map-20260927'
+  'stat-chests-runtime.js?v=v671-ox-sapphire-fps-20260927'
 ];
 for(const x of required)if(html.indexOf(x)<0)throw new Error('OX chests validation missing: '+x);
 if(html.indexOf(newPopular)<0)throw new Error('OX chests: new Popular filter missing');
