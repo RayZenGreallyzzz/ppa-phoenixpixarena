@@ -71,6 +71,21 @@ if (!html.includes(marker)) {
 }
 const count = (html.match(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
 if (count !== 1) throw new Error('Mimic Sombrero event injected more than once: ' + count);
+
+const desktopInputPath=path.join(ROOT,'public','game','pc-input-desktop.js');
+if(!fs.existsSync(desktopInputPath))throw new Error('Desktop PC input asset missing from final build');
+const desktopInputCode=fs.readFileSync(desktopInputPath,'utf8');
+if(!desktopInputCode.includes('V656 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT')||
+   !desktopInputCode.includes('requestAnimationFrame(loop)')){
+  throw new Error('Desktop PC input asset is incomplete');
+}
+if(!html.includes('PPA_DESKTOP_PC_INPUT_LOADER_V656')||
+   !html.includes('/game/pc-input-desktop.js?v=')||
+   html.includes('V656 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT')||
+   html.includes('function ppaPcTickMove()')||
+   html.includes('window.PPA_PC_INPUT_DEBUG')){
+  throw new Error('Desktop PC input leaked into shared phone/tablet HTML');
+}
 for (const required of [
   'PPA_MIMIC_SOMBRERO_EVENT',
   'Билет Мимика-Самбреро',
