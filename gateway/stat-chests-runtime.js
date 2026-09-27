@@ -235,7 +235,7 @@
     style.textContent=
       '#ppaOxChestModal{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:calc(12px + env(safe-area-inset-top,0px)) 10px calc(12px + env(safe-area-inset-bottom,0px));background:radial-gradient(circle at 50% 44%,rgba(5,7,10,.22),rgba(0,0,0,.82) 72%);backdrop-filter:blur(2.5px);-webkit-backdrop-filter:blur(2.5px);box-sizing:border-box;font-family:Georgia,\'Times New Roman\',serif}'+
       '#ppaOxChestModal *{box-sizing:border-box}'+
-      '.ppa-ox-card{position:relative;width:min(94vw,680px);max-height:min(90vh,820px);overflow:auto;padding:30px 28px 24px;border:3px solid #d9a94d;border-radius:4px;color:#f7ecd0;background:radial-gradient(circle at 50% 15%,var(--ox-glow),transparent 32%),linear-gradient(180deg,#071019 0%,#05090d 45%,#020406 100%);box-shadow:0 0 0 2px #5f3d13,0 0 0 5px rgba(220,167,73,.22),0 20px 54px rgba(0,0,0,.84),0 0 34px var(--ox-glow),inset 0 0 60px rgba(0,0,0,.66);-webkit-overflow-scrolling:touch}'+
+      '.ppa-ox-card{position:relative;width:min(86vw,560px);max-height:min(82vh,690px);overflow:auto;padding:24px 22px 18px;border:3px solid #d9a94d;border-radius:4px;color:#f7ecd0;background:radial-gradient(circle at 50% 15%,var(--ox-glow),transparent 32%),linear-gradient(180deg,#071019 0%,#05090d 45%,#020406 100%);box-shadow:0 0 0 2px #5f3d13,0 0 0 5px rgba(220,167,73,.22),0 20px 54px rgba(0,0,0,.84),0 0 34px var(--ox-glow),inset 0 0 60px rgba(0,0,0,.66);-webkit-overflow-scrolling:touch}'+
       '.ppa-ox-card:before,.ppa-ox-card:after{content:\'✦\';position:absolute;top:-11px;width:42px;height:42px;display:grid;place-items:center;color:#ffcf62;font-size:28px;text-shadow:0 0 10px #ffb12f,0 0 18px rgba(255,177,47,.65)}'+
       '.ppa-ox-card:before{left:-9px}.ppa-ox-card:after{right:-9px}'+
       '.ppa-ox-frame-bottom{position:absolute;left:14px;right:14px;bottom:8px;height:1px;background:linear-gradient(90deg,transparent,#f0bd58 15%,#704711 50%,#f0bd58 85%,transparent);pointer-events:none}'+
@@ -243,9 +243,9 @@
       '.ppa-ox-gem:after{content:\'\';position:absolute;inset:6px;border:1px solid rgba(255,255,255,.45)}'+
       '.ppa-ox-title{padding:10px 10px 16px;text-align:center;color:#f5d88c;font-size:clamp(22px,4.8vw,34px);font-weight:800;line-height:1.1;text-shadow:0 2px 2px #000,0 0 14px rgba(235,195,94,.28)}'+
       '.ppa-ox-title-name{color:var(--ox-accent);text-shadow:0 0 13px var(--ox-glow)}'+
-      '.ppa-ox-hero{display:grid;grid-template-columns:minmax(180px,44%) 1fr;gap:18px;align-items:center;margin:2px 0 14px;padding:14px 18px 12px;border-top:1px solid rgba(226,182,83,.58);border-bottom:1px solid rgba(226,182,83,.58);background:radial-gradient(circle at 25% 55%,var(--ox-glow),transparent 50%),rgba(4,8,12,.42)}'+
-      '.ppa-ox-art-wrap{min-height:150px;display:flex;align-items:center;justify-content:center}'+
-      '.ppa-ox-img{width:min(100%,220px);height:150px;object-fit:contain;filter:drop-shadow(0 8px 10px rgba(0,0,0,.72)) drop-shadow(0 0 14px var(--ox-glow));transform:scale(1.08)}'+
+      '.ppa-ox-hero{display:grid;grid-template-columns:minmax(145px,42%) 1fr;gap:14px;align-items:center;margin:2px 0 14px;padding:14px 18px 12px;border-top:1px solid rgba(226,182,83,.58);border-bottom:1px solid rgba(226,182,83,.58);background:radial-gradient(circle at 25% 55%,var(--ox-glow),transparent 50%),rgba(4,8,12,.42)}'+
+      '.ppa-ox-art-wrap{min-height:118px;display:flex;align-items:center;justify-content:center}'+
+      '.ppa-ox-img{width:min(100%,180px);height:118px;object-fit:contain;filter:drop-shadow(0 8px 10px rgba(0,0,0,.72)) drop-shadow(0 0 14px var(--ox-glow));transform:scale(1.08)}'+
       '.ppa-ox-values{display:grid;gap:13px;align-content:center}'+
       '.ppa-ox-value{display:grid;grid-template-columns:auto 1fr;align-items:baseline;column-gap:10px;position:relative;padding-bottom:8px}'+
       '.ppa-ox-value:not(:last-child):after{content:\'\';position:absolute;left:0;right:18%;bottom:0;height:1px;background:linear-gradient(90deg,#8d6a2a,transparent)}'+
@@ -272,7 +272,7 @@
       '.ppa-ox-cancel{color:#f2dba7;background:linear-gradient(180deg,#4a2d1e,#241710)}'+
       '.ppa-ox-open{color:#fff0b5;background:linear-gradient(180deg,#9b681d,#5f390e);box-shadow:inset 0 0 0 2px rgba(80,44,8,.65),0 0 16px rgba(255,185,47,.24),0 4px 12px rgba(0,0,0,.38)}'+
       '.ppa-ox-open:disabled,.ppa-ox-cancel:disabled{opacity:.55;cursor:default}'+
-      '@media(max-width:520px){.ppa-ox-card{width:min(96vw,620px);padding:26px 16px 18px}.ppa-ox-hero{grid-template-columns:42% 1fr;gap:10px;padding:10px}.ppa-ox-art-wrap{min-height:112px}.ppa-ox-img{height:112px}.ppa-ox-list{column-gap:16px;padding-left:7px;padding-right:7px}.ppa-ox-row{font-size:14px;gap:5px}.ppa-ox-guarantee-bar{padding:9px 10px;gap:8px}.ppa-ox-actions{gap:10px}.ppa-ox-btn{min-height:46px;font-size:18px}}'+
+      '@media(max-width:520px){.ppa-ox-card{width:min(88vw,500px);max-height:80vh;padding:20px 13px 14px}.ppa-ox-hero{grid-template-columns:42% 1fr;gap:10px;padding:10px}.ppa-ox-art-wrap{min-height:88px}.ppa-ox-img{height:88px}.ppa-ox-list{column-gap:16px;padding-left:7px;padding-right:7px}.ppa-ox-row{font-size:14px;gap:5px}.ppa-ox-guarantee-bar{padding:9px 10px;gap:8px}.ppa-ox-actions{gap:10px}.ppa-ox-btn{min-height:42px;font-size:16px}}'+
       '@media(max-width:370px){.ppa-ox-card{padding-left:12px;padding-right:12px}.ppa-ox-title{font-size:20px}.ppa-ox-value-label{font-size:16px}.ppa-ox-value strong{font-size:27px}.ppa-ox-list{column-gap:10px}.ppa-ox-row{font-size:12.5px}.ppa-ox-guarantee-text{font-size:15px}.ppa-ox-guarantee-text strong{font-size:23px}.ppa-ox-100{font-size:22px}}';
     document.head.appendChild(style);
 
@@ -482,6 +482,7 @@
           y.ref=idx;
           y.count=count(it);y.qty=y.count;y.amount=y.count;
           y.auctionMinGram=c.minGram;y.auctionMinPpa=c.minPpa;
+          hydrateChestVisual(y);
           out.push(y);
         });
       }catch(_){}
@@ -498,6 +499,7 @@
           x.auctionMinGram=c.minGram;x.auctionMinPpa=c.minPpa;
           x.minGram=c.minGram;x.minPpa=c.minPpa;x.minPPA=c.minPpa;
           x.minPriceGram=c.minGram;x.minPricePpa=c.minPpa;x.minPricePPA=c.minPpa;
+          hydrateChestVisual(x);
         }
       }catch(_){}
       return x;
@@ -507,7 +509,23 @@
     return true;
   }
 
+  function hydrateChestVisual(it){
+    try{
+      var c=config(it);
+      if(!c)return 0;
+      var art=c.img;
+      var changed=0;
+      ['img','image','art','cardArt','iconArt','iconImg','src'].forEach(function(k){
+        if(it[k]!==art){it[k]=art;changed++}
+      });
+      it.statChest=true;
+      it.statChestTier=c.tier;
+      return changed;
+    }catch(_){return 0}
+  }
+
   function refreshChestArtEverywhere(){
+    var changed=0;
     try{
       var groups=[];
       if(Array.isArray(INV.bag))groups.push(INV.bag);
@@ -517,26 +535,89 @@
         if(Array.isArray(INV.storage.premium))groups.push(INV.storage.premium);
       }
       groups.forEach(function(arr){
-        arr.forEach(function(it){
-          var c=config(it);
-          if(c){it.img=c.img;it.iconArt=c.img;it.cardArt=c.img}
-        });
+        arr.forEach(function(it){changed+=hydrateChestVisual(it)});
       });
       (INV.auctionLots||[]).forEach(function(lot){
         var it=lot&&lot.item&&(lot.item.gear||lot.item);
-        var c=config(it);
-        if(c){it.img=c.img;it.iconArt=c.img;it.cardArt=c.img}
+        if(it)changed+=hydrateChestVisual(it);
       });
     }catch(_){}
+    return changed;
+  }
+
+  function installChestUiArtHooks(){
+    if(window.__PPA_STAT_CHEST_ART_HOOKS_V667)return true;
+    var installed=false;
+
+    ['sendInvState','sendStorageState','sendAuctionState'].forEach(function(name){
+      var base=window[name];
+      if(typeof base!=='function'||base.__ppaOxArtWrapped)return;
+      var wrap=function(){
+        refreshChestArtEverywhere();
+        return base.apply(this,arguments);
+      };
+      wrap.__ppaOxArtWrapped=true;
+      window[name]=wrap;
+      installed=true;
+    });
+
+    if(typeof window.storageItemForUi==='function'&&!window.storageItemForUi.__ppaOxArtWrapped){
+      var storageBase=window.storageItemForUi;
+      var storageWrap=function(it){
+        hydrateChestVisual(it);
+        var x=storageBase.apply(this,arguments);
+        hydrateChestVisual(x);
+        return x;
+      };
+      storageWrap.__ppaOxArtWrapped=true;
+      window.storageItemForUi=storageWrap;
+      installed=true;
+    }
+
+    if(typeof window.auctionLotForUi==='function'&&!window.auctionLotForUi.__ppaOxArtWrapped){
+      var lotBase=window.auctionLotForUi;
+      var lotWrap=function(){
+        var x=lotBase.apply(this,arguments);
+        try{if(x&&x.item)hydrateChestVisual(x.item)}catch(_){}
+        return x;
+      };
+      lotWrap.__ppaOxArtWrapped=true;
+      window.auctionLotForUi=lotWrap;
+      installed=true;
+    }
+
+    window.__PPA_STAT_CHEST_ART_HOOKS_V667=true;
+    return installed||true;
   }
 
   function bootAuction(){
-    refreshChestArtEverywhere();
+    var changed=refreshChestArtEverywhere();
     var a=installAuctionHooks();
     var b=installStorageHooks();
+    installChestUiArtHooks();
+    if(changed){
+      try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
+      try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}
+      try{if(typeof sendAuctionState==='function')sendAuctionState()}catch(_){}
+    }
     if(a&&b)return;
     setTimeout(bootAuction,350);
   }
+
+  // Cloud state can arrive after this runtime. Re-hydrate a few times so old
+  // saved chest stacks immediately switch from the placeholder SVG to PNG art.
+  var _ppaChestArtBootTicks=0;
+  var _ppaChestArtBootTimer=setInterval(function(){
+    _ppaChestArtBootTicks++;
+    var changed=refreshChestArtEverywhere();
+    installChestUiArtHooks();
+    if(changed){
+      try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
+      try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}
+      try{if(typeof sendAuctionState==='function')sendAuctionState()}catch(_){}
+    }
+    if(_ppaChestArtBootTicks>=10)clearInterval(_ppaChestArtBootTimer);
+  },700);
 
   window.PPA_REFRESH_STAT_CHEST_ART=refreshChestArtEverywhere;
   window.PPA_STAT_CHEST_STACK_MAX=STACK_MAX;
