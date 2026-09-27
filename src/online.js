@@ -223,6 +223,14 @@ async function ensureOnlineSchema(env) {
       claimed_at INTEGER NOT NULL,
       PRIMARY KEY (telegram_id, grant_key)
     )`,
+    `CREATE TABLE IF NOT EXISTS stat_chest_open_requests (
+      telegram_id TEXT NOT NULL,
+      request_id TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (telegram_id, request_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_stat_chest_open_user_created ON stat_chest_open_requests(telegram_id, created_at DESC)`,
     `CREATE TABLE IF NOT EXISTS player_visit_stats (
       telegram_id TEXT PRIMARY KEY,
       nickname TEXT NOT NULL DEFAULT '',
@@ -248,6 +256,72 @@ function out(data, status = 200) { return { data, status }; }
 function cleanName(v, max = 24) { return String(v || '').trim().replace(/\s+/g, ' ').slice(0, max); }
 function clanKey(v) { return cleanName(v).toLocaleLowerCase('ru-RU'); }
 function safeJson(v, fallback) { try { return JSON.parse(v); } catch (_) { return fallback; } }
+
+const STAT_CHEST_CONFIG = Object.freeze({
+  emerald: Object.freeze({
+    tier:'emerald',name:'Изумрудный сундук ОХ',refId:'stat_chest_emerald',
+    min:2,max:50,jackpot:50,minGram:3,minPpa:3000,
+    buckets:[[55,2,2],[25,3,5],[12,6,10],[5,11,20],[2,21,30],[0.8,31,49],[0.2,50,50]]
+  }),
+  sapphire: Object.freeze({
+    tier:'sapphire',name:'Сапфировый сундук ОХ',refId:'stat_chest_sapphire',
+    min:5,max:80,jackpot:80,minGram:7,minPpa:7000,
+    buckets:[[55,5,5],[20,6,10],[12,11,20],[7,21,35],[3,36,50],[2.6,51,79],[0.4,80,80]]
+  }),
+  amethyst: Object.freeze({
+    tier:'amethyst',name:'Аметистовый сундук ОХ',refId:'stat_chest_amethyst',
+    min:10,max:110,jackpot:110,minGram:17,minPpa:17000,
+    buckets:[[49,10,10],[15,11,20],[12,21,35],[9,36,50],[6,51,70],[4,71,90],[4.5,91,109],[0.5,110,110]]
+  })
+});
+
+function normalizeStatChestTier(v) {
+  v = String(v || '').trim().toLowerCase();
+  if (v.startsWith('stat_chest_')) v = v.slice('stat_chest_'.length);
+  return STAT_CHEST_CONFIG[v] ? v : '';
+}
+function statChestConfigFromItem(item) {
+  item = item && typeof item === 'object' ? item : null;
+  if (!item) return null;
+  const x = item.gear && typeof item.gear === 'object' ? item.gear : item;
+  const looksLikeChest = x.statChest === true || String(x.refId || '').startsWith('stat_chest_') || String(x.uid || '').startsWith('stat_chest_');
+  if (!looksLikeChest) return null;
+  const tier = normalizeStatChestTier(x.statChestTier || x.refId || x.uid);
+  return tier ? STAT_CHEST_CONFIG[tier] : null;
+}
+function secureRandomUnit() {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return a[0] / 4294967296;
+}
+function secureRandomInt(min, max) {
+  min = Math.ceil(Number(min) || 0);
+  max = Math.floor(Number(max) || min);
+  if (max <= min) return min;
+  return min + Math.floor(secureRandomUnit() * (max - min + 1));
+}
+function rollStatChest(tier) {
+  const cfg = STAT_CHEST_CONFIG[normalizeStatChestTier(tier)];
+  if (!cfg) return null;
+  const r = secureRandomUnit() * 100;
+  let edge = 0;
+  let chosen = cfg.buckets[cfg.buckets.length - 1];
+  for (const b of cfg.buckets) {
+    edge += Number(b[0]) || 0;
+    if (r < edge) { chosen = b; break; }
+  }
+  const amount = secureRandomInt(chosen[1], chosen[2]);
+  return { tier:cfg.tier, amount, jackpot:amount === cfg.jackpot, min:cfg.min, max:cfg.max };
+}
+function statChestStackCount(it) {
+  return Math.max(0, Math.floor(Number(it && (it.count ?? it.qty ?? it.amount)) || 0));
+}
+function setStatChestStackCount(it, n) {
+  n = Math.max(0, Math.floor(Number(n) || 0));
+  it.count = n; it.qty = n; it.amount = n;
+  return n;
+}
+
 function accountActivatedFromState(s) {
   if (!s || typeof s !== 'object') return false;
   if (Number(s.lifetimePaidGram) >= 1) return true;
@@ -387,7 +461,13 @@ function payloadToUi(item) {
     rarityName: item.rarityName || '', level: Number(item.level || g.level || g.lvl) || 0, enh: Number(item.enh || g.enh) || 0,
     kind: item.kind || 'gear', refId: item.refId || '', category: item.category || '', stats: item.stats || g.stats || {},
     bonusText: item.bonusText || g.bonusText || '', bm: Number(item.bm || g.bm) || 0,
-    classKey: item.classKey || g.classKey || '', className: item.className || g.className || '', petName: item.petName || g.petName || '', desc: item.desc || g.desc || ''
+    classKey: item.classKey || g.classKey || '', className: item.className || g.className || '', petName: item.petName || g.petName || '', desc: item.desc || g.desc || '',
+    statChest: item.statChest === true || g.statChest === true,
+    statChestTier: item.statChestTier || g.statChestTier || '',
+    statChestMin: Number(item.statChestMin || g.statChestMin) || 0,
+    statChestMax: Number(item.statChestMax || g.statChestMax) || 0,
+    statChestJackpot: Number(item.statChestJackpot || g.statChestJackpot) || 0,
+    count: Math.max(0, Math.floor(Number(item.count || g.count || item.qty || g.qty) || 0))
   };
 }
 async function expireAuction(env) {
@@ -423,6 +503,20 @@ async function auctionPlace(env, telegramId, player, body) {
   const price = Number(lot.price);
   if (!Number.isFinite(price) || price <= 0) return out({ ok: false, message: 'Некорректная цена.' }, 400);
   const currency = sanitizeCurrency(lot.currency);
+  const chestCfg = statChestConfigFromItem(lot.item);
+  if (chestCfg) {
+    const minimum = currency === 'gram' ? chestCfg.minGram : chestCfg.minPpa;
+    if (price + 1e-9 < minimum) {
+      return out({
+        ok:false,
+        code:'STAT_CHEST_MIN_PRICE',
+        message:'Минимальная цена для «' + chestCfg.name + '» — ' + minimum + ' ' + currency.toUpperCase() + '.',
+        minimum,
+        currency,
+        tier:chestCfg.tier
+      }, 400);
+    }
+  }
   const now = Date.now();
   const expiresAt = Math.max(now + 60_000, Math.min(now + 48 * 3600_000, Number(lot.expiresAt) || (now + 24 * 3600_000)));
   const itemRaw = JSON.stringify(lot.item);
@@ -451,6 +545,32 @@ function addAuctionPayload(state, item, qty) {
   state.feathers = state.feathers && typeof state.feathers === 'object' ? state.feathers : {};
   state.consumables = state.consumables && typeof state.consumables === 'object' ? state.consumables : {};
   state.grimoires = state.grimoires && typeof state.grimoires === 'object' ? state.grimoires : {};
+  const chestCfg = statChestConfigFromItem(item);
+  if (chestCfg) {
+    const src = item.gear && typeof item.gear === 'object' ? item.gear : item;
+    let existing = state.bag.find((x) => x && statChestConfigFromItem(x) && normalizeStatChestTier(x.statChestTier || x.refId || x.uid) === chestCfg.tier);
+    if (!existing) {
+      if (state.bag.length >= 100) return 'Сумка заполнена.';
+      existing = { ...src };
+      existing.uid = chestCfg.refId;
+      existing.refId = chestCfg.refId;
+      existing.name = chestCfg.name;
+      existing.kind = 'resource';
+      existing.statChest = true;
+      existing.statChestTier = chestCfg.tier;
+      existing.statChestMin = chestCfg.min;
+      existing.statChestMax = chestCfg.max;
+      existing.statChestJackpot = chestCfg.jackpot;
+      existing.stackable = true;
+      existing.bound = false;
+      existing.tradeLocked = false;
+      setStatChestStackCount(existing, qty);
+      state.bag.push(existing);
+    } else {
+      setStatChestStackCount(existing, statChestStackCount(existing) + qty);
+    }
+    return '';
+  }
   if (item.kind === 'gear') {
     if (state.bag.length >= 100) return 'Сумка заполнена.';
     if (!item.gear) return 'Повреждённый предмет.';
@@ -499,6 +619,85 @@ async function auctionBuy(env, telegramId, body) {
   return out({ ok: true, message: 'Покупка подтверждена сервером.', item, qty, total: gross, currency: lot.currency,
     balances: { gram: Math.max(0, Number(state.gram) || 0), ppa: Math.max(0, Number(state.ppa) || 0) } });
 }
+async function openStatChest(env, telegramId, body) {
+  const tier = normalizeStatChestTier(body && body.tier);
+  const cfg = tier && STAT_CHEST_CONFIG[tier];
+  if (!cfg) return out({ ok:false, code:'STAT_CHEST_TIER', message:'Неизвестный сундук ОХ.' }, 400);
+
+  const requestId = String(body && body.requestId || '').trim();
+  if (!/^[A-Za-z0-9:_-]{8,140}$/.test(requestId)) {
+    return out({ ok:false, code:'STAT_CHEST_REQUEST_ID', message:'Некорректный запрос открытия сундука.' }, 400);
+  }
+
+  const prior = await env.DB.prepare('SELECT result_json FROM stat_chest_open_requests WHERE telegram_id=?1 AND request_id=?2 LIMIT 1')
+    .bind(telegramId, requestId).first();
+  if (prior && prior.result_json) {
+    const saved = safeJson(prior.result_json, null);
+    if (saved) return out(saved);
+  }
+
+  const save = await loadSaveRow(env, telegramId);
+  if (!save) return out({ ok:false, code:'SAVE_MISSING', message:'Облачный сейв не найден.' }, 409);
+  const state = save.state && typeof save.state === 'object' ? save.state : {};
+  state.bag = Array.isArray(state.bag) ? state.bag : [];
+
+  const idx = state.bag.findIndex((it) => {
+    const c = statChestConfigFromItem(it);
+    return !!c && c.tier === tier && statChestStackCount(it) > 0;
+  });
+  if (idx < 0) return out({ ok:false, code:'STAT_CHEST_MISSING', message:'Этот сундук уже отсутствует в инвентаре.' }, 409);
+
+  const roll = rollStatChest(tier);
+  if (!roll) return out({ ok:false, code:'STAT_CHEST_ROLL', message:'Не удалось открыть сундук.' }, 500);
+
+  const stack = state.bag[idx];
+  const remaining = statChestStackCount(stack) - 1;
+  if (remaining > 0) setStatChestStackCount(stack, remaining);
+  else state.bag.splice(idx, 1);
+
+  state.statPts = Math.max(0, Math.floor(Number(state.statPts) || 0)) + roll.amount;
+  state.premiumShop = state.premiumShop && typeof state.premiumShop === 'object' ? state.premiumShop : { purchasedBundles:{} };
+  state.premiumShop.statPointsPurchased = Math.max(0, Math.floor(Number(state.premiumShop.statPointsPurchased) || 0)) + roll.amount;
+  state.premiumShop.statChestOpened = Math.max(0, Math.floor(Number(state.premiumShop.statChestOpened) || 0)) + 1;
+
+  const raw = JSON.stringify(state);
+  if (new TextEncoder().encode(raw).byteLength > 1_800_000) {
+    return out({ ok:false, code:'SAVE_TOO_LARGE', message:'Сейв после открытия сундука слишком большой.' }, 413);
+  }
+
+  const oldVersion = Number(save.row.version) || 0;
+  const nextVersion = oldVersion + 1;
+  const now = Date.now();
+  const result = {
+    ok:true,
+    tier,
+    name:cfg.name,
+    amount:roll.amount,
+    jackpot:roll.jackpot,
+    remaining:Math.max(0, remaining),
+    statPts:state.statPts,
+    statPointsPurchased:state.premiumShop.statPointsPurchased,
+    version:nextVersion,
+    message:(roll.jackpot ? 'ДЖЕКПОТ! ' : '') + '+' + roll.amount + ' ОХ'
+  };
+  const resultRaw = JSON.stringify(result);
+
+  const updateSave = env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5')
+    .bind(nextVersion, raw, now, telegramId, oldVersion);
+  const insertRequest = env.DB.prepare(`INSERT INTO stat_chest_open_requests(telegram_id,request_id,result_json,created_at)
+    SELECT ?1,?2,?3,?4
+    WHERE EXISTS(SELECT 1 FROM saves WHERE telegram_id=?1 AND version=?5 AND state_json=?6)`)
+    .bind(telegramId, requestId, resultRaw, now, nextVersion, raw);
+  await env.DB.batch([updateSave, insertRequest]);
+
+  const stored = await env.DB.prepare('SELECT result_json FROM stat_chest_open_requests WHERE telegram_id=?1 AND request_id=?2 LIMIT 1')
+    .bind(telegramId, requestId).first();
+  if (!stored || !stored.result_json) {
+    return out({ ok:false, code:'STAT_CHEST_RETRY', message:'Сейв изменился. Нажми открыть ещё раз.' }, 409);
+  }
+  return out(safeJson(stored.result_json, result));
+}
+
 async function auctionAck(env, telegramId, body) {
   const ids = Array.isArray(body.ids) ? body.ids.slice(0, 100).map(String) : [];
   for (const id of ids) await env.DB.prepare('UPDATE auction_credits SET acked=1 WHERE id=?1 AND seller_id=?2').bind(id, telegramId).run();
@@ -739,7 +938,7 @@ async function walletDeposit(env, telegramId, body) {
 }
 
 export async function handleOnlineRoute(path, ctx) {
-  if (!path.startsWith('/api/clan/') && !path.startsWith('/api/auction/') && !path.startsWith('/api/wallet/') && !path.startsWith('/api/admin/')) return null;
+  if (!path.startsWith('/api/clan/') && !path.startsWith('/api/auction/') && !path.startsWith('/api/wallet/') && !path.startsWith('/api/admin/') && !path.startsWith('/api/stat-chest/')) return null;
   const { env, body, auth, player } = ctx;
   const telegramId = String(auth.user.id);
   await ensureOnlineSchema(env);
@@ -780,7 +979,7 @@ export async function handleOnlineRoute(path, ctx) {
   if (path === '/api/admin/event-reward-stock-access') {
     const ids = String(env.WITHDRAW_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean);
     if (!ids.includes(telegramId)) return out({ ok: false, code: 'ADMIN_ONLY', message: 'Admin only' }, 403);
-    const grantKey = 'event-reward-stock-v636';
+    const grantKey = 'event-reward-stock-v662-stat-chests';
     if (String(body && body.action || '') === 'ack') {
       await env.DB.prepare('INSERT OR IGNORE INTO admin_event_reward_grants(telegram_id,grant_key,claimed_at) VALUES(?1,?2,?3)')
         .bind(telegramId, grantKey, Date.now()).run();
@@ -799,6 +998,8 @@ export async function handleOnlineRoute(path, ctx) {
   if (path === '/api/auction/cancel') return auctionCancel(env, telegramId, body);
   if (path === '/api/auction/buy') return auctionBuy(env, telegramId, body);
   if (path === '/api/auction/ack-credits') return auctionAck(env, telegramId, body);
+
+  if (path === '/api/stat-chest/open') return openStatChest(env, telegramId, body);
 
   if (path === '/api/wallet/state') {
     const sync = await walletSyncIncoming(env, telegramId);
@@ -892,7 +1093,7 @@ export async function handleOnlineRoute(path, ctx) {
 
 export async function handleOnlineRequest(request, env) {
   const url = new URL(request.url);
-  if (!url.pathname.startsWith('/api/clan/') && !url.pathname.startsWith('/api/auction/') && !url.pathname.startsWith('/api/wallet/') && !url.pathname.startsWith('/api/admin/')) return null;
+  if (!url.pathname.startsWith('/api/clan/') && !url.pathname.startsWith('/api/auction/') && !url.pathname.startsWith('/api/wallet/') && !url.pathname.startsWith('/api/admin/') && !url.pathname.startsWith('/api/stat-chest/')) return null;
   if (request.method !== 'POST') return jsonResponse({ok:false,code:'METHOD_NOT_ALLOWED',message:'POST required'},405);
   try {
     let body={};try{body=await request.json()}catch(_){}
