@@ -285,9 +285,13 @@ function statChestConfigFromItem(item) {
   item = item && typeof item === 'object' ? item : null;
   if (!item) return null;
   const x = item.gear && typeof item.gear === 'object' ? item.gear : item;
-  const looksLikeChest = x.statChest === true || String(x.refId || '').startsWith('stat_chest_') || String(x.uid || '').startsWith('stat_chest_');
-  if (!looksLikeChest) return null;
-  const tier = normalizeStatChestTier(x.statChestTier || x.refId || x.uid);
+  let tier = normalizeStatChestTier(x.statChestTier || x.refId || x.uid);
+  if (!tier) {
+    const hint = String((x.name || '') + ' ' + (x.title || '') + ' ' + (x.img || '') + ' ' + (x.image || '')).toLowerCase();
+    if (hint.includes('stat-chest-emerald') || (hint.includes('изумрудн') && hint.includes('сундук'))) tier = 'emerald';
+    else if (hint.includes('stat-chest-sapphire') || (hint.includes('сапфиров') && hint.includes('сундук'))) tier = 'sapphire';
+    else if (hint.includes('stat-chest-amethyst') || (hint.includes('аметистов') && hint.includes('сундук'))) tier = 'amethyst';
+  }
   return tier ? STAT_CHEST_CONFIG[tier] : null;
 }
 function secureRandomUnit() {
