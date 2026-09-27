@@ -149,7 +149,7 @@ function titanStatus(){
   return available?{label:'АКТИВНО',timer:'Доступен · ежедневный откат в 18:00',locked:false}:{label:'ОТКАТ',timer:'До отката 18:00: '+timeClock(reset-now),locked:true};
 }
 function ruriStatus(){
-  const r=state.ruriEvent||{},now=Date.now();
+  const r=state.ruriEvent||{},now=Date.now()+(Number(r.clockOffset)||0);
   if(r.active){
     const end=Number(r.end)||0;
     return{label:'АКТИВНО',timer:end?'Осталось '+timeLeft(end-now):'Событие активно',locked:false};
@@ -274,7 +274,10 @@ window.addEventListener('message',e=>{
     state.titanShards=Math.max(0,Number(d.titanShards)||0);
     state.mimicTickets=Math.max(0,Number(d.mimicTickets)||0);
     if(d.mimicEvent&&typeof d.mimicEvent==='object')state.mimicEvent=d.mimicEvent;
-    if(d.ruriEvent&&typeof d.ruriEvent==='object')state.ruriEvent=d.ruriEvent;
+    if(d.ruriEvent&&typeof d.ruriEvent==='object'){
+      state.ruriEvent=d.ruriEvent;
+      state.ruriEvent.clockOffset=(Number(d.ruriEvent.serverNow)>0)?Number(d.ruriEvent.serverNow)-Date.now():0;
+    }
     if(d.ruri&&typeof d.ruri==='object')state.ruri=d.ruri;
     if(d.worldBoss&&typeof d.worldBoss==='object')state.worldBoss=d.worldBoss;
     if(d.clanSiege&&typeof d.clanSiege==='object')state.clanSiege=d.clanSiege;
