@@ -611,12 +611,14 @@ async function auctionBuy(env, telegramId, body) {
   const credit = Math.round(gross * 0.90 * 100) / 100;
   const creditId = 'credit_' + crypto.randomUUID();
   const now = Date.now();
+  const nextSaveVersion=(Number(save.row.version) || 0) + 1;
   await env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4')
-    .bind((Number(save.row.version) || 0) + 1, raw, now, telegramId).run();
+    .bind(nextSaveVersion, raw, now, telegramId).run();
   await env.DB.prepare('UPDATE auction_lots SET qty=?1,status=?2 WHERE id=?3').bind(Math.max(0, nextQty), status, id).run();
   await env.DB.prepare('INSERT INTO auction_credits(id,seller_id,lot_id,sold_qty,currency,amount,created_at,acked) VALUES(?1,?2,?3,?4,?5,?6,?7,0)')
     .bind(creditId, lot.seller_id, id, qty, lot.currency, credit, now).run();
   return out({ ok: true, message: 'Покупка подтверждена сервером.', item, qty, total: gross, currency: lot.currency,
+    version:nextSaveVersion,
     balances: { gram: Math.max(0, Number(state.gram) || 0), ppa: Math.max(0, Number(state.ppa) || 0) } });
 }
 async function openStatChest(env, telegramId, body) {
