@@ -1603,6 +1603,95 @@ if (!output.includes('statPointsPurchased') ||
 }
 /* ======================================================================== */
 
+/* === CHARACTER STAT CAPS / DODGE WASTE GUARD =========================== */
+// HP, Mana and Attack can absorb the larger OX economy up to 200 invested
+// points. Other stats stay at 100. Dodge keeps its real 60% combat ceiling and
+// must never consume points that cannot increase the displayed/real dodge.
+ppaPatchRegex(
+  'per-stat character point caps',
+  /const STAT_POINT_MAX=100;\s*const STAT_LABELS=\{hp:'HP',mp:'Мана',atk:'Атака',def:'Защита',spd:'Скорость',atkspd:'Скорость атаки',critdmg:'Крит\. урон',crit:'Крит\. шанс',dodge:'Уворот'\};/g,
+  `const STAT_POINT_MAX=100;
+const STAT_POINT_MAX_BY_STAT={hp:200,mp:200,atk:200};
+const STAT_LABELS={hp:'HP',mp:'Мана',atk:'Атака',def:'Защита',spd:'Скорость',atkspd:'Скорость атаки',critdmg:'Крит. урон',crit:'Крит. шанс',dodge:'Уворот'};
+function dodgeStatPointCap(){
+  try{
+    var g=gearBonus(),r=runeBonus(),ck=classBaseKey(),c=CLASS_BASE[ck]||CLASS_BASE.assassin;
+    var base=(Number(c.dodge)||0)+(Number(g.spd)||0)*0.4+(Number(g.dodge)||0)+(Number(r.dodge)||0);
+    return Math.max(0,Math.min(STAT_POINT_MAX,Math.ceil((60-base-1e-9)/STAT_POINT_GAIN.dodge)));
+  }catch(_){return STAT_POINT_MAX}
+}
+function statPointMaxFor(stat){
+  if(stat==='dodge')return dodgeStatPointCap();
+  return STAT_POINT_MAX_BY_STAT[stat]||STAT_POINT_MAX;
+}`,
+  true
+);
+
+ppaPatchRegex(
+  'stat allocation uses per-stat cap',
+  /if\(\(P\.statAlloc\[stat\]\|\|0\)>=STAT_POINT_MAX\)\{showPickup\(STAT_LABELS\[stat\]\+' · максимум 100 очков','#ffd168'\);return;\}/g,
+  `var _ppaStatCap=statPointMaxFor(stat);
+  if((P.statAlloc[stat]||0)>=_ppaStatCap){
+    showPickup(STAT_LABELS[stat]+' · '+(stat==='dodge'?'максимум 60%':('максимум '+_ppaStatCap+' очков')),'#ffd168');
+    return;
+  }`,
+  true
+);
+
+ppaPatchRegex(
+  'refund dodge points above real 60 percent cap',
+  /var g=gearBonus\(\),r=runeBonus\(\),a=P\.statAlloc\|\|\{\};\s*var ck=classBaseKey\(\);\s*var c=CLASS_BASE\[ck\]\|\|CLASS_BASE\.assassin;/g,
+  `var g=gearBonus(),r=runeBonus(),a=P.statAlloc||{};
+  var ck=classBaseKey();
+  var c=CLASS_BASE[ck]||CLASS_BASE.assassin;
+  var _ppaDodgeBase=(Number(c.dodge)||0)+(Number(g.spd)||0)*0.4+(Number(g.dodge)||0)+(Number(r.dodge)||0);
+  var _ppaDodgeCap=Math.max(0,Math.min(STAT_POINT_MAX,Math.ceil((60-_ppaDodgeBase-1e-9)/STAT_POINT_GAIN.dodge)));
+  var _ppaDodgeAllocated=Math.max(0,Math.floor(Number(a.dodge)||0));
+  if(_ppaDodgeAllocated>_ppaDodgeCap){
+    var _ppaDodgeRefund=_ppaDodgeAllocated-_ppaDodgeCap;
+    a.dodge=_ppaDodgeCap;
+    if(P.statAlloc)P.statAlloc.dodge=_ppaDodgeCap;
+    P.statPts=Math.max(0,Math.floor(Number(P.statPts)||0))+_ppaDodgeRefund;
+  }`,
+  true
+);
+
+{
+  const oldUi=ppaEscapeSrcdocCode(`document.querySelectorAll('.statBtn[data-stat]').forEach(function(b){
+    var k=b.getAttribute('data-stat'),v=alloc[k]||0;
+    b.classList.toggle('max',v>=100);b.textContent=v>=100?'MAX':'+';
+    b.title='Вложено '+v+' / 100';
+  });`);
+  const newUi=ppaEscapeSrcdocCode(`document.querySelectorAll('.statBtn[data-stat]').forEach(function(b){
+    var k=b.getAttribute('data-stat'),v=alloc[k]||0;
+    var cap=(k==='hp'||k==='mp'||k==='atk')?200:100;
+    var maxed=k==='dodge'?(((Number(st&&st.dodge)||0)>=60)||v>=100):v>=cap;
+    b.classList.toggle('max',maxed);b.textContent=maxed?'MAX':'+';
+    b.title=k==='dodge'?('Вложено '+v+' · максимум 60%'):('Вложено '+v+' / '+cap);
+  });`);
+  const count=output.split(oldUi).length-1;
+  if(!count)throw new Error('Character stat MAX UI target not found');
+  output=output.split(oldUi).join(newUi);
+  console.log('[PPA BUILD] Character per-stat MAX UI patched: '+count);
+}
+
+{
+  const oldText=ppaEscapeSrcdocCode('Старт: 10 очков · до первого перерождения +3 за уровень · с 30 ур. можно переродиться и получить +15 · после перерождения уровни 1–30 повторных очков не дают, с 31 ур. снова +3 · максимум 100 в одну характеристику.');
+  const newText=ppaEscapeSrcdocCode('Старт: 10 очков · до первого перерождения +3 за уровень · с 30 ур. можно переродиться и получить +15 · после перерождения уровни 1–30 повторных очков не дают, с 31 ур. снова +3 · HP / Мана / Атака — максимум 200 очков · остальные — 100 · Уворот — максимум 60%.');
+  const count=output.split(oldText).length-1;
+  if(!count)throw new Error('Character stat cap help text target not found');
+  output=output.split(oldText).join(newText);
+}
+
+if(!output.includes('STAT_POINT_MAX_BY_STAT={hp:200,mp:200,atk:200}') ||
+   !output.includes('function dodgeStatPointCap()') ||
+   !output.includes('_ppaDodgeRefund') ||
+   !output.includes(ppaEscapeSrcdocCode("var cap=(k==='hp'||k==='mp'||k==='atk')?200:100;")) ||
+   !output.includes(ppaEscapeSrcdocCode('Уворот — максимум 60%.'))) {
+  throw new Error('Character stat cap / dodge guard patch incomplete');
+}
+/* ======================================================================== */
+
 /* === PREMIUM POPULAR PHONE/TABLET PAGER ================================ */
 // Keep Premium Popular isolated from the rest of the shop.
 // Phone: 6 cards (2 x 3). Tablet: 8 cards (4 x 2).
