@@ -19,6 +19,9 @@
   window.PPA_SERVER_NOW=function(){
     return Date.now()+(RT.serverClockReady?Number(RT.serverClockOffset)||0:0);
   };
+  window.PPA_SERVER_CLOCK_OFFSET=function(){
+    return RT.serverClockReady?(Number(RT.serverClockOffset)||0):0;
+  };
   window.PPA_SERVER_CLOCK_READY=function(){return RT.serverClockReady===true};
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
