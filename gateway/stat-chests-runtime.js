@@ -233,34 +233,47 @@
     var style=document.createElement('style');
     style.id='ppaOxChestModalStyle';
     style.textContent=
-      '#ppaOxChestModal{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:calc(18px + env(safe-area-inset-top,0px)) 16px calc(18px + env(safe-area-inset-bottom,0px));background:radial-gradient(circle at 50% 42%,rgba(0,0,0,.18),rgba(0,0,0,.78) 74%);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);box-sizing:border-box;font-family:Georgia,\'Times New Roman\',serif}'+
+      '#ppaOxChestModal{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:calc(12px + env(safe-area-inset-top,0px)) 10px calc(12px + env(safe-area-inset-bottom,0px));background:radial-gradient(circle at 50% 44%,rgba(5,7,10,.22),rgba(0,0,0,.82) 72%);backdrop-filter:blur(2.5px);-webkit-backdrop-filter:blur(2.5px);box-sizing:border-box;font-family:Georgia,\'Times New Roman\',serif}'+
       '#ppaOxChestModal *{box-sizing:border-box}'+
-      '.ppa-ox-card{position:relative;width:min(92vw,430px);max-height:min(86vh,720px);overflow:auto;border:2px solid #c49a49;border-radius:18px;padding:18px 18px 16px;color:#f6ecd2;background:var(--ox-panel);box-shadow:0 0 0 2px rgba(76,47,17,.8),0 14px 45px rgba(0,0,0,.72),0 0 26px var(--ox-glow),inset 0 0 38px rgba(0,0,0,.48);-webkit-overflow-scrolling:touch}'+
-      '.ppa-ox-card:before,.ppa-ox-card:after{content:\'✦\';position:absolute;top:7px;color:#e8c66c;font-size:15px;text-shadow:0 0 7px rgba(232,198,108,.5)}'+
-      '.ppa-ox-card:before{left:10px}.ppa-ox-card:after{right:10px}'+
-      '.ppa-ox-title{padding:1px 26px 10px;text-align:center;color:#f3d581;font-size:20px;font-weight:800;line-height:1.18;text-shadow:0 2px 2px #000,0 0 10px rgba(235,195,94,.24)}'+
-      '.ppa-ox-sub{margin:-3px 0 12px;text-align:center;color:var(--ox-accent2);font:700 12px/1.2 system-ui,-apple-system,sans-serif;letter-spacing:.08em;text-transform:uppercase;opacity:.92}'+
-      '.ppa-ox-hero{display:grid;grid-template-columns:74px 1fr;gap:12px;align-items:center;margin:2px 0 14px;padding:11px;border:1px solid rgba(223,185,91,.48);border-radius:13px;background:linear-gradient(180deg,rgba(255,232,172,.055),rgba(0,0,0,.16));box-shadow:inset 0 0 18px rgba(0,0,0,.28)}'+
-      '.ppa-ox-img{width:68px;height:68px;object-fit:contain;filter:drop-shadow(0 5px 7px rgba(0,0,0,.55)) drop-shadow(0 0 8px var(--ox-glow))}'+
-      '.ppa-ox-guarantee-label{font:700 12px/1.2 system-ui,-apple-system,sans-serif;color:#d8c8a2;letter-spacing:.035em;margin-bottom:4px}'+
-      '.ppa-ox-guarantee{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}'+
-      '.ppa-ox-guarantee strong{color:var(--ox-accent2);font-size:25px;line-height:1;text-shadow:0 0 10px var(--ox-glow)}'+
-      '.ppa-ox-100{display:inline-flex;align-items:center;padding:4px 9px;border:1px solid #d7af53;border-radius:999px;color:#ffe39b;background:rgba(130,92,26,.23);font:800 12px/1 system-ui,-apple-system,sans-serif;box-shadow:inset 0 0 8px rgba(255,213,112,.10)}'+
-      '.ppa-ox-section{margin-top:10px}'+
-      '.ppa-ox-section-title{display:flex;align-items:center;gap:8px;margin-bottom:7px;color:#ebd49a;font:800 12px/1.2 system-ui,-apple-system,sans-serif;letter-spacing:.07em;text-transform:uppercase}'+
-      '.ppa-ox-section-title:before,.ppa-ox-section-title:after{content:\'\';height:1px;flex:1;background:linear-gradient(90deg,transparent,#8d7138,transparent)}'+
-      '.ppa-ox-list{display:grid;gap:6px}'+
-      '.ppa-ox-row{display:flex;justify-content:space-between;align-items:center;padding:8px 11px;border:1px solid rgba(219,184,101,.22);border-radius:10px;background:var(--ox-chip);font:700 13px/1.1 system-ui,-apple-system,sans-serif}'+
-      '.ppa-ox-row .reward{color:#f5ecd9}.ppa-ox-row .chance{min-width:48px;text-align:right;color:var(--ox-accent);text-shadow:0 0 8px var(--ox-glow)}'+
-      '.ppa-ox-jackpot{margin-top:9px;padding:10px 12px;border:1px solid #d5aa4d;border-radius:11px;background:linear-gradient(90deg,rgba(120,76,17,.22),rgba(255,210,91,.10),rgba(120,76,17,.22));box-shadow:inset 0 0 15px rgba(255,195,71,.07);text-align:center}'+
-      '.ppa-ox-jackpot span{display:block;color:#d9bb72;font:800 10px/1.2 system-ui,-apple-system,sans-serif;letter-spacing:.13em;text-transform:uppercase;margin-bottom:4px}'+
-      '.ppa-ox-jackpot strong{color:#ffd65f;font-size:19px;text-shadow:0 0 11px rgba(255,197,61,.42)}'+
-      '.ppa-ox-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:15px}'+
-      '.ppa-ox-btn{appearance:none;border-radius:10px;padding:11px 8px;font:800 13px/1 system-ui,-apple-system,sans-serif;letter-spacing:.035em;cursor:pointer;touch-action:manipulation}'+
-      '.ppa-ox-cancel{border:1px solid #6c604e;color:#d8cdb9;background:linear-gradient(#2a2826,#181716)}'+
-      '.ppa-ox-open{border:1px solid #d4ad55;color:#fff2cb;background:linear-gradient(180deg,#8b6428,#5b3c16);box-shadow:inset 0 1px rgba(255,255,255,.15),0 0 12px rgba(221,170,73,.12)}'+
+      '.ppa-ox-card{position:relative;width:min(94vw,680px);max-height:min(90vh,820px);overflow:auto;padding:30px 28px 24px;border:3px solid #d9a94d;border-radius:4px;color:#f7ecd0;background:radial-gradient(circle at 50% 15%,var(--ox-glow),transparent 32%),linear-gradient(180deg,#071019 0%,#05090d 45%,#020406 100%);box-shadow:0 0 0 2px #5f3d13,0 0 0 5px rgba(220,167,73,.22),0 20px 54px rgba(0,0,0,.84),0 0 34px var(--ox-glow),inset 0 0 60px rgba(0,0,0,.66);-webkit-overflow-scrolling:touch}'+
+      '.ppa-ox-card:before,.ppa-ox-card:after{content:\'✦\';position:absolute;top:-11px;width:42px;height:42px;display:grid;place-items:center;color:#ffcf62;font-size:28px;text-shadow:0 0 10px #ffb12f,0 0 18px rgba(255,177,47,.65)}'+
+      '.ppa-ox-card:before{left:-9px}.ppa-ox-card:after{right:-9px}'+
+      '.ppa-ox-frame-bottom{position:absolute;left:14px;right:14px;bottom:8px;height:1px;background:linear-gradient(90deg,transparent,#f0bd58 15%,#704711 50%,#f0bd58 85%,transparent);pointer-events:none}'+
+      '.ppa-ox-gem{position:absolute;left:50%;top:-21px;transform:translateX(-50%) rotate(45deg);width:38px;height:38px;border:3px solid #e5b54d;background:linear-gradient(135deg,var(--ox-accent2),var(--ox-accent));box-shadow:0 0 0 3px #4c2f0e,0 0 20px var(--ox-glow);z-index:3}'+
+      '.ppa-ox-gem:after{content:\'\';position:absolute;inset:6px;border:1px solid rgba(255,255,255,.45)}'+
+      '.ppa-ox-title{padding:10px 10px 16px;text-align:center;color:#f5d88c;font-size:clamp(22px,4.8vw,34px);font-weight:800;line-height:1.1;text-shadow:0 2px 2px #000,0 0 14px rgba(235,195,94,.28)}'+
+      '.ppa-ox-title-name{color:var(--ox-accent);text-shadow:0 0 13px var(--ox-glow)}'+
+      '.ppa-ox-hero{display:grid;grid-template-columns:minmax(180px,44%) 1fr;gap:18px;align-items:center;margin:2px 0 14px;padding:14px 18px 12px;border-top:1px solid rgba(226,182,83,.58);border-bottom:1px solid rgba(226,182,83,.58);background:radial-gradient(circle at 25% 55%,var(--ox-glow),transparent 50%),rgba(4,8,12,.42)}'+
+      '.ppa-ox-art-wrap{min-height:150px;display:flex;align-items:center;justify-content:center}'+
+      '.ppa-ox-img{width:min(100%,220px);height:150px;object-fit:contain;filter:drop-shadow(0 8px 10px rgba(0,0,0,.72)) drop-shadow(0 0 14px var(--ox-glow));transform:scale(1.08)}'+
+      '.ppa-ox-values{display:grid;gap:13px;align-content:center}'+
+      '.ppa-ox-value{display:grid;grid-template-columns:auto 1fr;align-items:baseline;column-gap:10px;position:relative;padding-bottom:8px}'+
+      '.ppa-ox-value:not(:last-child):after{content:\'\';position:absolute;left:0;right:18%;bottom:0;height:1px;background:linear-gradient(90deg,#8d6a2a,transparent)}'+
+      '.ppa-ox-value-label{font-size:clamp(18px,3.5vw,25px);color:#eed59d;white-space:nowrap}'+
+      '.ppa-ox-value strong{font-size:clamp(28px,5vw,42px);line-height:1;color:var(--ox-accent2);text-shadow:0 0 13px var(--ox-glow)}'+
+      '.ppa-ox-value.jackpot strong{color:#ffd45b;text-shadow:0 0 13px rgba(255,198,61,.45)}'+
+      '.ppa-ox-section-head{display:flex;align-items:center;gap:10px;margin:11px 0 10px;color:#efc969;font-size:clamp(16px,3.2vw,23px);font-weight:800;text-align:center;text-transform:uppercase;letter-spacing:.04em}'+
+      '.ppa-ox-section-head:before,.ppa-ox-section-head:after{content:\'\';height:1px;flex:1;background:linear-gradient(90deg,transparent,#b88931,transparent)}'+
+      '.ppa-ox-guarantee-bar{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:11px 18px;margin:0 0 12px;border:2px solid var(--ox-accent);background:linear-gradient(90deg,transparent,var(--ox-glow),transparent),rgba(5,14,20,.78);box-shadow:inset 0 0 18px rgba(0,0,0,.5),0 0 12px var(--ox-glow)}'+
+      '.ppa-ox-guarantee-icon{width:16px;height:16px;transform:rotate(45deg);border:2px solid var(--ox-accent2);background:var(--ox-accent);box-shadow:0 0 9px var(--ox-glow)}'+
+      '.ppa-ox-guarantee-text{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-size:clamp(17px,3.5vw,25px);color:#f1dba4}'+
+      '.ppa-ox-guarantee-text strong{color:var(--ox-accent2);font-size:clamp(24px,4.7vw,37px);text-shadow:0 0 10px var(--ox-glow)}'+
+      '.ppa-ox-100{font-size:clamp(22px,4.4vw,35px);font-weight:800;color:#ffe68e;text-shadow:0 0 11px rgba(255,198,61,.38)}'+
+      '.ppa-ox-extra-label{margin:6px 0 8px;text-align:center;color:#e6c57c;font-size:clamp(15px,3vw,21px);font-weight:700}'+
+      '.ppa-ox-list{display:grid;grid-template-columns:1fr 1fr;column-gap:28px;row-gap:5px;padding:5px 18px 7px;border-top:1px solid rgba(187,139,49,.42);border-bottom:1px solid rgba(187,139,49,.42)}'+
+      '.ppa-ox-row{display:grid;grid-template-columns:14px 1fr auto;gap:9px;align-items:center;padding:5px 0;font-size:clamp(16px,3.2vw,23px);font-weight:700;line-height:1.1}'+
+      '.ppa-ox-row:before{content:\'◇\';color:#ffcf55;text-shadow:0 0 7px rgba(255,190,61,.35)}'+
+      '.ppa-ox-row:nth-child(3n+1) .reward,.ppa-ox-row:nth-child(3n+1) .chance{color:#77b9ff}.ppa-ox-row:nth-child(3n+2) .reward,.ppa-ox-row:nth-child(3n+2) .chance{color:#ffd064}.ppa-ox-row:nth-child(3n) .reward,.ppa-ox-row:nth-child(3n) .chance{color:#df7bff}'+
+      '.ppa-ox-row .chance{text-align:right;white-space:nowrap;text-shadow:0 0 7px rgba(0,0,0,.7)}'+
+      '.ppa-ox-jackpot{margin:8px auto 0;width:min(100%,360px);display:flex;justify-content:center;align-items:baseline;gap:9px;padding:7px 12px;color:#ffd45b;font-size:clamp(18px,3.7vw,27px);font-weight:800;text-align:center;text-shadow:0 0 11px rgba(255,198,61,.4)}'+
+      '.ppa-ox-jackpot span{color:#e6c57c;font-size:clamp(14px,2.7vw,18px);font-weight:700;text-transform:uppercase;letter-spacing:.08em}'+
+      '.ppa-ox-actions{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;padding-top:2px}'+
+      '.ppa-ox-btn{appearance:none;min-height:54px;border:2px solid #c8953e;border-radius:2px;padding:11px 10px;font-family:Georgia,\'Times New Roman\',serif;font-size:clamp(18px,3.5vw,25px);font-weight:800;cursor:pointer;touch-action:manipulation;box-shadow:inset 0 0 0 2px rgba(61,36,12,.7),0 4px 12px rgba(0,0,0,.38)}'+
+      '.ppa-ox-cancel{color:#f2dba7;background:linear-gradient(180deg,#4a2d1e,#241710)}'+
+      '.ppa-ox-open{color:#fff0b5;background:linear-gradient(180deg,#9b681d,#5f390e);box-shadow:inset 0 0 0 2px rgba(80,44,8,.65),0 0 16px rgba(255,185,47,.24),0 4px 12px rgba(0,0,0,.38)}'+
       '.ppa-ox-open:disabled,.ppa-ox-cancel:disabled{opacity:.55;cursor:default}'+
-      '@media(max-width:380px){.ppa-ox-card{padding:15px 14px 13px}.ppa-ox-title{font-size:18px}.ppa-ox-hero{grid-template-columns:60px 1fr}.ppa-ox-img{width:56px;height:56px}.ppa-ox-row{padding:7px 9px;font-size:12px}}';
+      '@media(max-width:520px){.ppa-ox-card{width:min(96vw,620px);padding:26px 16px 18px}.ppa-ox-hero{grid-template-columns:42% 1fr;gap:10px;padding:10px}.ppa-ox-art-wrap{min-height:112px}.ppa-ox-img{height:112px}.ppa-ox-list{column-gap:16px;padding-left:7px;padding-right:7px}.ppa-ox-row{font-size:14px;gap:5px}.ppa-ox-guarantee-bar{padding:9px 10px;gap:8px}.ppa-ox-actions{gap:10px}.ppa-ox-btn{min-height:46px;font-size:18px}}'+
+      '@media(max-width:370px){.ppa-ox-card{padding-left:12px;padding-right:12px}.ppa-ox-title{font-size:20px}.ppa-ox-value-label{font-size:16px}.ppa-ox-value strong{font-size:27px}.ppa-ox-list{column-gap:10px}.ppa-ox-row{font-size:12.5px}.ppa-ox-guarantee-text{font-size:15px}.ppa-ox-guarantee-text strong{font-size:23px}.ppa-ox-100{font-size:22px}}';
     document.head.appendChild(style);
 
     var root=document.createElement('div');
@@ -269,24 +282,29 @@
     root.setAttribute('aria-modal','true');
     root.innerHTML=
       '<div class="ppa-ox-card" id="ppaOxChestCard">'+
-        '<div class="ppa-ox-title" id="ppaOxChestTitle"></div>'+
-        '<div class="ppa-ox-sub">Шансы награды</div>'+
+        '<div class="ppa-ox-gem"></div>'+
+        '<div class="ppa-ox-title">Открыть «<span class="ppa-ox-title-name" id="ppaOxChestTitle"></span>»?</div>'+
         '<div class="ppa-ox-hero">'+
-          '<img class="ppa-ox-img" id="ppaOxChestImg" alt="">'+
-          '<div>'+
-            '<div class="ppa-ox-guarantee-label">Гарантированная награда</div>'+
-            '<div class="ppa-ox-guarantee"><strong id="ppaOxChestGuaranteed"></strong><span class="ppa-ox-100">100%</span></div>'+
+          '<div class="ppa-ox-art-wrap"><img class="ppa-ox-img" id="ppaOxChestImg" alt=""></div>'+
+          '<div class="ppa-ox-values">'+
+            '<div class="ppa-ox-value"><span class="ppa-ox-value-label">Минимум:</span><strong id="ppaOxChestMin"></strong></div>'+
+            '<div class="ppa-ox-value jackpot"><span class="ppa-ox-value-label">Джекпот:</span><strong id="ppaOxChestMax"></strong></div>'+
           '</div>'+
         '</div>'+
-        '<div class="ppa-ox-section">'+
-          '<div class="ppa-ox-section-title">Дополнительная награда</div>'+
-          '<div class="ppa-ox-list" id="ppaOxChestRows"></div>'+
+        '<div class="ppa-ox-section-head">Награды и шансы</div>'+
+        '<div class="ppa-ox-guarantee-bar">'+
+          '<span class="ppa-ox-guarantee-icon"></span>'+
+          '<div class="ppa-ox-guarantee-text"><span>Гарантировано:</span><strong id="ppaOxChestGuaranteed"></strong></div>'+
+          '<div class="ppa-ox-100">100%</div>'+
         '</div>'+
+        '<div class="ppa-ox-extra-label">Дополнительно может выпасть:</div>'+
+        '<div class="ppa-ox-list" id="ppaOxChestRows"></div>'+
         '<div class="ppa-ox-jackpot"><span>Джекпот</span><strong id="ppaOxChestJackpot"></strong></div>'+
         '<div class="ppa-ox-actions">'+
           '<button class="ppa-ox-btn ppa-ox-cancel" id="ppaOxChestCancel" type="button">Отмена</button>'+
           '<button class="ppa-ox-btn ppa-ox-open" id="ppaOxChestOpen" type="button">Открыть</button>'+
         '</div>'+
+        '<div class="ppa-ox-frame-bottom"></div>'+
       '</div>';
     document.body.appendChild(root);
 
@@ -329,10 +347,14 @@
     root.style.setProperty('--ox-glow',theme.glow);
     root.style.setProperty('--ox-panel',theme.panel);
     root.style.setProperty('--ox-chip',theme.chip);
+
     document.getElementById('ppaOxChestTitle').textContent=c.name;
     var img=document.getElementById('ppaOxChestImg');
     img.src=c.img||'';img.alt=c.name;
+    document.getElementById('ppaOxChestMin').textContent=c.min+' ОХ';
+    document.getElementById('ppaOxChestMax').textContent=c.jackpot+' ОХ';
     document.getElementById('ppaOxChestGuaranteed').textContent=c.min+' ОХ';
+
     var rows=document.getElementById('ppaOxChestRows');
     rows.innerHTML='';
     (c.chanceRows||[]).forEach(function(row){
@@ -342,9 +364,11 @@
       var chance=document.createElement('span');chance.className='chance';chance.textContent=row[1];
       el.appendChild(reward);el.appendChild(chance);rows.appendChild(el);
     });
+
     document.getElementById('ppaOxChestJackpot').textContent=c.jackpot+' ОХ — '+(
       c.tier==='emerald'?'0.2%':(c.tier==='sapphire'?'0.4%':'0.5%')
     );
+
     root.style.display='flex';
     try{document.getElementById('ppaOxChestOpen').focus({preventScroll:true})}catch(_){}
     return true;
