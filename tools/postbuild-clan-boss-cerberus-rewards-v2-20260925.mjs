@@ -59,6 +59,8 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
 
     const cerberus=bossId==='clan_boss_2';
     const minDamage=cerberus?100000:5000;
+    const _ruriDate=new Date(now),_ruriDay=_ruriDate.getUTCDate();
+    const ruriEventActive=_ruriDay>=1&&_ruriDay<=10;
     const eligible=this.clanBossEligible(st);
     const id='cbd:'+String(st.clanId||'')+':'+bossId+':'+String(st.defeatedAt||now);
     const shared=[];
@@ -135,12 +137,16 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
         this.clanBossSharedRoll(eligible,'greenRune','Зелёная руна',0.25),
         this.clanBossSharedRoll(eligible,'blueRune','Синяя руна',0.08),
         this.clanBossSharedRoll(eligible,'activeBookRank2','Книга активного навыка · ранг II',0.00008),
-        this.clanBossSharedRoll(eligible,'passiveBookRank2','Книга пассивного навыка · ранг II',0.00007),
-        this.clanBossSharedRoll(eligible,'monsterBlood','Кровь монстра',0.22),
-        this.clanBossSharedRoll(eligible,'fireShards','Огненные осколки',0.14),
-        this.clanBossSharedRoll(eligible,'demonicCrystal','Демонический кристалл',0.04),
-        this.clanBossSharedRoll(eligible,'ruriCrystal','Хрустальный кристалл',0.01)
+        this.clanBossSharedRoll(eligible,'passiveBookRank2','Книга пассивного навыка · ранг II',0.00007)
       );
+      if(ruriEventActive){
+        shared.push(
+          this.clanBossSharedRoll(eligible,'monsterBlood','Кровь монстра',0.22),
+          this.clanBossSharedRoll(eligible,'fireShards','Огненные осколки',0.14),
+          this.clanBossSharedRoll(eligible,'demonicCrystal','Демонический кристалл',0.04),
+          this.clanBossSharedRoll(eligible,'ruriCrystal','Хрустальный кристалл',0.01)
+        );
+      }
     }else{
       shared.push(
         this.clanBossSharedRoll(eligible,'blueGear','Синий шмот / оружие'),
@@ -170,12 +176,14 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
         {kind:'greenRune',label:'Доп. редкий ролл · Зелёная руна',chance:0.25},
         {kind:'blueRune',label:'Доп. редкий ролл · Синяя руна',chance:0.08},
         {kind:'activeBookRank2',label:'Доп. редкий ролл · Книга активного навыка II',chance:0.00008},
-        {kind:'passiveBookRank2',label:'Доп. редкий ролл · Книга пассивного навыка II',chance:0.00007},
+        {kind:'passiveBookRank2',label:'Доп. редкий ролл · Книга пассивного навыка II',chance:0.00007}
+      ];
+      if(ruriEventActive)bonusPool.push(
         {kind:'monsterBlood',label:'Доп. редкий ролл · Кровь монстра',chance:0.22},
         {kind:'fireShards',label:'Доп. редкий ролл · Огненные осколки',chance:0.14},
         {kind:'demonicCrystal',label:'Доп. редкий ролл · Демонический кристалл',chance:0.04},
         {kind:'ruriCrystal',label:'Доп. редкий ролл · Хрустальный кристалл',chance:0.01}
-      ];
+      );
       const pick=bonusPool[Math.floor(Math.random()*bonusPool.length)];
       const roll=this.clanBossSharedRoll([leader],pick.kind,pick.label,pick.chance);
       roll.bonusTop=true;
@@ -241,6 +249,9 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
 if (!src.includes('clanBossBuildDistribution(st,now=Date.now())') ||
     !src.includes("const minDamage=String(st&&st.bossId||'')==='clan_boss_2'?100000:5000") ||
     !src.includes("const minDamage=cerberus?100000:5000") ||
+    !src.includes("const ruriEventActive=_ruriDay>=1&&_ruriDay<=10") ||
+    !src.includes("if(ruriEventActive){") ||
+    !src.includes("if(ruriEventActive)bonusPool.push(") ||
     !src.includes('greenResources:2,blueResources:0,normalStones:8+Math.floor(Math.random()*7)') ||
     !src.includes('damageCoins=Math.min(6000,Math.floor(Math.max(0,p.damage)/7500))') ||
     !src.includes("blueGear','Синий шмот / оружие #1") ||
@@ -293,4 +304,4 @@ if (fs.existsSync(indexPath)) {
   if (html !== beforeHtml) fs.writeFileSync(indexPath, html, 'utf8');
 }
 
-console.log('[PPA POSTBUILD] clan boss Cerberus rewards applied: min damage 100000, guaranteed pool, rare/event drops.');
+console.log('[PPA POSTBUILD] clan boss Cerberus rewards applied: min damage 100000, guaranteed pool, Ruri event drops only days 1-10 UTC.');
