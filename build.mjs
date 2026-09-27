@@ -367,7 +367,8 @@ function ppaEscapeSrcdocCode(code) {
   output=output.replace(eventsFrameRe,'<iframe id="eventsMenuFrame" title="События" srcdoc="'+nativeEventsEscaped+'"></iframe>');
   console.log('[PPA BUILD] Native Events iframe instances replaced: '+eventsFrameMatches.length);
   if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('Мимик-Самбреро')||!output.includes('mimicSombreroOpen')||!output.includes('craftRuri')||!output.includes('data-cat=&quot;game&quot;')||
-     !output.includes('CLAN_SIEGE_QA_TEST_OPEN=true')||!output.includes('ТЕСТ · ВОЙТИ В ОСАДУ')||!output.includes('Откат осады отключён')||!output.includes('ppaClanSiegeQaEnter')){
+     !output.includes('Осада доступна · цикл 3 дня')||!output.includes("type:&#x27;eventsEnter&#x27;,action:&#x27;clansiege&#x27;")||
+     output.includes('CLAN_SIEGE_QA_TEST_OPEN')||output.includes('ТЕСТ · ВОЙТИ В ОСАДУ')||output.includes('Откат осады отключён')||output.includes('ppaClanSiegeQaEnter')){
     throw new Error('Native tabbed Events replacement incomplete');
   }
   console.log('[PPA BUILD] Native Events iframe replaced: Игровые / Клановые / Война / Обновления');
@@ -7486,7 +7487,6 @@ const filesToPublish = [
   ['gateway/ruri-event-drops.js','ruri-event-drops.js','Great Ruri event drops missing'],
   ['gateway/mimic-sombrero-event.js','mimic-sombrero-event.js','Mimic Sombrero event runtime missing'],
   ['gateway/mimic-sombrero-arena.js','mimic-sombrero-arena.js','Mimic Sombrero arena runtime missing'],
-  ['gateway/qa-test-access.js','qa-test-access.js','QA dungeon access helper missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
   ['gateway/mobile-sprite-performance.js','mobile-sprite-performance.js','Mobile sprite performance helper missing'],
   ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],
@@ -7515,7 +7515,7 @@ output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"><
 <script src="${js('ruri-event-drops.js')}"></script>
 <script src="${js('mimic-sombrero-event.js')}"></script>
 <script src="${js('mimic-sombrero-arena.js')}"></script>
-<script src="${js('qa-test-access.js')}"></script>\n<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
+<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
