@@ -1591,18 +1591,17 @@ if (!output.includes('statPointsPurchased') ||
 }
 /* ======================================================================== */
 
-/* === PREMIUM POPULAR MOBILE PAGER ====================================== */
-// The Premium iframe was authored for 4x2 desktop pages (8 items), while the
-// portrait Telegram layout is 2 columns and visibly fits 3 rows. Keep desktop
-// at 8, but paginate portrait/narrow screens by 6 so no cards live in a clipped
-// fourth row. Add native touch swipe because Telegram Android may cancel the
-// PointerEvent sequence inside iframe srcdoc.
+/* === PREMIUM POPULAR TOUCH/TABLET PAGER ================================ */
+// Premium Popular uses a 2-column layout on Telegram touch devices. Six cards
+// are the largest page that fits cleanly as 3 rows on both phones and tablets.
+// Do not classify by viewport width: a landscape tablet can be wider than 720px
+// while still using the compact touch layout.
 {
   const _ppaPremiumPerPageOld=ppaEscapeSrcdocCode(
     "const perPage=8,pageCount=Math.max(1,Math.ceil(goods.length/perPage));"
   );
   const _ppaPremiumPerPageNew=ppaEscapeSrcdocCode(
-    "const perPage=((window.matchMedia&&window.matchMedia('(orientation: portrait)').matches)||window.innerWidth<=720)?6:8,pageCount=Math.max(1,Math.ceil(goods.length/perPage));/* PPA_PREMIUM_POPULAR_PAGER_V659 */"
+    "const ppaTouchPager=!!((navigator&&Number(navigator.maxTouchPoints)>0)||(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches));const perPage=ppaTouchPager?6:8,pageCount=Math.max(1,Math.ceil(goods.length/perPage));/* PPA_PREMIUM_POPULAR_PAGER_V660 */"
   );
   if(!output.includes(_ppaPremiumPerPageOld))throw new Error('Premium popular pager target missing');
   output=output.replace(_ppaPremiumPerPageOld,_ppaPremiumPerPageNew);
@@ -1613,31 +1612,38 @@ if (!output.includes('statPointsPurchased') ||
   const _ppaPremiumTouchNew=ppaEscapeSrcdocCode(`
 grid.addEventListener('pointercancel',()=>dragging=false);
 
-/* PPA_PREMIUM_TOUCH_SWIPE_V659 */
+/* PPA_PREMIUM_TOUCH_SWIPE_V660 */
 let ppaTouchX=0,ppaTouchY=0,ppaTouchTracking=false;
+function ppaPopularSwipePoint(t){
+  if(!ppaTouchTracking||!t)return false;
+  const dx=t.clientX-ppaTouchX,dy=t.clientY-ppaTouchY;
+  if(Math.abs(dx)<=45||Math.abs(dx)<=Math.abs(dy)*1.15)return false;
+  ppaTouchTracking=false;dragging=false;
+  if(dx<0)goPage(currentPage+1);
+  else goPage(currentPage-1);
+  return true;
+}
+grid.style.touchAction='pan-y';
 grid.addEventListener('touchstart',e=>{
   if(!e.touches||e.touches.length!==1||e.target.closest('.buy'))return;
   const t=e.touches[0];
   ppaTouchX=t.clientX;ppaTouchY=t.clientY;ppaTouchTracking=true;
 },{passive:true});
+grid.addEventListener('touchmove',e=>{
+  const t=e.touches&&e.touches[0];
+  ppaPopularSwipePoint(t);
+},{passive:true});
 grid.addEventListener('touchend',e=>{
   if(!ppaTouchTracking)return;
-  ppaTouchTracking=false;
-  dragging=false;
   const t=e.changedTouches&&e.changedTouches[0];
-  if(!t)return;
-  const dx=t.clientX-ppaTouchX,dy=t.clientY-ppaTouchY;
-  if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.15){
-    if(dx<0)goPage(currentPage+1);
-    else goPage(currentPage-1);
-  }
+  ppaPopularSwipePoint(t);
+  ppaTouchTracking=false;dragging=false;
 },{passive:true});
 grid.addEventListener('touchcancel',()=>{ppaTouchTracking=false;dragging=false},{passive:true});
 `);
   if(!output.includes(_ppaPremiumCancelOld))throw new Error('Premium touch swipe target missing');
   output=output.replace(_ppaPremiumCancelOld,_ppaPremiumTouchNew);
 
-  // Keep the visual design, but make the pager dots easier to hit on phones.
   const _ppaPremiumDotOld=ppaEscapeSrcdocCode(
     ".pageDot{\n  width:8px;height:8px;border-radius:50%;\n  background:#4f3b25;border:1px solid #8b6636;\n}"
   );
@@ -1650,13 +1656,15 @@ grid.addEventListener('touchcancel',()=>{ppaTouchTracking=false;dragging=false},
     console.warn('[PPA BUILD WARN] Premium pager dot CSS target moved; swipe fix still applies');
   }
 
-  if(!output.includes('PPA_PREMIUM_POPULAR_PAGER_V659')||
-     !output.includes('PPA_PREMIUM_TOUCH_SWIPE_V659')||
+  if(!output.includes('PPA_PREMIUM_POPULAR_PAGER_V660')||
+     !output.includes('PPA_PREMIUM_TOUCH_SWIPE_V660')||
      !output.includes(ppaEscapeSrcdocCode("g.id==='stat15'||g.id==='stat30'"))||
-     !output.includes(ppaEscapeSrcdocCode("window.innerWidth<=720)?6:8"))){
-    throw new Error('Premium popular mobile pager/swipe patch incomplete');
+     !output.includes('maxTouchPoints')||
+     !output.includes("grid.style.touchAction='pan-y'")||
+     !output.includes("grid.addEventListener('touchmove'")){
+    throw new Error('Premium popular tablet pager/swipe patch incomplete');
   }
-  console.log('[PPA BUILD] Premium popular mobile pager: 6-card portrait pages + touch swipe');
+  console.log('[PPA BUILD] Premium Popular: 6-card touch/tablet pages + resilient swipe');
 }
 /* ======================================================================== */
 
