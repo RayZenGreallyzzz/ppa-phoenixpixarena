@@ -257,6 +257,7 @@ function cleanName(v, max = 24) { return String(v || '').trim().replace(/\s+/g, 
 function clanKey(v) { return cleanName(v).toLocaleLowerCase('ru-RU'); }
 function safeJson(v, fallback) { try { return JSON.parse(v); } catch (_) { return fallback; } }
 
+const STAT_CHEST_STACK_MAX = 999;
 const STAT_CHEST_CONFIG = Object.freeze({
   emerald: Object.freeze({
     tier:'emerald',name:'Изумрудный сундук ОХ',refId:'stat_chest_emerald',
@@ -317,9 +318,69 @@ function statChestStackCount(it) {
   return Math.max(0, Math.floor(Number(it && (it.count ?? it.qty ?? it.amount)) || 0));
 }
 function setStatChestStackCount(it, n) {
-  n = Math.max(0, Math.floor(Number(n) || 0));
+  n = Math.max(0, Math.min(STAT_CHEST_STACK_MAX, Math.floor(Number(n) || 0)));
   it.count = n; it.qty = n; it.amount = n;
   return n;
+}
+
+function statChestBagCapacity(state, tier) {
+  state = state && typeof state === 'object' ? state : {};
+  state.bag = Array.isArray(state.bag) ? state.bag : [];
+  tier = normalizeStatChestTier(tier);
+  let free = Math.max(0, 100 - state.bag.length) * STAT_CHEST_STACK_MAX;
+  for (const it of state.bag) {
+    const c = statChestConfigFromItem(it);
+    if (c && c.tier === tier) free += Math.max(0, STAT_CHEST_STACK_MAX - statChestStackCount(it));
+  }
+  return free;
+}
+
+function addStatChestToBag(state, item, qty) {
+  state = state && typeof state === 'object' ? state : {};
+  state.bag = Array.isArray(state.bag) ? state.bag : [];
+  const cfg = statChestConfigFromItem(item);
+  if (!cfg) return 'Повреждённый сундук ОХ.';
+  qty = Math.max(1, Math.floor(Number(qty) || 1));
+  if (statChestBagCapacity(state, cfg.tier) < qty) return 'Недостаточно места для сундуков ОХ. Один стек — максимум 999.';
+
+  let left = qty;
+  for (const it of state.bag) {
+    if (left <= 0) break;
+    const c = statChestConfigFromItem(it);
+    if (!c || c.tier !== cfg.tier) continue;
+    const room = Math.max(0, STAT_CHEST_STACK_MAX - statChestStackCount(it));
+    if (!room) continue;
+    const add = Math.min(room, left);
+    setStatChestStackCount(it, statChestStackCount(it) + add);
+    left -= add;
+  }
+
+  const src = item && item.gear && typeof item.gear === 'object' ? item.gear : item;
+  while (left > 0) {
+    if (state.bag.length >= 100) return 'Недостаточно места для сундуков ОХ.';
+    const add = Math.min(left, STAT_CHEST_STACK_MAX);
+    const x = { ...src };
+    delete x.eventRewardId;
+    delete x.eventRewardTemplate;
+    delete x.eventRewardStock;
+    delete x.rewardSource;
+    x.uid = cfg.refId;
+    x.refId = cfg.refId;
+    x.name = cfg.name;
+    x.kind = 'resource';
+    x.statChest = true;
+    x.statChestTier = cfg.tier;
+    x.statChestMin = cfg.min;
+    x.statChestMax = cfg.max;
+    x.statChestJackpot = cfg.jackpot;
+    x.stackable = true;
+    x.bound = false;
+    x.tradeLocked = false;
+    setStatChestStackCount(x, add);
+    state.bag.push(x);
+    left -= add;
+  }
+  return '';
 }
 
 function makeServerStatChestItem(tier, count) {
@@ -329,7 +390,7 @@ function makeServerStatChestItem(tier, count) {
   const rarityName = cfg.tier === 'emerald' ? 'Необычный' : (cfg.tier === 'sapphire' ? 'Редкий' : 'Эпический');
   const img = '/assets/stat-chest-' + cfg.tier + '.svg';
   const eventRewardId = 'admin_qa_stat_chest_' + cfg.tier + '_100_v2';
-  const n = Math.max(1, Math.floor(Number(count) || 1));
+  const n = Math.max(1, Math.min(STAT_CHEST_STACK_MAX, Math.floor(Number(count) || 1)));
   return {
     uid:cfg.refId,
     refId:cfg.refId,
@@ -645,31 +706,7 @@ function addAuctionPayload(state, item, qty) {
   state.consumables = state.consumables && typeof state.consumables === 'object' ? state.consumables : {};
   state.grimoires = state.grimoires && typeof state.grimoires === 'object' ? state.grimoires : {};
   const chestCfg = statChestConfigFromItem(item);
-  if (chestCfg) {
-    const src = item.gear && typeof item.gear === 'object' ? item.gear : item;
-    let existing = state.bag.find((x) => x && statChestConfigFromItem(x) && normalizeStatChestTier(x.statChestTier || x.refId || x.uid) === chestCfg.tier);
-    if (!existing) {
-      if (state.bag.length >= 100) return 'Сумка заполнена.';
-      existing = { ...src };
-      existing.uid = chestCfg.refId;
-      existing.refId = chestCfg.refId;
-      existing.name = chestCfg.name;
-      existing.kind = 'resource';
-      existing.statChest = true;
-      existing.statChestTier = chestCfg.tier;
-      existing.statChestMin = chestCfg.min;
-      existing.statChestMax = chestCfg.max;
-      existing.statChestJackpot = chestCfg.jackpot;
-      existing.stackable = true;
-      existing.bound = false;
-      existing.tradeLocked = false;
-      setStatChestStackCount(existing, qty);
-      state.bag.push(existing);
-    } else {
-      setStatChestStackCount(existing, statChestStackCount(existing) + qty);
-    }
-    return '';
-  }
+  if (chestCfg) return addStatChestToBag(state, item, qty);
   if (item.kind === 'gear') {
     if (state.bag.length >= 100) return 'Сумка заполнена.';
     if (!item.gear) return 'Повреждённый предмет.';
