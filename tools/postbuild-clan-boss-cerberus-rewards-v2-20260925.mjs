@@ -240,11 +240,36 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
 
 if (!src.includes('clanBossBuildDistribution(st,now=Date.now())') ||
     !src.includes("const minDamage=String(st&&st.bossId||'')==='clan_boss_2'?100000:5000") ||
-    !src.includes('damageCoins=Math.min(6000,Math.floor(Math.max(0,p.damage)/7500))') ||
-    !src.includes("bossTitle:cerberus?'Цербер':'Владычица'") ||
     !src.includes("const minDamage=cerberus?100000:5000") ||
-    !src.includes("pick.kind,pick.label,pick.chance") ||
-    !src.includes("ruriCrystal','Хрустальный кристалл',0.01")) {
+    !src.includes('greenResources:2,blueResources:0,normalStones:8+Math.floor(Math.random()*7)') ||
+    !src.includes('damageCoins=Math.min(6000,Math.floor(Math.max(0,p.damage)/7500))') ||
+    !src.includes("blueGear','Синий шмот / оружие #1") ||
+    !src.includes("blueGear','Синий шмот / оружие #2") ||
+    !src.includes("premiumStone','Премиум камень заточки #1") ||
+    !src.includes("premiumStone','Премиум камень заточки #2") ||
+    !src.includes("grayRune','Универсальная руна") ||
+    !src.includes("blueResource','Синий ресурс #1") ||
+    !src.includes("blueResource','Синий ресурс #2") ||
+    !src.includes("blueResource','Синий ресурс #3") ||
+    !src.includes("epicGear','Эпический шмот / оружие',0.12") ||
+    !src.includes("greenRune','Зелёная руна',0.25") ||
+    !src.includes("blueRune','Синяя руна',0.08") ||
+    !src.includes("activeBookRank2','Книга активного навыка · ранг II',0.00008") ||
+    !src.includes("passiveBookRank2','Книга пассивного навыка · ранг II',0.00007") ||
+    !src.includes("monsterBlood','Кровь монстра',0.22") ||
+    !src.includes("fireShards','Огненные осколки',0.14") ||
+    !src.includes("demonicCrystal','Демонический кристалл',0.04") ||
+    !src.includes("ruriCrystal','Хрустальный кристалл',0.01") ||
+    !src.includes("rw.blueResources+=3;rw.normalStones+=5;rw.topBonus='1 место по урону · доп. редкий ролл'") ||
+    !src.includes("rw.blueResources+=2;rw.normalStones+=4;rw.topBonus='2 место по урону'") ||
+    !src.includes("rw.blueResources+=1;rw.normalStones+=3;rw.topBonus='3 место по урону'") ||
+    !src.includes('rewards[killerPid].clanCoins+=cerberus?15:10') ||
+    !src.includes('pick.kind,pick.label,pick.chance') ||
+    !src.includes('if(!anyRarePool&&eligible[0]&&rewards[eligible[0].pid])') ||
+    !src.includes('rw.premiumStoneCount=Math.max(0,Number(rw.premiumStoneCount)||0)+1') ||
+    !src.includes('rw.grayRuneCount=Math.max(0,Number(rw.grayRuneCount)||0)+1') ||
+    !src.includes("bossTitle:cerberus?'Цербер':'Владычица'") ||
+    !src.includes('const distribution=this.clanBossBuildDistribution(st,now);')) {
   throw new Error('Cerberus clan boss reward validation failed');
 }
 
