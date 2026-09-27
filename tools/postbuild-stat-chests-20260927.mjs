@@ -46,6 +46,19 @@ fs.writeFileSync(path.join(assetsDir,'stat-chest-emerald.svg'),svg('#23894a','#5
 fs.writeFileSync(path.join(assetsDir,'stat-chest-sapphire.svg'),svg('#2369bd','#58a9ff','#123b73','#7fc8ff'),'utf8');
 fs.writeFileSync(path.join(assetsDir,'stat-chest-amethyst.svg'),svg('#7430a8','#bc63e8','#3d155e','#e099ff'),'utf8');
 
+// User-approved transparent chest renders uploaded to repo root.
+// 21_34_02 is the combined/reference composition and is not used as an item icon.
+const uploadedChestArt={
+  emerald:'Изображение ChatGPT 27 сент. 2026 г., 21_33_30.png',
+  sapphire:'Изображение ChatGPT 27 сент. 2026 г., 21_33_41.png',
+  amethyst:'Изображение ChatGPT 27 сент. 2026 г., 21_33_51.png'
+};
+for(const [tier,file] of Object.entries(uploadedChestArt)){
+  const src=path.join(ROOT,file);
+  if(!fs.existsSync(src))throw new Error('OX chest uploaded art missing: '+file);
+  fs.copyFileSync(src,path.join(assetsDir,'stat-chest-'+tier+'.png'));
+}
+
 let html=fs.readFileSync(indexPath,'utf8');
 
 function findProductObject(block,id){
@@ -75,9 +88,9 @@ function cloneProduct(obj,overrideCode){
 }
 
 const overrides={
-  emerald:"id:'statChestEmerald',name:'Изумрудный сундук ОХ',title:'Изумрудный сундук ОХ',label:'Изумрудный сундук ОХ',kind:'statChest',qty:1,price:3,chestTier:'emerald',statChestMin:2,statChestMax:50,statChestJackpot:50,rarity:'uncommon',rarityName:'Необычный',icon:'🎁',img:'/assets/stat-chest-emerald.svg',cardArt:'/assets/stat-chest-emerald.svg',iconArt:'/assets/stat-chest-emerald.svg',desc:'2–50 ОХ · 50 ОХ — джекпот'",
-  sapphire:"id:'statChestSapphire',name:'Сапфировый сундук ОХ',title:'Сапфировый сундук ОХ',label:'Сапфировый сундук ОХ',kind:'statChest',qty:1,price:7,chestTier:'sapphire',statChestMin:5,statChestMax:80,statChestJackpot:80,rarity:'rare',rarityName:'Редкий',icon:'🎁',img:'/assets/stat-chest-sapphire.svg',cardArt:'/assets/stat-chest-sapphire.svg',iconArt:'/assets/stat-chest-sapphire.svg',desc:'5–80 ОХ · 80 ОХ — джекпот'",
-  amethyst:"id:'statChestAmethyst',name:'Аметистовый сундук ОХ',title:'Аметистовый сундук ОХ',label:'Аметистовый сундук ОХ',kind:'statChest',qty:1,price:17,chestTier:'amethyst',statChestMin:10,statChestMax:110,statChestJackpot:110,rarity:'epic',rarityName:'Эпический',icon:'🎁',img:'/assets/stat-chest-amethyst.svg',cardArt:'/assets/stat-chest-amethyst.svg',iconArt:'/assets/stat-chest-amethyst.svg',desc:'10–110 ОХ · 110 ОХ — джекпот'"
+  emerald:"id:'statChestEmerald',name:'Изумрудный сундук ОХ',title:'Изумрудный сундук ОХ',label:'Изумрудный сундук ОХ',kind:'statChest',qty:1,price:3,chestTier:'emerald',statChestMin:2,statChestMax:50,statChestJackpot:50,rarity:'uncommon',rarityName:'Необычный',icon:'🎁',img:'/assets/stat-chest-emerald.png',cardArt:'/assets/stat-chest-emerald.png',iconArt:'/assets/stat-chest-emerald.png',desc:'2–50 ОХ · 50 ОХ — джекпот'",
+  sapphire:"id:'statChestSapphire',name:'Сапфировый сундук ОХ',title:'Сапфировый сундук ОХ',label:'Сапфировый сундук ОХ',kind:'statChest',qty:1,price:7,chestTier:'sapphire',statChestMin:5,statChestMax:80,statChestJackpot:80,rarity:'rare',rarityName:'Редкий',icon:'🎁',img:'/assets/stat-chest-sapphire.png',cardArt:'/assets/stat-chest-sapphire.png',iconArt:'/assets/stat-chest-sapphire.png',desc:'5–80 ОХ · 80 ОХ — джекпот'",
+  amethyst:"id:'statChestAmethyst',name:'Аметистовый сундук ОХ',title:'Аметистовый сундук ОХ',label:'Аметистовый сундук ОХ',kind:'statChest',qty:1,price:17,chestTier:'amethyst',statChestMin:10,statChestMax:110,statChestJackpot:110,rarity:'epic',rarityName:'Эпический',icon:'🎁',img:'/assets/stat-chest-amethyst.png',cardArt:'/assets/stat-chest-amethyst.png',iconArt:'/assets/stat-chest-amethyst.png',desc:'10–110 ОХ · 110 ОХ — джекпот'"
 };
 
 let scan=0,patchedBlocks=0;
@@ -175,7 +188,7 @@ const adminPatch=[
 if(html.indexOf(adminReturn)<0)throw new Error('OX chests: admin reward stock return target not found');
 html=html.replace(adminReturn,adminPatch);
 
-const scriptTag='<script src="/game/stat-chests-runtime.js?v=v665-ox-fantasy-modal-20260927"></script>';
+const scriptTag='<script src="/game/stat-chests-runtime.js?v=v666-ox-uploaded-art-20260927"></script>';
 if(html.indexOf(scriptTag)<0){
   const bodyEnd=html.lastIndexOf('</body>');
   if(bodyEnd<0)throw new Error('OX chests: parent body end missing');
@@ -184,9 +197,9 @@ if(html.indexOf(scriptTag)<0){
 
 const required=[
   'statChestEmerald','statChestSapphire','statChestAmethyst',
-  '/assets/stat-chest-emerald.svg','/assets/stat-chest-sapphire.svg','/assets/stat-chest-amethyst.svg',
+  '/assets/stat-chest-emerald.png','/assets/stat-chest-sapphire.png','/assets/stat-chest-amethyst.png',
   "g.kind==='statChest'","PPA_OPEN_STAT_CHEST","admin_qa_stat_chest_emerald_100_v1",
-  'stat-chests-runtime.js?v=v665-ox-fantasy-modal-20260927'
+  'stat-chests-runtime.js?v=v666-ox-uploaded-art-20260927'
 ];
 for(const x of required)if(html.indexOf(x)<0)throw new Error('OX chests validation missing: '+x);
 if(html.indexOf(newPopular)<0)throw new Error('OX chests: new Popular filter missing');
