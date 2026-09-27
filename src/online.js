@@ -322,6 +322,105 @@ function setStatChestStackCount(it, n) {
   return n;
 }
 
+function makeServerStatChestItem(tier, count) {
+  const cfg = STAT_CHEST_CONFIG[normalizeStatChestTier(tier)];
+  if (!cfg) return null;
+  const rarity = cfg.tier === 'emerald' ? 'uncommon' : (cfg.tier === 'sapphire' ? 'rare' : 'epic');
+  const rarityName = cfg.tier === 'emerald' ? 'Необычный' : (cfg.tier === 'sapphire' ? 'Редкий' : 'Эпический');
+  const img = '/assets/stat-chest-' + cfg.tier + '.svg';
+  const eventRewardId = 'admin_qa_stat_chest_' + cfg.tier + '_100_v2';
+  const n = Math.max(1, Math.floor(Number(count) || 1));
+  return {
+    uid:cfg.refId,
+    refId:cfg.refId,
+    eventRewardId,
+    eventRewardTemplate:true,
+    eventRewardStock:true,
+    rewardSource:'admin-qa',
+    name:cfg.name,
+    kind:'resource',
+    rarity,
+    rarityName,
+    icon:'🎁',
+    ic:'🎁',
+    img,
+    count:n,
+    qty:n,
+    amount:n,
+    stackable:true,
+    sell:0,
+    stats:{},
+    bound:false,
+    tradeLocked:false,
+    blackMarket:false,
+    statChest:true,
+    statChestTier:cfg.tier,
+    statChestMin:cfg.min,
+    statChestMax:cfg.max,
+    statChestJackpot:cfg.jackpot,
+    auctionMinGram:cfg.minGram,
+    auctionMinPpa:cfg.minPpa,
+    bonusText:'Сундук ОХ · ' + cfg.min + '–' + cfg.max + ' ОХ · ' + cfg.jackpot + ' ОХ — джекпот'
+  };
+}
+
+function stateHasAdminStatChest(state, tier) {
+  const cfg = STAT_CHEST_CONFIG[normalizeStatChestTier(tier)];
+  if (!cfg || !state || typeof state !== 'object') return false;
+  const id = 'admin_qa_stat_chest_' + cfg.tier + '_100_v2';
+  const all = [];
+  if (Array.isArray(state.bag)) all.push(...state.bag);
+  if (state.storage && typeof state.storage === 'object') {
+    for (const k of ['personal','clan','premium']) if (Array.isArray(state.storage[k])) all.push(...state.storage[k]);
+  }
+  if (Array.isArray(state.auctionLots)) {
+    for (const lot of state.auctionLots) {
+      const item = lot && lot.item && (lot.item.gear || lot.item);
+      if (item) all.push(item);
+    }
+  }
+  return all.some((it) => it && (
+    String(it.eventRewardId || '') === id ||
+    (it.statChest === true && normalizeStatChestTier(it.statChestTier || it.refId || it.uid) === cfg.tier && statChestStackCount(it) >= 100)
+  ));
+}
+
+async function ensureAdminStatChestQaGrant(env, telegramId) {
+  const save = await loadSaveRow(env, telegramId);
+  if (!save) return { granted:false, addedTiers:[] };
+  const state = save.state && typeof save.state === 'object' ? save.state : {};
+  state.bag = Array.isArray(state.bag) ? state.bag : [];
+  state.storage = state.storage && typeof state.storage === 'object' ? state.storage : {};
+  state.storage.personal = Array.isArray(state.storage.personal) ? state.storage.personal : [];
+  state.storage.clan = Array.isArray(state.storage.clan) ? state.storage.clan : [];
+  state.storage.premium = Array.isArray(state.storage.premium) ? state.storage.premium : [];
+
+  const addedTiers = [];
+  for (const tier of ['emerald','sapphire','amethyst']) {
+    if (stateHasAdminStatChest(state, tier)) continue;
+    const item = makeServerStatChestItem(tier, 100);
+    if (!item) continue;
+    if (state.storage.premium.length < 50) state.storage.premium.push(item);
+    else if (state.bag.length < 100) state.bag.push(item);
+    else continue;
+    addedTiers.push(tier);
+  }
+  if (!addedTiers.length) return { granted:false, addedTiers:[] };
+
+  const raw = JSON.stringify(state);
+  if (new TextEncoder().encode(raw).byteLength > 1_800_000) {
+    throw Object.assign(new Error('Сейв слишком большой для выдачи тестовых сундуков.'), { status:413, code:'SAVE_TOO_LARGE' });
+  }
+  const oldVersion = Number(save.row.version) || 0;
+  const nextVersion = oldVersion + 1;
+  const r = await env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5')
+    .bind(nextVersion, raw, Date.now(), telegramId, oldVersion).run();
+  if (!r.meta || !r.meta.changes) {
+    throw Object.assign(new Error('Сейв изменился во время выдачи сундуков. Повтори вход.'), { status:409, code:'SAVE_VERSION_CONFLICT' });
+  }
+  return { granted:true, addedTiers, version:nextVersion };
+}
+
 function accountActivatedFromState(s) {
   if (!s || typeof s !== 'object') return false;
   if (Number(s.lifetimePaidGram) >= 1) return true;
@@ -989,7 +1088,21 @@ export async function handleOnlineRoute(path, ctx) {
     }
     const claimed = await env.DB.prepare('SELECT 1 AS ok FROM admin_event_reward_grants WHERE telegram_id=?1 AND grant_key=?2 LIMIT 1')
       .bind(telegramId, grantKey).first();
-    return out({ ok: true, authorized: true, seedRequired: !claimed, grantKey });
+    if (claimed) return out({ ok: true, authorized: true, seedRequired: false, grantKey });
+
+    // Give the three QA chest stacks directly in the authoritative cloud save.
+    // The existing client-side reward seed then runs after one reload and ACKs
+    // the grant key without duplicating these stacks.
+    const chestGrant = await ensureAdminStatChestQaGrant(env, telegramId);
+    return out({
+      ok: true,
+      authorized: true,
+      seedRequired: true,
+      grantKey,
+      serverChestGranted: !!chestGrant.granted,
+      serverChestAddedTiers: chestGrant.addedTiers || [],
+      version: chestGrant.version == null ? null : chestGrant.version
+    });
   }
 
   if (path === '/api/clan/state') return out({ ok: true, state: await clanState(env, telegramId, player) });
