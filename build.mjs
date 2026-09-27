@@ -6963,7 +6963,7 @@ function sendEventsState(){`
 ppaPatchRegex(
   'Great Ruri state in Events payload',
   /titanShards:titanShardCount\(\),\s*worldBoss:worldBossDailyStatus\(\),/,
-  "titanShards:titanShardCount(),\n        mimicTickets:(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount==='function'?window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount():0),\n        mimicEvent:(function(){try{var a=window.PPA_MIMIC_SOMBRERO_EVENT,s=a&&typeof a.schedule==='function'?a.schedule():null;return s?{active:!!a.active(),test:!!(a.testMode&&a.testMode()),adminTestAllowed:window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED===true,end:Number(s.end)||0,nextStart:Number(s.nextStart)||0,days:Number(s.days)||5,startDay:Number(s.startDay)||25}:{active:false,test:false,adminTestAllowed:window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED===true,end:0,nextStart:0,days:5,startDay:25}}catch(_){return{active:false,test:false,adminTestAllowed:false,end:0,nextStart:0,days:5,startDay:25}}})(),\n        ruri:(typeof ppaRuriCraftState==='function'?ppaRuriCraftState():null),\n        worldBoss:worldBossDailyStatus(),"
+  "titanShards:titanShardCount(),\n        mimicTickets:(window.PPA_MIMIC_SOMBRERO_EVENT&&typeof window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount==='function'?window.PPA_MIMIC_SOMBRERO_EVENT.ticketCount():0),\n        mimicEvent:(function(){try{var a=window.PPA_MIMIC_SOMBRERO_EVENT,s=a&&typeof a.schedule==='function'?a.schedule():null;return s?{active:!!a.active(),test:!!(a.testMode&&a.testMode()),adminTestAllowed:window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED===true,end:Number(s.end)||0,nextStart:Number(s.nextStart)||0,days:Number(s.days)||5,startDay:Number(s.startDay)||25}:{active:false,test:false,adminTestAllowed:window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED===true,end:0,nextStart:0,days:5,startDay:25}}catch(_){return{active:false,test:false,adminTestAllowed:false,end:0,nextStart:0,days:5,startDay:25}}})(),\n        ruriEvent:(function(){try{var rs=window.PPA_RURI_EVENT_SCHEDULE&&window.PPA_RURI_EVENT_SCHEDULE();var ra=window.PPA_RURI_EVENT_IS_ACTIVE&&window.PPA_RURI_EVENT_IS_ACTIVE();return rs?{active:!!ra,end:Number(rs.end)||0,nextStart:Number(rs.nextStart)||0,days:Number(rs.days)||10,startDay:Number(rs.startDay)||1,serverNow:(window.PPA_SERVER_NOW?Number(window.PPA_SERVER_NOW())||0:0)}:{active:false,end:0,nextStart:0,days:10,startDay:1,serverNow:0}}catch(_){return{active:false,end:0,nextStart:0,days:10,startDay:1,serverNow:0}}})(),\n        ruri:(typeof ppaRuriCraftState==='function'?ppaRuriCraftState():null),\n        worldBoss:worldBossDailyStatus(),"
 );
 ppaPatchRegex(
   'Great Ruri craft message route',
@@ -6976,6 +6976,8 @@ if(!output.includes('function ppaRuriCraftFromEvent()')||
    !output.includes("d.type==='mimicSombreroTestToggle'")||
    !output.includes('mimicTickets:')||
    !output.includes('mimicEvent:')||
+   !output.includes('ruriEvent:')||
+   !output.includes('PPA_RURI_EVENT_SCHEDULE')||
    !output.includes("Демонический кристалл']=st.resources.demonic-72")||
    !output.includes("eventRewardId:'crafted_ruri_legendary_v1'")){
   throw new Error('Great Ruri direct craft patch incomplete');
@@ -7196,6 +7198,7 @@ if(_ppaClanBossTrackCalls<1){
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
   const mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');
   const remotePet=fs.readFileSync(path.join(ROOT,'gateway/remote-pet-renderer.js'),'utf8');
+  const ruriEventDrops=fs.readFileSync(path.join(ROOT,'gateway/ruri-event-drops.js'),'utf8');
   const ruriPet=fs.readFileSync(path.join(ROOT,'gateway/ruri-pet-runtime.js'),'utf8');
   const legendaryGearArt=fs.readFileSync(path.join(ROOT,'gateway/legendary-gear-art.js'),'utf8');
   const onlineClient=fs.readFileSync(path.join(ROOT,'gateway/online-client.js'),'utf8');
@@ -7294,6 +7297,18 @@ if(_ppaClanBossTrackCalls<1){
       !onlineClient.includes("ppaAdminEventRewardStockAccess({action:'ack'})") ||
       !ppaBridge.includes('ppaAdminEventRewardStockAccess')) {
     throw new Error('Event reward stock admin bridge incomplete');
+  }
+  if (!ruriEventDrops.includes('var MONTHLY_START_DAY=1;') ||
+      !ruriEventDrops.includes('var EVENT_DAYS=10;') ||
+      !ruriEventDrops.includes('window.PPA_RURI_EVENT_SCHEDULE=scheduleInfo') ||
+      !ruriEventDrops.includes("typeof window.PPA_SERVER_CLOCK_READY==='function'") ||
+      !ruriEventDrops.includes('window.PPA_SERVER_NOW()') ||
+      ruriEventDrops.includes('TEST_ACTIVE') ||
+      ruriEventDrops.includes('PPA_RURI_EVENT_TEST_ACTIVE') ||
+      ruriEventDrops.includes('PPA_SET_RURI_EVENT_TEST_ACTIVE') ||
+      !realtimeClient.includes('window.PPA_SERVER_NOW=function()') ||
+      !realtimeClient.includes('RT.serverClockReady=true')) {
+    throw new Error('Great Ruri monthly server-clock schedule incomplete');
   }
   if (!ruriPet.includes("var NAME='Великий Рури'") ||
       !ruriPet.includes('ATTACK_COOLDOWN=2400') ||
@@ -7533,7 +7548,7 @@ console.log('Dungeon drop slots: /game/dungeon-drop-slots.js');
 console.log('Boss drop boost: /game/boss-drop-boost.js');
 console.log('Clan boss loot: /game/clan-boss-loot.js');
 console.log('Clan boss reward chest: /game/clan-boss-chest.js');
-console.log('Great Ruri event drops: /game/ruri-event-drops.js · TEST ACTIVE');
+console.log('Great Ruri event drops: /game/ruri-event-drops.js · monthly days 1-10 · server clock');
 console.log('Mimic Sombrero event: /game/mimic-sombrero-event.js · monthly 5-day + QA test mode');
 console.log('Mimic Sombrero arena: /game/mimic-sombrero-arena.js · REAL COMBAT V2');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
