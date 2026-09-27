@@ -7014,7 +7014,7 @@ if(!output.includes("PPA_RURI_DIR_ART") ||
 ppaPatchRegex(
   'clan boss reward lexical bridge',
   /function\s+runeUiState\(\)\s*\{/,
-  \`function ppaClanBossRewardCount(pkt,countKey,boolKey,max){
+  `function ppaClanBossRewardCount(pkt,countKey,boolKey,max){
   var n=Math.floor(Number(pkt&&pkt[countKey])||0);
   if(n<=0&&boolKey&&pkt&&pkt[boolKey])n=1;
   return Math.max(0,Math.min(Number(max)||20,n));
@@ -7142,7 +7142,7 @@ function ppaClanBossSpawnReward(pkt){
   }
 }
 window.PPA_CLAN_BOSS_SPAWN_REWARD=ppaClanBossSpawnReward;
-function runeUiState(){\`
+function runeUiState(){`
 );
 if(!output.includes('function ppaClanBossSpawnReward(pkt)')||
    !output.includes("bossId!=='clan_boss_1'&&bossId!=='clan_boss_2'")||
