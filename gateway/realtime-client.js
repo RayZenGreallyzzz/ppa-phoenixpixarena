@@ -7,6 +7,7 @@
     pendingRoom:'',pendingSince:0,lastX:null,lastY:null,lastHp:null,lastMhp:null,lastDead:null,lastFace:null,
     lastAnim:'',lastLevel:null,lastBm:null,lastAtk:null,lastDef:null,lastRange:null,lastCrit:null,lastCritDmg:null,lastAtkSpd:null,
     onlineCount:0,started:false,pingSent:0,pingMs:null,
+    serverClockOffset:0,serverClockReady:false,
     lastServerAt:0,lastSnapshotAt:0,serverRoom:'',roomPeers:null,
     assignBase:'',assignAt:0,dungeonInstance:0,dungeonCapacity:40,
     selfPid:'',serverDeadLocked:false,pkTargetId:'',pkAutoTarget:false,pkLastAttack:0,arenaRoom:'',arenaLeavingUntil:0,arenaMatchId:'',arenaSide:'',arenaOpponentId:'',arenaOpponentName:'',arenaLastAttack:0,arenaLastRoundToken:'',arenaAutoTarget:false,arenaAutoTick:0,
@@ -15,6 +16,10 @@
     clanBossEnterPromise:null,clanBossEnterResolve:null,clanBossEnterTimer:0,clanBossRequestId:'',
     clanBossEnteringUntil:0,clanBossSceneSeen:false,clanBossReconnectId:'',clanBossDefeatShown:false
   };
+  window.PPA_SERVER_NOW=function(){
+    return Date.now()+(RT.serverClockReady?Number(RT.serverClockOffset)||0:0);
+  };
+  window.PPA_SERVER_CLOCK_READY=function(){return RT.serverClockReady===true};
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var t=tg();return t&&t.initData?String(t.initData):''}
@@ -550,9 +555,16 @@
       return;
     }
     if(m.type==='pong'){
+      var recvAt=Date.now(),sentAt=Math.max(0,Number(m.clientTs)||0),serverAt=Math.max(0,Number(m.ts)||0);
+      if(serverAt>0&&sentAt>0&&recvAt>=sentAt){
+        var midpoint=sentAt+(recvAt-sentAt)/2;
+        var sample=serverAt-midpoint;
+        RT.serverClockOffset=RT.serverClockReady?(RT.serverClockOffset*.75+sample*.25):sample;
+        RT.serverClockReady=true;
+      }
       if(m.room)RT.serverRoom=canonicalRoom(m.room);
       if(Number.isFinite(Number(m.roomCount)))RT.roomPeers=Math.max(1,Number(m.roomCount)||1);
-      if(RT.pingSent){var ms=Math.max(0,Date.now()-RT.pingSent);RT.pingMs=Number.isFinite(RT.pingMs)?(RT.pingMs*.65+ms*.35):ms;RT.pingSent=0;refreshBadge()}
+      if(RT.pingSent){var ms=Math.max(0,recvAt-RT.pingSent);RT.pingMs=Number.isFinite(RT.pingMs)?(RT.pingMs*.65+ms*.35):ms;RT.pingSent=0;refreshBadge()}
       if(RT.serverRoom&&RT.serverRoom!==canonicalRoom(RT.lastRoom))resyncRoom();
       return;
     }
@@ -1283,7 +1295,7 @@ window.PPA_CLAN_BOSS_SELF_PID=function(){return String(RT.selfPid||'')};
   };
   window.PPA_REALTIME_RESYNC=resyncRoom;
   window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
-  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,selfPid:RT.selfPid,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady(),pkActive:pkActive(),pkTargetId:RT.pkTargetId,serverDeadLocked:RT.serverDeadLocked,clanBossRoom:RT.clanBossRoom,clanBossId:RT.clanBossId,clanBossState:RT.clanBossState}};
+  window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,serverClockReady:RT.serverClockReady,serverClockOffset:Math.round(Number(RT.serverClockOffset)||0),selfPid:RT.selfPid,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady(),pkActive:pkActive(),pkTargetId:RT.pkTargetId,serverDeadLocked:RT.serverDeadLocked,clanBossRoom:RT.clanBossRoom,clanBossId:RT.clanBossId,clanBossState:RT.clanBossState}};
 
   function boot(){
     if(RT.started)return;RT.started=true;disableLegacyOnline();ensureFullsize();armFullsize();bindServerRespawnConfirm();bindArenaSmartMovement();bindArenaAttackCapture();
