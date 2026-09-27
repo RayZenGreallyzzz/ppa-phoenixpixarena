@@ -6,21 +6,21 @@
     emerald:{
       tier:'emerald',name:'Изумрудный сундук ОХ',rarity:'uncommon',
       min:2,max:50,jackpot:50,price:3,minGram:3,minPpa:3000,
-      refId:'stat_chest_emerald',img:'/assets/stat-chest-emerald.svg',color:'#74e58a',
+      refId:'stat_chest_emerald',img:'/assets/stat-chest-emerald.png',color:'#74e58a',
       odds:'2 ОХ — 55% · 3–5 — 25% · 6–10 — 12% · 11–20 — 5% · 21–30 — 2% · 31–49 — 0.8% · 50 — 0.2%',
       chanceRows:[['3–5 ОХ','25%'],['6–10 ОХ','12%'],['11–20 ОХ','5%'],['21–30 ОХ','2%'],['31–49 ОХ','0.8%']]
     },
     sapphire:{
       tier:'sapphire',name:'Сапфировый сундук ОХ',rarity:'rare',
       min:5,max:80,jackpot:80,price:7,minGram:7,minPpa:7000,
-      refId:'stat_chest_sapphire',img:'/assets/stat-chest-sapphire.svg',color:'#67a8ff',
+      refId:'stat_chest_sapphire',img:'/assets/stat-chest-sapphire.png',color:'#67a8ff',
       odds:'5 ОХ — 55% · 6–10 — 20% · 11–20 — 12% · 21–35 — 7% · 36–50 — 3% · 51–79 — 2.6% · 80 — 0.4%',
       chanceRows:[['6–10 ОХ','20%'],['11–20 ОХ','12%'],['21–35 ОХ','7%'],['36–50 ОХ','3%'],['51–79 ОХ','2.6%']]
     },
     amethyst:{
       tier:'amethyst',name:'Аметистовый сундук ОХ',rarity:'epic',
       min:10,max:110,jackpot:110,price:17,minGram:17,minPpa:17000,
-      refId:'stat_chest_amethyst',img:'/assets/stat-chest-amethyst.svg',color:'#c47aff',
+      refId:'stat_chest_amethyst',img:'/assets/stat-chest-amethyst.png',color:'#c47aff',
       odds:'10 ОХ — 49% · 11–20 — 15% · 21–35 — 12% · 36–50 — 9% · 51–70 — 6% · 71–90 — 4% · 91–109 — 4.5% · 110 — 0.5%',
       chanceRows:[['11–20 ОХ','15%'],['21–35 ОХ','12%'],['36–50 ОХ','9%'],['51–70 ОХ','6%'],['71–90 ОХ','4%'],['91–109 ОХ','4.5%']]
     }
@@ -507,13 +507,38 @@
     return true;
   }
 
+  function refreshChestArtEverywhere(){
+    try{
+      var groups=[];
+      if(Array.isArray(INV.bag))groups.push(INV.bag);
+      if(INV.storage){
+        if(Array.isArray(INV.storage.personal))groups.push(INV.storage.personal);
+        if(Array.isArray(INV.storage.clan))groups.push(INV.storage.clan);
+        if(Array.isArray(INV.storage.premium))groups.push(INV.storage.premium);
+      }
+      groups.forEach(function(arr){
+        arr.forEach(function(it){
+          var c=config(it);
+          if(c){it.img=c.img;it.iconArt=c.img;it.cardArt=c.img}
+        });
+      });
+      (INV.auctionLots||[]).forEach(function(lot){
+        var it=lot&&lot.item&&(lot.item.gear||lot.item);
+        var c=config(it);
+        if(c){it.img=c.img;it.iconArt=c.img;it.cardArt=c.img}
+      });
+    }catch(_){}
+  }
+
   function bootAuction(){
+    refreshChestArtEverywhere();
     var a=installAuctionHooks();
     var b=installStorageHooks();
     if(a&&b)return;
     setTimeout(bootAuction,350);
   }
 
+  window.PPA_REFRESH_STAT_CHEST_ART=refreshChestArtEverywhere;
   window.PPA_STAT_CHEST_STACK_MAX=STACK_MAX;
   window.PPA_STAT_CHEST_CONFIG=CFG;
   window.PPA_STAT_CHEST_TIER=tier;
