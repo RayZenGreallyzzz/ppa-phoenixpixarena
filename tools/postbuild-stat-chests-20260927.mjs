@@ -82,8 +82,13 @@ const overrides={
 
 let scan=0,patchedBlocks=0;
 while((scan=html.indexOf('const PREMIUM_GOODS=[',scan))>=0){
-  const end=html.indexOf('];\n\nconst BUNDLES',scan);
-  if(end<0)throw new Error('OX chests: Premium goods block end not found');
+  // Previous postbuild steps can change whitespace/newlines around BUNDLES.
+  // Locate the next BUNDLES declaration first, then take the nearest array
+  // terminator before it instead of depending on one exact formatting string.
+  const bundles=html.indexOf('const BUNDLES',scan);
+  if(bundles<0)throw new Error('OX chests: Premium BUNDLES declaration not found after PREMIUM_GOODS');
+  const end=html.lastIndexOf('];',bundles);
+  if(end<scan)throw new Error('OX chests: Premium goods array end not found before BUNDLES');
   let block=html.slice(scan,end+2);
 
   if(block.indexOf('statChestEmerald')>=0){
