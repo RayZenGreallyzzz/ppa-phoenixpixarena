@@ -139,7 +139,7 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
         this.clanBossSharedRoll(eligible,'monsterBlood','Кровь монстра',0.22),
         this.clanBossSharedRoll(eligible,'fireShards','Огненные осколки',0.14),
         this.clanBossSharedRoll(eligible,'demonicCrystal','Демонический кристалл',0.04),
-        this.clanBossSharedRoll(eligible,'ruriCrystal','Кристалл Рури',0.01)
+        this.clanBossSharedRoll(eligible,'ruriCrystal','Хрустальный кристалл',0.01)
       );
     }else{
       shared.push(
@@ -166,14 +166,18 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
     if(cerberus&&eligible[0]){
       const leader=eligible[0];
       const bonusPool=[
-        {kind:'epicGear',label:'Доп. редкий ролл · Эпический шмот / оружие'},
-        {kind:'greenRune',label:'Доп. редкий ролл · Зелёная руна'},
-        {kind:'blueRune',label:'Доп. редкий ролл · Синяя руна'},
-        {kind:'monsterBlood',label:'Доп. редкий ролл · Кровь монстра'},
-        {kind:'fireShards',label:'Доп. редкий ролл · Огненные осколки'}
+        {kind:'epicGear',label:'Доп. редкий ролл · Эпический шмот / оружие',chance:0.12},
+        {kind:'greenRune',label:'Доп. редкий ролл · Зелёная руна',chance:0.25},
+        {kind:'blueRune',label:'Доп. редкий ролл · Синяя руна',chance:0.08},
+        {kind:'activeBookRank2',label:'Доп. редкий ролл · Книга активного навыка II',chance:0.00008},
+        {kind:'passiveBookRank2',label:'Доп. редкий ролл · Книга пассивного навыка II',chance:0.00007},
+        {kind:'monsterBlood',label:'Доп. редкий ролл · Кровь монстра',chance:0.22},
+        {kind:'fireShards',label:'Доп. редкий ролл · Огненные осколки',chance:0.14},
+        {kind:'demonicCrystal',label:'Доп. редкий ролл · Демонический кристалл',chance:0.04},
+        {kind:'ruriCrystal',label:'Доп. редкий ролл · Хрустальный кристалл',chance:0.01}
       ];
       const pick=bonusPool[Math.floor(Math.random()*bonusPool.length)];
-      const roll=this.clanBossSharedRoll([leader],pick.kind,pick.label,1);
+      const roll=this.clanBossSharedRoll([leader],pick.kind,pick.label,pick.chance);
       roll.bonusTop=true;
       shared.push(roll);
     }
@@ -237,7 +241,10 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
 if (!src.includes('clanBossBuildDistribution(st,now=Date.now())') ||
     !src.includes("const minDamage=String(st&&st.bossId||'')==='clan_boss_2'?100000:5000") ||
     !src.includes('damageCoins=Math.min(6000,Math.floor(Math.max(0,p.damage)/7500))') ||
-    !src.includes("bossTitle:cerberus?'Цербер':'Владычица'")) {
+    !src.includes("bossTitle:cerberus?'Цербер':'Владычица'") ||
+    !src.includes("const minDamage=cerberus?100000:5000") ||
+    !src.includes("pick.kind,pick.label,pick.chance") ||
+    !src.includes("ruriCrystal','Хрустальный кристалл',0.01")) {
   throw new Error('Cerberus clan boss reward validation failed');
 }
 
