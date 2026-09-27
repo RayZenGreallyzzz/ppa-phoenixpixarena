@@ -188,7 +188,7 @@ const adminPatch=[
 if(html.indexOf(adminReturn)<0)throw new Error('OX chests: admin reward stock return target not found');
 html=html.replace(adminReturn,adminPatch);
 
-const scriptTag='<script src="/game/stat-chests-runtime.js?v=v668-ox-art-all-ui-20260927"></script>';
+const scriptTag='<script src="/game/stat-chests-runtime.js?v=v669-ox-halfscale-modal-20260927"></script>';
 if(html.indexOf(scriptTag)<0){
   const bodyEnd=html.lastIndexOf('</body>');
   if(bodyEnd<0)throw new Error('OX chests: parent body end missing');
@@ -199,7 +199,7 @@ const required=[
   'statChestEmerald','statChestSapphire','statChestAmethyst',
   '/assets/stat-chest-emerald.png','/assets/stat-chest-sapphire.png','/assets/stat-chest-amethyst.png',
   "g.kind==='statChest'","PPA_OPEN_STAT_CHEST","admin_qa_stat_chest_emerald_100_v1",
-  'stat-chests-runtime.js?v=v668-ox-art-all-ui-20260927'
+  'stat-chests-runtime.js?v=v669-ox-halfscale-modal-20260927'
 ];
 for(const x of required)if(html.indexOf(x)<0)throw new Error('OX chests validation missing: '+x);
 if(html.indexOf(newPopular)<0)throw new Error('OX chests: new Popular filter missing');
