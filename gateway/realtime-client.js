@@ -142,6 +142,8 @@
       var b=clanBossEntity();
       if(b){
         b.__ppaClanBossServer=true;
+        b.bossId=String(st.bossId||RT.clanBossId||b.bossId||'');
+        b.clanBossId=b.bossId;
         if(Number.isFinite(Number(st.bossMaxHp)))b.mhp=Math.max(1,Number(st.bossMaxHp));
         if(Number.isFinite(Number(st.bossHp)))b.hp=Math.max(0,Math.min(Math.max(1,Number(b.mhp)||1),Number(st.bossHp)));
       }
