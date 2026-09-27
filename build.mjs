@@ -1591,20 +1591,32 @@ if (!output.includes('statPointsPurchased') ||
 }
 /* ======================================================================== */
 
-/* === PREMIUM POPULAR TOUCH/TABLET PAGER ================================ */
-// Premium Popular uses a 2-column layout on Telegram touch devices. Six cards
-// are the largest page that fits cleanly as 3 rows on both phones and tablets.
-// Do not classify by viewport width: a landscape tablet can be wider than 720px
-// while still using the compact touch layout.
+/* === PREMIUM POPULAR PHONE/TABLET PAGER ================================ */
+// Keep Premium Popular isolated from the rest of the shop.
+// Phone: 6 cards (2 x 3). Tablet: 8 cards (4 x 2).
+// Device class uses the physical screen's short side, not iframe/window width,
+// because Telegram can give a large tablet a narrow embedded shop viewport.
 {
   const _ppaPremiumPerPageOld=ppaEscapeSrcdocCode(
     "const perPage=8,pageCount=Math.max(1,Math.ceil(goods.length/perPage));"
   );
   const _ppaPremiumPerPageNew=ppaEscapeSrcdocCode(
-    "const ppaTouchPager=!!((navigator&&Number(navigator.maxTouchPoints)>0)||(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches));const perPage=ppaTouchPager?6:8,pageCount=Math.max(1,Math.ceil(goods.length/perPage));/* PPA_PREMIUM_POPULAR_PAGER_V660 */"
+    "const ppaTouchPager=!!((navigator&&Number(navigator.maxTouchPoints)>0)||(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches));const ppaScreenMin=Math.min(Number(window.screen&&window.screen.width)||0,Number(window.screen&&window.screen.height)||0);const ppaTabletPager=ppaTouchPager&&ppaScreenMin>=600;const perPage=ppaTouchPager?(ppaTabletPager?8:6):8,pageCount=Math.max(1,Math.ceil(goods.length/perPage));/* PPA_PREMIUM_POPULAR_PAGER_V661 */"
   );
   if(!output.includes(_ppaPremiumPerPageOld))throw new Error('Premium popular pager target missing');
   output=output.replace(_ppaPremiumPerPageOld,_ppaPremiumPerPageNew);
+
+  // Telegram WebView can render the second translated flex page outside the
+  // visible iframe. For Popular only, switch pages by visibility instead of
+  // moving the whole pages rail. Other Premium tabs keep their old behavior.
+  const _ppaPremiumGoPageOld=ppaEscapeSrcdocCode(
+    "function goPage(index,animate=true){\n  const count=pages.children.length;\n  currentPage=Math.max(0,Math.min(count-1,index));\n  pages.style.transition=animate?'transform .20s ease-out':'none';\n  pages.style.transform=\`translateX(\${-currentPage*100}%)\`;\n  [...pageDots.children].forEach((d,i)=>d.classList.toggle('active',i===currentPage));\n}"
+  );
+  const _ppaPremiumGoPageNew=ppaEscapeSrcdocCode(
+    "function goPage(index,animate=true){\n  const count=pages.children.length;\n  currentPage=Math.max(0,Math.min(count-1,index));\n  if(active==='popular'){\n    pages.style.transition='none';\n    pages.style.transform='translateX(0)';\n    [...pages.children].forEach((p,i)=>{p.style.display=i===currentPage?'grid':'none'});\n  }else{\n    [...pages.children].forEach(p=>{p.style.display=''});\n    pages.style.transition=animate?'transform .20s ease-out':'none';\n    pages.style.transform='translateX('+(-currentPage*100)+'%)';\n  }\n  [...pageDots.children].forEach((d,i)=>d.classList.toggle('active',i===currentPage));\n}/* PPA_PREMIUM_POPULAR_PAGE_VISIBILITY_V661 */"
+  );
+  if(!output.includes(_ppaPremiumGoPageOld))throw new Error('Premium popular page visibility target missing');
+  output=output.replace(_ppaPremiumGoPageOld,_ppaPremiumGoPageNew);
 
   const _ppaPremiumCancelOld=ppaEscapeSrcdocCode(
     "grid.addEventListener('pointercancel',()=>dragging=false);"
@@ -1612,10 +1624,10 @@ if (!output.includes('statPointsPurchased') ||
   const _ppaPremiumTouchNew=ppaEscapeSrcdocCode(`
 grid.addEventListener('pointercancel',()=>dragging=false);
 
-/* PPA_PREMIUM_TOUCH_SWIPE_V660 */
+/* PPA_PREMIUM_TOUCH_SWIPE_V661 */
 let ppaTouchX=0,ppaTouchY=0,ppaTouchTracking=false;
 function ppaPopularSwipePoint(t){
-  if(!ppaTouchTracking||!t)return false;
+  if(active!=='popular'||!ppaTouchTracking||!t)return false;
   const dx=t.clientX-ppaTouchX,dy=t.clientY-ppaTouchY;
   if(Math.abs(dx)<=45||Math.abs(dx)<=Math.abs(dy)*1.15)return false;
   ppaTouchTracking=false;dragging=false;
@@ -1625,7 +1637,7 @@ function ppaPopularSwipePoint(t){
 }
 grid.style.touchAction='pan-y';
 grid.addEventListener('touchstart',e=>{
-  if(!e.touches||e.touches.length!==1||e.target.closest('.buy'))return;
+  if(active!=='popular'||!e.touches||e.touches.length!==1||e.target.closest('.buy'))return;
   const t=e.touches[0];
   ppaTouchX=t.clientX;ppaTouchY=t.clientY;ppaTouchTracking=true;
 },{passive:true});
@@ -1653,18 +1665,20 @@ grid.addEventListener('touchcancel',()=>{ppaTouchTracking=false;dragging=false},
   if(output.includes(_ppaPremiumDotOld)){
     output=output.replace(_ppaPremiumDotOld,_ppaPremiumDotNew);
   }else{
-    console.warn('[PPA BUILD WARN] Premium pager dot CSS target moved; swipe fix still applies');
+    console.warn('[PPA BUILD WARN] Premium pager dot CSS target moved; page logic still applies');
   }
 
-  if(!output.includes('PPA_PREMIUM_POPULAR_PAGER_V660')||
-     !output.includes('PPA_PREMIUM_TOUCH_SWIPE_V660')||
+  if(!output.includes('PPA_PREMIUM_POPULAR_PAGER_V661')||
+     !output.includes('PPA_PREMIUM_POPULAR_PAGE_VISIBILITY_V661')||
+     !output.includes('PPA_PREMIUM_TOUCH_SWIPE_V661')||
      !output.includes(ppaEscapeSrcdocCode("g.id==='stat15'||g.id==='stat30'"))||
-     !output.includes('maxTouchPoints')||
-     !output.includes("grid.style.touchAction='pan-y'")||
-     !output.includes("grid.addEventListener('touchmove'")){
-    throw new Error('Premium popular tablet pager/swipe patch incomplete');
+     !output.includes('ppaTabletPager')||
+     !output.includes('window.screen')||
+     !output.includes("p.style.display=i===currentPage?'grid':'none'")||
+     !output.includes("grid.addEventListener('touchmove'"))){
+    throw new Error('Premium popular phone/tablet pager patch incomplete');
   }
-  console.log('[PPA BUILD] Premium Popular: 6-card touch/tablet pages + resilient swipe');
+  console.log('[PPA BUILD] Premium Popular: phone 6 cards, tablet 8 cards, second page visible');
 }
 /* ======================================================================== */
 
