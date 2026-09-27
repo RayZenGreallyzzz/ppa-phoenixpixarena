@@ -7401,6 +7401,7 @@ if(_ppaClanBossTrackCalls<1){
       !bossDropBoost.includes('Бонусный бросок таблицы босса')) {
     throw new Error('Boss drop boost helper incomplete');
   }
+  try{new Function(clanBossChest)}catch(err){throw new Error('Clan boss chest syntax invalid: '+String(err&&err.message||err))}
   if (!clanBossLoot.includes('__PPA_CLAN_BOSS_LOOT_V2') ||
       !clanBossLoot.includes("['Участие','от 5 000 урона · +1 зелёный ресурс +3 монеты клана']") ||
       !clanBossLoot.includes("['Обычный камень заточки ×4–7','100% каждому участнику']") ||
@@ -7418,7 +7419,8 @@ if(_ppaClanBossTrackCalls<1){
       !clanBossChest.includes("countdown.textContent=String(sec)") ||
       !clanBossChest.includes('localOpenEnd=Date.now()+remain') ||
       !realtimeClient.includes('Number(serverTs)||0') ||
-      !clanBossChest.includes('РОЛЛ СУНДУКА ВЛАДЫЧИЦЫ') ||
+      !clanBossChest.includes("var bossTitle=String(d.bossTitle||((String(d.bossId||'')==='clan_boss_2')?'Цербер':'Владычица'))") ||
+      !clanBossChest.includes("РОЛЛ СУНДУКА '+esc(bossTitle.toUpperCase())") ||
       !clanBossChest.includes('PPA_CLAN_BOSS_CHEST_COMPLETE') ||
       clanBossLoot.includes('Золото') ||
       clanBossLoot.includes('PPA ×1') ||
