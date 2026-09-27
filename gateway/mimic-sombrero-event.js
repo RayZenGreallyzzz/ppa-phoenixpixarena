@@ -35,7 +35,7 @@
   };
 
   function scheduleInfo(now){
-    now=Number(now)||Date.now();
+    now=Number(now)||((typeof window.PPA_SERVER_NOW==='function')?Number(window.PPA_SERVER_NOW())||Date.now():Date.now());
     var d=new Date(now),y=d.getUTCFullYear(),m=d.getUTCMonth();
     var start=Date.UTC(y,m,MONTHLY_START_DAY,0,0,0,0),end=start+EVENT_DAYS*DAY_MS;
     if(now<start){
@@ -47,11 +47,13 @@
     var nextStart=activeNow?start:(now<start?start:Date.UTC(m===11?y+1:y,m===11?0:m+1,MONTHLY_START_DAY,0,0,0,0));
     return {active:activeNow,start:start,end:end,nextStart:nextStart,startDay:MONTHLY_START_DAY,days:EVENT_DAYS};
   }
-  function testMode(){return window.PPA_MIMIC_SOMBRERO_TEST_MODE===true}
-  function active(){return testMode()||scheduleInfo().active}
-  window.PPA_MIMIC_SOMBRERO_TEST_MODE=false;
+  function active(){
+    try{
+      if(typeof window.PPA_SERVER_CLOCK_READY==='function'&&window.PPA_SERVER_CLOCK_READY()!==true)return false;
+      return scheduleInfo().active===true;
+    }catch(_){return false}
+  }
   window.PPA_MIMIC_SOMBRERO_IS_ACTIVE=active;
-  window.PPA_SET_MIMIC_SOMBRERO_TEST_MODE=function(v){window.PPA_MIMIC_SOMBRERO_TEST_MODE=(v===true);return active()};
 
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function save(){try{if(typeof scheduleCombatSave==='function')scheduleCombatSave()}catch(_){}try{if(typeof sendInvState==='function')sendInvState()}catch(_){}try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}try{if(typeof sendBlacksmithState==='function')sendBlacksmithState()}catch(_){}try{if(typeof saveGame==='function')saveGame()}catch(_){}}
@@ -109,7 +111,7 @@
     try{
       if(typeof dropLoot!=='function'||dropLoot.__ppaMimicSombreroTicket)return;
       var base=dropLoot;
-      var wrapped=function(e){var r=base.apply(this,arguments);var chance=testMode()?1:TICKET_CHANCE;if(eligible(e)&&Math.random()<chance)dropTicket(e);return r};
+      var wrapped=function(e){var r=base.apply(this,arguments);if(eligible(e)&&Math.random()<TICKET_CHANCE)dropTicket(e);return r};
       wrapped.__ppaMimicSombreroTicket=1;wrapped.__ppaMimicSombreroTicketBase=base;
       try{dropLoot=wrapped}catch(_){}try{window.dropLoot=wrapped}catch(_){}
     }catch(_){}
@@ -118,7 +120,7 @@
     try{
       if(typeof mobDropInfo!=='function'||mobDropInfo.__ppaMimicSombreroInfo)return;
       var base=mobDropInfo;
-      var wrapped=function(e){var rows=base.apply(this,arguments);if(!Array.isArray(rows)||!eligible(e))return rows;var out=rows.map(function(x){return Array.isArray(x)?x.slice():x});out.push([TICKET,(testMode()?'100% · ТЕСТ':'0.47% · событие')]);return out};
+      var wrapped=function(e){var rows=base.apply(this,arguments);if(!Array.isArray(rows)||!eligible(e))return rows;var out=rows.map(function(x){return Array.isArray(x)?x.slice():x});out.push([TICKET,'0.47% · событие']);return out};
       wrapped.__ppaMimicSombreroInfo=1;wrapped.__ppaMimicSombreroInfoBase=base;
       try{mobDropInfo=wrapped}catch(_){}try{window.mobDropInfo=wrapped}catch(_){}
     }catch(_){}
@@ -388,17 +390,17 @@
   function pct(v){return (Math.round(Number(v||0)*10000)/100).toFixed((Number(v||0)*100)%1?2:0)+'%'}
   function rewardRows(lv){
     var d=DIFF[Number(lv)]||DIFF[20],ex=EXTRA_REWARDS[d.level]||{stones:[],potion:0};
-    var rows=[['Случайная часть '+RARITY_RU[d.rarity]+' общего сета',pct(testMode()?1:d.rewardChance)+' · 1 случайная часть']];
-    ex.stones.forEach(function(x){rows.push(['Премиум камень заточки ×'+x[0],pct(testMode()?1:x[1])])});
-    rows.push(['Премиум банка HP или MP ×1',pct(testMode()?1:ex.potion)]);
+    var rows=[['Случайная часть '+RARITY_RU[d.rarity]+' общего сета',pct(d.rewardChance)+' · 1 случайная часть']];
+    ex.stones.forEach(function(x){rows.push(['Премиум камень заточки ×'+x[0],pct(x[1])])});
+    rows.push(['Премиум банка HP или MP ×1',pct(ex.potion)]);
     return rows;
   }
   function rollBossRewards(lv){
     var d=DIFF[Number(lv)]||null;if(!d)return null;
     var ex=EXTRA_REWARDS[d.level],out={level:d.level,gear:null,premiumStones:[],premiumPotion:false};
-    if(Math.random()<(testMode()?1:d.rewardChance))out.gear=grantGear(d);
-    ex.stones.forEach(function(x){if(Math.random()<(testMode()?1:x[1]))out.premiumStones.push(x[0])});
-    if(Math.random()<(testMode()?1:ex.potion))out.premiumPotion=true;
+    if(Math.random()<d.rewardChance)out.gear=grantGear(d);
+    ex.stones.forEach(function(x){if(Math.random()<x[1])out.premiumStones.push(x[0])});
+    if(Math.random()<ex.potion)out.premiumPotion=true;
     return out;
   }
   function ticketCount(){return matCount(TICKET)}
@@ -422,12 +424,11 @@
     var setDrop=false,setGold=false;
     try{setDrop=!!(typeof rewardDropMul==='function'&&rewardDropMul.__ppaMimicSetDropBonus)}catch(_){}
     try{setGold=!!(typeof dropLoot==='function'&&dropLoot.__ppaMimicSetGoldBonus)}catch(_){}
-    return {active:active(),test:testMode(),ticketChance:testMode()?1:TICKET_CHANCE,dropHook:drop,infoHook:info,setDropHook:setDrop,setGoldHook:setGold,setBonus:setBonus(),tickets:ticketCount()};
+    return {active:active(),ticketChance:TICKET_CHANCE,serverClockReady:(typeof window.PPA_SERVER_CLOCK_READY==='function'?window.PPA_SERVER_CLOCK_READY():false),dropHook:drop,infoHook:info,setDropHook:setDrop,setGoldHook:setGold,setBonus:setBonus(),tickets:ticketCount()};
   };
   window.PPA_MIMIC_SOMBRERO_EVENT={
     active:active,
     schedule:scheduleInfo,
-    testMode:testMode,
     ticket:TICKET,
     ticketChance:TICKET_CHANCE,
     ticketCount:ticketCount,
