@@ -222,6 +222,11 @@
       var access=await PPA.ppaAdminEventRewardStockAccess();
       window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED=!!(access&&access.authorized);
       try{if(typeof sendEventsState==='function')sendEventsState()}catch(_){}
+      if(access&&access.serverChestGranted===true){
+        try{showPickup('ТЕСТ · ПО 100 СУНДУКОВ ОХ ВЫДАНО','#8dff9a')}catch(_){}
+        setTimeout(function(){location.reload()},450);
+        return;
+      }
       if(!window.PPA_ADMIN_EVENT_REWARD_AUTHORIZED||access.seedRequired===false)return;
       var seeded=window.PPA_ADMIN_EVENT_REWARD_STOCK();
       if(!seeded||seeded.ok===false||seeded.error)return;
