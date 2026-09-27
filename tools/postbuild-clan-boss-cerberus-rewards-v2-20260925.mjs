@@ -23,7 +23,7 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
   src = replaceRegex(src, /  clanBossEligible\(st\) \{[\s\S]*?\n  \}\n\n  clanBossSharedRoll/, `  clanBossEligible(st) {
     const dmg=st&&st.damageByPid&&typeof st.damageByPid==='object'?st.damageByPid:{};
     const names=st&&st.nameByPid&&typeof st.nameByPid==='object'?st.nameByPid:{};
-    const minDamage=String(st&&st.bossId||'')==='clan_boss_2'?10000:5000;
+    const minDamage=String(st&&st.bossId||'')==='clan_boss_2'?100000:5000;
     return Object.keys(dmg)
       .map(pid=>({pid:String(pid),name:cleanName(names[pid]||'Игрок'),damage:Math.max(0,Number(dmg[pid])||0)}))
       .filter(x=>x.damage>=minDamage)
@@ -58,7 +58,7 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
     if(st.distribution&&st.distribution.id)return st.distribution;
 
     const cerberus=bossId==='clan_boss_2';
-    const minDamage=cerberus?10000:5000;
+    const minDamage=cerberus?100000:5000;
     const eligible=this.clanBossEligible(st);
     const id='cbd:'+String(st.clanId||'')+':'+bossId+':'+String(st.defeatedAt||now);
     const shared=[];
@@ -235,7 +235,7 @@ if (!src.includes('clanBossBuildDistribution(st,now=Date.now())')) {
 }
 
 if (!src.includes('clanBossBuildDistribution(st,now=Date.now())') ||
-    !src.includes("const minDamage=String(st&&st.bossId||'')==='clan_boss_2'?10000:5000") ||
+    !src.includes("const minDamage=String(st&&st.bossId||'')==='clan_boss_2'?100000:5000") ||
     !src.includes('damageCoins=Math.min(6000,Math.floor(Math.max(0,p.damage)/7500))') ||
     !src.includes("bossTitle:cerberus?'Цербер':'Владычица'")) {
   throw new Error('Cerberus clan boss reward validation failed');
@@ -261,4 +261,4 @@ if (fs.existsSync(indexPath)) {
   if (html !== beforeHtml) fs.writeFileSync(indexPath, html, 'utf8');
 }
 
-console.log('[PPA POSTBUILD] clan boss Cerberus rewards applied: min damage 10000, guaranteed pool, rare/event drops.');
+console.log('[PPA POSTBUILD] clan boss Cerberus rewards applied: min damage 100000, guaranteed pool, rare/event drops.');
