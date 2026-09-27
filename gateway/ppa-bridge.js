@@ -167,6 +167,17 @@
     ppaRequestNicknameChange:renameWithSyncedCard,
 
     ppaAdminEventRewardStockAccess:function(payload){return authed('/api/admin/event-reward-stock-access',payload||{})},
+    ppaStatChestOpen:async function(payload){
+      await auth();
+      var snapshot=currentSaveSnapshot();
+      if(snapshot&&typeof snapshot==='object'){
+        var version=null;try{version=window.PPA_CLOUD&&window.PPA_CLOUD.version}catch(_){}
+        await queueSave(snapshot,version);
+      }
+      var r=await call('/api/stat-chest/open',payload||{});
+      if(r&&r.version!=null)noteSaveVersion(r.version);
+      return r;
+    },
 
     ppaClanState:function(){return authed('/api/clan/state')},
     ppaClanAction:function(req){return authed('/api/clan/action',req||{})},
