@@ -3,9 +3,22 @@
   if(window.__PPA_RURI_EVENT_DROPS_V1)return;
   window.__PPA_RURI_EVENT_DROPS_V1=true;
 
-  // TEST PHASE: enabled deliberately so the drop tables and real farming can be verified.
-  // After the active/inactive test this flag will be replaced by the monthly server window.
-  var TEST_ACTIVE=true;
+  var MONTHLY_START_DAY=1;
+  var EVENT_DAYS=10;
+  var DAY_MS=86400000;
+
+  function scheduleInfo(now){
+    now=Number(now)||Date.now();
+    var d=new Date(now),y=d.getUTCFullYear(),m=d.getUTCMonth();
+    var start=Date.UTC(y,m,MONTHLY_START_DAY,0,0,0,0);
+    var end=start+EVENT_DAYS*DAY_MS;
+    var activeNow=now>=start&&now<end;
+    var nextStart=activeNow
+      ? start
+      : (now<start?start:Date.UTC(m===11?y+1:y,m===11?0:m+1,MONTHLY_START_DAY,0,0,0,0));
+    return {active:activeNow,start:start,end:end,nextStart:nextStart,startDay:MONTHLY_START_DAY,days:EVENT_DAYS};
+  }
+
   // Canonical full-size transparent event resources supplied for Great Ruri.
   // Dedicated files are used directly; do not crop them out of the poster.
   var RES={
@@ -17,14 +30,10 @@
   var BY_NAME={};
   Object.keys(RES).forEach(function(k){BY_NAME[RES[k].name]=RES[k]});
 
-  window.PPA_RURI_EVENT_TEST_ACTIVE=TEST_ACTIVE;
   window.PPA_RURI_EVENT_RESOURCES=RES;
+  window.PPA_RURI_EVENT_SCHEDULE=scheduleInfo;
   window.PPA_RURI_EVENT_IS_ACTIVE=function(){
-    return window.PPA_RURI_EVENT_TEST_ACTIVE===true;
-  };
-  window.PPA_SET_RURI_EVENT_TEST_ACTIVE=function(v){
-    window.PPA_RURI_EVENT_TEST_ACTIVE=(v===true);
-    return window.PPA_RURI_EVENT_TEST_ACTIVE;
+    try{return scheduleInfo().active===true}catch(_){return false}
   };
 
   function active(){
@@ -215,9 +224,9 @@
   setTimeout(install,250);
   setTimeout(install,900);
 
-  window.PPA_RURI_EVENT_DROP_TEST={
+  window.PPA_RURI_EVENT_DROP_INFO={
     active:function(){return active()},
-    setActive:function(v){return window.PPA_SET_RURI_EVENT_TEST_ACTIVE(v===true)},
+    schedule:scheduleInfo,
     resources:RES,
     classify:classification
   };
