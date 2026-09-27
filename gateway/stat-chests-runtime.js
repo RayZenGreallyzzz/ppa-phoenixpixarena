@@ -160,6 +160,26 @@
     }catch(_){return 0}
   }
 
+  function findLocalChest(c,source){
+    try{
+      var bag=Array.isArray(INV.bag)?INV.bag:[];
+      var x=find(c.tier);
+      if(x)return x;
+      var src=source&&source.gear&&typeof source.gear==='object'?source.gear:source;
+      var srcRef=String(src&&((src.refId||src.uid)||''));
+      var srcName=String(src&&src.name||'').trim().toLowerCase();
+      for(var i=0;i<bag.length;i++){
+        var it=bag[i],raw=it&&it.gear&&typeof it.gear==='object'?it.gear:it;
+        if(!raw)continue;
+        if(srcRef&&(String(raw.refId||raw.uid||'')===srcRef))return it;
+        if(srcName&&String(raw.name||'').trim().toLowerCase()===srcName)return it;
+        var cc=config(it);
+        if(cc&&cc.tier===c.tier)return it;
+      }
+    }catch(_){}
+    return null;
+  }
+
   async function openChest(it){
     var c=config(it);
     if(!c)return false;
@@ -167,16 +187,19 @@
       try{showPickup('Сервер сундуков ОХ недоступен','#ff7777')}catch(_){}
       return false;
     }
-    var local=find(c.tier);
-    if(!local)return false;
-    if(local.__ppaOpening)return false;
-    local.__ppaOpening=true;
+
+    // Do not block a valid server-authoritative open just because an old
+    // client stack cannot be found by the newest metadata fields.
+    var lock=it&&typeof it==='object'?it:null;
+    if(lock&&lock.__ppaOpening)return false;
+    if(lock)lock.__ppaOpening=true;
+
     try{
       var requestId='ox_'+c.tier+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10);
       var r=await PPA.ppaStatChestOpen({tier:c.tier,requestId:requestId});
       if(!r||r.ok===false)throw new Error((r&&r.message)||'Сундук не открыт');
 
-      local=find(c.tier);
+      var local=findLocalChest(c,it);
       if(local){
         var left=count(local)-1;
         if(left>0)setCount(local,left);
@@ -202,7 +225,8 @@
       return false;
     }finally{
       try{
-        var x=find(c.tier);
+        if(lock)lock.__ppaOpening=false;
+        var x=findLocalChest(c,it);
         if(x)x.__ppaOpening=false;
       }catch(_){}
     }
@@ -236,7 +260,7 @@
     var style=document.createElement('style');
     style.id='ppaOxChestModalStyle';
     style.textContent=
-      '#ppaOxChestModal{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:calc(12px + env(safe-area-inset-top,0px)) 10px calc(12px + env(safe-area-inset-bottom,0px));background:radial-gradient(circle at 50% 44%,rgba(5,7,10,.30),rgba(0,0,0,.84) 72%);box-sizing:border-box;font-family:Georgia,\'Times New Roman\',serif}'+
+      '#ppaOxChestModal{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:calc(12px + env(safe-area-inset-top,0px)) 10px calc(12px + env(safe-area-inset-bottom,0px));background:transparent;box-sizing:border-box;font-family:Georgia,\'Times New Roman\',serif}'+
       '#ppaOxChestModal *{box-sizing:border-box}'+
       '.ppa-ox-card{position:relative;width:min(52vw,340px);max-height:min(72vh,520px);overflow:auto;padding:14px 12px 10px;border:3px solid #d9a94d;border-radius:4px;color:#f7ecd0;background:radial-gradient(circle at 50% 15%,var(--ox-glow),transparent 32%),linear-gradient(180deg,#071019 0%,#05090d 45%,#020406 100%);box-shadow:0 0 0 2px #5f3d13,0 0 0 5px rgba(220,167,73,.22),0 20px 54px rgba(0,0,0,.84),0 0 34px var(--ox-glow),inset 0 0 60px rgba(0,0,0,.66);-webkit-overflow-scrolling:touch}'+
       '.ppa-ox-card:before,.ppa-ox-card:after{content:\'✦\';position:absolute;top:-7px;width:24px;height:24px;display:grid;place-items:center;color:#ffcf62;font-size:17px;text-shadow:0 0 10px #ffb12f,0 0 18px rgba(255,177,47,.65)}'+
