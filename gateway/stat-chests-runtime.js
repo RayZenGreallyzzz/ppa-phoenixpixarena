@@ -546,7 +546,6 @@
   }
 
   function installChestUiArtHooks(){
-    if(window.__PPA_STAT_CHEST_ART_HOOKS_V667)return true;
     var installed=false;
 
     ['sendInvState','sendStorageState','sendAuctionState'].forEach(function(name){
