@@ -8,7 +8,7 @@
   var DAY_MS=86400000;
 
   function scheduleInfo(now){
-    now=Number(now)||Date.now();
+    now=Number(now)||((typeof window.PPA_SERVER_NOW==='function')?Number(window.PPA_SERVER_NOW())||Date.now():Date.now());
     var d=new Date(now),y=d.getUTCFullYear(),m=d.getUTCMonth();
     var start=Date.UTC(y,m,MONTHLY_START_DAY,0,0,0,0);
     var end=start+EVENT_DAYS*DAY_MS;
