@@ -367,7 +367,9 @@ function ppaEscapeSrcdocCode(code) {
   output=output.replace(eventsFrameRe,'<iframe id="eventsMenuFrame" title="События" srcdoc="'+nativeEventsEscaped+'"></iframe>');
   console.log('[PPA BUILD] Native Events iframe instances replaced: '+eventsFrameMatches.length);
   if(!output.includes('ЦЕНТР СОБЫТИЙ')||!output.includes('Великий Рури')||!output.includes('Мимик-Самбреро')||!output.includes('mimicSombreroOpen')||!output.includes('craftRuri')||!output.includes('data-cat=&quot;game&quot;')||
+     !output.includes('ruriEvent')||!output.includes('Запуск 1-го числа · 10 дней')||
      !output.includes('Осада доступна · цикл 3 дня')||!output.includes("type:&#x27;eventsEnter&#x27;,action:&#x27;clansiege&#x27;")||
+     output.includes('ТЕСТОВЫЙ ЗАПУСК')||
      output.includes('CLAN_SIEGE_QA_TEST_OPEN')||output.includes('ТЕСТ · ВОЙТИ В ОСАДУ')||output.includes('Откат осады отключён')||output.includes('ppaClanSiegeQaEnter')){
     throw new Error('Native tabbed Events replacement incomplete');
   }
