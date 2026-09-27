@@ -7,16 +7,16 @@ if (!fs.existsSync(indexPath)) {
   throw new Error('public/index.html not found; run node build.mjs first');
 }
 
-function insertBeforeLastScriptClose(src, code) {
-  const pos = src.lastIndexOf('</script>');
-  if (pos < 0) throw new Error('Cannot find closing </script> for PC input insertion');
-  return src.slice(0, pos) + code + src.slice(pos);
+function insertBeforeBodyClose(src, code) {
+  const pos = src.lastIndexOf('</body>');
+  if (pos < 0) throw new Error('Cannot find </body> for desktop PC input loader');
+  return src.slice(0, pos) + code + '\n' + src.slice(pos);
 }
 
 let html = fs.readFileSync(indexPath, 'utf8');
 const before = html;
 
-const KEY = 'v610-pc-telegram-desktop-20260925';
+const KEY = 'v656-desktop-pc-input-split-20260927';
 
 // Always derive the active build key from the canonical value emitted by build.mjs.
 // This keeps the postbuild independent from whatever feature most recently bumped
@@ -35,12 +35,23 @@ html = html
   .split('v606-clan-siege-city-exit-20260925').join(KEY)
   .split('v607-clan-siege-castle-cache-20260925').join(KEY)
   .split('v608-pc-mouse-hotkeys-20260925').join(KEY)
-  .split('v609-pc-mouse-hotkeys-safe-20260925').join(KEY);
+  .split('v609-pc-mouse-hotkeys-safe-20260925').join(KEY)
+  .split('v610-pc-telegram-desktop-20260925').join(KEY)
+  .split('v655-mobile-fps-input-gate-20260927').join(KEY);
 
 const PC_INPUT_CODE = `
-
-// === V610 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT ===========================
-// Desktop-only layer. Android/iOS/tablet touch keeps the native joystick.
+(function(){
+'use strict';
+// === V656 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT ===========================
+// This file is loaded only on desktop. The guard below is defense-in-depth.
+function ppaPcHardMobileLike(){
+  const ua=String(navigator.userAgent||'').toLowerCase();
+  let p='';try{p=String(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.platform||'').toLowerCase()}catch(_){}
+  let coarseOnly=false;try{coarseOnly=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches&&!matchMedia('(any-pointer:fine)').matches)}catch(_){}
+  const ipadDesktopUa=/macintosh/.test(ua)&&(navigator.maxTouchPoints||0)>1;
+  return /android|iphone|ipad|ipod|mobile|tablet|kindle|silk/.test(ua)||/android|ios|iphone|ipad/.test(p)||ipadDesktopUa||((navigator.maxTouchPoints||0)>0&&coarseOnly);
+}
+if(ppaPcHardMobileLike())return;
 let PPA_PC_CLICK_MOVE={active:false,x:0,y:0,lastAt:0};
 let PPA_PC_MOVE_LAST={x:0,y:0,active:false};
 let PPA_PC_POINTER_SEEN=false;
@@ -199,9 +210,6 @@ function ppaPcBindCanvas(){
 function ppaPcBindInput(){
   if(window.__PPA_PC_MOUSE_HOTKEYS_BOUND__)return;
   window.__PPA_PC_MOUSE_HOTKEYS_BOUND__=true;
-  // Mobile/tablet already use the native joystick. Do not install the desktop
-  // pointer listeners, retry timer or an extra requestAnimationFrame loop there.
-  if(ppaPcMobileLike())return;
   window.addEventListener('pointermove',ppaPcMarkPointer,{passive:true});
   window.addEventListener('mousemove',function(){PPA_PC_POINTER_SEEN=true},{passive:true});
   window.addEventListener('pointerdown',function(e){
@@ -238,29 +246,58 @@ window.PPA_PC_INPUT_DEBUG=function(){
 };
 ppaPcBindInput();
 // ========================================================================
+})();
 `;
 
-if (!html.includes('V610 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT')) {
-  html = insertBeforeLastScriptClose(html, PC_INPUT_CODE);
+const desktopInputPath=path.join(ROOT,'public','game','pc-input-desktop.js');
+fs.mkdirSync(path.dirname(desktopInputPath),{recursive:true});
+fs.writeFileSync(desktopInputPath,PC_INPUT_CODE,'utf8');
+
+const DESKTOP_LOADER_MARK='PPA_DESKTOP_PC_INPUT_LOADER_V656';
+const DESKTOP_LOADER=`
+<script>
+(function(){
+  'use strict';
+  // ${DESKTOP_LOADER_MARK}: do not fetch desktop input on phones/tablets.
+  const ua=String(navigator.userAgent||'').toLowerCase();
+  let p='';try{p=String(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.platform||'').toLowerCase()}catch(_){}
+  let coarseOnly=false;try{coarseOnly=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches&&!matchMedia('(any-pointer:fine)').matches)}catch(_){}
+  const ipadDesktopUa=/macintosh/.test(ua)&&(navigator.maxTouchPoints||0)>1;
+  const mobileLike=/android|iphone|ipad|ipod|mobile|tablet|kindle|silk/.test(ua)||/android|ios|iphone|ipad/.test(p)||ipadDesktopUa||((navigator.maxTouchPoints||0)>0&&coarseOnly);
+  if(mobileLike)return;
+  const s=document.createElement('script');
+  s.src='/game/pc-input-desktop.js?v='+encodeURIComponent(String(window.PPA_CLIENT_BUILD||'${KEY}'));
+  s.defer=true;
+  document.head.appendChild(s);
+})();
+</script>`;
+
+if(!html.includes(DESKTOP_LOADER_MARK)){
+  html=insertBeforeBodyClose(html,DESKTOP_LOADER);
 }
 
-const validation = [
-  [KEY,'cache key'],
+const runtimeValidation = [
+  ['V656 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT','desktop runtime marker'],
   ['function ppaPcDesktopTelegram()','desktop detector'],
   ['function ppaPcBindCanvas()','canvas binding'],
   ['PPA_PC_POINTER_SEEN','pointer state'],
   ['window.PPA_PC_INPUT_DEBUG','debug bridge'],
   ['ppaPcHudSkill(skill,e)','skill hotkeys'],
   ['ppaPcSetMoveTarget(e.clientX,e.clientY)','mouse movement'],
-  ['if(ppaPcMobileLike())return;','mobile runtime gate'],
   ['requestAnimationFrame(loop)','desktop movement loop']
 ];
-const missingValidation = validation.filter(([needle])=>!html.includes(needle)).map(([,label])=>label);
-if (missingValidation.length) {
-  throw new Error('PC Telegram mouse/hotkey validation failed: missing '+missingValidation.join(', '));
+const missingRuntime=runtimeValidation.filter(([needle])=>!PC_INPUT_CODE.includes(needle)).map(([,label])=>label);
+if(missingRuntime.length)throw new Error('Desktop PC input asset validation failed: missing '+missingRuntime.join(', '));
+if(!html.includes(KEY)||!html.includes(DESKTOP_LOADER_MARK)||!html.includes('/game/pc-input-desktop.js?v=')){
+  throw new Error('Desktop-only PC input loader validation failed');
+}
+if(html.includes('V656 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT')||
+   html.includes('function ppaPcTickMove()')||
+   html.includes('requestAnimationFrame(loop)')){
+  throw new Error('Desktop PC input runtime leaked back into shared mobile HTML');
 }
 if (html === before) throw new Error('No changes applied to public/index.html');
 
 fs.writeFileSync(indexPath, html, 'utf8');
-console.log('[PPA POSTBUILD] PC input applied only on desktop; mobile/tablet skip desktop pointer listeners and rAF loop.');
+console.log('[PPA POSTBUILD] PC input split: desktop asset is conditionally fetched; mobile/tablet never load its listeners or rAF loop.');
 console.log('[PPA POSTBUILD] index.html: '+(Buffer.byteLength(html)/1024/1024).toFixed(2)+' MiB');
