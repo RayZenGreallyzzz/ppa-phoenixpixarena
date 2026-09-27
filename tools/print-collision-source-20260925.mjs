@@ -4,54 +4,42 @@ import zlib from 'node:zlib';
 const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
 const src=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
 
-function out(label,pos,pre=5000,post=12000){
+function out(label,pos,pre=4200,post=9000){
   console.log('\n===== '+label+' @ '+pos+' =====');
   console.log(src.slice(Math.max(0,pos-pre),Math.min(src.length,pos+post)));
 }
 
-const anchors=[
-  'const _smartMove=updateSmartAttackInput();',
-  'const _moveX=_smartMove',
-  'const _moveY=_smartMove',
-  'updateSmartAttackInput()'
+const terms=[
+  'Популярное','ПОПУЛЯРНОЕ','популярное',
+  'statPoints','statPoint','premiumShop',
+  'Очки характеристик','очки характеристик','характеристик',
+  '15 очков','30 очков',
+  'touchstart','touchend','pointerdown','pointerup',
+  'swipe','carousel','pageDots','dots','dot','pager','pagination',
+  'premiumGoods','PREMIUM_GOODS','renderPremium','premiumPage','shopPage'
 ];
-for(const a of anchors){
-  const p=src.indexOf(a);
-  if(p>=0)out(a,p);
-}
 
-console.log('\n===== JX/JY CONTEXTS =====');
-for(const term of ['jX','jY']){
+for(const term of terms){
   let pos=0,n=0;
-  while((pos=src.indexOf(term,pos))>=0&&n<12){
-    const lo=Math.max(0,pos-1200),hi=Math.min(src.length,pos+2600);
-    const frag=src.slice(lo,hi);
-    if(/P\.x|P\.y|speed|spd|move|collid|wall|block|cam/i.test(frag)){
-      console.log('\n--- '+term+' '+(++n)+' @ '+pos+' ---\n'+frag);
+  while((pos=src.toLocaleLowerCase('ru-RU').indexOf(term.toLocaleLowerCase('ru-RU'),pos))>=0&&n<20){
+    const frag=src.slice(Math.max(0,pos-2600),Math.min(src.length,pos+6200));
+    if(/premium|shop|популяр|характер|statPoint|touch|swipe|page|dot|gram/i.test(frag)){
+      out(term+' #'+(++n),pos,2600,6200);
     }
-    pos+=term.length;
+    pos+=Math.max(1,term.length);
   }
 }
 
-console.log('\n===== PLAYER POSITION WRITE CONTEXTS =====');
-const posRe=/P\.(?:x|y)\s*(?:\+=|-=|=)/g;
-let m,n=0;
-while((m=posRe.exec(src))&&n<40){
-  const lo=Math.max(0,m.index-1000),hi=Math.min(src.length,m.index+2200);
-  const frag=src.slice(lo,hi);
-  if(/jX|jY|_moveX|_moveY|speed|spd|move|collid|wall|block|cam|delta|\bdt\b/i.test(frag)){
-    console.log('\n--- POSWRITE '+(++n)+' @ '+m.index+' ---\n'+frag);
+console.log('\n===== FUNCTIONS AROUND PREMIUM / SHOP / PAGE / SWIPE =====');
+const re=/function\s+([A-Za-z0-9_$]*(?:premium|shop|page|swipe|carousel|render|good|product)[A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*\{/gi;
+let m,count=0;
+while((m=re.exec(src))&&count<120){
+  const frag=src.slice(Math.max(0,m.index-900),Math.min(src.length,m.index+2800));
+  if(/premium|shop|statPoints|Популяр|характер|page|dot|swipe|touch/i.test(frag)){
+    console.log('\n--- FUNC '+(++count)+' '+m[1]+'('+m[2]+') @ '+m.index+' ---\n'+frag);
   }
 }
 
-console.log('\n===== LOOP / FRAME CANDIDATES =====');
-for(const term of ['requestAnimationFrame','performance.now()','deltaTime','function loop','function update']){
-  let pos=0,n=0;
-  while((pos=src.indexOf(term,pos))>=0&&n<10){
-    const frag=src.slice(Math.max(0,pos-1400),Math.min(src.length,pos+3000));
-    if(/P\.x|P\.y|jX|jY|_moveX|_moveY|updateSmartAttackInput/i.test(frag)){
-      console.log('\n--- '+term+' '+(++n)+' @ '+pos+' ---\n'+frag);
-    }
-    pos+=term.length;
-  }
-}
+console.log('\n===== STATPOINT PRODUCT OBJECTS =====');
+let p0=0,k=0;
+while((p0=src.indexOf("kind:'statPoints'",p0))>=0&&k<20){out('statPoints object '+(++k),p0,3400,5200);p0+=17}
