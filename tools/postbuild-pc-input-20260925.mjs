@@ -16,7 +16,7 @@ function insertBeforeBodyClose(src, code) {
 let html = fs.readFileSync(indexPath, 'utf8');
 const before = html;
 
-const KEY = 'v656-desktop-pc-input-split-20260927';
+const KEY = 'v657-mobile-city-fps-release-20260927';
 
 // Always derive the active build key from the canonical value emitted by build.mjs.
 // This keeps the postbuild independent from whatever feature most recently bumped
@@ -37,7 +37,8 @@ html = html
   .split('v608-pc-mouse-hotkeys-20260925').join(KEY)
   .split('v609-pc-mouse-hotkeys-safe-20260925').join(KEY)
   .split('v610-pc-telegram-desktop-20260925').join(KEY)
-  .split('v655-mobile-fps-input-gate-20260927').join(KEY);
+  .split('v655-mobile-fps-input-gate-20260927').join(KEY)
+  .split('v656-desktop-pc-input-split-20260927').join(KEY);
 
 const PC_INPUT_CODE = `
 (function(){
