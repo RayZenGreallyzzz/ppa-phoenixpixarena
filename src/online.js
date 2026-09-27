@@ -388,7 +388,7 @@ function makeServerStatChestItem(tier, count) {
   if (!cfg) return null;
   const rarity = cfg.tier === 'emerald' ? 'uncommon' : (cfg.tier === 'sapphire' ? 'rare' : 'epic');
   const rarityName = cfg.tier === 'emerald' ? 'Необычный' : (cfg.tier === 'sapphire' ? 'Редкий' : 'Эпический');
-  const img = '/assets/stat-chest-' + cfg.tier + '.svg';
+  const img = '/assets/stat-chest-' + cfg.tier + '.png';
   const eventRewardId = 'admin_qa_stat_chest_' + cfg.tier + '_100_v2';
   const n = Math.max(1, Math.min(STAT_CHEST_STACK_MAX, Math.floor(Number(count) || 1)));
   return {
