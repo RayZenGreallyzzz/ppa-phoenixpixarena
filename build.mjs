@@ -1674,8 +1674,8 @@ grid.addEventListener('touchcancel',()=>{ppaTouchTracking=false;dragging=false},
      !output.includes(ppaEscapeSrcdocCode("g.id==='stat15'||g.id==='stat30'"))||
      !output.includes('ppaTabletPager')||
      !output.includes('window.screen')||
-     !output.includes("p.style.display=i===currentPage?'grid':'none'")||
-     !output.includes("grid.addEventListener('touchmove'")){
+     !output.includes(ppaEscapeSrcdocCode("p.style.display=i===currentPage?'grid':'none'"))||
+     !output.includes(ppaEscapeSrcdocCode("grid.addEventListener('touchmove'"))){
     throw new Error('Premium popular phone/tablet pager patch incomplete');
   }
   console.log('[PPA BUILD] Premium Popular: phone 6 cards, tablet 8 cards, second page visible');
