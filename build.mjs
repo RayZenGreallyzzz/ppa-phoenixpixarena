@@ -2175,7 +2175,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'dragon60 mob info title',
   /name=e\.isClanBoss\?'ВЛАДЫЧИЦА ПЛАМЕНИ':\(e\.isDungeon21Boss\?'ВЛАДЫКА СКВЕРНЫ':\(e\.isBoss\?'ФЕНИКС':\(\(e\.type&&e\.type\.n\)\|\|'Моб'\)\)\);/,
-  "name=e.isClanBoss?'ВЛАДЫЧИЦА ПЛАМЕНИ':(e.isDungeon60Boss?'ДРАКОН ПЕПЛА':(e.isDungeon21Boss?'ВЛАДЫКА СКВЕРНЫ':(e.isBoss?'ФЕНИКС':((e.type&&e.type.n)||'Моб'))));"
+  "name=e.isClanBoss?((String(e.bossId||e.clanBossId||'')==='clan_boss_2')?'ЦЕРБЕР ПЕКЛА':'ВЛАДЫЧИЦА ПЛАМЕНИ'):(e.isDungeon60Boss?'ДРАКОН ПЕПЛА':(e.isDungeon21Boss?'ВЛАДЫКА СКВЕРНЫ':(e.isBoss?'ФЕНИКС':((e.type&&e.type.n)||'Моб'))));"
 );
 
 ppaPatchRegex(
@@ -2184,8 +2184,10 @@ ppaPatchRegex(
   "}else if(e.isDungeon60Boss&&P.scene==='dungeon'){\n        const ln=document.getElementById('locName');\n        ln.innerHTML='ДРАКОН ПЕПЛА ПОВЕРЖЕН<div class=\"sub\">Откат 6 часов</div>';\n        ln.classList.add('show');\n        setTimeout(()=>ln.classList.remove('show'),2500);\n      }else if(e.isDungeon21Boss&&P.scene==='dungeon'){"
 );
 
-if (!output.includes("e.isDungeon60Boss?'ДРАКОН ПЕПЛА'")) {
-  throw new Error('Dragon 60 mob info title patch did not apply');
+if (!output.includes("String(e.bossId||e.clanBossId||'')==='clan_boss_2'") ||
+    !output.includes("'ЦЕРБЕР ПЕКЛА':'ВЛАДЫЧИЦА ПЛАМЕНИ'") ||
+    !output.includes("e.isDungeon60Boss?'ДРАКОН ПЕПЛА'")) {
+  throw new Error('Mob info boss title patch did not apply');
 }
 
 ppaPatchRegex(
