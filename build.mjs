@@ -7228,12 +7228,13 @@ if(_ppaClanBossTrackCalls<1){
     throw new Error('Remote Great Ruri visibility/runtime sync patch missing');
   }
   if (!realtimeServer.includes('CLAN_BOSS_RESPAWN_MS = 12 * 60 * 60 * 1000') ||
-      !realtimeServer.includes('CLAN_BOSS_QA_TEST_OPEN = true') ||
-      !realtimeServer.includes('CLAN_BOSS_QA_RESPAWN_MS = 10 * 1000') ||
-      !realtimeServer.includes('st.qaMode=CLAN_BOSS_QA_TEST_OPEN') ||
-      !realtimeClient.includes('ТЕСТ · КЛАНОВЫЙ БОСС · ОТКАТ 10 СЕКУНД') ||
-      !clanOnline.includes('const CLAN_BOSS_QA_TEST_OPEN=true') ||
-      !clanOnline.includes('clanBossUiReadyAt') ||
+      realtimeServer.includes('CLAN_BOSS_QA_TEST_OPEN') ||
+      realtimeServer.includes('CLAN_BOSS_QA_RESPAWN_MS') ||
+      realtimeServer.includes('qaMode:CLAN_BOSS_QA_TEST_OPEN') ||
+      realtimeServer.includes('st.qaMode=CLAN_BOSS_QA_TEST_OPEN') ||
+      realtimeClient.includes('ТЕСТ · КЛАНОВЫЙ БОСС · ОТКАТ 10 СЕКУНД') ||
+      clanOnline.includes('CLAN_BOSS_QA_TEST_OPEN') ||
+      !clanOnline.includes('function clanBossUiReadyAt(v){return Math.max(0,Number(v)||0)}') ||
       !clanOnline.includes("function progUi(p,id='')") ||
       !clanOnline.includes("personal=id?Number(by[String(id)])||0") ||
       !clanOnline.includes('base.clanProgress=progUi(meta.progress,id)') ||
