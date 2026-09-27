@@ -1,6 +1,7 @@
 (function(){
   'use strict';
 
+  var STACK_MAX=999;
   var CFG={
     emerald:{
       tier:'emerald',name:'Изумрудный сундук ОХ',rarity:'uncommon',
@@ -49,25 +50,76 @@
   }
 
   function setCount(it,n){
-    n=Math.max(0,Math.floor(Number(n)||0));
+    n=Math.max(0,Math.min(STACK_MAX,Math.floor(Number(n)||0)));
     it.count=n;it.qty=n;it.amount=n;
     return n;
   }
 
-  function find(t){
+  function findIn(arr,t,needRoom){
     t=tier(t);
+    arr=Array.isArray(arr)?arr:[];
+    return arr.find(function(it){
+      var c=config(it),n=count(it);
+      return c&&c.tier===t&&n>0&&(!needRoom||n<STACK_MAX);
+    })||null;
+  }
+
+  function find(t){
+    try{return findIn(INV.bag||[],t,false)}catch(_){return null}
+  }
+
+  function arrayCap(arr){
     try{
-      return (INV.bag||[]).find(function(it){
-        var c=config(it);
-        return c&&c.tier===t&&count(it)>0;
-      })||null;
-    }catch(_){return null}
+      if(arr===INV.bag)return 100;
+      if(INV.storage&&(arr===INV.storage.personal||arr===INV.storage.clan||arr===INV.storage.premium))return 50;
+    }catch(_){}
+    return 100;
+  }
+
+  function availableChestCapacity(arr,t){
+    arr=Array.isArray(arr)?arr:[];
+    var free=0,t0=tier(t);
+    for(var i=0;i<arr.length;i++){
+      var c=config(arr[i]);
+      if(c&&c.tier===t0)free+=Math.max(0,STACK_MAX-count(arr[i]));
+    }
+    free+=Math.max(0,arrayCap(arr)-arr.length)*STACK_MAX;
+    return free;
+  }
+
+  function mergeChestIntoArray(arr,item,n){
+    if(!Array.isArray(arr))return 0;
+    var c=config(item);if(!c)return 0;
+    n=Math.max(0,Math.floor(Number(n)||0));
+    if(!n||availableChestCapacity(arr,c.tier)<n)return 0;
+    var left=n,moved=0;
+    while(left>0){
+      var existing=findIn(arr,c.tier,true);
+      if(existing){
+        var add=Math.min(left,STACK_MAX-count(existing));
+        setCount(existing,count(existing)+add);
+        existing.img=c.img;
+        moved+=add;left-=add;
+        continue;
+      }
+      if(arr.length>=arrayCap(arr))break;
+      var addNew=Math.min(left,STACK_MAX);
+      var x=Object.assign({},item);
+      x.uid=c.refId;x.refId=c.refId;x.name=c.name;x.kind='resource';
+      x.statChest=true;x.statChestTier=c.tier;
+      x.statChestMin=c.min;x.statChestMax=c.max;x.statChestJackpot=c.jackpot;
+      x.stackable=true;x.bound=false;x.tradeLocked=false;x.blackMarket=false;x.img=c.img;
+      setCount(x,addNew);
+      arr.push(x);
+      moved+=addNew;left-=addNew;
+    }
+    return moved;
   }
 
   function make(t,n){
     var c=CFG[tier(t)];
     if(!c)return null;
-    n=Math.max(1,Math.floor(Number(n)||1));
+    n=Math.max(1,Math.min(STACK_MAX,Math.floor(Number(n)||1)));
     return {
       uid:c.refId,refId:c.refId,
       name:c.name,kind:'resource',
@@ -91,17 +143,11 @@
     n=Math.max(1,Math.floor(Number(n)||1));
     try{
       if(!Array.isArray(INV.bag))INV.bag=[];
-      var it=find(c.tier);
-      if(!it){
-        if(INV.bag.length>=100){
-          if(!silent&&typeof showPickup==='function')showPickup('Сумка полна · сундук не помещается','#ff8c78');
-          return 0;
-        }
-        it=make(c.tier,n);
-        INV.bag.push(it);
-      }else{
-        setCount(it,count(it)+n);
-        it.img=c.img;
+      var template=make(c.tier,Math.min(n,STACK_MAX));
+      var moved=mergeChestIntoArray(INV.bag,template,n);
+      if(moved!==n){
+        if(!silent&&typeof showPickup==='function')showPickup('Недостаточно места для сундуков ОХ','#ff8c78');
+        return 0;
       }
       if(!silent&&typeof showPickup==='function')showPickup(c.name+' ×'+n,c.color);
       return n;
@@ -172,6 +218,91 @@
     return ok;
   }
 
+  function storageArray(key){
+    try{
+      if(key==='bag'||key==='inventory')return INV.bag;
+      if(!INV.storage)return null;
+      if(key==='personal'||key==='clan'||key==='premium')return INV.storage[key];
+    }catch(_){}
+    return null;
+  }
+
+  function storageKey(v){
+    v=String(v||'').trim().toLowerCase();
+    if(/premium|прем/.test(v))return 'premium';
+    if(/personal|личн/.test(v))return 'personal';
+    if(/clan|клан/.test(v))return 'clan';
+    if(/bag|inventory|инвентар|сумк/.test(v))return 'bag';
+    return '';
+  }
+
+  function syncChestMove(){
+    try{saveGame()}catch(_){}
+    try{sendInvState();sendStorageState();sendAuctionState();updateUI()}catch(_){}
+  }
+
+  function moveChestStack(from,to,idx){
+    idx=Math.floor(Number(idx));
+    if(!Array.isArray(from)||!Array.isArray(to)||idx<0||idx>=from.length)return false;
+    var item=from[idx],c=config(item);
+    if(!c)return false;
+    var n=count(item);
+    if(n<=0){from.splice(idx,1);syncChestMove();return true}
+    if(availableChestCapacity(to,c.tier)<n){
+      try{showPickup('Недостаточно места · сундуки складываются до 999 в ячейке','#ff8c78')}catch(_){}
+      return true;
+    }
+    var moved=mergeChestIntoArray(to,item,n);
+    if(moved!==n){
+      try{showPickup('Не удалось переместить весь стек сундуков','#ff7777')}catch(_){}
+      return true;
+    }
+    from.splice(idx,1);
+    syncChestMove();
+    try{showPickup(c.name+' ×'+n+' перемещён',c.color)}catch(_){}
+    return true;
+  }
+
+  function installStorageHooks(){
+    if(window.__PPA_STAT_CHEST_STORAGE_HOOKS_V663)return true;
+    if(typeof window.storageMove!=='function')return false;
+
+    var base=window.storageMove;
+    window.storageMove=function(mode,direction,idx,source){
+      var i=Math.floor(Number(idx));
+      var m=storageKey(mode),src=storageKey(source);
+      var dir=String(direction||'').toLowerCase();
+      var take=/take|out|withdraw|get|забрат|взят|получ/.test(dir);
+      var put=/put|in|deposit|store|полож|сдат|вклад/.test(dir);
+
+      try{
+        if(src==='premium'||src==='personal'||src==='clan'){
+          var from=storageArray(src);
+          if(from&&config(from[i])&&(!put||take))return moveChestStack(from,INV.bag,i);
+        }
+        if(src==='bag'){
+          var target=storageArray(m);
+          if(target&&config(INV.bag&&INV.bag[i]))return moveChestStack(INV.bag,target,i);
+        }
+        if(m==='premium'||m==='personal'||m==='clan'){
+          var box=storageArray(m);
+          var storageItem=box&&box[i];
+          var bagItem=INV.bag&&INV.bag[i];
+          if(take&&storageItem&&config(storageItem))return moveChestStack(box,INV.bag,i);
+          if(put&&bagItem&&config(bagItem))return moveChestStack(INV.bag,box,i);
+          if(storageItem&&config(storageItem)&&!(bagItem&&config(bagItem)))return moveChestStack(box,INV.bag,i);
+          if(bagItem&&config(bagItem)&&!(storageItem&&config(storageItem)))return moveChestStack(INV.bag,box,i);
+        }
+      }catch(e){
+        console.warn('PPA OX chest storage move',e);
+      }
+      return base.apply(this,arguments);
+    };
+
+    window.__PPA_STAT_CHEST_STORAGE_HOOKS_V663=true;
+    return true;
+  }
+
   function installAuctionHooks(){
     if(window.__PPA_STAT_CHEST_AUCTION_HOOKS_V662)return true;
     if(typeof window.auctionItemsForUi!=='function'||typeof window.auctionAttachMinPrices!=='function')return false;
@@ -221,10 +352,13 @@
   }
 
   function bootAuction(){
-    if(installAuctionHooks())return;
+    var a=installAuctionHooks();
+    var b=installStorageHooks();
+    if(a&&b)return;
     setTimeout(bootAuction,350);
   }
 
+  window.PPA_STAT_CHEST_STACK_MAX=STACK_MAX;
   window.PPA_STAT_CHEST_CONFIG=CFG;
   window.PPA_STAT_CHEST_TIER=tier;
   window.PPA_STAT_CHEST_CONFIG_FROM_ITEM=config;
