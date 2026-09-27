@@ -4,11 +4,14 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const indexPath = path.join(ROOT, 'public', 'index.html');
 const eventPath = path.join(ROOT, 'gateway', 'mimic-sombrero-event.js');
+const arenaPath = path.join(ROOT, 'gateway', 'mimic-sombrero-arena.js');
 if (!fs.existsSync(indexPath)) throw new Error('public/index.html not found; run node build.mjs first');
 if (!fs.existsSync(eventPath)) throw new Error('gateway/mimic-sombrero-event.js not found');
+if (!fs.existsSync(arenaPath)) throw new Error('gateway/mimic-sombrero-arena.js not found');
 
 let html = fs.readFileSync(indexPath, 'utf8');
 const code = fs.readFileSync(eventPath, 'utf8');
+const arenaCode = fs.readFileSync(arenaPath, 'utf8');
 const marker = '<!-- PPA_MIMIC_SOMBRERO_EVENT_V2 -->';
 const key = 'v658-mimic-background-resume-20260927';
 html = html
@@ -100,12 +103,20 @@ for (const required of [
   '50000',
   'mimic-sombrero-event.js',
   'mimic-sombrero-event-card.webp',
-  'ppa_mimic_sombrero_run_v1',
-  'БОЙ С МИМИКОМ ВОССТАНОВЛЕН',
-  'visibilitychange',
+  'mimic-sombrero-arena.js',
   key
 ]) {
   if (!html.includes(required)) throw new Error('Mimic Sombrero validation missing: ' + required);
+}
+if(!arenaCode.includes("RUN_KEY='ppa_mimic_sombrero_run_v1'") ||
+   !arenaCode.includes("document.addEventListener('visibilitychange'") ||
+   !arenaCode.includes("window.addEventListener('pagehide'") ||
+   !arenaCode.includes("window.addEventListener('pageshow'") ||
+   !arenaCode.includes('БОЙ С МИМИКОМ ВОССТАНОВЛЕН') ||
+   arenaCode.includes('PPA_MIMIC_SOMBRERO_TEST_MODE') ||
+   arenaCode.includes('PPA_SET_MIMIC_SOMBRERO_TEST_MODE') ||
+   arenaCode.includes('testMode()')){
+  throw new Error('Mimic background resume/release arena validation failed');
 }
 fs.writeFileSync(indexPath, html, 'utf8');
 console.log('[PPA POSTBUILD] v658: stable mobile FPS preserved; Mimic fight resumes after app background/reload.');
