@@ -293,7 +293,7 @@ if(!html.includes(KEY)||!html.includes(DESKTOP_LOADER_MARK)||!html.includes('/ga
 }
 if(html.includes('V656 DESKTOP TELEGRAM MOUSE + HOTKEY INPUT')||
    html.includes('function ppaPcTickMove()')||
-   html.includes('requestAnimationFrame(loop)')){
+   html.includes('window.PPA_PC_INPUT_DEBUG')){
   throw new Error('Desktop PC input runtime leaked back into shared mobile HTML');
 }
 if (html === before) throw new Error('No changes applied to public/index.html');
