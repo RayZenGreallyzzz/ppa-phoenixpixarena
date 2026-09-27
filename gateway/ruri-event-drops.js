@@ -33,7 +33,10 @@
   window.PPA_RURI_EVENT_RESOURCES=RES;
   window.PPA_RURI_EVENT_SCHEDULE=scheduleInfo;
   window.PPA_RURI_EVENT_IS_ACTIVE=function(){
-    try{return scheduleInfo().active===true}catch(_){return false}
+    try{
+      if(typeof window.PPA_SERVER_CLOCK_READY==='function'&&window.PPA_SERVER_CLOCK_READY()!==true)return false;
+      return scheduleInfo().active===true;
+    }catch(_){return false}
   };
 
   function active(){
