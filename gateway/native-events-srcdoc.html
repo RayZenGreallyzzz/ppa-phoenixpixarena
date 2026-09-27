@@ -120,7 +120,7 @@ button{font:inherit}
 <script>
 const RURI_ART='__PPA_RURI_CARD__';
 const TITAN_ART='__PPA_TITAN_ART__';
-const state={titanShards:0,mimicTickets:0,mimicEvent:{active:false,test:false,adminTestAllowed:false,end:0,nextStart:0,days:5,startDay:25},ruri:{resources:{demonic:0,fire:0,blood:0,crystal:0},need:{demonic:72,fire:10,blood:7,crystal:11},owned:false,bagFull:false,canCraft:false},worldBoss:{available:true,killedThisCycle:false,nextResetAt:0,resetHour:18},clanSiege:{ready:true,nextAt:0,remainingMs:0,text:'ОСАДА ДОСТУПНА'}};
+const state={titanShards:0,mimicTickets:0,mimicEvent:{active:false,test:false,adminTestAllowed:false,end:0,nextStart:0,days:5,startDay:25},ruriEvent:{active:false,end:0,nextStart:0,days:10,startDay:1},ruri:{resources:{demonic:0,fire:0,blood:0,crystal:0},need:{demonic:72,fire:10,blood:7,crystal:11},owned:false,bagFull:false,canCraft:false},worldBoss:{available:true,killedThisCycle:false,nextResetAt:0,resetHour:18},clanSiege:{ready:true,nextAt:0,remainingMs:0,text:'ОСАДА ДОСТУПНА'}};
 let currentCat='game',currentEvent='ruri',toastTimer=0;
 
 const offers=[
@@ -147,6 +147,15 @@ function titanStatus(){
   const w=state.worldBoss||{},now=Date.now(),reset=Number(w.nextResetAt)||0;
   const available=!!w.available||(reset>0&&now>=reset);
   return available?{label:'АКТИВНО',timer:'Доступен · ежедневный откат в 18:00',locked:false}:{label:'ОТКАТ',timer:'До отката 18:00: '+timeClock(reset-now),locked:true};
+}
+function ruriStatus(){
+  const r=state.ruriEvent||{},now=Date.now();
+  if(r.active){
+    const end=Number(r.end)||0;
+    return{label:'АКТИВНО',timer:end?'Осталось '+timeLeft(end-now):'Событие активно',locked:false};
+  }
+  const next=Number(r.nextStart)||0;
+  return{label:'ЗАВЕРШЕНО',timer:next?'Следующий запуск через '+timeLeft(next-now):'Запуск 1-го числа · 10 дней',locked:true};
 }
 function mimicStatus(){
   const m=state.mimicEvent||{},now=Date.now();
@@ -184,11 +193,12 @@ function render(){
     return;
   }
   if(currentEvent==='ruri'){
+    const st=ruriStatus();
     const rs=state.ruri||{resources:{},need:{demonic:72,fire:10,blood:7,crystal:11},owned:false,bagFull:false,canCraft:false};
     const h=rs.resources||{},n=rs.need||{demonic:72,fire:10,blood:7,crystal:11};
     function mat(src,label,key){const have=Math.max(0,Number(h[key])||0),need=Math.max(0,Number(n[key])||0),ok=have>=need;return '<div class="ruriMatWrap '+(ok?'ok':'')+'" title="'+label+'"><div class="ruriMat"><img src="'+src+'" alt="'+label+'"></div><div class="ruriMatCount">'+have+' / '+need+'</div></div>'}
     const craftLabel=rs.owned?'РУРИ УЖЕ ПОЛУЧЕН':(rs.bagFull?'НЕТ МЕСТА В СУМКЕ':(rs.canCraft?'СОЗДАТЬ ВЕЛИКОГО РУРИ':'НЕ ХВАТАЕТ РЕСУРСОВ'));
-    v.innerHTML='<div class="hero">'+artBlock(RURI_ART,'🔥','Великий Рури')+'<div class="info"><h2>🔥 Великий Рури</h2><div class="status">● АКТИВНО · ТЕСТОВЫЙ ЗАПУСК</div><p>Ограниченное событие длится 10 дней каждый месяц. Собранные ресурсы после окончания не исчезают и сохраняются до следующего запуска.</p><p><b>Великий Рури сам атакует врагов хозяина огненной магией. Урон питомца — 20% от силы атаки хозяина.</b></p><h3>ДРОП РЕСУРСОВ</h3><p>Демонический кристалл — обычные мобы 1–60 · 0,05%</p><p>Огненные осколки — элита 1–60 · 0,8%</p><p>Кровь монстра — боссы 20 / 40 / 60 · 1,5% / 2,5% / 4%</p><p>Хрустальный кристалл — мировой босс · 8%</p><h3>КРАФТ ВЕЛИКОГО РУРИ</h3><div class="recipe">72 Демонических + 10 Огненных + 7 Крови монстра + 11 Хрустальных</div><div class="ruriMatGrid">'+
+    v.innerHTML='<div class="hero">'+artBlock(RURI_ART,'🔥','Великий Рури')+'<div class="info"><h2>🔥 Великий Рури</h2><div class="status'+(st.locked?' locked':'')+'" id="liveStatus">'+st.label+' · '+st.timer+'</div><p>Ограниченное событие длится 10 дней каждый месяц. Собранные ресурсы после окончания не исчезают и сохраняются до следующего запуска.</p><p><b>Великий Рури сам атакует врагов хозяина огненной магией. Урон питомца — 20% от силы атаки хозяина.</b></p><h3>ДРОП РЕСУРСОВ</h3><p>Демонический кристалл — обычные мобы 1–60 · 0,05%</p><p>Огненные осколки — элита 1–60 · 0,8%</p><p>Кровь монстра — боссы 20 / 40 / 60 · 1,5% / 2,5% / 4%</p><p>Хрустальный кристалл — мировой босс · 8%</p><h3>КРАФТ ВЕЛИКОГО РУРИ</h3><div class="recipe">72 Демонических + 10 Огненных + 7 Крови монстра + 11 Хрустальных</div><div class="ruriMatGrid">'+
       mat('/assets/ruri-demonic-crystal.webp?v=v531','Демонич.','demonic')+
       mat('/assets/ruri-fire-shards.webp?v=v531','Огненные','fire')+
       mat('/assets/ruri-monster-blood.webp?v=v531','Кровь','blood')+
@@ -264,6 +274,7 @@ window.addEventListener('message',e=>{
     state.titanShards=Math.max(0,Number(d.titanShards)||0);
     state.mimicTickets=Math.max(0,Number(d.mimicTickets)||0);
     if(d.mimicEvent&&typeof d.mimicEvent==='object')state.mimicEvent=d.mimicEvent;
+    if(d.ruriEvent&&typeof d.ruriEvent==='object')state.ruriEvent=d.ruriEvent;
     if(d.ruri&&typeof d.ruri==='object')state.ruri=d.ruri;
     if(d.worldBoss&&typeof d.worldBoss==='object')state.worldBoss=d.worldBoss;
     if(d.clanSiege&&typeof d.clanSiege==='object')state.clanSiege=d.clanSiege;
@@ -282,9 +293,9 @@ window.addEventListener('message',e=>{
 });
 setInterval(()=>{
   if(document.hidden)return;
-  if(currentEvent==='titan'||currentEvent==='citadel'||currentEvent==='mimic'){
+  if(currentEvent==='titan'||currentEvent==='citadel'||currentEvent==='mimic'||currentEvent==='ruri'){
     const el=document.getElementById('liveStatus');if(!el)return;
-    const st=currentEvent==='titan'?titanStatus():(currentEvent==='mimic'?mimicStatus():citadelStatus());
+    const st=currentEvent==='titan'?titanStatus():(currentEvent==='mimic'?mimicStatus():(currentEvent==='ruri'?ruriStatus():citadelStatus()));
     el.className='status'+(st.locked?' locked':'');
     el.textContent=st.label+' · '+st.timer;
   }
