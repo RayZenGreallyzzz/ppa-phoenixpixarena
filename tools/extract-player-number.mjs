@@ -13,3 +13,14 @@ for(const needle of ['function drawPlayer','drawPlayerNickname','fillText(','str
   }
 }
 fs.writeFileSync('diag-player-number.txt',out);
+
+const defs=['PALADIN_ANIM','TANK_ANIM','BERSERKER_ANIM','ASSASSIN_ANIM','ARCHER_ANIM','PRIEST_ANIM','MAGE_ANIM','GNOME_ANIM','PALADIN_RUN','PALADIN_IDLE','PALADIN_ATTACK'];
+let defsOut='';
+for(const n of defs){
+  let p=0,c=0;
+  while((p=src.indexOf(n,p))>=0&&c<30){
+    defsOut+='\n===== DEF '+n+' #'+(++c)+' @ '+p+' =====\n'+src.slice(Math.max(0,p-1800),Math.min(src.length,p+5000));
+    p+=n.length;
+  }
+}
+fs.writeFileSync('diag-player-assets.txt',defsOut);
