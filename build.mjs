@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v608-phoenix-real-city-gate-20260928';
+const CLIENT_BUILD = 'v609-phoenix-immediate-telegram-ready-20260928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -301,7 +301,9 @@ output = output.replace(
 
 output = output.replace(
   '<script src="https://telegram.org/js/telegram-web-app.js?63"></script>',
-  '<script src="https://telegram.org/js/telegram-web-app.js?63"></script>\n<script defer src="https://unpkg.com/@tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js" data-ppa-tonconnect="1"></script>'
+  '<script src="https://telegram.org/js/telegram-web-app.js?63"></script>\n'+
+  '<script id="ppaBootTelegramReady">(function(){try{var w=window.Telegram&&window.Telegram.WebApp;if(!w)return;try{w.setBackgroundColor(\'#050302\')}catch(_){}try{w.setHeaderColor(\'#050302\')}catch(_){}try{w.ready()}catch(_){}try{w.expand()}catch(_){}}catch(_){}})();<\\/script>\n'+
+  '<script defer src="https://unpkg.com/@tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js" data-ppa-tonconnect="1"></script>'
 );
 if (!output.includes('data-ppa-tonconnect="1"')) {
   throw new Error('TON Connect preload did not apply');
@@ -324,7 +326,8 @@ const PPA_BOOT_INLINE_CSS=
   '@media(max-height:650px){#ppaBootHud{height:34vh!important;min-height:165px!important;padding-top:14px!important}#ppaBootTagline{margin-top:7px!important;padding-top:6px!important}}';
 
 const PPA_BOOT_SEED=
-  '<style id="ppaBootInlineStyle">'+PPA_BOOT_INLINE_CSS+'</style>'+
+  '<meta name="theme-color" content="#050302">'+
+  '<style id="ppaBootInlineStyle">html,body{background:#050302!important}'+PPA_BOOT_INLINE_CSS+'</style>'+
   '<script>document.documentElement.classList.add("ppaBootActive");</script>'+
   '<script>window.PPA_CLIENT_BUILD='+JSON.stringify(CLIENT_BUILD)+';window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=false;window.PPA_TEST_ALL_DUNGEONS=false;</script>'+
   '<script id="ppaBootInlineRuntime">'+PPA_VISUAL_BOOT_RUNTIME+'</script>';
