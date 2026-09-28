@@ -169,7 +169,7 @@ async function playerIdentity(env, user) {
   ).bind(id).first();
   return {
     pid,
-    name: cleanName((player && player.nickname) || user.first_name || user.username || 'Игрок'),
+    name: cleanName((player && player.nickname) || 'Игрок'),
     classKey: String((player && player.class_key) || '').slice(0, 24),
     clanId: member ? String(member.clan_id || '').slice(0, 80) : '',
     clanName: member ? String(member.clan_name || '').trim().slice(0, 24) : '',
