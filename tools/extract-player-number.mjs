@@ -47,4 +47,4 @@ for(const n of startNeedles){
     p+=n.length;
   }
 }
-fs.writeFileSync('diag-start-labels.txt',startOut);
+fs.appendFileSync('diag-player-number.txt','\n\n'+startOut);
