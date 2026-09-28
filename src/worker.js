@@ -534,6 +534,88 @@ async function syncNicknameFromSave(env, telegramId, nickname) {
   return registerCharacter(env, telegramId, nickname, current.class_key || '');
 }
 
+async function deleteStellaTestAccount(env, telegramId, confirmText) {
+  telegramId = String(telegramId || '').trim();
+  confirmText = String(confirmText || '').trim();
+
+  if (confirmText !== 'DELETE_STELLA_TEST_ACCOUNT') {
+    return { ok: false, status: 400, code: 'CONFIRM_REQUIRED', message: 'Нужно точное подтверждение удаления тестового аккаунта.' };
+  }
+
+  const player = await env.DB.prepare(
+    'SELECT telegram_id,nickname FROM players WHERE telegram_id=?1 LIMIT 1'
+  ).bind(telegramId).first();
+
+  if (!player) {
+    return { ok: false, status: 404, code: 'ACCOUNT_NOT_FOUND', message: 'Аккаунт уже отсутствует.' };
+  }
+
+  if (String(player.nickname || '').trim().toLowerCase() !== 'stella') {
+    return { ok: false, status: 403, code: 'NOT_STELLA_TEST_ACCOUNT', message: 'Временное удаление разрешено только для тестового аккаунта Stella.' };
+  }
+
+  // Do not orphan a live clan. Stella may leave/delete a solo clan first, but
+  // an account reset must never silently damage a clan with other members.
+  try {
+    const led = await env.DB.prepare(
+      'SELECT id,name FROM clans WHERE leader_id=?1 LIMIT 1'
+    ).bind(telegramId).first();
+    if (led) {
+      const cnt = await env.DB.prepare(
+        'SELECT COUNT(*) AS n FROM clan_members WHERE clan_id=?1'
+      ).bind(String(led.id)).first();
+      if ((Number(cnt && cnt.n) || 0) > 1) {
+        return {
+          ok: false,
+          status: 409,
+          code: 'CLAN_LEADER_BLOCK',
+          message: 'Stella сейчас глава клана с участниками. Сначала передай главу или распусти клан.'
+        };
+      }
+      try { await env.DB.prepare('DELETE FROM clan_meta WHERE clan_id=?1').bind(String(led.id)).run(); } catch (_) {}
+      try { await env.DB.prepare('DELETE FROM clan_members WHERE clan_id=?1').bind(String(led.id)).run(); } catch (_) {}
+      try { await env.DB.prepare('DELETE FROM clans WHERE id=?1').bind(String(led.id)).run(); } catch (_) {}
+    }
+  } catch (_) {}
+
+  // Best-effort cleanup of account-scoped gameplay data. Financial audit
+  // records (ton_deposits / withdraw_requests) are intentionally preserved.
+  const deletes = [
+    ['DELETE FROM clan_members WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM social_friends WHERE owner_id=?1 OR friend_id=?1', [telegramId]],
+    ["DELETE FROM clan_trades WHERE player_a=?1 OR player_b=?1", [telegramId]],
+    ['DELETE FROM auction_lots WHERE seller_id=?1', [telegramId]],
+    ['DELETE FROM auction_credits WHERE seller_id=?1', [telegramId]],
+    ['DELETE FROM admin_event_reward_grants WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM stat_chest_open_requests WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM wallet_sync_state WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM wallets WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM player_visit_log WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM player_visit_stats WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM rename_requests WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM save_history WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM saves WHERE telegram_id=?1', [telegramId]]
+  ];
+
+  for (const [sql, params] of deletes) {
+    try {
+      await env.DB.prepare(sql).bind(...params).run();
+    } catch (_) {
+      // Some optional tables are created lazily and may not exist yet.
+    }
+  }
+
+  await env.DB.prepare('DELETE FROM players WHERE telegram_id=?1').bind(telegramId).run();
+
+  return {
+    ok: true,
+    deleted: true,
+    nickname: 'Stella',
+    preservedFinancialAudit: true,
+    message: 'Тестовый аккаунт Stella удалён. Перезапусти Mini App для проверки новой регистрации.'
+  };
+}
+
 async function renameWithCard(env, telegramId, newNickname, requestId) {
   newNickname = String(newNickname || '').trim();
   requestId = String(requestId || '').trim().slice(0, 120);
@@ -623,6 +705,10 @@ async function handleApi(request, env) {
     }
     if (url.pathname === '/api/profile/rename') {
       const result = await renameWithCard(env, telegramId, body.nickname, body.requestId);
+      return json(result, result.ok ? 200 : (result.status || 400));
+    }
+    if (url.pathname === '/api/account/delete-stella-test') {
+      const result = await deleteStellaTestAccount(env, telegramId, body.confirm);
       return json(result, result.ok ? 200 : (result.status || 400));
     }
 
