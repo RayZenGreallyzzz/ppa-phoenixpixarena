@@ -55,3 +55,26 @@ for(const term of ['requestAnimationFrame','performance.now()','deltaTime','func
     pos+=term.length;
   }
 }
+
+
+console.log('\n===== DUNGEON GEOMETRY / DRAW =====');
+for(const term of [
+  'function dgSlide',
+  'function dgPointInRoom',
+  'function dgClampToRoom',
+  'DG_ROOMS',
+  'DG_ACTIVE_SPAWNS',
+  'DUNGEON_ROOMS',
+  "dungeon:{",
+  "scene==='dungeon'",
+  'drawDungeon',
+  'function draw(',
+  'function render('
+]){
+  let pos=0,n=0;
+  while((pos=src.indexOf(term,pos))>=0&&n<20){
+    const lo=Math.max(0,pos-7000),hi=Math.min(src.length,pos+14000);
+    console.log('\n--- DUNGEON '+term+' '+(++n)+' @ '+pos+' ---\n'+src.slice(lo,hi));
+    pos+=term.length;
+  }
+}
