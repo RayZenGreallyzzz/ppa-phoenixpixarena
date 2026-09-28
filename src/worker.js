@@ -166,7 +166,33 @@ async function nicknameOwner(env, key) {
   return env.DB.prepare('SELECT telegram_id, nickname FROM players WHERE nickname_key=?1 LIMIT 1').bind(key).first();
 }
 
-async function upsertBoundInitialSave(env, telegramId, profile, nickname, classKey) {
+function makeNewbieChestSaveItem() {
+  return {
+    uid: 'newbie_chest_gray_v1',
+    refId: 'newbie_chest_gray_v1',
+    newbieChest: true,
+    kind: 'newbieChest',
+    name: 'Серый сундук новичка',
+    rarity: 'common',
+    rarityName: 'Обычный',
+    icon: '🎁',
+    ic: '🎁',
+    img: '/assets/newbie-chest-gray.webp',
+    image: '/assets/newbie-chest-gray.webp',
+    art: '/assets/newbie-chest-gray.webp',
+    cardArt: '/assets/newbie-chest-gray.webp',
+    iconArt: '/assets/newbie-chest-gray.webp',
+    count: 1,
+    qty: 1,
+    amount: 1,
+    bound: true,
+    tradeLocked: true,
+    sell: 0,
+    desc: 'Полный серый комплект текущего класса · 4 активных гримуара I ранга · 100 малых HP · 100 малых MP.'
+  };
+}
+
+async function upsertBoundInitialSave(env, telegramId, profile, nickname, classKey, grantNewbieChest = false) {
   const row = await env.DB.prepare('SELECT version, state_json FROM saves WHERE telegram_id=?1').bind(telegramId).first();
   let state = parseStateJson(row && row.state_json) || {};
   const before = JSON.stringify(state);
@@ -183,6 +209,17 @@ async function upsertBoundInitialSave(env, telegramId, profile, nickname, classK
   state.profileTelegramId = String(telegramId);
   state.gatewayProfileBound = true;
   state.registrationSavedAt = Number(state.registrationSavedAt) || Date.now();
+
+  if (grantNewbieChest) {
+    state.bag = Array.isArray(state.bag) ? state.bag : [];
+    const already = state.bag.some((it) => it && (
+      it.newbieChest === true ||
+      String(it.refId || '') === 'newbie_chest_gray_v1' ||
+      String(it.uid || '') === 'newbie_chest_gray_v1'
+    ));
+    if (!already) state.bag.push(makeNewbieChestSaveItem());
+    state.newbieChestGranted = true;
+  }
 
   const after = JSON.stringify(state);
   const now = Date.now();
@@ -211,6 +248,7 @@ async function registerCharacter(env, telegramId, nickname, classKey) {
   const key = nickKey(nickname);
   const current = await env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(telegramId).first();
   if (!current) return { ok: false, status: 404, message: 'Профиль Telegram не найден.' };
+  const firstCharacterRegistration = !String(current.nickname_key || '').trim();
 
   if (current.nickname_key && current.nickname_key !== key) {
     return { ok: false, status: 409, message: 'Персонаж для этого Telegram ID уже создан. Для смены имени нужна карточка.' };
@@ -230,8 +268,14 @@ async function registerCharacter(env, telegramId, nickname, classKey) {
   `).bind(nickname, key, normalizeClass(classKey), now, telegramId).run();
 
   const profile = profileFromRow(await env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(telegramId).first());
-  const save = await upsertBoundInitialSave(env, telegramId, profile, nickname, classKey);
-  return { ok: true, profile, save, telegramId: String(telegramId) };
+  const save = await upsertBoundInitialSave(env, telegramId, profile, nickname, classKey, firstCharacterRegistration);
+  return {
+    ok: true,
+    profile,
+    save,
+    telegramId: String(telegramId),
+    newbieChestGranted: firstCharacterRegistration
+  };
 }
 
 async function loadSave(env, telegramId) {
