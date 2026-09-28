@@ -34,6 +34,6 @@ for(const n of palNames){
   const m=src.match(re);
   palOut += '\n###'+n+'###\n'+(m?m[1]:'NOT_FOUND')+'\n';
 }
-fs.writeFileSync('diag-paladin-sheets-base64.txt',palOut);
+fs.appendFileSync('diag-player-number.txt','\n\n'+palOut);
 
 // trigger paladin alignment audit
