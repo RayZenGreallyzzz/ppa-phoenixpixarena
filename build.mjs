@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v613-dungeon-native-hires-normalize-20260928';
+const CLIENT_BUILD = 'v614-dungeon-layout-build-fix-20260928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -1654,13 +1654,14 @@ ppaPatchRegex(
   "function spawnMobAtPoint(si,fx){if(window.PPA_DUNGEON_LAYOUT_TEST)return;if(window.PPA_REALTIME_V2_ACTIVE&&P&&P.scene==='dungeon'&&!window.__PPA_SERVER_SPAWN_CALL)return;"
 );
 
-ppaPatchRegex(
-  'dungeon layout test no enemies',
-  /function\s+update\(\)\s*\{\s*if\(P\.dead\)return;/,
-  "function update(){\n  if(P.dead)return;\n  if(window.PPA_DUNGEON_LAYOUT_TEST&&P.scene==='dungeon'&&Array.isArray(EN)&&EN.length){EN.length=0;}"
-);
-if(!output.includes("window.PPA_DUNGEON_LAYOUT_TEST&&P.scene==='dungeon'&&Array.isArray(EN)")){
-  throw new Error('Dungeon layout test enemy-clear hook did not apply');
+// Layout-test boss gate: block any spawn*Boss() while the player is in the regular dungeon.
+{
+  const _beforeDungeonBossGate=output;
+  output=output.replace(
+    /function\s+(spawn[A-Za-z0-9_$]*Boss)\s*\(([^)]*)\)\s*\{/g,
+    "function $1($2){if(window.PPA_DUNGEON_LAYOUT_TEST&&typeof P!=='undefined'&&P&&P.scene==='dungeon')return;"
+  );
+  console.log('[PPA BUILD] dungeon layout test boss spawn gates: '+(_beforeDungeonBossGate===output?'0':'patched'));
 }
 
 ppaPatchRegex(
