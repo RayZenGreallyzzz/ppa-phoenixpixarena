@@ -317,6 +317,52 @@ const catchPatch = "  }catch(err){\n    console.error('PPA Gateway bootstrap:',e
 if (!output.includes(catchNeedle)) throw new Error('PPA Gateway cloud-only fallback target not found');
 output = output.replace(catchNeedle, catchPatch);
 
+// New Telegram characters must be registered on the server BEFORE entering
+// the world. The packed client used to post classChosen and immediately call
+// beginGame(), which left nickname/save/starter rewards racing behind it.
+const classChosenStartNeedle = "    applyClass(d.cls);beginGame();\n  }\n  else if(d.type==='closeChar')";
+const classChosenStartPatch = `    var _ppaStartChosen=function(){
+      applyClass(d.cls);beginGame();
+    };
+    if(ppaCloudBridgeAvailable()&&window.PPA&&typeof PPA.ppaRegisterCharacter==='function'){
+      var _ppaClassKey='';
+      try{_ppaClassKey=String(classKeyFromName(d.cls&&d.cls.name)||'')}catch(_){}
+      var _ppaChooseBtn=null;
+      try{
+        var _ppaClassFrame=document.getElementById('classSelectFrame');
+        _ppaChooseBtn=_ppaClassFrame&&_ppaClassFrame.contentDocument?_ppaClassFrame.contentDocument.getElementById('choose'):null;
+        if(_ppaChooseBtn)_ppaChooseBtn.disabled=true;
+      }catch(_){}
+      Promise.resolve(PPA.ppaRegisterCharacter(_nick,_ppaClassKey)).then(function(_ppaReg){
+        var _ppaServerNick=String((_ppaReg&&_ppaReg.profile&&_ppaReg.profile.nickname)||_nick||'').trim();
+        if(_ppaServerNick){
+          try{INV.playerName=_ppaServerNick}catch(_){}
+          try{window.PPA_PLAYER_NAME=_ppaServerNick}catch(_){}
+          try{localStorage.setItem('ppaPlayerNameV205',_ppaServerNick)}catch(_){}
+          try{if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE)PPA_ONLINE.selfName=_ppaServerNick}catch(_){}
+        }
+        try{if(_ppaReg&&_ppaReg.profile)PPA_CLOUD.profile=_ppaReg.profile}catch(_){}
+        _ppaStartChosen();
+      }).catch(function(_ppaErr){
+        var _ppaMsg=String((_ppaErr&&_ppaErr.message)||_ppaErr||'Не удалось создать персонажа');
+        try{
+          var _ppaFr=document.getElementById('classSelectFrame');
+          var _ppaHint=_ppaFr&&_ppaFr.contentDocument?_ppaFr.contentDocument.getElementById('nickHint'):null;
+          if(_ppaHint){_ppaHint.textContent=_ppaMsg;_ppaHint.classList.add('bad')}
+        }catch(_){}
+        console.warn('PPA character registration:',_ppaErr);
+      }).finally(function(){
+        try{if(_ppaChooseBtn)_ppaChooseBtn.disabled=false}catch(_){}
+      });
+      return;
+    }
+    _ppaStartChosen();
+  }
+  else if(d.type==='closeChar')`;
+if (!output.includes(classChosenStartNeedle)) throw new Error('PPA classChosen server registration target not found');
+output = output.replace(classChosenStartNeedle, classChosenStartPatch);
+console.log('[PPA BUILD] Character registration now completes before beginGame');
+
 const saveToolsRe = /&lt;div id=&quot;saveTools&quot;&gt;[\s\S]*?&lt;\/div&gt;\s*&lt;\/section&gt;/;
 if (!saveToolsRe.test(output)) throw new Error('PPA save tools block not found');
 const accountDeleteTools =
