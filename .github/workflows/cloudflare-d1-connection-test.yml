@@ -2,12 +2,16 @@ name: Cloudflare D1 connection test
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
   test-d1:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'Test Cloudflare D1 connection')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
