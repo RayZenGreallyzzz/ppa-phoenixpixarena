@@ -46,7 +46,26 @@ if(html.indexOf('PPA_OPEN_NEWBIE_CHEST')<0){
   html=html.slice(0,at)+newbieBranch+'\n'+html.slice(at);
 }
 
-const scriptTag='<script src="/game/newbie-chest-runtime.js?v=v1-20260928"></script>';
+// Personal storage has its own iframe click handler. Intercept the newbie chest
+// there as well so tapping it opens the same confirmation window instead of
+// merely selecting it for transfer.
+const storageClickNeedle=esc([
+  "      if(!it){selected={side:null,idx:-1};render();return}",
+  "      selected={side:side,idx:i};render();"
+].join('\n'));
+const storageClickPatch=esc([
+  "      if(!it){selected={side:null,idx:-1};render();return}",
+  "      if(it&&(it.newbieChest===true||String(it.refId||'')==='newbie_chest_gray_v1'||String(it.uid||'')==='newbie_chest_gray_v1'||String(it.name||'').toLowerCase()==='серый сундук новичка')){",
+  "        selected={side:null,idx:-1};",
+  "        try{if(parent&&typeof parent.PPA_OPEN_NEWBIE_CHEST==='function')parent.PPA_OPEN_NEWBIE_CHEST(it)}catch(_){}",
+  "        render();return;",
+  "      }",
+  "      selected={side:side,idx:i};render();"
+].join('\n'));
+if(html.indexOf(storageClickNeedle)<0)throw new Error('Newbie chest: personal storage tap target not found');
+html=html.replace(storageClickNeedle,storageClickPatch);
+
+const scriptTag='<script src="/game/newbie-chest-runtime.js?v=v2-20260928"></script>';
 if(html.indexOf(scriptTag)<0){
   const bodyEnd=html.lastIndexOf('</body>');
   if(bodyEnd<0)throw new Error('Newbie chest: parent body end missing');
@@ -56,7 +75,7 @@ if(html.indexOf(scriptTag)<0){
 const required=[
   'PPA_OPEN_NEWBIE_CHEST',
   'newbie_chest_gray_v1',
-  '/game/newbie-chest-runtime.js?v=v1-20260928'
+  '/game/newbie-chest-runtime.js?v=v2-20260928'
 ];
 for(const x of required)if(html.indexOf(x)<0)throw new Error('Newbie chest validation missing: '+x);
 
