@@ -210,8 +210,9 @@ async function upsertBoundInitialSave(env, telegramId, profile, nickname, classK
   state.gatewayProfileBound = true;
   state.registrationSavedAt = Number(state.registrationSavedAt) || Date.now();
 
-  // Newbie chest belongs to PERSONAL STORAGE, not the carried bag.
-  // Also repair the earlier buggy grant that could leave the chest in bag.
+  // Newbie chest belongs to the carried inventory so the player can open it
+  // immediately and receive the starter gear in the same bag.
+  // Repair unopened chests from the short-lived personal-storage build too.
   const chestId = 'newbie_chest_gray_v1';
   state.storage = state.storage && typeof state.storage === 'object' ? state.storage : {};
   state.storage.personal = Array.isArray(state.storage.personal) ? state.storage.personal : [];
@@ -228,18 +229,20 @@ async function upsertBoundInitialSave(env, telegramId, profile, nickname, classK
   }
 
   const bagChestIndex = state.bag.findIndex(isNewbieChest);
-  const personalHasChest = state.storage.personal.some(isNewbieChest);
+  const personalChestIndex = state.storage.personal.findIndex(isNewbieChest);
   const shouldRepairGrant = state.newbieChestGranted === true && state.newbieKitOpened !== true;
   const shouldHaveChest = grantNewbieChest || shouldRepairGrant;
 
   if (shouldHaveChest && state.newbieKitOpened !== true) {
-    if (!personalHasChest) {
-      let chest = bagChestIndex >= 0 ? state.bag.splice(bagChestIndex, 1)[0] : makeNewbieChestSaveItem();
-      if (state.storage.personal.length < 50) state.storage.personal.push(chest);
-      else if (bagChestIndex < 0) state.bag.push(chest);
-    } else if (bagChestIndex >= 0) {
-      // Remove a duplicate left by an older test build.
-      state.bag.splice(bagChestIndex, 1);
+    if (bagChestIndex < 0) {
+      const chest = personalChestIndex >= 0
+        ? state.storage.personal.splice(personalChestIndex, 1)[0]
+        : makeNewbieChestSaveItem();
+      if (state.bag.length < 100) state.bag.push(chest);
+      else state.storage.personal.push(chest); // never destroy it if a legacy bag is unexpectedly full
+    } else if (personalChestIndex >= 0) {
+      // Remove a duplicate left by the temporary personal-storage build.
+      state.storage.personal.splice(personalChestIndex, 1);
     }
     state.newbieChestGranted = true;
   }
