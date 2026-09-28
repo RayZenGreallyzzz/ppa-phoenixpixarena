@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v607-phoenix-root-overlay-20260928';
+const CLIENT_BUILD = 'v608-phoenix-real-city-gate-20260928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -104,6 +104,7 @@ if(PPA_VISUAL_BOOT_META.format!=='webp'||PPA_VISUAL_BOOT_META.width!==480||PPA_V
 }
 fs.writeFileSync(path.join(assetsDir,'ppa-start-screen.webp'),PPA_VISUAL_BOOT_BUF);
 console.log('[PPA BUILD] Safe Phoenix visual startup overlay: 480x852 WebP ready.');
+const PPA_VISUAL_BOOT_RUNTIME=fs.readFileSync(path.join(ROOT,'gateway','phoenix-visual-start.js'),'utf8');
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
 fs.writeFileSync(path.join(assetsDir,'clan-boss-chest.webp'),PPA_CLAN_BOSS_CHEST_BUF);
 for(const name of PPA_RURI_RESOURCE_FILES){
@@ -307,18 +308,39 @@ if (!output.includes('data-ppa-tonconnect="1"')) {
 }
 
 if (!output.includes('<head>')) throw new Error('PPA <head> not found');
-output = output.replace('<head>', `<head>\n<script>window.PPA_CLIENT_BUILD=${JSON.stringify(CLIENT_BUILD)};window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=false;window.PPA_TEST_ALL_DUNGEONS=false;</script>`);
 
-const PPA_VISUAL_BOOT_URL='/assets/ppa-start-screen.webp?v='+CLIENT_BUILD;
-output=output.replace('</head>',
-  '<link rel="preload" as="image" href="'+PPA_VISUAL_BOOT_URL+'">'+
-  '<script src="/game/phoenix-visual-start.js?v='+CLIENT_BUILD+'"></script></head>'
-);
-// Remove only old visible startup signatures; no startup behavior is changed.
-output=output.replace(/С\\s+любовью\\s+RayZenGX/gi,'').replace(/\\bbuild256\\b/gi,'');
-if(!output.includes('phoenix-visual-start.js')||!output.includes('ppa-start-screen.webp')){
-  throw new Error('Safe Phoenix visual startup overlay did not apply');
+const PPA_BOOT_INLINE_CSS=
+  'html.ppaBootActive::before{content:""!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;z-index:2147483645!important;background:#050302 url("data:image/webp;base64,'+PPA_VISUAL_BOOT_B64+'") center center/cover no-repeat!important;opacity:1!important;visibility:visible!important;pointer-events:none!important;transform:none!important;transform-origin:0 0!important;transition:opacity .22s ease!important}'+
+  'html.ppaBootActive.ppaBootLeaving::before{opacity:0!important}'+
+  '#ppaBootHud{position:fixed!important;left:0!important;right:0!important;bottom:0!important;height:29vh!important;min-height:190px!important;z-index:2147483646!important;display:flex!important;align-items:flex-start!important;justify-content:center!important;box-sizing:border-box!important;padding:22px 7vw max(20px,env(safe-area-inset-bottom))!important;background:linear-gradient(to bottom,rgba(5,3,2,.05) 0%,rgba(5,3,2,.94) 28%,#050302 100%)!important;pointer-events:none!important;transform:none!important;transition:opacity .22s ease!important}'+
+  'html.ppaBootLeaving #ppaBootHud{opacity:0!important}'+
+  '#ppaBootCard{width:min(680px,86vw)!important;text-align:center!important;color:#f3dfc4!important;font-family:Georgia,"Times New Roman",serif!important;text-shadow:0 2px 5px #000!important}'+
+  '#ppaBootTrack{height:16px!important;box-sizing:border-box!important;border:2px solid #9b5c25!important;border-radius:3px!important;padding:2px!important;background:#0d0907!important;box-shadow:0 0 0 1px #e0aa62 inset,0 0 12px rgba(255,116,19,.30)!important;overflow:hidden!important}'+
+  '#ppaBootFill{height:100%!important;width:4%;border-radius:1px!important;background:linear-gradient(90deg,#8b2608 0%,#e9610c 42%,#ffae22 78%,#fff0a0 100%)!important;box-shadow:0 0 12px rgba(255,126,24,.9)!important;transition:width .12s linear!important}'+
+  '#ppaBootPercent{margin-top:7px!important;font-size:clamp(15px,2.8vw,23px)!important;font-weight:700!important;letter-spacing:.08em!important;color:#f5dfbd!important}'+
+  '#ppaBootStatus{margin-top:2px!important;font-size:clamp(17px,3.2vw,27px)!important;letter-spacing:.035em!important;color:#f0dcc2!important}'+
+  '#ppaBootFirst{margin:8px auto 0!important;font-size:clamp(11px,2.2vw,17px)!important;line-height:1.3!important;color:#cdb28f!important}'+
+  '#ppaBootTagline{margin:12px auto 0!important;padding-top:9px!important;border-top:1px solid rgba(210,149,74,.42)!important;font-size:clamp(13px,2.5vw,20px)!important;color:#e2c291!important}'+
+  '@media(max-height:650px){#ppaBootHud{height:34vh!important;min-height:165px!important;padding-top:14px!important}#ppaBootTagline{margin-top:7px!important;padding-top:6px!important}}';
+
+const PPA_BOOT_SEED=
+  '<style id="ppaBootInlineStyle">'+PPA_BOOT_INLINE_CSS+'</style>'+
+  '<script>document.documentElement.classList.add("ppaBootActive");</script>'+
+  '<script>window.PPA_CLIENT_BUILD='+JSON.stringify(CLIENT_BUILD)+';window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=false;window.PPA_TEST_ALL_DUNGEONS=false;</script>'+
+  '<script id="ppaBootInlineRuntime">'+PPA_VISUAL_BOOT_RUNTIME+'</script>';
+
+output=output.replace('<head>','<head>'+PPA_BOOT_SEED);
+output=output.replace(/С\s+любовью\s+RayZenGX/gi,'').replace(/\bbuild256\b/gi,'');
+if(!output.includes('ppaBootInlineRuntime')||!output.includes('ppaBootActive')){
+  throw new Error('Phoenix real startup cover did not apply');
 }
+
+{
+  const re=/(async\s+)?function\s+beginGame\s*\(\s*\)\s*\{/;
+  if(!re.test(output))throw new Error('beginGame signal target not found');
+  output=output.replace(re,(m)=>m+"try{if(window.__PPA_BOOT_SIGNAL__)window.__PPA_BOOT_SIGNAL__('beginGame')}catch(_){}");
+}
+console.log('[PPA BUILD] Phoenix startup: immediate cover + real progress + painted-city gate');
 
 const legacyInitNeedle = 'async function PPAOnlineInit(){\n';
 if (!output.includes(legacyInitNeedle)) throw new Error('Legacy PPAOnlineInit patch target not found');
