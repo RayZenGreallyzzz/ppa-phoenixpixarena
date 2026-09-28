@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v604-phoenix-real-loader-20260928';
+const CLIENT_BUILD = 'v605-phoenix-loader-toplayer-20260928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -320,21 +320,12 @@ output = output.replace('<head>', `<head>\n<script>window.PPA_CLIENT_BUILD=${JSO
 
 
 const PPA_BOOT_ASSET='/assets/ppa-loading-screen.webp?v='+CLIENT_BUILD;
+const PPA_BOOT_CSS="#ppaPhoenixBoot{position:fixed!important;left:0!important;top:0!important;right:0!important;bottom:0!important;width:100vw!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;box-sizing:border-box!important;z-index:2147483647!important;background:#050302 center center/cover no-repeat!important;background-image:var(--ppa-boot-bg)!important;font-family:Georgia,\"Times New Roman\",serif!important;color:#f1dcc0!important;opacity:1;transition:opacity .22s ease;overflow:hidden!important;touch-action:none;pointer-events:auto;transform:none!important;transform-origin:0 0!important}\n#ppaPhoenixBoot::backdrop{background:#050302!important}\n#ppaPhoenixBoot.ppaBootDone{opacity:0;pointer-events:none}\n#ppaPhoenixBoot .ppaBootShade{position:absolute;left:0;right:0;bottom:0;height:39%;box-sizing:border-box;display:flex;align-items:flex-end;justify-content:center;padding:0 7vw max(26px,env(safe-area-inset-bottom));background:linear-gradient(to bottom,rgba(5,3,2,0) 0%,rgba(5,3,2,.96) 18%,rgba(5,3,2,.985) 48%,#050302 100%)}\n#ppaPhoenixBoot .ppaBootPanel{width:min(720px,86vw);text-align:center;padding-bottom:3.5vh;text-shadow:0 2px 5px #000}\n#ppaPhoenixBoot .ppaBootTrack{height:18px;box-sizing:border-box;border:2px solid #9b5c25;border-radius:3px;padding:2px;background:#0e0a08;box-shadow:0 0 0 1px #e5b56c inset,0 0 12px rgba(255,116,19,.28)}\n#ppaPhoenixBoot .ppaBootFill{height:100%;width:4%;border-radius:1px;background:linear-gradient(90deg,#8d2808 0%,#ed6b0e 38%,#ffb52b 78%,#fff0a2 100%);box-shadow:0 0 12px rgba(255,124,21,.82);transition:width .18s ease-out}\n#ppaPhoenixBoot .ppaBootPercent{margin-top:7px;font-size:clamp(16px,3.1vw,24px);letter-spacing:.08em;color:#f8e1bd}\n#ppaPhoenixBoot .ppaBootStatus{margin-top:2px;font-size:clamp(18px,3.6vw,29px);letter-spacing:.035em;color:#f4dfc5}\n#ppaPhoenixBoot .ppaBootFirst{margin:10px auto 0;max-width:620px;font-size:clamp(12px,2.5vw,18px);line-height:1.35;color:#dcc3a4;opacity:.94}\n#ppaPhoenixBoot .ppaBootTagline{margin-top:17px;padding-top:12px;border-top:1px solid rgba(210,149,74,.55);font-size:clamp(15px,3vw,22px);letter-spacing:.03em;color:#e7c79b}\n@media (max-height:620px){#ppaPhoenixBoot .ppaBootShade{height:48%}#ppaPhoenixBoot .ppaBootPanel{padding-bottom:1.5vh}#ppaPhoenixBoot .ppaBootTagline{margin-top:9px;padding-top:8px}#ppaPhoenixBoot .ppaBootFirst{margin-top:6px}}";
+const PPA_BOOT_MOUNT="(function(){var d=document,b=d.createElement('div');b.id='ppaPhoenixBoot';b.setAttribute('role','progressbar');b.setAttribute('aria-label','Загрузка Phoenix Pix Arena');b.setAttribute('aria-valuemin','0');b.setAttribute('aria-valuemax','100');b.setAttribute('aria-valuenow','4');b.style.setProperty('--ppa-boot-bg','url(\"'+PPA_BOOT_ASSET+'\")');try{b.setAttribute('popover','manual')}catch(_){}b.innerHTML=\"<div class=\\\"ppaBootShade\\\"><div class=\\\"ppaBootPanel\\\"><div class=\\\"ppaBootTrack\\\"><div id=\\\"ppaBootProgressFill\\\" class=\\\"ppaBootFill\\\"></div></div><div id=\\\"ppaBootPercent\\\" class=\\\"ppaBootPercent\\\">4%</div><div id=\\\"ppaBootStatus\\\" class=\\\"ppaBootStatus\\\">Подготовка мира…</div><div id=\\\"ppaBootFirst\\\" class=\\\"ppaBootFirst\\\">Первый запуск может занять немного больше времени…</div><div class=\\\"ppaBootTagline\\\">Возродись из пепла. Стань легендой.</div></div></div>\";d.documentElement.appendChild(b);try{if(typeof b.showPopover==='function')b.showPopover()}catch(_){}})();";
 const PPA_BOOT_HEAD=
   '<link rel="preload" as="image" href="'+PPA_BOOT_ASSET+'">'+
-  '<style id="ppaPhoenixBootStyle">'+
-  '#ppaPhoenixBoot{position:fixed;inset:0;z-index:2147483647;background:#050302 center center/cover no-repeat;background-image:url("'+PPA_BOOT_ASSET+'");font-family:Georgia,"Times New Roman",serif;color:#f1dcc0;opacity:1;transition:opacity .22s ease;overflow:hidden;touch-action:none;pointer-events:auto}'+
-  '#ppaPhoenixBoot.ppaBootDone{opacity:0;pointer-events:none}'+
-  '#ppaPhoenixBoot .ppaBootShade{position:absolute;left:0;right:0;bottom:0;height:39%;box-sizing:border-box;display:flex;align-items:flex-end;justify-content:center;padding:0 7vw max(26px,env(safe-area-inset-bottom));background:linear-gradient(to bottom,rgba(5,3,2,0) 0%,rgba(5,3,2,.96) 18%,rgba(5,3,2,.985) 48%,#050302 100%)}'+
-  '#ppaPhoenixBoot .ppaBootPanel{width:min(720px,86vw);text-align:center;padding-bottom:3.5vh;text-shadow:0 2px 5px #000}'+
-  '#ppaPhoenixBoot .ppaBootTrack{height:18px;box-sizing:border-box;border:2px solid #9b5c25;border-radius:3px;padding:2px;background:#0e0a08;box-shadow:0 0 0 1px #e5b56c inset,0 0 12px rgba(255,116,19,.28)}'+
-  '#ppaPhoenixBoot .ppaBootFill{height:100%;width:4%;border-radius:1px;background:linear-gradient(90deg,#8d2808 0%,#ed6b0e 38%,#ffb52b 78%,#fff0a2 100%);box-shadow:0 0 12px rgba(255,124,21,.82);transition:width .18s ease-out}'+
-  '#ppaPhoenixBoot .ppaBootPercent{margin-top:7px;font-size:clamp(16px,3.1vw,24px);letter-spacing:.08em;color:#f8e1bd}'+
-  '#ppaPhoenixBoot .ppaBootStatus{margin-top:2px;font-size:clamp(18px,3.6vw,29px);letter-spacing:.035em;color:#f4dfc5}'+
-  '#ppaPhoenixBoot .ppaBootFirst{margin:10px auto 0;max-width:620px;font-size:clamp(12px,2.5vw,18px);line-height:1.35;color:#dcc3a4;opacity:.94}'+
-  '#ppaPhoenixBoot .ppaBootTagline{margin-top:17px;padding-top:12px;border-top:1px solid rgba(210,149,74,.55);font-size:clamp(15px,3vw,22px);letter-spacing:.03em;color:#e7c79b}'+
-  '@media (max-height:620px){#ppaPhoenixBoot .ppaBootShade{height:48%}#ppaPhoenixBoot .ppaBootPanel{padding-bottom:1.5vh}#ppaPhoenixBoot .ppaBootTagline{margin-top:9px;padding-top:8px}#ppaPhoenixBoot .ppaBootFirst{margin-top:6px}}'+
-  '</style>'+
+  '<style id="ppaPhoenixBootStyle">'+PPA_BOOT_CSS+'</style>'+
+  '<script>'+PPA_BOOT_MOUNT+'</script>'+
   '<script defer src="/game/phoenix-boot-runtime.js?v='+CLIENT_BUILD+'"></script>';
 if(!output.includes('</head>'))throw new Error('PPA main </head> not found');
 output=output.replace('</head>',PPA_BOOT_HEAD+'\n</head>');
@@ -7885,27 +7876,16 @@ for (const [srcName,dstName,err] of filesToPublish) {
 }
 
 
-const PPA_BOOT_HTML=
-  '<div id="ppaPhoenixBoot" role="progressbar" aria-label="Загрузка Phoenix Pix Arena" aria-valuemin="0" aria-valuemax="100" aria-valuenow="4">'+
-    '<div class="ppaBootShade"><div class="ppaBootPanel">'+
-      '<div class="ppaBootTrack"><div id="ppaBootProgressFill" class="ppaBootFill"></div></div>'+
-      '<div id="ppaBootPercent" class="ppaBootPercent">4%</div>'+
-      '<div id="ppaBootStatus" class="ppaBootStatus">Подготовка мира…</div>'+
-      '<div id="ppaBootFirst" class="ppaBootFirst">Первый запуск может занять немного больше времени…</div>'+
-      '<div class="ppaBootTagline">Возродись из пепла. Стань легендой.</div>'+
-    '</div></div>'+
-  '</div>';
-if(!/<body\b/i.test(output))throw new Error('PPA main <body> not found');
-output=output.replace(/<body([^>]*)>/i,(m)=>m+'\n'+PPA_BOOT_HTML);
-
-// Retire the legacy splash signatures from the visible startup experience.
-output=output.replace(/С\s+любовью\s+RayZenGX/gi,'').replace(/\bbuild256\b/gi,'');
-
+// Phoenix loader is mounted synchronously as a direct <html> child in <head>.
+// This keeps it outside the legacy scaled game body used by Telegram tablets.
 if(!output.includes('ppaPhoenixBoot')||
    !output.includes('phoenix-boot-runtime.js')||
    !output.includes('ppa-loading-screen.webp')){
   throw new Error('Phoenix startup loading screen patch did not apply');
 }
+
+// Retire legacy startup signatures.
+output=output.replace(/С\s+любовью\s+RayZenGX/gi,'').replace(/\bbuild256\b/gi,'');
 
 if (!output.includes('</body>')) throw new Error('PPA main </body> not found');
 const js=(name)=>`/game/${name}?v=${CLIENT_BUILD}`;
