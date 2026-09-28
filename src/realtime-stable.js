@@ -1947,7 +1947,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     const oldSockets = [];
     for (const old of this.sockets()) {
       const a = attOf(old);
-      if (String(a.pid || '') === pid) oldSockets.push(old);
+      if (String(a.pid || '') === pid || String(a.telegramId || '') === telegramId) oldSockets.push(old);
     }
 
     this.ensureRoomIndex();
