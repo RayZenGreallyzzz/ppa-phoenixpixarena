@@ -319,7 +319,15 @@ output = output.replace(catchNeedle, catchPatch);
 
 const saveToolsRe = /&lt;div id=&quot;saveTools&quot;&gt;[\s\S]*?&lt;\/div&gt;\s*&lt;\/section&gt;/;
 if (!saveToolsRe.test(output)) throw new Error('PPA save tools block not found');
-output = output.replace(saveToolsRe, '&lt;/section&gt;');
+const accountDeleteTools =
+  '&lt;div id=&quot;saveTools&quot; style=&quot;margin-top:12px;padding-top:10px;border-top:1px solid rgba(180,90,70,.35)&quot;&gt;'+
+  '&lt;button id=&quot;ppaDeleteAccountBtn&quot; type=&quot;button&quot; style=&quot;width:100%;height:42px;border:1px solid #a4473d;border-radius:8px;background:#3a1614;color:#ffb0a8;font-weight:800;letter-spacing:.4px&quot;&gt;УДАЛИТЬ АККАУНТ&lt;/button&gt;'+
+  '&lt;div style=&quot;margin-top:6px;color:#9f817c;font:9px monospace;line-height:1.35&quot;&gt;Удаляет персонажа и игровой сейв текущего Telegram-аккаунта. История TON/выводов сохраняется.&lt;/div&gt;'+
+  '&lt;script&gt;(function(){var b=document.getElementById(&quot;ppaDeleteAccountBtn&quot;);if(!b)return;b.onclick=function(){try{var p=parent&&parent.PPA;if(!p||typeof p.ppaDeleteOwnAccount!==&quot;function&quot;){alert(&quot;Функция удаления аккаунта ещё не загружена.&quot;);return;}b.disabled=true;Promise.resolve(p.ppaDeleteOwnAccount()).catch(function(e){alert(String(e&&e.message||e||&quot;Ошибка удаления&quot;));}).finally(function(){b.disabled=false;});}catch(e){try{alert(String(e&&e.message||e))}catch(_){}}};})();&lt;/script&gt;'+
+  '&lt;/div&gt;&lt;/section&gt;';
+output = output.replace(saveToolsRe, accountDeleteTools);
+if(!output.includes('ppaDeleteAccountBtn')||!output.includes('ppaDeleteOwnAccount'))throw new Error('Account delete settings button injection failed');
+console.log('[PPA BUILD] Account delete button added to save/settings section');
 
 // Online dungeon mobs use server-authoritative spawn/HP/position/AI events.
 // The V278 packed source has changed formatting across releases, so these
