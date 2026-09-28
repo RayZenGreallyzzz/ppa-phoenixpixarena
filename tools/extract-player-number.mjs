@@ -35,3 +35,5 @@ for(const n of palNames){
   palOut += '\n###'+n+'###\n'+(m?m[1]:'NOT_FOUND')+'\n';
 }
 fs.writeFileSync('diag-paladin-sheets-base64.txt',palOut);
+
+// trigger paladin alignment audit
