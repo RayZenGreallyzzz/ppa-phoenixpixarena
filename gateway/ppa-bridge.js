@@ -204,7 +204,7 @@
       var b=document.createElement('button');
       b.id='ppaDeleteStellaTestBtn';
       b.type='button';
-      b.textContent='ТЕСТ · УДАЛИТЬ STELLA';
+      b.textContent='ТЕСТ · УДАЛИТЬ АККАУНТ';
       b.style.cssText='position:fixed;left:8px;bottom:8px;z-index:2147483600;height:30px;padding:0 9px;border:1px solid #8e3a34;border-radius:7px;background:rgba(55,16,14,.94);color:#ffb1aa;font:800 9px monospace;box-shadow:0 3px 12px rgba(0,0,0,.55);touch-action:manipulation';
       b.onclick=function(){
         b.disabled=true;
