@@ -210,14 +210,37 @@ async function upsertBoundInitialSave(env, telegramId, profile, nickname, classK
   state.gatewayProfileBound = true;
   state.registrationSavedAt = Number(state.registrationSavedAt) || Date.now();
 
-  if (grantNewbieChest) {
-    state.bag = Array.isArray(state.bag) ? state.bag : [];
-    const already = state.bag.some((it) => it && (
+  // Newbie chest belongs to PERSONAL STORAGE, not the carried bag.
+  // Also repair the earlier buggy grant that could leave the chest in bag.
+  const chestId = 'newbie_chest_gray_v1';
+  state.storage = state.storage && typeof state.storage === 'object' ? state.storage : {};
+  state.storage.personal = Array.isArray(state.storage.personal) ? state.storage.personal : [];
+  state.storage.clan = Array.isArray(state.storage.clan) ? state.storage.clan : [];
+  state.storage.premium = Array.isArray(state.storage.premium) ? state.storage.premium : [];
+  state.bag = Array.isArray(state.bag) ? state.bag : [];
+
+  function isNewbieChest(it) {
+    return !!(it && (
       it.newbieChest === true ||
-      String(it.refId || '') === 'newbie_chest_gray_v1' ||
-      String(it.uid || '') === 'newbie_chest_gray_v1'
+      String(it.refId || '') === chestId ||
+      String(it.uid || '') === chestId
     ));
-    if (!already) state.bag.push(makeNewbieChestSaveItem());
+  }
+
+  const bagChestIndex = state.bag.findIndex(isNewbieChest);
+  const personalHasChest = state.storage.personal.some(isNewbieChest);
+  const shouldRepairGrant = state.newbieChestGranted === true && state.newbieKitOpened !== true;
+  const shouldHaveChest = grantNewbieChest || shouldRepairGrant;
+
+  if (shouldHaveChest && state.newbieKitOpened !== true) {
+    if (!personalHasChest) {
+      let chest = bagChestIndex >= 0 ? state.bag.splice(bagChestIndex, 1)[0] : makeNewbieChestSaveItem();
+      if (state.storage.personal.length < 50) state.storage.personal.push(chest);
+      else if (bagChestIndex < 0) state.bag.push(chest);
+    } else if (bagChestIndex >= 0) {
+      // Remove a duplicate left by an older test build.
+      state.bag.splice(bagChestIndex, 1);
+    }
     state.newbieChestGranted = true;
   }
 
