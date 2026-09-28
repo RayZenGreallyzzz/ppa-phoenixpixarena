@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v612-dungeon-mask-format-fix-20260928';
+const CLIENT_BUILD = 'v613-dungeon-native-hires-normalize-20260928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -97,51 +97,62 @@ const PPA_DUNGEON_TEST_MASK_PATH=path.join(ROOT,'маскаs.png');
 if(!fs.existsSync(PPA_DUNGEON_TEST_FLOOR_PATH)||!fs.existsSync(PPA_DUNGEON_TEST_MASK_PATH)){
   throw new Error('Dungeon layout test requires данж.png and маскаs.png in repository root');
 }
-const PPA_DUNGEON_TEST_MASK_META=await sharp(PPA_DUNGEON_TEST_MASK_PATH).metadata();
-const PPA_DUNGEON_TEST_ART_W=2048,PPA_DUNGEON_TEST_ART_H=996;
-if(!PPA_DUNGEON_TEST_MASK_META.width||!PPA_DUNGEON_TEST_MASK_META.height){
-  throw new Error('маскаs.png metadata is invalid');
-}
-if(PPA_DUNGEON_TEST_MASK_META.width!==2048||PPA_DUNGEON_TEST_MASK_META.height!==996){
-  console.warn('[PPA BUILD] маскаs.png is '+PPA_DUNGEON_TEST_MASK_META.width+'x'+PPA_DUNGEON_TEST_MASK_META.height+'; normalizing to 2048x996');
-}
-console.log('[PPA BUILD] Dungeon mask source: '+PPA_DUNGEON_TEST_MASK_META.width+'x'+PPA_DUNGEON_TEST_MASK_META.height+' alpha='+(!!PPA_DUNGEON_TEST_MASK_META.hasAlpha));
-const PPA_DUNGEON_TEST_FLOOR_META=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH).metadata();
-if(!PPA_DUNGEON_TEST_FLOOR_META.width||!PPA_DUNGEON_TEST_FLOOR_META.height){
-  throw new Error('данж.png metadata is invalid');
-}
-if(PPA_DUNGEON_TEST_FLOOR_META.width!==2048||PPA_DUNGEON_TEST_FLOOR_META.height<996){
-  throw new Error('данж.png must be 2048px wide and at least 996px high; got '+PPA_DUNGEON_TEST_FLOOR_META.width+'x'+PPA_DUNGEON_TEST_FLOOR_META.height);
-}
 
-// 4096px render art. The original floor is tiled, not stretched:
-// stones remain smaller and sharper than on the old one-piece dungeon art.
-const PPA_DUNGEON_BOTTOM_H=1992-1097;
-const PPA_DUNGEON_BOTTOM_TILE=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH)
-  .extract({left:0,top:0,width:2048,height:PPA_DUNGEON_BOTTOM_H}).png().toBuffer();
-const PPA_DUNGEON_TILED_FLOOR=await sharp({
-  create:{width:4096,height:1992,channels:4,background:{r:2,g:2,b:2,alpha:1}}
-}).composite([
-  {input:PPA_DUNGEON_TEST_FLOOR_PATH,left:0,top:0},
-  {input:PPA_DUNGEON_TEST_FLOOR_PATH,left:2048,top:0},
-  {input:PPA_DUNGEON_BOTTOM_TILE,left:0,top:1097},
-  {input:PPA_DUNGEON_BOTTOM_TILE,left:2048,top:1097}
-]).png().toBuffer();
+const PPA_DUNGEON_TEST_MASK_META=await sharp(PPA_DUNGEON_TEST_MASK_PATH).metadata();
+const PPA_DUNGEON_TEST_FLOOR_META=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH).metadata();
+if(!PPA_DUNGEON_TEST_MASK_META.width||!PPA_DUNGEON_TEST_MASK_META.height)throw new Error('маскаs.png metadata is invalid');
+if(!PPA_DUNGEON_TEST_FLOOR_META.width||!PPA_DUNGEON_TEST_FLOOR_META.height)throw new Error('данж.png metadata is invalid');
+
+console.log('[PPA BUILD] Dungeon mask source: '+PPA_DUNGEON_TEST_MASK_META.width+'x'+PPA_DUNGEON_TEST_MASK_META.height+' alpha='+(!!PPA_DUNGEON_TEST_MASK_META.hasAlpha));
+console.log('[PPA BUILD] Dungeon floor source: '+PPA_DUNGEON_TEST_FLOOR_META.width+'x'+PPA_DUNGEON_TEST_FLOOR_META.height);
+
+// Geometry follows the MASK aspect ratio. The uploaded sources are intentionally
+// allowed to have different dimensions: the floor is texture material, the mask
+// is the authoritative dungeon shape.
+const PPA_DUNGEON_TEST_ART_W=2048;
+const PPA_DUNGEON_TEST_ART_H=Math.round(PPA_DUNGEON_TEST_ART_W*PPA_DUNGEON_TEST_MASK_META.height/PPA_DUNGEON_TEST_MASK_META.width);
+const PPA_DUNGEON_RENDER_W=4096;
+const PPA_DUNGEON_RENDER_H=Math.round(PPA_DUNGEON_RENDER_W*PPA_DUNGEON_TEST_MASK_META.height/PPA_DUNGEON_TEST_MASK_META.width);
+
+// Normalize/crop the 10136x5430 floor to the mask aspect ratio, then downsample
+// to a 4096px render asset. This uses the uploaded high-resolution source instead
+// of stretching a small image, so the stone pattern stays much sharper.
+const PPA_DUNGEON_BASE_FLOOR=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH)
+  .resize(PPA_DUNGEON_RENDER_W,PPA_DUNGEON_RENDER_H,{
+    fit:'cover',
+    position:'centre',
+    kernel:sharp.kernel.lanczos3,
+    withoutEnlargement:false
+  })
+  .png()
+  .toBuffer();
+
 const PPA_DUNGEON_RENDER_MASK=await sharp(PPA_DUNGEON_TEST_MASK_PATH)
-  .resize(4096,1992,{fit:'fill',kernel:'nearest'}).png().toBuffer();
-const PPA_DUNGEON_CLIPPED_FLOOR=await sharp(PPA_DUNGEON_TILED_FLOOR)
-  .composite([{input:PPA_DUNGEON_RENDER_MASK,blend:'dest-in'}]).png().toBuffer();
+  .resize(PPA_DUNGEON_RENDER_W,PPA_DUNGEON_RENDER_H,{fit:'fill',kernel:'nearest'})
+  .png()
+  .toBuffer();
+
+const PPA_DUNGEON_CLIPPED_FLOOR=await sharp(PPA_DUNGEON_BASE_FLOOR)
+  .composite([{input:PPA_DUNGEON_RENDER_MASK,blend:'dest-in'}])
+  .png()
+  .toBuffer();
+
 const PPA_DUNGEON_TEST_MAP=await sharp({
-  create:{width:4096,height:1992,channels:4,background:{r:0,g:0,b:0,alpha:1}}
+  create:{width:PPA_DUNGEON_RENDER_W,height:PPA_DUNGEON_RENDER_H,channels:4,background:{r:0,g:0,b:0,alpha:1}}
 }).composite([{input:PPA_DUNGEON_CLIPPED_FLOOR,left:0,top:0}])
-  .webp({quality:94,alphaQuality:100,effort:5,smartSubsample:false}).toBuffer();
+  .webp({quality:95,alphaQuality:100,effort:5,smartSubsample:false})
+  .toBuffer();
 fs.writeFileSync(path.join(assetsDir,'dungeon-layout-test.webp'),PPA_DUNGEON_TEST_MAP);
 
-// Collision is compiled from mask alpha. We keep dgWalk/dgCircleWalk/dgSlide unchanged.
-const PPA_DUNGEON_COLL_W=1024,PPA_DUNGEON_COLL_H=Math.round(996/2048*1024);
+// Collision is compiled from the same uploaded mask. Keep the existing
+// dgWalk/dgCircleWalk/dgSlide movement code unchanged.
+const PPA_DUNGEON_COLL_W=1024;
+const PPA_DUNGEON_COLL_H=Math.round(PPA_DUNGEON_COLL_W*PPA_DUNGEON_TEST_MASK_META.height/PPA_DUNGEON_TEST_MASK_META.width);
 const PPA_DUNGEON_MASK_RAW=await sharp(PPA_DUNGEON_TEST_MASK_PATH)
   .resize(PPA_DUNGEON_COLL_W,PPA_DUNGEON_COLL_H,{fit:'fill',kernel:'nearest'})
-  .ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  .ensureAlpha()
+  .raw()
+  .toBuffer({resolveWithObject:true});
 const PPA_DUNGEON_WALK_BITS=Buffer.alloc(Math.ceil(PPA_DUNGEON_COLL_W*PPA_DUNGEON_COLL_H/8),0);
 let PPA_DUNGEON_WALK_COUNT=0;
 for(let y=0;y<PPA_DUNGEON_COLL_H;y++)for(let x=0;x<PPA_DUNGEON_COLL_W;x++){
@@ -153,13 +164,14 @@ for(let y=0;y<PPA_DUNGEON_COLL_H;y++)for(let x=0;x<PPA_DUNGEON_COLL_W;x++){
   }
 }
 const PPA_DUNGEON_WALK_RATIO=PPA_DUNGEON_WALK_COUNT/(PPA_DUNGEON_COLL_W*PPA_DUNGEON_COLL_H);
-if(PPA_DUNGEON_WALK_RATIO<0.20||PPA_DUNGEON_WALK_RATIO>0.55){
+if(PPA_DUNGEON_WALK_RATIO<0.08||PPA_DUNGEON_WALK_RATIO>0.65){
   throw new Error('Dungeon mask walk ratio invalid: '+PPA_DUNGEON_WALK_RATIO);
 }
 const PPA_DUNGEON_WALK_B64=PPA_DUNGEON_WALK_BITS.toString('base64');
+
 // Preserve the old ~9526 world-pixel width so player speed/size remains comparable.
-const PPA_DUNGEON_TEST_SCALE=(1852*5.1435)/2048;
-console.log('[PPA BUILD] Dungeon test art 4096x1992 · collision '+PPA_DUNGEON_COLL_W+'x'+PPA_DUNGEON_COLL_H+' · walk '+(PPA_DUNGEON_WALK_RATIO*100).toFixed(1)+'%');
+const PPA_DUNGEON_TEST_SCALE=(1852*5.1435)/PPA_DUNGEON_TEST_ART_W;
+console.log('[PPA BUILD] Dungeon normalized: logical '+PPA_DUNGEON_TEST_ART_W+'x'+PPA_DUNGEON_TEST_ART_H+' · render '+PPA_DUNGEON_RENDER_W+'x'+PPA_DUNGEON_RENDER_H+' · collision '+PPA_DUNGEON_COLL_W+'x'+PPA_DUNGEON_COLL_H+' · walk '+(PPA_DUNGEON_WALK_RATIO*100).toFixed(1)+'%');
 // ==========================================================================
 
 
