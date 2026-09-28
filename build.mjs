@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v627-dungeon-fill-every-physical-room-20260929';
+const CLIENT_BUILD = 'v628-dungeon-room-density-plus4-plus9-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -337,9 +337,13 @@ const PPA_DUNGEON_ROOM_BOUNDS=[];
 const PPA_DUNGEON_ACTIVE_SPAWNS=[];
 
 function ppaDungeonMobCountForPhysicalRoom(room){
-  if(room.maxClear>=55||room.area>=6000)return 6;
-  if(room.maxClear>=43||room.area>=4500)return 5;
-  return 4;
+  // Keep the current density as the baseline, then add exactly:
+  // +4 mobs to small physical rooms and +9 mobs to large physical rooms.
+  let base=4;
+  if(room.maxClear>=55||room.area>=6000)base=6;
+  else if(room.maxClear>=43||room.area>=4500)base=5;
+  const isLarge=room.maxClear>=50;
+  return base+(isLarge?9:4);
 }
 
 function ppaDungeonSpawnPhysicalRoom(room,ri,ordinalStart){
@@ -417,6 +421,7 @@ console.log('[PPA BUILD] Dungeon physical rooms: top='+_ppaTopCounts.reduce((a,b
 console.log('[PPA BUILD] Dungeon branch rooms top odd: '+_ppaTopCounts.join(',')+' · bottom even: '+_ppaBottomCounts.join(','));
 console.log('[PPA BUILD] Dungeon level fill: '+PPA_DUNGEON_ROOM_META_RUNTIME.map((r,i)=>r.level+'='+PPA_DUNGEON_LEVEL_BRANCHES[i].rooms.length+' rooms/'+r.count+' mobs').join(' | '));
 console.log('[PPA BUILD] Dungeon room-only mobs: '+PPA_DUNGEON_ACTIVE_SPAWNS.length+' spawns · boss center '+PPA_DUNGEON_BOSS_IMG[0]+','+PPA_DUNGEON_BOSS_IMG[1]);
+console.log('[PPA BUILD] Dungeon density boost: small rooms +4 mobs · large rooms +9 mobs');
 
 
 // Runtime floor visual uses the original high-res mask directly rather than the
