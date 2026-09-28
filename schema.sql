@@ -2,6 +2,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS players (
   telegram_id TEXT PRIMARY KEY,
+  realtime_pid TEXT UNIQUE,
   telegram_username TEXT NOT NULL DEFAULT '',
   telegram_first_name TEXT NOT NULL DEFAULT '',
   telegram_last_name TEXT NOT NULL DEFAULT '',
