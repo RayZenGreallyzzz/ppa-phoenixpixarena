@@ -24,3 +24,5 @@ for(const n of defs){
   }
 }
 fs.writeFileSync('diag-player-assets.txt',defsOut);
+
+// rerun asset extraction
