@@ -45,10 +45,13 @@ function components(raw,w,h,x0,y0){
 }
 
 async function cleanSheet(name){
-  const re=new RegExp("const "+name+"='data:image\\/png;base64,([^']+)'");
+  const re=new RegExp("const "+name+"='(\\./assets/[^']+\\.png)'");
   const m=html.match(re);
-  if(!m)throw new Error('Paladin sheet not found: '+name);
-  const input=Buffer.from(m[1],'base64');
+  if(!m)throw new Error('Paladin externalized sheet not found: '+name);
+  const rel=m[1].replace(/^\.\//,'');
+  const assetPath='public/'+rel;
+  if(!fs.existsSync(assetPath))throw new Error('Paladin asset file missing: '+assetPath);
+  const input=fs.readFileSync(assetPath);
   const {data,info}=await sharp(input).ensureAlpha().raw().toBuffer({resolveWithObject:true});
   if(info.width!==1024||info.height!==1024||info.channels!==4)throw new Error(name+' unexpected size '+info.width+'x'+info.height+' c'+info.channels);
 
@@ -109,8 +112,7 @@ async function cleanSheet(name){
   }
 
   const out=await sharp(src,{raw:{width:info.width,height:info.height,channels:4}}).png().toBuffer();
-  const b64=out.toString('base64');
-  html=html.replace(m[0],"const "+name+"='data:image/png;base64,"+b64+"'");
+  fs.writeFileSync(assetPath,out);
   return fixed;
 }
 
