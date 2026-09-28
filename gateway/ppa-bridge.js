@@ -236,6 +236,26 @@
       var loaded=await call('/api/save/load');
       noteSaveVersion(loaded&&loaded.version!=null?loaded.version:0);
       cloudSaveLoaded=true;
+
+      // First registration may add server-owned starter items (newbie chest).
+      // Apply that fresh cloud save to the live game immediately; otherwise
+      // INV.bag would keep the pre-registration empty in-memory inventory until
+      // the next full app restart.
+      try{
+        var st=loaded&&loaded.state&&typeof loaded.state==='object'?loaded.state:null;
+        if(st){
+          localStorage.setItem('pxSave',JSON.stringify(st));
+          localStorage.setItem('pxSaveLastGood',JSON.stringify(st));
+          try{sessionStorage.removeItem('ppaCloudLoadedStamp')}catch(_){}
+          if(typeof loadGame==='function')loadGame();
+          try{if(window.PPA_REFRESH_NEWBIE_CHEST)window.PPA_REFRESH_NEWBIE_CHEST()}catch(_){}
+          try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
+          try{if(typeof updateUI==='function')updateUI()}catch(_){}
+        }
+      }catch(applyErr){
+        console.warn('PPA fresh registration cloud apply',applyErr);
+      }
+
       try{if(window.PPA_REALTIME_RECONNECT)setTimeout(function(){window.PPA_REALTIME_RECONNECT()},60)}catch(_){}
       return r;
     },
