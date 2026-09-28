@@ -7876,7 +7876,8 @@ const filesToPublish = [
   ['gateway/class-sync-client.js','class-sync-client.js','Realtime class sync missing'],
   ['gateway/telegram-safe-ui.js','telegram-safe-ui.js','Telegram safe UI helper missing'],
   ['gateway/mobile-hud-tweaks.js','mobile-hud-tweaks.js','Mobile HUD tweaks missing'],
-  ['gateway/social-ui.js','social-ui.js','Social UI missing'],\n  ['gateway/phoenix-boot-runtime.js','phoenix-boot-runtime.js','Phoenix boot runtime missing'],
+  ['gateway/social-ui.js','social-ui.js','Social UI missing'],
+  ['gateway/phoenix-boot-runtime.js','phoenix-boot-runtime.js','Phoenix boot runtime missing'],
 ];
 for (const [srcName,dstName,err] of filesToPublish) {
   const src=path.join(ROOT,srcName);if(!fs.existsSync(src))throw new Error(`${err}: ${srcName}`);
