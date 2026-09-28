@@ -113,8 +113,10 @@ function applyProfileToSaveState(profile, state) {
   const out = state && typeof state === 'object' && !Array.isArray(state) ? { ...state } : {};
   const nickname = String(profile.nickname || '').trim();
   const classKey = String(profile.classKey || '').trim();
-  if (nickname && !String(out.playerName || '').trim()) out.playerName = nickname;
-  if (nickname && !String(out.nickname || '').trim()) out.nickname = nickname;
+  if (nickname) {
+    out.playerName = nickname;
+    out.nickname = nickname;
+  }
   if (classKey && !String(out.cls || '').trim()) out.cls = classKey;
   if (classKey && !String(out.classKey || '').trim()) out.classKey = classKey;
   out.telegramId = String(profile.telegramId || out.telegramId || '');
@@ -449,14 +451,20 @@ async function saveGameState(env, telegramId, state, expectedVersion) {
   const profile = profileFromRow(await env.DB.prepare(
     'SELECT * FROM players WHERE telegram_id=?1'
   ).bind(telegramId).first());
-  state = applyProfileToSaveState(profile, state);
 
-  const nickname = String(state.playerName || '').trim();
-  if (nickname && (!profile || !profile.nickname || nickKey(profile.nickname) !== nickKey(nickname))) {
-    const registered = await registerCharacter(env, telegramId, nickname, state.cls || state.classKey || '');
-    if (!registered.ok) return registered;
+  // A device/local save is never allowed to create or claim a character.
+  // Character identity must already be registered for this authenticated
+  // Telegram account through /api/character/register.
+  if (!profile || !String(profile.nickname || '').trim()) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'CHARACTER_NOT_REGISTERED',
+      message: 'Сначала создай персонажа для этого Telegram-аккаунта.'
+    };
   }
 
+  state = applyProfileToSaveState(profile, state);
   const raw = JSON.stringify(state);
   if (new TextEncoder().encode(raw).byteLength > 1_800_000) {
     return { ok: false, status: 413, code: 'SAVE_TOO_LARGE', message: 'Сохранение слишком большое.' };
