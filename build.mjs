@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v621-dungeon-v616-wallband-no-white-outline-20260929';
+const CLIENT_BUILD = 'v622-dungeon-room-mob-redistribution-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -139,6 +139,165 @@ if(PPA_DUNGEON_WALK_RATIO<0.08||PPA_DUNGEON_WALK_RATIO>0.65){
   throw new Error('Dungeon mask walk ratio invalid: '+PPA_DUNGEON_WALK_RATIO);
 }
 const PPA_DUNGEON_WALK_B64=PPA_DUNGEON_WALK_BITS.toString('base64');
+
+// === NEW DUNGEON MOB LAYOUT ===============================================
+function ppaParseDungeonJsonConst(name){
+  const re=new RegExp('const\\s+'+name+'=(\\[[\\s\\S]*?\\]);');
+  const m=source.match(re);
+  if(!m)throw new Error('Dungeon source constant not found: '+name);
+  return JSON.parse(m[1]);
+}
+const PPA_DUNGEON_OLD_ROOM_META=ppaParseDungeonJsonConst('DG_ROOM_META');
+ppaParseDungeonJsonConst('DG_ACTIVE_SPAWNS');
+
+function ppaDungeonInsideDistance(walk,w,h){
+  const INF=0x3fff,d=new Uint16Array(w*h);
+  for(let i=0;i<d.length;i++)d[i]=walk[i]?INF:0;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=y*w+x;if(d[i]===0)continue;let v=d[i];
+    if(x>0)v=Math.min(v,d[i-1]+3);
+    if(y>0){
+      v=Math.min(v,d[i-w]+3);
+      if(x>0)v=Math.min(v,d[i-w-1]+4);
+      if(x+1<w)v=Math.min(v,d[i-w+1]+4);
+    }
+    d[i]=v;
+  }
+  for(let y=h-1;y>=0;y--)for(let x=w-1;x>=0;x--){
+    const i=y*w+x;if(d[i]===0)continue;let v=d[i];
+    if(x+1<w)v=Math.min(v,d[i+1]+3);
+    if(y+1<h){
+      v=Math.min(v,d[i+w]+3);
+      if(x>0)v=Math.min(v,d[i+w-1]+4);
+      if(x+1<w)v=Math.min(v,d[i+w+1]+4);
+    }
+    d[i]=v;
+  }
+  return d;
+}
+const PPA_DUNGEON_INNER_DIST=ppaDungeonInsideDistance(PPA_DUNGEON_WALK,PPA_DUNGEON_COLL_W,PPA_DUNGEON_COLL_H);
+const PPA_DUNGEON_ROOM_SX=PPA_DUNGEON_TEST_ART_W/1852;
+const PPA_DUNGEON_ROOM_SY=PPA_DUNGEON_TEST_ART_H/849;
+
+function ppaDungeonCellOk(x,y,minClear=9){
+  x=Math.round(x);y=Math.round(y);
+  if(x<0||y<0||x>=PPA_DUNGEON_COLL_W||y>=PPA_DUNGEON_COLL_H)return false;
+  const i=y*PPA_DUNGEON_COLL_W+x;
+  return PPA_DUNGEON_WALK[i]===1&&PPA_DUNGEON_INNER_DIST[i]>=minClear*3;
+}
+function ppaDungeonSnapInterior(x,y,minClear=10,maxR=150){
+  x=Math.round(x);y=Math.round(y);
+  if(ppaDungeonCellOk(x,y,minClear))return{x,y};
+  for(let r=6;r<=maxR;r+=6){
+    const steps=Math.max(16,Math.ceil(2*Math.PI*r/8));
+    for(let k=0;k<steps;k++){
+      const a=k/steps*Math.PI*2;
+      const px=Math.round(x+Math.cos(a)*r),py=Math.round(y+Math.sin(a)*r);
+      if(ppaDungeonCellOk(px,py,minClear))return{x:px,y:py};
+    }
+  }
+  return null;
+}
+
+const PPA_DUNGEON_ROOM_META=[];
+for(const old of PPA_DUNGEON_OLD_ROOM_META){
+  const q=ppaDungeonSnapInterior(old.x*PPA_DUNGEON_ROOM_SX,old.y*PPA_DUNGEON_ROOM_SY,10,150);
+  if(!q)continue;
+  PPA_DUNGEON_ROOM_META.push({
+    x:q.x,y:q.y,level:old.level,size:old.size==='large'?'large':'small',
+    count:Math.max(5,Math.min(19,Number(old.count)||7)),inherited:true
+  });
+}
+
+const PPA_DUNGEON_LEVEL_ANCHOR=new Map();
+for(let lvl=1;lvl<=20;lvl++){
+  const rs=PPA_DUNGEON_ROOM_META.filter(r=>r.level===lvl);
+  if(rs.length)PPA_DUNGEON_LEVEL_ANCHOR.set(lvl,rs.reduce((s,r)=>s+r.x,0)/rs.length);
+}
+function ppaDungeonLevelForNewRoom(x,y){
+  const levels=y<PPA_DUNGEON_TEST_ART_H*0.43?[1,3,5,7,9,11,13,15,17,19]:[2,4,6,8,10,12,14,16,18,20];
+  let best=levels[0],bd=Infinity;
+  for(const lvl of levels){
+    const ax=PPA_DUNGEON_LEVEL_ANCHOR.get(lvl);
+    if(ax==null)continue;
+    const d=Math.abs(x-ax);
+    if(d<bd){bd=d;best=lvl}
+  }
+  return best;
+}
+
+const PPA_DUNGEON_EXTRA_CANDIDATES=[];
+for(let y=36;y<PPA_DUNGEON_TEST_ART_H-36;y+=6){
+  for(let x=120;x<Math.min(1680,PPA_DUNGEON_TEST_ART_W-160);x+=6){
+    const i=y*PPA_DUNGEON_COLL_W+x;
+    if(PPA_DUNGEON_WALK[i]!==1)continue;
+    const clear=PPA_DUNGEON_INNER_DIST[i]/3;
+    if(clear<24||Math.hypot(x-50,y-518)<150)continue;
+    let near=false;
+    for(const r of PPA_DUNGEON_ROOM_META){
+      if(Math.hypot(x-r.x,y-r.y)<92){near=true;break}
+    }
+    if(!near)PPA_DUNGEON_EXTRA_CANDIDATES.push({x,y,clear});
+  }
+}
+PPA_DUNGEON_EXTRA_CANDIDATES.sort((a,b)=>b.clear-a.clear);
+let PPA_DUNGEON_EXTRA_ROOMS=0;
+for(const q of PPA_DUNGEON_EXTRA_CANDIDATES){
+  if(PPA_DUNGEON_EXTRA_ROOMS>=14)break;
+  let near=false;
+  for(const r of PPA_DUNGEON_ROOM_META){
+    if(Math.hypot(q.x-r.x,q.y-r.y)<105){near=true;break}
+  }
+  if(near)continue;
+  PPA_DUNGEON_ROOM_META.push({
+    x:q.x,y:q.y,level:ppaDungeonLevelForNewRoom(q.x,q.y),
+    size:q.clear>=40?'large':'small',count:q.clear>=48?11:(q.clear>=34?8:6),inherited:false
+  });
+  PPA_DUNGEON_EXTRA_ROOMS++;
+}
+
+const PPA_DUNGEON_ACTIVE_SPAWNS=[];
+const PPA_DUNGEON_ROOM_BOUNDS=[];
+function ppaDungeonBuildRoomSpawns(room,ri){
+  const want=Math.max(5,Math.min(19,room.count|0)),pts=[];
+  const maxR=room.size==='large'?76:48,minGap=15;
+  const accept=(x,y)=>{
+    x=Math.round(x);y=Math.round(y);
+    if(!ppaDungeonCellOk(x,y,9)||Math.hypot(x-50,y-518)<135)return false;
+    for(const p of pts)if(Math.hypot(x-p[0],y-p[1])<minGap)return false;
+    pts.push([x,y]);return true;
+  };
+  accept(room.x,room.y);
+  const golden=2.399963229728653;
+  for(let k=1;k<180&&pts.length<want;k++){
+    const t=k/179,r=12+Math.sqrt(t)*(maxR-12),a=k*golden+ri*0.71;
+    accept(room.x+Math.cos(a)*r,room.y+Math.sin(a)*r);
+  }
+  if(pts.length<want){
+    for(let yy=-maxR;yy<=maxR&&pts.length<want;yy+=14){
+      for(let xx=-maxR;xx<=maxR&&pts.length<want;xx+=14){
+        if(xx*xx+yy*yy<=maxR*maxR)accept(room.x+xx,room.y+yy);
+      }
+    }
+  }
+  for(let j=0;j<pts.length;j++)PPA_DUNGEON_ACTIVE_SPAWNS.push([pts[j][0],pts[j][1],ri,j]);
+  let minX=room.x-38,minY=room.y-38,maxX=room.x+38,maxY=room.y+38;
+  if(pts.length){
+    minX=Math.min(...pts.map(p=>p[0]))-24;minY=Math.min(...pts.map(p=>p[1]))-24;
+    maxX=Math.max(...pts.map(p=>p[0]))+24;maxY=Math.max(...pts.map(p=>p[1]))+24;
+  }
+  PPA_DUNGEON_ROOM_BOUNDS.push([
+    Math.max(0,Math.round(minX)),Math.max(0,Math.round(minY)),
+    Math.min(PPA_DUNGEON_TEST_ART_W-1,Math.round(maxX)),Math.min(PPA_DUNGEON_TEST_ART_H-1,Math.round(maxY))
+  ]);
+}
+for(let ri=0;ri<PPA_DUNGEON_ROOM_META.length;ri++)ppaDungeonBuildRoomSpawns(PPA_DUNGEON_ROOM_META[ri],ri);
+
+const PPA_DUNGEON_ROOM_META_RUNTIME=PPA_DUNGEON_ROOM_META.map(r=>({
+  x:r.x,y:r.y,level:r.level,size:r.size,count:r.count
+}));
+console.log('[PPA BUILD] Dungeon mobs: '+PPA_DUNGEON_ROOM_META_RUNTIME.length+' rooms ('+PPA_DUNGEON_EXTRA_ROOMS+' new) · '+PPA_DUNGEON_ACTIVE_SPAWNS.length+' spawn points');
+// ==========================================================================
 
 // Runtime floor visual uses the original high-res mask directly rather than the
 // lower-resolution collision grid. This removes visible "teeth" from the edge.
@@ -492,6 +651,16 @@ let output = source.replace(dataUri, (full, mime, b64) => {
   ].join('\n');
   output=output.replace(dgMaskBlock,dgReplacement);
 
+  const roomMetaRe=/const DG_ROOM_META=\[[\s\S]*?\];/;
+  const roomBoundsRe=/const DG_ROOM_BOUNDS_IMG=\[[\s\S]*?\];/;
+  const activeSpawnsRe=/const DG_ACTIVE_SPAWNS=\[[\s\S]*?\];/;
+  if(!roomMetaRe.test(output)||!roomBoundsRe.test(output)||!activeSpawnsRe.test(output)){
+    throw new Error('Dungeon room/spawn source blocks not found');
+  }
+  output=output.replace(roomMetaRe,'const DG_ROOM_META='+JSON.stringify(PPA_DUNGEON_ROOM_META_RUNTIME)+';');
+  output=output.replace(roomBoundsRe,'const DG_ROOM_BOUNDS_IMG='+JSON.stringify(PPA_DUNGEON_ROOM_BOUNDS)+';');
+  output=output.replace(activeSpawnsRe,'const DG_ACTIVE_SPAWNS='+JSON.stringify(PPA_DUNGEON_ACTIVE_SPAWNS)+';');
+
   const imgDecl='const imgDungeon=new Image();';
   if(!output.includes(imgDecl))throw new Error('imgDungeon declaration not found');
   output=output.replace(
@@ -503,7 +672,7 @@ let output = source.replace(dataUri, (full, mime, b64) => {
   if(!output.includes(sceneBg))throw new Error('Dungeon scene background target not found');
   output=output.replace(
     sceneBg,
-    "dungeon:{name:'ПОДЗЕМЕЛЬЕ',sub:'ТЕСТ НОВОЙ КАРТЫ · БЕЗ МОБОВ',bg:imgDungeonLayoutTest,"
+    "dungeon:{name:'ПОДЗЕМЕЛЬЕ',sub:'ТЕСТ НОВОЙ КАРТЫ · МОБЫ ПО КОМНАТАМ',bg:imgDungeonLayoutTest,"
   );
 
   // Temporary test flag is available before the game body scripts execute.
@@ -1725,7 +1894,7 @@ ppaPatchRegex(
 ppaPatchRegex(
   'spawnMobAtPoint server gate',
   /function\s+spawnMobAtPoint\s*\(\s*si\s*,\s*fx\s*\)\s*\{/,
-  "function spawnMobAtPoint(si,fx){if(window.PPA_DUNGEON_LAYOUT_TEST)return;if(window.PPA_REALTIME_V2_ACTIVE&&P&&P.scene==='dungeon'&&!window.__PPA_SERVER_SPAWN_CALL)return;"
+  "function spawnMobAtPoint(si,fx){if(window.PPA_DUNGEON_LAYOUT_TEST&&!window.PPA_DUNGEON_MOBS_ENABLED)return;if(window.PPA_REALTIME_V2_ACTIVE&&P&&P.scene==='dungeon'&&!window.__PPA_SERVER_SPAWN_CALL)return;"
 );
 
 // Layout-test boss gate: block any spawn*Boss() while the player is in the regular dungeon.
