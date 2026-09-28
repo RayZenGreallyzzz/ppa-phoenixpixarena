@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v619-dungeon-smooth-edge-buffer-20260929';
+const CLIENT_BUILD = 'v620-dungeon-buffer-tile-tone-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -222,10 +222,10 @@ const PPA_DUNGEON_FLOOR_LAYER=await sharp(PPA_DUNGEON_BASE_FLOOR)
   .png()
   .toBuffer();
 
-// Buffer uses the SAME floor material, just slightly darker, so there is no
-// bright outline and no fake wall. It only keeps the outer shadow away.
+// Buffer uses the SAME floor material, only ~14% darker and nearly the same saturation.
+// It reads as the same tile family while keeping the outer shadow away.
 const PPA_DUNGEON_BUFFER_STONE=await sharp(PPA_DUNGEON_BASE_FLOOR)
-  .modulate({brightness:0.72,saturation:0.78})
+  .modulate({brightness:0.86,saturation:0.96})
   .png()
   .toBuffer();
 const PPA_DUNGEON_BUFFER_LAYER=await sharp(PPA_DUNGEON_BUFFER_STONE)
