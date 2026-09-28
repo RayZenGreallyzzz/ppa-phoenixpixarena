@@ -257,13 +257,26 @@
           }
 
           try{
-            if(typeof INV!=='undefined'&&INV&&Array.isArray(st.bag)){
-              INV.bag=st.bag.map(function(it){return it&&typeof it==='object'?Object.assign({},it):it});
+            if(typeof INV!=='undefined'&&INV){
+              if(Array.isArray(st.bag)){
+                INV.bag=st.bag.map(function(it){return it&&typeof it==='object'?Object.assign({},it):it});
+              }
+              if(st.storage&&typeof st.storage==='object'){
+                INV.storage=INV.storage&&typeof INV.storage==='object'?INV.storage:{personal:[],clan:[],premium:[]};
+                ['personal','clan','premium'].forEach(function(k){
+                  if(Array.isArray(st.storage[k])){
+                    INV.storage[k]=st.storage[k].map(function(it){return it&&typeof it==='object'?Object.assign({},it):it});
+                  }else if(!Array.isArray(INV.storage[k])){
+                    INV.storage[k]=[];
+                  }
+                });
+              }
             }
           }catch(_){}
 
           try{if(window.PPA_REFRESH_NEWBIE_CHEST)window.PPA_REFRESH_NEWBIE_CHEST()}catch(_){}
           try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
+          try{if(typeof sendStorageState==='function')sendStorageState()}catch(_){}
           try{if(typeof updateUI==='function')updateUI()}catch(_){}
         }
       }catch(applyErr){
