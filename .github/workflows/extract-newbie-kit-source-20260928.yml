@@ -20,6 +20,6 @@ jobs:
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add diag-newbie-kit-source.txt
+          git add diag-newbie-kit-source-small.txt
           git commit -m "Add newbie kit source diagnostics"
           git push
