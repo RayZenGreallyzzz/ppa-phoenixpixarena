@@ -103,3 +103,15 @@ for(const term of [
     pos+=term.length;
   }
 }
+
+
+console.log('\n===== DUNGEON IMAGE DECLARATION SANITIZED =====');
+{
+  let pos=0,n=0;
+  while((pos=src.indexOf('imgDungeon',pos))>=0&&n<12){
+    let frag=src.slice(Math.max(0,pos-2500),Math.min(src.length,pos+3500));
+    frag=frag.replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g,'data:image/...;base64,[REMOVED]');
+    console.log('\n--- IMGDUNGEON '+(++n)+' @ '+pos+' ---\n'+frag);
+    pos+='imgDungeon'.length;
+  }
+}
