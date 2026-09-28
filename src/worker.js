@@ -542,6 +542,95 @@ async function syncNicknameFromSave(env, telegramId, nickname) {
   return registerCharacter(env, telegramId, nickname, current.class_key || '');
 }
 
+async function deleteOwnAccount(env, telegramId, confirmText) {
+  telegramId = String(telegramId || '').trim();
+  confirmText = String(confirmText || '').trim();
+
+  if (confirmText !== 'DELETE_MY_ACCOUNT') {
+    return { ok: false, status: 400, code: 'CONFIRM_REQUIRED', message: 'Нужно подтвердить удаление аккаунта.' };
+  }
+
+  const player = await env.DB.prepare(
+    'SELECT telegram_id,nickname FROM players WHERE telegram_id=?1 LIMIT 1'
+  ).bind(telegramId).first();
+
+  if (!player) {
+    return { ok: false, status: 404, code: 'ACCOUNT_NOT_FOUND', message: 'Аккаунт уже удалён.' };
+  }
+
+  // Never orphan a clan. A solo clan can be removed with its owner; a clan
+  // with other members requires leadership transfer first.
+  try {
+    const led = await env.DB.prepare(
+      'SELECT id,name FROM clans WHERE leader_id=?1 LIMIT 1'
+    ).bind(telegramId).first();
+    if (led) {
+      const cnt = await env.DB.prepare(
+        'SELECT COUNT(*) AS n FROM clan_members WHERE clan_id=?1'
+      ).bind(String(led.id)).first();
+      if ((Number(cnt && cnt.n) || 0) > 1) {
+        return {
+          ok: false,
+          status: 409,
+          code: 'CLAN_LEADER_BLOCK',
+          message: 'Сначала передай права главы клана другому игроку.'
+        };
+      }
+      try { await env.DB.prepare('DELETE FROM clan_meta WHERE clan_id=?1').bind(String(led.id)).run(); } catch (_) {}
+      try { await env.DB.prepare('DELETE FROM clan_members WHERE clan_id=?1').bind(String(led.id)).run(); } catch (_) {}
+      try { await env.DB.prepare('DELETE FROM clans WHERE id=?1').bind(String(led.id)).run(); } catch (_) {}
+    }
+  } catch (_) {}
+
+  // Do not let an account vanish while a payout is still unresolved.
+  try {
+    const pending = await env.DB.prepare(
+      "SELECT id FROM withdraw_requests WHERE telegram_id=?1 AND status IN ('pending','approved') LIMIT 1"
+    ).bind(telegramId).first();
+    if (pending) {
+      return {
+        ok: false,
+        status: 409,
+        code: 'WITHDRAW_PENDING',
+        message: 'Сначала заверши или отмени текущую заявку на вывод.'
+      };
+    }
+  } catch (_) {}
+
+  // Best-effort cleanup of gameplay/account state. TON deposits and completed
+  // withdrawal records are preserved as financial audit records.
+  const deletes = [
+    ['DELETE FROM clan_members WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM social_friends WHERE owner_id=?1 OR friend_id=?1', [telegramId]],
+    ['DELETE FROM clan_trades WHERE player_a=?1 OR player_b=?1', [telegramId]],
+    ['DELETE FROM auction_lots WHERE seller_id=?1', [telegramId]],
+    ['DELETE FROM auction_credits WHERE seller_id=?1', [telegramId]],
+    ['DELETE FROM admin_event_reward_grants WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM stat_chest_open_requests WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM wallet_sync_state WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM wallets WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM player_visit_log WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM player_visit_stats WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM rename_requests WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM save_history WHERE telegram_id=?1', [telegramId]],
+    ['DELETE FROM saves WHERE telegram_id=?1', [telegramId]]
+  ];
+
+  for (const [sql, params] of deletes) {
+    try { await env.DB.prepare(sql).bind(...params).run(); } catch (_) {}
+  }
+
+  await env.DB.prepare('DELETE FROM players WHERE telegram_id=?1').bind(telegramId).run();
+
+  return {
+    ok: true,
+    deleted: true,
+    nickname: String(player.nickname || ''),
+    preservedFinancialAudit: true,
+    message: 'Аккаунт удалён. Перезапусти Mini App, чтобы создать нового персонажа.'
+  };
+}
+
 async function renameWithCard(env, telegramId, newNickname, requestId) {
   newNickname = String(newNickname || '').trim();
   requestId = String(requestId || '').trim().slice(0, 120);
@@ -631,6 +720,10 @@ async function handleApi(request, env) {
     }
     if (url.pathname === '/api/profile/rename') {
       const result = await renameWithCard(env, telegramId, body.nickname, body.requestId);
+      return json(result, result.ok ? 200 : (result.status || 400));
+    }
+    if (url.pathname === '/api/account/delete') {
+      const result = await deleteOwnAccount(env, telegramId, body.confirm);
       return json(result, result.ok ? 200 : (result.status || 400));
     }
 
