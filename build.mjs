@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v611-dungeon-mask-layout-test-20260928';
+const CLIENT_BUILD = 'v612-dungeon-mask-format-fix-20260928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -99,12 +99,19 @@ if(!fs.existsSync(PPA_DUNGEON_TEST_FLOOR_PATH)||!fs.existsSync(PPA_DUNGEON_TEST_
 }
 const PPA_DUNGEON_TEST_MASK_META=await sharp(PPA_DUNGEON_TEST_MASK_PATH).metadata();
 const PPA_DUNGEON_TEST_ART_W=2048,PPA_DUNGEON_TEST_ART_H=996;
-if(PPA_DUNGEON_TEST_MASK_META.width!==2048||PPA_DUNGEON_TEST_MASK_META.height!==996||!PPA_DUNGEON_TEST_MASK_META.hasAlpha){
-  throw new Error('маскаs.png must be transparent RGBA 2048x996');
+if(!PPA_DUNGEON_TEST_MASK_META.width||!PPA_DUNGEON_TEST_MASK_META.height){
+  throw new Error('маскаs.png metadata is invalid');
 }
+if(PPA_DUNGEON_TEST_MASK_META.width!==2048||PPA_DUNGEON_TEST_MASK_META.height!==996){
+  console.warn('[PPA BUILD] маскаs.png is '+PPA_DUNGEON_TEST_MASK_META.width+'x'+PPA_DUNGEON_TEST_MASK_META.height+'; normalizing to 2048x996');
+}
+console.log('[PPA BUILD] Dungeon mask source: '+PPA_DUNGEON_TEST_MASK_META.width+'x'+PPA_DUNGEON_TEST_MASK_META.height+' alpha='+(!!PPA_DUNGEON_TEST_MASK_META.hasAlpha));
 const PPA_DUNGEON_TEST_FLOOR_META=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH).metadata();
+if(!PPA_DUNGEON_TEST_FLOOR_META.width||!PPA_DUNGEON_TEST_FLOOR_META.height){
+  throw new Error('данж.png metadata is invalid');
+}
 if(PPA_DUNGEON_TEST_FLOOR_META.width!==2048||PPA_DUNGEON_TEST_FLOOR_META.height<996){
-  throw new Error('данж.png must be 2048px wide and at least 996px high');
+  throw new Error('данж.png must be 2048px wide and at least 996px high; got '+PPA_DUNGEON_TEST_FLOOR_META.width+'x'+PPA_DUNGEON_TEST_FLOOR_META.height);
 }
 
 // 4096px render art. The original floor is tiled, not stretched:
@@ -140,7 +147,7 @@ let PPA_DUNGEON_WALK_COUNT=0;
 for(let y=0;y<PPA_DUNGEON_COLL_H;y++)for(let x=0;x<PPA_DUNGEON_COLL_W;x++){
   const pi=y*PPA_DUNGEON_COLL_W+x,off=pi*PPA_DUNGEON_MASK_RAW.info.channels;
   const red=PPA_DUNGEON_MASK_RAW.data[off]||0,alpha=PPA_DUNGEON_MASK_RAW.data[off+3]||0;
-  if(alpha>=96&&red>=96){
+  if(red>=96&&alpha>=32){
     PPA_DUNGEON_WALK_BITS[pi>>3]|=(1<<(7-(pi&7)));
     PPA_DUNGEON_WALK_COUNT++;
   }
