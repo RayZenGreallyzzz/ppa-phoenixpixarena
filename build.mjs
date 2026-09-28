@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v623-dungeon-enable-room-mobs-20260929';
+const CLIENT_BUILD = 'v624-dungeon-room-core-mobs-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -199,13 +199,34 @@ function ppaDungeonSnapInterior(x,y,minClear=10,maxR=150){
   return null;
 }
 
+function ppaDungeonFindRoomCore(x,y,maxR=180){
+  x=Math.round(x);y=Math.round(y);
+  let best=null,bestScore=-Infinity;
+  for(let yy=Math.max(0,y-maxR);yy<=Math.min(PPA_DUNGEON_COLL_H-1,y+maxR);yy+=4){
+    for(let xx=Math.max(0,x-maxR);xx<=Math.min(PPA_DUNGEON_COLL_W-1,x+maxR);xx+=4){
+      const dx=xx-x,dy=yy-y,d=Math.hypot(dx,dy);
+      if(d>maxR)continue;
+      const i=yy*PPA_DUNGEON_COLL_W+xx;
+      if(PPA_DUNGEON_WALK[i]!==1)continue;
+      const clear=PPA_DUNGEON_INNER_DIST[i]/3;
+      if(clear<18)continue;
+      const score=clear*5-d*0.24;
+      if(score>bestScore){bestScore=score;best={x:xx,y:yy,clear};}
+    }
+  }
+  if(best)return best;
+  const q=ppaDungeonSnapInterior(x,y,14,maxR);
+  if(!q)return null;
+  return {x:q.x,y:q.y,clear:PPA_DUNGEON_INNER_DIST[q.y*PPA_DUNGEON_COLL_W+q.x]/3};
+}
+
 const PPA_DUNGEON_ROOM_META=[];
 for(const old of PPA_DUNGEON_OLD_ROOM_META){
-  const q=ppaDungeonSnapInterior(old.x*PPA_DUNGEON_ROOM_SX,old.y*PPA_DUNGEON_ROOM_SY,10,150);
+  const q=ppaDungeonFindRoomCore(old.x*PPA_DUNGEON_ROOM_SX,old.y*PPA_DUNGEON_ROOM_SY,180);
   if(!q)continue;
   PPA_DUNGEON_ROOM_META.push({
     x:q.x,y:q.y,level:old.level,size:old.size==='large'?'large':'small',
-    count:Math.max(5,Math.min(19,Number(old.count)||7)),inherited:true
+    count:Math.max(5,Math.min(19,Number(old.count)||7)),inherited:true,coreClear:q.clear
   });
 }
 
@@ -232,7 +253,7 @@ for(let y=36;y<PPA_DUNGEON_TEST_ART_H-36;y+=6){
     const i=y*PPA_DUNGEON_COLL_W+x;
     if(PPA_DUNGEON_WALK[i]!==1)continue;
     const clear=PPA_DUNGEON_INNER_DIST[i]/3;
-    if(clear<24||Math.hypot(x-50,y-518)<150)continue;
+    if(clear<30||Math.hypot(x-50,y-518)<150)continue;
     let near=false;
     for(const r of PPA_DUNGEON_ROOM_META){
       if(Math.hypot(x-r.x,y-r.y)<92){near=true;break}
@@ -251,7 +272,7 @@ for(const q of PPA_DUNGEON_EXTRA_CANDIDATES){
   if(near)continue;
   PPA_DUNGEON_ROOM_META.push({
     x:q.x,y:q.y,level:ppaDungeonLevelForNewRoom(q.x,q.y),
-    size:q.clear>=40?'large':'small',count:q.clear>=48?11:(q.clear>=34?8:6),inherited:false
+    size:q.clear>=44?'large':'small',count:q.clear>=52?11:(q.clear>=38?8:6),inherited:false,coreClear:q.clear
   });
   PPA_DUNGEON_EXTRA_ROOMS++;
 }
@@ -260,43 +281,66 @@ const PPA_DUNGEON_ACTIVE_SPAWNS=[];
 const PPA_DUNGEON_ROOM_BOUNDS=[];
 function ppaDungeonBuildRoomSpawns(room,ri){
   const want=Math.max(5,Math.min(19,room.count|0)),pts=[];
-  const maxR=room.size==='large'?76:48,minGap=15;
+  const cx=Math.round(room.x),cy=Math.round(room.y);
+  const ci=cy*PPA_DUNGEON_COLL_W+cx;
+  const centerClear=Number(room.coreClear)||((PPA_DUNGEON_INNER_DIST[ci]||0)/3);
+  const minRoomClear=Math.max(20,Math.min(32,Math.floor(centerClear*0.55)));
+  const maxR=Math.max(34,Math.min(room.size==='large'?88:58,Math.floor(centerClear*1.55)));
+  const minGap=15;
+
+  const sameRoomCore=(x,y)=>{
+    const dx=x-room.x,dy=y-room.y,d=Math.hypot(dx,dy);
+    const steps=Math.max(1,Math.ceil(d/6));
+    for(let s=1;s<=steps;s++){
+      const t=s/steps,px=Math.round(room.x+dx*t),py=Math.round(room.y+dy*t);
+      if(px<0||py<0||px>=PPA_DUNGEON_COLL_W||py>=PPA_DUNGEON_COLL_H)return false;
+      const ii=py*PPA_DUNGEON_COLL_W+px;
+      if(PPA_DUNGEON_WALK[ii]!==1||PPA_DUNGEON_INNER_DIST[ii]<minRoomClear*3)return false;
+    }
+    return true;
+  };
+
   const accept=(x,y)=>{
     x=Math.round(x);y=Math.round(y);
-    if(!ppaDungeonCellOk(x,y,9)||Math.hypot(x-50,y-518)<135)return false;
+    if(!ppaDungeonCellOk(x,y,minRoomClear)||Math.hypot(x-50,y-518)<135)return false;
+    if(Math.hypot(x-room.x,y-room.y)>maxR||!sameRoomCore(x,y))return false;
     for(const p of pts)if(Math.hypot(x-p[0],y-p[1])<minGap)return false;
     pts.push([x,y]);return true;
   };
+
   accept(room.x,room.y);
   const golden=2.399963229728653;
-  for(let k=1;k<180&&pts.length<want;k++){
-    const t=k/179,r=12+Math.sqrt(t)*(maxR-12),a=k*golden+ri*0.71;
+  for(let k=1;k<320&&pts.length<want;k++){
+    const t=k/319,r=10+Math.sqrt(t)*(maxR-10),a=k*golden+ri*0.71;
     accept(room.x+Math.cos(a)*r,room.y+Math.sin(a)*r);
   }
   if(pts.length<want){
-    for(let yy=-maxR;yy<=maxR&&pts.length<want;yy+=14){
-      for(let xx=-maxR;xx<=maxR&&pts.length<want;xx+=14){
+    for(let yy=-maxR;yy<=maxR&&pts.length<want;yy+=12){
+      for(let xx=-maxR;xx<=maxR&&pts.length<want;xx+=12){
         if(xx*xx+yy*yy<=maxR*maxR)accept(room.x+xx,room.y+yy);
       }
     }
   }
+
   for(let j=0;j<pts.length;j++)PPA_DUNGEON_ACTIVE_SPAWNS.push([pts[j][0],pts[j][1],ri,j]);
-  let minX=room.x-38,minY=room.y-38,maxX=room.x+38,maxY=room.y+38;
+
+  let minX=room.x-30,minY=room.y-30,maxX=room.x+30,maxY=room.y+30;
   if(pts.length){
-    minX=Math.min(...pts.map(p=>p[0]))-24;minY=Math.min(...pts.map(p=>p[1]))-24;
-    maxX=Math.max(...pts.map(p=>p[0]))+24;maxY=Math.max(...pts.map(p=>p[1]))+24;
+    minX=Math.min(...pts.map(p=>p[0]))-18;minY=Math.min(...pts.map(p=>p[1]))-18;
+    maxX=Math.max(...pts.map(p=>p[0]))+18;maxY=Math.max(...pts.map(p=>p[1]))+18;
   }
   PPA_DUNGEON_ROOM_BOUNDS.push([
     Math.max(0,Math.round(minX)),Math.max(0,Math.round(minY)),
     Math.min(PPA_DUNGEON_TEST_ART_W-1,Math.round(maxX)),Math.min(PPA_DUNGEON_TEST_ART_H-1,Math.round(maxY))
   ]);
 }
+
 for(let ri=0;ri<PPA_DUNGEON_ROOM_META.length;ri++)ppaDungeonBuildRoomSpawns(PPA_DUNGEON_ROOM_META[ri],ri);
 
 const PPA_DUNGEON_ROOM_META_RUNTIME=PPA_DUNGEON_ROOM_META.map(r=>({
   x:r.x,y:r.y,level:r.level,size:r.size,count:r.count
 }));
-console.log('[PPA BUILD] Dungeon mobs: '+PPA_DUNGEON_ROOM_META_RUNTIME.length+' rooms ('+PPA_DUNGEON_EXTRA_ROOMS+' new) · '+PPA_DUNGEON_ACTIVE_SPAWNS.length+' spawn points');
+console.log('[PPA BUILD] Dungeon mobs: '+PPA_DUNGEON_ROOM_META_RUNTIME.length+' room cores ('+PPA_DUNGEON_EXTRA_ROOMS+' new) · '+PPA_DUNGEON_ACTIVE_SPAWNS.length+' room-only spawn points');
 // ==========================================================================
 
 // Runtime floor visual uses the original high-res mask directly rather than the
