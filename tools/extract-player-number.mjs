@@ -26,3 +26,12 @@ for(const n of defs){
 fs.appendFileSync('diag-player-number.txt','\n\n'+defsOut);
 
 // rerun asset extraction
+
+const palNames=['PALADIN_IDLE_SRC','PALADIN_RUN_SRC','PALADIN_ATTACK_SRC'];
+let palOut='';
+for(const n of palNames){
+  const re=new RegExp("const "+n+"='data:image\\/png;base64,([^']+)'");
+  const m=src.match(re);
+  palOut += '\n###'+n+'###\n'+(m?m[1]:'NOT_FOUND')+'\n';
+}
+fs.writeFileSync('diag-paladin-sheets-base64.txt',palOut);
