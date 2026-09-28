@@ -168,57 +168,6 @@
     catch(err){if(err&&err.data&&err.data.ok===false)return err.data;throw err}
   }
 
-  async function deleteStellaTestAccount(){
-    var a=await auth();
-    var nick=String(a&&a.profile&&a.profile.nickname||'').trim();
-    if(nick.toLowerCase()!=='stella')throw new Error('Эта временная кнопка доступна только аккаунту Stella.');
-
-    var ok=false;
-    try{ok=window.confirm('Удалить тестовый аккаунт Stella с сервера?\n\nСейв, профиль, инвентарь и локальный персонаж будут очищены. История TON/выводов останется для аудита.')}catch(_){ok=false}
-    if(!ok)return {ok:false,cancelled:true};
-
-    var typed='';
-    try{typed=window.prompt('Для подтверждения введи: DELETE STELLA','')||''}catch(_){typed=''}
-    if(String(typed).trim()!=='DELETE STELLA')throw new Error('Удаление отменено: подтверждение не совпало.');
-
-    var r=await call('/api/account/delete-stella-test',{confirm:'DELETE_STELLA_TEST_ACCOUNT'});
-
-    try{
-      localStorage.removeItem('pxSave');
-      localStorage.removeItem('pxSaveLastGood');
-      localStorage.removeItem('ppaPlayerNameV205');
-      sessionStorage.removeItem('ppaTgMigrationDecisionV278');
-    }catch(_){}
-    cachedAuth=null;knownSaveVersion=null;saveConflict=null;cloudSaveLoaded=false;
-
-    try{window.alert((r&&r.message)||'Stella удалена. Mini App будет перезапущен.') }catch(_){}
-    try{window.location.reload()}catch(_){}
-    return r;
-  }
-
-  function installStellaDeleteButton(){
-    if(document.getElementById('ppaDeleteStellaTestBtn'))return;
-    auth().then(function(a){
-      var nick=String(a&&a.profile&&a.profile.nickname||'').trim();
-      if(nick.toLowerCase()!=='stella')return;
-      var b=document.createElement('button');
-      b.id='ppaDeleteStellaTestBtn';
-      b.type='button';
-      b.textContent='ТЕСТ · УДАЛИТЬ АККАУНТ';
-      b.style.cssText='position:fixed;left:8px;bottom:8px;z-index:2147483600;height:30px;padding:0 9px;border:1px solid #8e3a34;border-radius:7px;background:rgba(55,16,14,.94);color:#ffb1aa;font:800 9px monospace;box-shadow:0 3px 12px rgba(0,0,0,.55);touch-action:manipulation';
-      b.onclick=function(){
-        b.disabled=true;
-        deleteStellaTestAccount().catch(function(err){
-          try{window.alert(String(err&&err.message||err||'Ошибка удаления'))}catch(_){}
-        }).finally(function(){b.disabled=false});
-      };
-      document.body.appendChild(b);
-    }).catch(function(){});
-  }
-
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(installStellaDeleteButton,600)},{once:true});
-  else setTimeout(installStellaDeleteButton,600);
-
   async function authed(path,payload){await auth();return call(path,payload||{})}
 
   window.PPA=window.PPA||{};
@@ -244,7 +193,6 @@
     },
     ppaSyncNicknameFromSave:async function(){return authed('/api/profile/load')},
     ppaRequestNicknameChange:renameWithSyncedCard,
-    ppaDeleteStellaTestAccount:deleteStellaTestAccount,
 
     ppaAdminEventRewardStockAccess:function(payload){return authed('/api/admin/event-reward-stock-access',payload||{})},
     ppaStatChestOpen:async function(payload){
