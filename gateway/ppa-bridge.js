@@ -168,6 +168,49 @@
     catch(err){if(err&&err.data&&err.data.ok===false)return err.data;throw err}
   }
 
+  async function deleteOwnAccount(){
+    await auth();
+
+    var ok=false;
+    try{
+      ok=window.confirm(
+        'Удалить текущий игровой аккаунт?\n\nБудут удалены персонаж, сейв, инвентарь, аукцион и игровые данные этого Telegram-аккаунта. История TON/выводов сохраняется для финансового аудита.'
+      );
+    }catch(_){ok=false}
+    if(!ok)return {ok:false,cancelled:true};
+
+    var typed='';
+    try{typed=window.prompt('Для подтверждения введи: УДАЛИТЬ','')||''}catch(_){typed=''}
+    if(String(typed).trim().toUpperCase()!=='УДАЛИТЬ'){
+      throw new Error('Удаление отменено: подтверждение не совпало.');
+    }
+
+    var r=await call('/api/account/delete',{confirm:'DELETE_MY_ACCOUNT'});
+
+    try{
+      localStorage.removeItem('pxSave');
+      localStorage.removeItem('pxSaveLastGood');
+      localStorage.removeItem('ppaPlayerNameV205');
+      sessionStorage.removeItem('ppaTgMigrationDecisionV278');
+    }catch(_){}
+
+    cachedAuth=null;
+    knownSaveVersion=null;
+    saveConflict=null;
+    cloudSaveLoaded=false;
+    try{
+      if(window.PPA_CLOUD){
+        window.PPA_CLOUD.ready=false;
+        window.PPA_CLOUD.version=null;
+        window.PPA_CLOUD.saveConflict=null;
+      }
+    }catch(_){}
+
+    try{window.alert((r&&r.message)||'Аккаунт удалён. Mini App будет перезапущен.')}catch(_){}
+    try{window.location.reload()}catch(_){}
+    return r;
+  }
+
   async function authed(path,payload){await auth();return call(path,payload||{})}
 
   window.PPA=window.PPA||{};
@@ -193,6 +236,7 @@
     },
     ppaSyncNicknameFromSave:async function(){return authed('/api/profile/load')},
     ppaRequestNicknameChange:renameWithSyncedCard,
+    ppaDeleteOwnAccount:deleteOwnAccount,
 
     ppaAdminEventRewardStockAccess:function(payload){return authed('/api/admin/event-reward-stock-access',payload||{})},
     ppaStatChestOpen:async function(payload){
