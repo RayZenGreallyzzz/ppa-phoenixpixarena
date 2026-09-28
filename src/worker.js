@@ -284,7 +284,7 @@ async function registerCharacter(env, telegramId, nickname, classKey) {
   const now = Date.now();
   await env.DB.prepare(`
     UPDATE players SET nickname=?1, nickname_key=?2,
-      class_key=CASE WHEN class_key IS NULL OR class_key='' THEN ?3 ELSE class_key END,
+      class_key=CASE WHEN nickname_key IS NULL OR nickname_key='' THEN ?3 ELSE class_key END,
       updated_at=?4,
       last_auth_at=?4
     WHERE telegram_id=?5
