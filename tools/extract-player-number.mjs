@@ -37,3 +37,14 @@ for(const n of palNames){
 fs.appendFileSync('diag-player-number.txt','\n\n'+palOut);
 
 // trigger paladin alignment audit
+
+const startNeedles=['RayZenGX','С любовью','build256','BUILD256','build 256','Build 256','256'];
+let startOut='';
+for(const n of startNeedles){
+  let p=0,c=0;
+  while((p=src.indexOf(n,p))>=0&&c<30){
+    startOut+='\n===== START '+n+' #'+(++c)+' @ '+p+' =====\n'+src.slice(Math.max(0,p-2200),Math.min(src.length,p+4200));
+    p+=n.length;
+  }
+}
+fs.writeFileSync('diag-start-labels.txt',startOut);
