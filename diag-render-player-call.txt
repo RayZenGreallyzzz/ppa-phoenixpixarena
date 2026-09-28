@@ -1,0 +1,1294 @@
+
+===== drawPlayer(); #1 @ 97883437 =====
+   }
+      if(isScavengerSlime&&e.slimeFlip){
+        cx.translate(sx,0);
+        cx.scale(-1,1);
+        cx.drawImage(e.sprite,-dw/2,sy-dh*0.78+bob,dw,dh);
+      }else{
+        cx.drawImage(e.sprite,sx-dw/2,sy-dh*0.78+bob,dw,dh);
+      }
+      cx.filter='none';
+      cx.globalAlpha=1;
+      cx.restore();
+    }else{
+      // Fallback only if a sprite failed to load.
+      cx.fillStyle=e.flash>0?'#ffffff':e.col;
+      cx.beginPath();cx.arc(sx,sy+bob,e.sz*0.42*eliteScale,0,Math.PI*2);cx.fill();
+    }
+    // HP bar
+    if(e.hp<e.mhp||e.isDungeonElite){
+      const bw=e.sz*(e.isDungeonElite?2.3:1),bh=e.isDungeonElite?7:4;
+      const barY=sy-e.sz*0.65*eliteScale;
+      cx.fillStyle='rgba(0,0,0,0.78)';
+      cx.fillRect(sx-bw/2,barY,bw,bh);
+      cx.fillStyle=e.isDungeonElite?'#b25cff':'#ff3333';
+      cx.fillRect(sx-bw/2,barY,bw*Math.max(0,e.hp/e.mhp),bh);
+      if(e.isDungeonElite){cx.strokeStyle='#f2c45e';cx.lineWidth=1;cx.strokeRect(sx-bw/2,barY,bw,bh)}
+    }
+    // Уровень и имя моба
+    if(e.lvl&&e.type&&e.type.n){
+      cx.textAlign='center';
+      cx.font=e.isDungeonElite?'bold 11px monospace':'bold 9px monospace';
+      const _eliteName=(e.isDungeonElite?'⚠ ЭЛИТА · ':'')+'['+e.lvl+'] '+e.type.n;
+      const _nameY=sy-e.sz*0.75*eliteScale;
+      cx.fillStyle='rgba(0,0,0,0.82)';
+      cx.fillText(_eliteName,sx+1,_nameY+1);
+      cx.fillStyle=e.isDungeonElite?'#ffd76a':'#ffdd88';
+      cx.fillText(_eliteName,sx,_nameY);
+      cx.textAlign='left';
+    }
+  }
+
+  // Crystal projectiles from the world boss.
+  if(P.scene==='worldboss')drawWorldCrystalProjectiles();
+
+  // Boss fireballs
+  for(const f of PR){
+    const fx=f.x-cam.x,fy=f.y-cam.y;
+    const fg=cx.createRadialGradient(fx,fy,0,fx,fy,15);
+    fg.addColorStop(0,'rgba(255,240,180,0.95)');
+    fg.addColorStop(0.4,'rgba(255,140,40,0.75)');
+    fg.addColorStop(1,'rgba(255,60,0,0)');
+    cx.fillStyle=fg;cx.beginPath();cx.arc(fx,fy,15,0,Math.PI*2);cx.fill();
+  }
+
+  // Online players from Realtime Presence (same scene only).
+  drawOnlinePlayers();
+
+  // Equipped visuals.
+  updatePetFollower();
+  drawPetFollower();
+
+  // Wings and cloak stay as equipment/craft items,
+  // but are NOT rendered in the world.
+  // Player is always rendered in the normal world pass.
+  // The old reward-only late-render branch could make the hero invisible
+  // between Titan death and personal-chest pickup on some mobile browsers.
+  drawPlayer();
+
+  // Player projectiles are rendered above world sprites so shots stay readable.
+  try{drawPlayerCannonballs()}catch(_){}
+  try{drawPlayerArrows()}catch(_){}
+
+  // Artifact floats above/beside the character.
+  drawEquippedArtifact();
+
+  // V104 depth for the original Phoenix and all ordinary dungeon/arena mobs.
+  // When the player walks behind their ground shadow, their sprite body is redrawn on top.
+  ppaDrawWorldBodyOccluders();
+
+  // V89 depth sorting for the large clan boss.
+  // If the player's feet are behind the boss, the boss body covers the player.
+  if(P.scene==='clanboss1'){
+    const _depthBoss=clanBossCombatTarget();
+    if(_depthBoss)drawClanBossBodyOccluder(_depthBoss);
+  }
+
+  // World boss depth: player disappears behind the Titan when walking behind its body.
+  if(P.scene==='worldboss'){
+    const _worldDepthBoss=worldCrystalBossEntity();
+    if(_worldDepthBoss)drawWorldCrystalBossOccluder(_worldDepthBoss);
+  }
+
+  // V204: small frameless character name follows the hero in world space.
+  try{drawPlayerNickname()}catch(_){}
+
+  drawMinimap();
+
+  // Return to physical screen coordinates for screen-space effects.
+  cx.restore();
+
+  // Vignette — cached until the canvas size changes.
+  cx.fillStyle=ppaGetVignetteGradient();cx.fillRect(0,0,cv.width,cv.height);
+}
+
+// === DUNGEON MINIMAP ===
+// Pre-rendered walkable mask (1px per mask cell), drawn once
+const mmBase=document.createElement('canvas');
+mmBase.width=DG.gw;mmBase.height=DG.gh;
+(function(){
+  const m=mmBase.getContext('2d');
+  m.fillStyle='#0a0a0a';m.fillRect(0,0,DG.gw,DG.gh);
+  for(let y=0;y<DG.gh;y++)for(let x=0;x<DG.gw;x++){
+    if(DG_WALK[y*DG.gw+x]){m.fillStyle='#6e6e6e';m.fillRect(x,y,1,1)}
+  }
+  // Boss hall marker
+  m.fillStyle='#7a1a0a';
+  m.fillRect(Math.floor(DG_BOSS_IMG[0]/24)-3,Math.floor(DG_BOSS_IMG[1]/24)-3,7,7);
+})();
+let __v218MinimapAt=0;
+function drawMinimap(){
+  const mm=document.getElementById('mmap');
+  if(P.scene!=='dungeon'){
+    __v218MinimapAt=0;
+    if(mm.style.display!=='none')mm.style.display='none';
+    return;
+  }
+  mm.style.display='block';
+  const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  if(now-__v218MinimapAt<320)return;
+  __v218MinimapAt=now;
+  const m=mm.getContext('2d');
+  m.imageSmoothingEnabled=false;
+  m.clearRect(0,0,200,133);
+  m.drawImage(mmBase,0,0,200,133);
+  const sxr=200/SCENES.dungeon.w,syr=133/SCENES.dungeon.h;
+  // Viewport rectangle respects the dungeon camera zoom.
+  const z=cameraZoom(),vw=cv.width/z,vh=cv.height/z;
+  m.strokeStyle='rgba(255,255,255,0.4)';m.lineWidth=1;
+  m.strokeRect(cam.x*sxr,cam.y*syr,vw*sxr,vh*syr);
+  // Mobs + boss
+  for(const e of EN){
+    if(e.isBoss){m.fillStyle='#ff3311';m.fillRect(e.x*sxr-2.5,e.y*syr-2.5,5,5)}
+    else{m.fillStyle='#ffaa33';m.fillRect(e.x*sxr-1.5,e.y*syr-1.5,3,3)}
+  }
+  // Player (blinking)
+  const blink=Math.sin(Date.now()*0.008)>-0.3;
+  if(blink){m.fillStyle='#ffff44';m.fillRect(P.x*sxr-2,P.y*syr-2,4,4)}
+}
+
+function drawNPC(){
+  const t=Date.now()*0.003;
+  const groundDrop=12; // visually seat every NPC on the town floor
+  for(const npc of ((SCENES[P.scene]&&SCENES[P.scene].npcs)||[])){
+    if(npc.hidden)continue;
+    const nx=npc.x-cam.x,ny=npc.y-cam.y;
+    if(nx<-220||ny<-260||nx>cv.width+220||ny>cv.height+220)continue;
+    const gy=ny+groundDrop;
+    const glow=Math.sin(t*3+npc.x*0.001)*0.12+0.88;
+
+    // Dark contact shadow so the NPC base visibly touches the ground.
+    cx.fillStyle='rgba(0,0,0,0.30)';
+    cx.beginPath();cx.ellipse(nx,gy+15,47,13,0,0,Math.PI*2);cx.fill();
+
+    // Small interaction glow directly on the ground.
+    const g=cx.createRadialGradient(nx,gy,0,nx,gy,70);
+    g.addColorStop(0,'rgba(255,190,70,'+(0.18*glow)+')');
+    g.addColorStop(1,'rgba(255,190,70,0)');
+    cx.fillStyle=g;cx.beginPath();cx.ellipse(nx,gy+8,70,28,0,0,Math.PI*2);cx.fill();
+
+    // Actual supplied NPC art, lowered to a common ground baseline.
+    if(npc.img&&npc.img.complete&&npc.img.naturalWidth>0){
+      const dh=npc.id==='dungeon'?126:(npc.id==='fartzone_guide'?90:112);
+      const dw=dh*(npc.img.naturalWidth/npc.img.naturalHeight);
+      cx.imageSmoothingEnabled=false;
+      cx.drawImage(npc.img,nx-dw/2,gy-dh+18,dw,dh);
+    }else if(npc.id==='clan'){
+      // Temporary in-game pixel silhouette until the dedicated Clan Master sprite is approved.
+      cx.save();
+      cx.translate(Math.round(nx),Math.round(gy));
+      cx.imageSmoothingEnabled=false;
+      cx.fillStyle='#151116';cx.fillRect(-2
+===== drawPlayer( #1 @ 97883437 =====
+   }
+      if(isScavengerSlime&&e.slimeFlip){
+        cx.translate(sx,0);
+        cx.scale(-1,1);
+        cx.drawImage(e.sprite,-dw/2,sy-dh*0.78+bob,dw,dh);
+      }else{
+        cx.drawImage(e.sprite,sx-dw/2,sy-dh*0.78+bob,dw,dh);
+      }
+      cx.filter='none';
+      cx.globalAlpha=1;
+      cx.restore();
+    }else{
+      // Fallback only if a sprite failed to load.
+      cx.fillStyle=e.flash>0?'#ffffff':e.col;
+      cx.beginPath();cx.arc(sx,sy+bob,e.sz*0.42*eliteScale,0,Math.PI*2);cx.fill();
+    }
+    // HP bar
+    if(e.hp<e.mhp||e.isDungeonElite){
+      const bw=e.sz*(e.isDungeonElite?2.3:1),bh=e.isDungeonElite?7:4;
+      const barY=sy-e.sz*0.65*eliteScale;
+      cx.fillStyle='rgba(0,0,0,0.78)';
+      cx.fillRect(sx-bw/2,barY,bw,bh);
+      cx.fillStyle=e.isDungeonElite?'#b25cff':'#ff3333';
+      cx.fillRect(sx-bw/2,barY,bw*Math.max(0,e.hp/e.mhp),bh);
+      if(e.isDungeonElite){cx.strokeStyle='#f2c45e';cx.lineWidth=1;cx.strokeRect(sx-bw/2,barY,bw,bh)}
+    }
+    // Уровень и имя моба
+    if(e.lvl&&e.type&&e.type.n){
+      cx.textAlign='center';
+      cx.font=e.isDungeonElite?'bold 11px monospace':'bold 9px monospace';
+      const _eliteName=(e.isDungeonElite?'⚠ ЭЛИТА · ':'')+'['+e.lvl+'] '+e.type.n;
+      const _nameY=sy-e.sz*0.75*eliteScale;
+      cx.fillStyle='rgba(0,0,0,0.82)';
+      cx.fillText(_eliteName,sx+1,_nameY+1);
+      cx.fillStyle=e.isDungeonElite?'#ffd76a':'#ffdd88';
+      cx.fillText(_eliteName,sx,_nameY);
+      cx.textAlign='left';
+    }
+  }
+
+  // Crystal projectiles from the world boss.
+  if(P.scene==='worldboss')drawWorldCrystalProjectiles();
+
+  // Boss fireballs
+  for(const f of PR){
+    const fx=f.x-cam.x,fy=f.y-cam.y;
+    const fg=cx.createRadialGradient(fx,fy,0,fx,fy,15);
+    fg.addColorStop(0,'rgba(255,240,180,0.95)');
+    fg.addColorStop(0.4,'rgba(255,140,40,0.75)');
+    fg.addColorStop(1,'rgba(255,60,0,0)');
+    cx.fillStyle=fg;cx.beginPath();cx.arc(fx,fy,15,0,Math.PI*2);cx.fill();
+  }
+
+  // Online players from Realtime Presence (same scene only).
+  drawOnlinePlayers();
+
+  // Equipped visuals.
+  updatePetFollower();
+  drawPetFollower();
+
+  // Wings and cloak stay as equipment/craft items,
+  // but are NOT rendered in the world.
+  // Player is always rendered in the normal world pass.
+  // The old reward-only late-render branch could make the hero invisible
+  // between Titan death and personal-chest pickup on some mobile browsers.
+  drawPlayer();
+
+  // Player projectiles are rendered above world sprites so shots stay readable.
+  try{drawPlayerCannonballs()}catch(_){}
+  try{drawPlayerArrows()}catch(_){}
+
+  // Artifact floats above/beside the character.
+  drawEquippedArtifact();
+
+  // V104 depth for the original Phoenix and all ordinary dungeon/arena mobs.
+  // When the player walks behind their ground shadow, their sprite body is redrawn on top.
+  ppaDrawWorldBodyOccluders();
+
+  // V89 depth sorting for the large clan boss.
+  // If the player's feet are behind the boss, the boss body covers the player.
+  if(P.scene==='clanboss1'){
+    const _depthBoss=clanBossCombatTarget();
+    if(_depthBoss)drawClanBossBodyOccluder(_depthBoss);
+  }
+
+  // World boss depth: player disappears behind the Titan when walking behind its body.
+  if(P.scene==='worldboss'){
+    const _worldDepthBoss=worldCrystalBossEntity();
+    if(_worldDepthBoss)drawWorldCrystalBossOccluder(_worldDepthBoss);
+  }
+
+  // V204: small frameless character name follows the hero in world space.
+  try{drawPlayerNickname()}catch(_){}
+
+  drawMinimap();
+
+  // Return to physical screen coordinates for screen-space effects.
+  cx.restore();
+
+  // Vignette — cached until the canvas size changes.
+  cx.fillStyle=ppaGetVignetteGradient();cx.fillRect(0,0,cv.width,cv.height);
+}
+
+// === DUNGEON MINIMAP ===
+// Pre-rendered walkable mask (1px per mask cell), drawn once
+const mmBase=document.createElement('canvas');
+mmBase.width=DG.gw;mmBase.height=DG.gh;
+(function(){
+  const m=mmBase.getContext('2d');
+  m.fillStyle='#0a0a0a';m.fillRect(0,0,DG.gw,DG.gh);
+  for(let y=0;y<DG.gh;y++)for(let x=0;x<DG.gw;x++){
+    if(DG_WALK[y*DG.gw+x]){m.fillStyle='#6e6e6e';m.fillRect(x,y,1,1)}
+  }
+  // Boss hall marker
+  m.fillStyle='#7a1a0a';
+  m.fillRect(Math.floor(DG_BOSS_IMG[0]/24)-3,Math.floor(DG_BOSS_IMG[1]/24)-3,7,7);
+})();
+let __v218MinimapAt=0;
+function drawMinimap(){
+  const mm=document.getElementById('mmap');
+  if(P.scene!=='dungeon'){
+    __v218MinimapAt=0;
+    if(mm.style.display!=='none')mm.style.display='none';
+    return;
+  }
+  mm.style.display='block';
+  const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  if(now-__v218MinimapAt<320)return;
+  __v218MinimapAt=now;
+  const m=mm.getContext('2d');
+  m.imageSmoothingEnabled=false;
+  m.clearRect(0,0,200,133);
+  m.drawImage(mmBase,0,0,200,133);
+  const sxr=200/SCENES.dungeon.w,syr=133/SCENES.dungeon.h;
+  // Viewport rectangle respects the dungeon camera zoom.
+  const z=cameraZoom(),vw=cv.width/z,vh=cv.height/z;
+  m.strokeStyle='rgba(255,255,255,0.4)';m.lineWidth=1;
+  m.strokeRect(cam.x*sxr,cam.y*syr,vw*sxr,vh*syr);
+  // Mobs + boss
+  for(const e of EN){
+    if(e.isBoss){m.fillStyle='#ff3311';m.fillRect(e.x*sxr-2.5,e.y*syr-2.5,5,5)}
+    else{m.fillStyle='#ffaa33';m.fillRect(e.x*sxr-1.5,e.y*syr-1.5,3,3)}
+  }
+  // Player (blinking)
+  const blink=Math.sin(Date.now()*0.008)>-0.3;
+  if(blink){m.fillStyle='#ffff44';m.fillRect(P.x*sxr-2,P.y*syr-2,4,4)}
+}
+
+function drawNPC(){
+  const t=Date.now()*0.003;
+  const groundDrop=12; // visually seat every NPC on the town floor
+  for(const npc of ((SCENES[P.scene]&&SCENES[P.scene].npcs)||[])){
+    if(npc.hidden)continue;
+    const nx=npc.x-cam.x,ny=npc.y-cam.y;
+    if(nx<-220||ny<-260||nx>cv.width+220||ny>cv.height+220)continue;
+    const gy=ny+groundDrop;
+    const glow=Math.sin(t*3+npc.x*0.001)*0.12+0.88;
+
+    // Dark contact shadow so the NPC base visibly touches the ground.
+    cx.fillStyle='rgba(0,0,0,0.30)';
+    cx.beginPath();cx.ellipse(nx,gy+15,47,13,0,0,Math.PI*2);cx.fill();
+
+    // Small interaction glow directly on the ground.
+    const g=cx.createRadialGradient(nx,gy,0,nx,gy,70);
+    g.addColorStop(0,'rgba(255,190,70,'+(0.18*glow)+')');
+    g.addColorStop(1,'rgba(255,190,70,0)');
+    cx.fillStyle=g;cx.beginPath();cx.ellipse(nx,gy+8,70,28,0,0,Math.PI*2);cx.fill();
+
+    // Actual supplied NPC art, lowered to a common ground baseline.
+    if(npc.img&&npc.img.complete&&npc.img.naturalWidth>0){
+      const dh=npc.id==='dungeon'?126:(npc.id==='fartzone_guide'?90:112);
+      const dw=dh*(npc.img.naturalWidth/npc.img.naturalHeight);
+      cx.imageSmoothingEnabled=false;
+      cx.drawImage(npc.img,nx-dw/2,gy-dh+18,dw,dh);
+    }else if(npc.id==='clan'){
+      // Temporary in-game pixel silhouette until the dedicated Clan Master sprite is approved.
+      cx.save();
+      cx.translate(Math.round(nx),Math.round(gy));
+      cx.imageSmoothingEnabled=false;
+      cx.fillStyle='#151116';cx.fillRect(-2
+===== drawPlayer( #2 @ 98223116 =====
+wHeight(P.sz*ARCHER_DRAW_SCALE,_sv);dy=P.sz*.40-(184/224)*dh;
+  }else if(playerUsesAssassinSprites()&&ASSASSIN_ANIM[P.anim]){
+    var sc=(P.anim==='idle')?ASSASSIN_IDLE_DRAW_SCALE:(P.anim==='attack'?ASSASSIN_ATTACK_DRAW_SCALE:ASSASSIN_RUN_DRAW_SCALE);
+    dh=phoneCharacterDrawHeight(P.sz*sc,_sv);dy=P.sz*.40-(156/192)*dh;
+  }else if(playerUsesTankSprites()&&TANK_ANIM[P.anim]){
+    dh=phoneCharacterDrawHeight(P.sz*TANK_DRAW_SCALE,_sv);dy=P.sz*.40-(232/256)*dh;
+  }else if(playerUsesBerserkerSprites()&&BERSERKER_ANIM[P.anim]){
+    dh=phoneCharacterDrawHeight(P.sz*BERSERKER_DRAW_SCALE,_sv);dy=P.sz*.40-(232/256)*dh;
+  }else if(playerUsesPriestSprites()&&PRIEST_ANIM[P.anim]){
+    dh=phoneCharacterDrawHeight(P.sz*PRIEST_DRAW_SCALE,_sv);dy=P.sz*.40-(236/256)*dh;
+  }else if(playerUsesMageSprites()&&MAGE_ANIM[P.anim]){
+    dh=phoneCharacterDrawHeight(P.sz*MAGE_DRAW_SCALE,_sv);dy=P.sz*.40-(236/256)*dh;
+  }else if(playerUsesPaladinSprites()&&PALADIN_ANIM[P.anim]){
+    dh=phoneCharacterDrawHeight(P.sz*PALADIN_DRAW_SCALE,_sv);dy=P.sz*.40-(234/256)*dh;
+  }else{
+    dh=phoneCharacterDrawHeight(P.sz*1.4,_sv);dy=P.sz*.40-dh;
+  }
+  return sy+(bob+dy)*_sv;
+}
+function ppaPlayerClanName(){
+  try{
+    var c=(typeof CLAN_LOCAL_STATE!=='undefined'&&CLAN_LOCAL_STATE&&CLAN_LOCAL_STATE.clan)
+      ?String(CLAN_LOCAL_STATE.clan.name||'').trim():'';
+    return c;
+  }catch(_){return ''}
+}
+function drawPlayerNickname(){
+  var name=ppaPlayerNickname();
+  if(!name)return;
+  var clan=ppaPlayerClanName();
+  var sx=P.x-cam.x;
+  var y=ppaPlayerVisualTopScreenY()-9;
+
+  cx.save();
+  cx.textAlign='center';
+  cx.textBaseline='bottom';
+  cx.lineJoin='round';
+
+  if(clan){
+    var clanText='['+clan.slice(0,18)+']';
+    cx.font='700 8px Georgia, "Times New Roman", serif';
+    cx.lineWidth=2.4;
+    cx.strokeStyle='rgba(8,12,20,.94)';
+    cx.shadowColor='rgba(0,0,0,.78)';
+    cx.shadowBlur=3;
+    cx.strokeText(clanText,sx,y-12);
+    cx.shadowBlur=0;
+    cx.fillStyle='#a9cfff';
+    cx.fillText(clanText,sx,y-12);
+  }
+
+  cx.font='600 10px Georgia, "Times New Roman", serif';
+  cx.lineWidth=2.6;
+  cx.strokeStyle='rgba(18,8,5,.92)';
+  cx.shadowColor='rgba(0,0,0,.72)';
+  cx.shadowBlur=3;
+  cx.strokeText(name.slice(0,18),sx,y);
+  cx.shadowBlur=0;
+  cx.fillStyle='#f2d39a';
+  cx.fillText(name.slice(0,18),sx,y);
+  cx.restore();
+}
+// ==========================================================================
+
+function drawPlayer(){
+  const sx=P.x-cam.x,sy=P.y-cam.y;
+  const siegeVisualScale=P.scene==='clansiege'?CLAN_SIEGE_PLAYER_VISUAL_SCALE:1;
+
+  // V277: only the player's 8 classes are drawn 10 px smaller.
+  // No collision, camera, NPC, mob, AI or combat values are changed.
+  const PLAYER_CLASS_EXTRA_REDUCTION_PX=10;
+  const playerClassDrawHeight=(baseHeight)=>{
+    const sc=Math.max(.01,Number(siegeVisualScale)||1);
+    return Math.max(8,phoneCharacterDrawHeight(baseHeight,siegeVisualScale)-PLAYER_CLASS_EXTRA_REDUCTION_PX/sc);
+  };
+  const playerClassBodySize=(baseSize)=>{
+    const sc=Math.max(.01,Number(siegeVisualScale)||1);
+    return Math.max(8,phoneCharacterBodySize(baseSize,siegeVisualScale)-PLAYER_CLASS_EXTRA_REDUCTION_PX/sc);
+  };
+  const isGnome=playerUsesGnomeSprites();
+  const isArcher=playerUsesArcherSprites();
+  const isAssassinCustom=playerUsesAssassinSprites()&&!!ASSASSIN_ANIM[P.anim];
+  const isTank=playerUsesTankSprites()&&!!TANK_ANIM[P.anim];
+  const isBerserker=playerUsesBerserkerSprites()&&!!BERSERKER_ANIM[P.anim];
+  const isPriest=playerUsesPriestSprites()&&!!PRIEST_ANIM[P.anim];
+  const isMage=playerUsesMageSprites()&&!!MAGE_ANIM[P.anim];
+  const isPaladin=playerUsesPaladinSprites()&&!!PALADIN_ANIM[P.anim];
+  const isCustomDirectional=isGnome||isArcher||isAssassinCustom||isTank||isBerserker||isPriest||isMage||isPaladin;
+  const phoneBodyBase=playerClassBodySize(P.sz);
+  const visualBody=(isGnome?phoneBodyBase*0.72:phoneBodyBase)*siegeVisualScale;
+  const bob=P.scene==='fartzone'?0:Math.sin(P.bob)*(isGnome?2.0:3);
+
+  // Shadow follows the visible character size.
+  // Fart Zone: exact feet-to-ground anchor, no visual hovering.
+  const playerShadowY=P.scene==='fartzone'?sy+visualBody*0.40:sy+visualBody*0.45;
+  cx.fillStyle='rgba(0,0,0,0.4)';
+  cx.beginPath();cx.ellipse(sx,playerShadowY,visualBody*0.38,visualBody*0.14,0,0,Math.PI*2);cx.fill();
+
+  // Dust when running
+  if((Math.abs(P.vx)>0.5||Math.abs(P.vy)>0.5)&&Math.random()<0.25)
+    PT.push({x:P.x+(Math.random()-.5)*(isGnome?6:12)*siegeVisualScale,y:P.y+visualBody*0.35,
+      vx:-P.vx*0.4+(Math.random()-.5),vy:-P.vy*0.2+(Math.random()-.5)*0.5,
+      life:10,ml:10,sz:(isGnome?1.5:2)*siegeVisualScale,col:'rgba(120,100,70,0.4)'});
+
+  cx.save();
+  cx.translate(sx,sy+bob);
+  if(P.scene==='clansiege')cx.scale(CLAN_SIEGE_PLAYER_VISUAL_SCALE,CLAN_SIEGE_PLAYER_VISUAL_SCALE);
+
+  // Legacy lean/recoil is disabled for the dwarf because his approved
+  // 4-frame attack already contains the physical movement.
+  if(!isCustomDirectional){
+    let lean=0;
+    if(P.shootT>0)lean=P.face>0?0.12:-0.12;
+    const rc=P.recoil*6*(P.face>0?-1:1);
+    cx.translate(rc,0);
+    cx.rotate(lean);
+  }
+
+  const cur=playerAnimDef(P.anim);
+  const canonicalDir=isCustomDirectional?playerDir8():0;
+  const dirRow=isGnome
+    ? GNOME_SOURCE_ROW[canonicalDir]
+    : (isArcher
+        ? ARCHER_SOURCE_ROW[canonicalDir]
+        : (isAssassinCustom
+            ? (P.anim==='run'
+                ? ASSASSIN_RUN_SOURCE_ROW[canonicalDir]
+                : ASSASSIN_4DIR_ROW[canonicalDir])
+            : (isTank
+                ? TANK_4DIR_ROW[canonicalDir]
+                : (isBerserker
+                    ? BERSERKER_4DIR_ROW[canonicalDir]
+                    : (isPriest
+                        ? PRIEST_4DIR_ROW[canonicalDir]
+                        : (isMage
+                            ? MAGE_4DIR_ROW[canonicalDir]
+                            : (isPaladin
+                                ? PALADIN_4DIR_ROW[canonicalDir]
+                                : (cur.rows ? getDirRow() : 0))))))));
+  const useFlip=isGnome
+    ? GNOME_FLIP_BY_DIR[canonicalDir]
+    : (isArcher
+        ? ARCHER_FLIP_BY_DIR[canonicalDir]
+        : ((isAssassinCustom||isTank||isBerserker||isPriest||isMage||isPaladin) ? false : (dirRow===2 && P.face>0)));
+  const frameIndex=((P.animFrame%cur.frames)+cur.frames)%cur.frames;
+
+  if(cur.img.complete && cur.img.naturalWidth > 0){
+    const fh_row=cur.fh;
+    const fw_frame=cur.fw;
+    const footY=P.sz*0.40;
+    const srcY=dirRow*fh_row;
+
+    let dh,dw,dx,dy;
+    if(isGnome){
+      // Approved dwarf size stays unchanged.
+      dh=playerClassDrawHeight(P.sz*GNOME_DRAW_SCALE,siegeVisualScale);
+      dw=dh;
+      dx=Math.round(-dw/2);
+      dy=Math.round(visualBody*0.40-(113/128)*dh);
+    }else if(isArcher){
+      dh=playerClassDrawHeight(P.sz*ARCHER_DRAW_SCALE,siegeVisualScale);
+      dw=dh;
+      dx=Math.round(-dw/2);
+      dy=Math.round(visualBody*0.40-(184/224)*dh);
+    }else if(isAssassin
+===== function render(){ #1 @ 2969316 =====
+}catch(_){}
+}
+function closeShardShop(){shardModal.classList.remove(&#x27;show&#x27;)}
+
+function dt(v){return v?new Date(v):null}
+function two(n){return String(n).padStart(2,&#x27;0&#x27;)}
+function fmtDate(d){
+  if(!d||Number.isNaN(d.getTime()))return &#x27;&#x27;;
+  return `${two(d.getDate())}.${two(d.getMonth()+1)} · ${two(d.getHours())}:${two(d.getMinutes())}`;
+}
+function timeLeft(ms){
+  if(ms&lt;=0)return &#x27;0 мин.&#x27;;
+  let sec=Math.floor(ms/1000),d=Math.floor(sec/86400);sec%=86400;
+  let h=Math.floor(sec/3600);sec%=3600;let m=Math.floor(sec/60);
+  return (d?d+&#x27; д. &#x27;:&#x27;&#x27;)+(h?h+&#x27; ч. &#x27;:&#x27;&#x27;)+m+&#x27; мин.&#x27;;
+}
+function timeLeftClock(ms){
+  let sec=Math.max(0,Math.ceil(ms/1000)),h=Math.floor(sec/3600);sec%=3600;
+  const m=Math.floor(sec/60),ss=sec%60;
+  return `${two(h)}:${two(m)}:${two(ss)}`;
+}
+function eventState(e){
+  const now=Date.now();
+  if(e&amp;&amp;e.action===&#x27;worldboss&#x27;&amp;&amp;EVENT_GAME_STATE.worldBoss){
+    const w=EVENT_GAME_STATE.worldBoss;
+    const reset=Number(w.nextResetAt)||0;
+    const available=!!w.available||(reset&gt;0&amp;&amp;now&gt;=reset);
+    if(!available)return {label:&#x27;ОТКАТ&#x27;,timer:&#x27;До отката 18:00: &#x27;+timeLeftClock(reset-now),cls:&#x27;locked&#x27;};
+    return {label:&#x27;АКТИВНО&#x27;,timer:&#x27;Доступен · ежедневный откат в 18:00&#x27;,cls:&#x27;live&#x27;};
+  }
+  if(e&amp;&amp;e.action===&#x27;clansiege&#x27;&amp;&amp;EVENT_GAME_STATE.clanSiege){
+    const z=EVENT_GAME_STATE.clanSiege,next=Number(z.nextAt)||0;
+    const ready=!!z.ready||!next||now&gt;=next;
+    if(!ready)return {label:&#x27;ОТКАТ&#x27;,timer:&#x27;Следующая осада через &#x27;+timeLeft(next-now),cls:&#x27;locked&#x27;};
+    return {label:&#x27;ДОСТУПНО&#x27;,timer:&#x27;Осада доступна · цикл 3 дня&#x27;,cls:&#x27;live&#x27;};
+  }
+  const s=dt(e.startsAt)?.getTime()||0,en=dt(e.endsAt)?.getTime()||0;
+  if(s&amp;&amp;now&lt;s)return {label:&#x27;СКОРО&#x27;,timer:&#x27;До начала: &#x27;+timeLeft(s-now),cls:&#x27;soon&#x27;};
+  if(en&amp;&amp;now&lt;en)return {label:&#x27;АКТИВНО&#x27;,timer:&#x27;Осталось: &#x27;+timeLeft(en-now),cls:&#x27;live&#x27;};
+  if(en&amp;&amp;now&gt;=en)return {label:&#x27;ЗАВЕРШЕНО&#x27;,timer:&#x27;Событие завершено&#x27;,cls:&#x27;ended&#x27;};
+  return {label:e.status||&#x27;ОБЪЯВЛЕНИЕ&#x27;,timer:e.timerText||&#x27;&#x27;,cls:&#x27;info&#x27;};
+}
+function render(){
+  const list=events.filter(e=&gt;activeCat===&#x27;all&#x27;||e.cat===activeCat);
+  cards.innerHTML=&#x27;&#x27;;
+  empty.style.display=list.length?&#x27;none&#x27;:&#x27;block&#x27;;
+  list.slice(0,6).forEach(e=&gt;{
+    const st=eventState(e),el=document.createElement(&#x27;div&#x27;);
+    el.className=&#x27;card&#x27;+(selected&amp;&amp;selected.id===e.id?&#x27; selected&#x27;:&#x27;&#x27;);
+    const art=e.bossArt
+      ?`&lt;div class=&quot;art bossArt&quot;&gt;&lt;img src=&quot;${e.bossArt}&quot; alt=&quot;&quot;&gt;&lt;/div&gt;`
+      :`&lt;div class=&quot;art&quot; data-icon=&quot;${e.icon||&#x27;✦&#x27;}&quot;&gt;&lt;/div&gt;`;
+    el.innerHTML=`${art}&lt;h3&gt;${e.name}&lt;/h3&gt;&lt;div class=&quot;meta&quot;&gt;&lt;span class=&quot;badge&quot;&gt;${names[e.cat]||&#x27;&#x27;}&lt;/span&gt;&lt;span class=&quot;timer&quot; data-id=&quot;${e.id}&quot;&gt;${st.timer}&lt;/span&gt;&lt;/div&gt;`;
+    el.onclick=()=&gt;selectEvent(e);
+    cards.appendChild(el);
+  });
+  if(!selected||!list.some(e=&gt;e.id===selected.id))selectEvent(list[0]||null,false);
+}
+function selectEvent(e,rerender=true){
+  selected=e;
+  const st=e?eventState(e):null;
+  document.getElementById(&#x27;detailTitle&#x27;).textContent=e?e.name:&#x27;&#x27;;
+  document.getElementById(&#x27;detailStatus&#x27;).textContent=e?`${names[e.cat]||&#x27;&#x27;} · ${st.label}`:&#x27;&#x27;;
+  document.getElementById(&#x27;detailTimer&#x27;).textContent=e?st.timer:&#x27;&#x27;;
+  const s=e?dt(e.startsAt):null,en=e?dt(e.endsAt):null;
+  document.getElementById(&#x27;detailStart&#x27;).textContent=e?(s?`Начало: ${fmtDate(s)}${en?&#x27;  ·  Конец: &#x27;+fmtDate(en):&#x27;&#x27;}`:&#x27;&#x27;):&#x27;&#x27;;
+  document.getElementById(&#x27;detailText&#x27;).textContent=e?(e.text||&#x27;&#x27;):&#x27;&#x27;;
+  document.getElementById(&#x27;detailCond&#x27;).textContent=e&amp;&amp;e.conditions?`Условия: ${e.conditions}`:&#x27;&#x27;;
+  document.getElementById(&#x27;rewards&#x27;).innerHTML=e&amp;&amp;e.rewards?.length?e.rewards.slice(0,3).map(x=&gt;`&lt;div class=&quot;reward&quot;&gt;${x}&lt;/div&gt;`).join(&#x27;&#x27;):&#x27;&#x27;;
+  eventArt.style.display=e?&#x27;grid&#x27;:&#x27;none&#x27;;
+  const bigIcon=eventArt.querySelector(&#x27;.bigIcon&#x27;);
+  if(e&amp;&amp;e.bossArt)bigIcon.innerHTML=`&lt;img src=&quot;${e.bossArt}&quot; alt=&quot;${e.name||&#x27;&#x27;}&quot;&gt;`;
+  else bigIcon.textContent=e?(e.icon||&#x27;✦&#x27;):&#x27;&#x27;;
+  eventArt.querySelector(&#x27;.artLabel&#x27;).textContent=e?(e.artLabel||names[e.cat]||&#x27;&#x27;):&#x27;&#x27;;
+  go.textContent=e?(e.actionLabel||(e.cat===&#x27;updates&#x27;?&#x27;Подробнее&#x27;:&#x27;Участвовать&#x27;)):&#x27;&#x27;;
+  if(e&amp;&amp;e.action===&#x27;worldboss&#x27;&amp;&amp;st.cls===&#x27;locked&#x27;)go.textContent=&#x27;ПОБЕЖДЁН · ОТКАТ 18:00&#x27;;
+  if(e&amp;&amp;e.action===&#x27;clansiege&#x27;&amp;&amp;st.cls===&#x27;locked&#x27;)go.textContent=&#x27;ОСАДА НА ОТКАТЕ&#x27;;
+  go.classList.toggle(&#x27;enabled&#x27;,!!e &amp;&amp; st.cls!==&#x27;ended&#x27; &amp;&amp; st.cls!==&#x27;locked&#x27;);
+  go.classList.toggle(&#x27;update&#x27;,!!e&amp;&amp;e.cat===&#x27;updates&#x27;);
+  shardShop.style.display=(e&amp;&amp;e.action===&#x27;worldboss&#x27;)?&#x27;block&#x27;:&#x27;none&#x27;;
+  if(rerender)render();
+}
+
+document.querySelectorAll(&#x27;.navBtn&#x27;).forEach(btn=&gt;btn.onclick=()=&gt;{
+  activeCat=btn.dataset.cat;
+  document.querySelectorAll(&#x27;.navBtn&#x27;).forEach(x=&gt;x.classList.remove(&#x27;active&#x27;));
+  btn.classList.add(&#x27;active&#x27;);
+  render();
+});
+
+go.onclick=()=&gt;{
+  if(!selected)return;
+  if(selected.cat===&#x27;updates&#x27;){showToast(&#x27;Откроется подробное описание обновления&#x27;);return;}
+  if(selected.action===&#x27;worldboss&#x27;){
+    const st=eventState(selected);
+    if(st.cls===&#x27;locked&#x27;){showToast(st.timer);return}
+    showToast(&#x27;Вход на арену мирового босса…&#x27;);
+    try{parent.postMessage({type:&#x27;eventsEnter&#x27;,action:&#x27;worldboss&#x27;,id:selected.id},&#x27;*&#x27;)}catch(_){}
+    return;
+  }
+  if(selected.action===&#x27;clansiege&#x27;){
+    const st=eventState(selected);
+    if(st.cls===&#x27;locked&#x27;){showToast(st.timer);return}
+    showToast(&#x27;Вход в Цитадель Феникса…&#x27;);
+    try{parent.postMessage({type:&#x27;eventsEnter&#x27;,action:&#x27;clansiege&#x27;,id:selected.id},&#x27;*&#x27;)}catch(_){}
+    return;
+  }
+  showToast(&#x27;Действие события готово к привязке к игрово
+===== function render(){ #2 @ 2986482 =====
+ / TON в кошельке&lt;/span&gt;&lt;strong class=&quot;blue&quot;&gt;💎 &lt;span id=&quot;walletGram&quot;&gt;—&lt;/span&gt;&lt;/strong&gt;&lt;/div&gt;
+        &lt;div class=&quot;actions&quot;&gt;
+          &lt;button id=&quot;deposit&quot; class=&quot;btn secondary&quot; disabled&gt;ПОПОЛНИТЬ&lt;/button&gt;
+          &lt;button id=&quot;withdraw&quot; class=&quot;btn secondary&quot; disabled&gt;ВЫВЕСТИ&lt;/button&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;fee&quot;&gt;Пополнение: &lt;b&gt;0%&lt;/b&gt; · Вывод: &lt;b&gt;10%&lt;/b&gt;. Баланс игры меняется только после подтверждённой операции.&lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;card&quot; style=&quot;min-height:0;display:grid;grid-template-rows:auto 1fr&quot;&gt;
+      &lt;h3&gt;ИСТОРИЯ ОПЕРАЦИЙ&lt;/h3&gt;
+      &lt;div id=&quot;history&quot; class=&quot;history&quot;&gt;&lt;div class=&quot;empty&quot;&gt;Операций пока нет&lt;/div&gt;&lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+&lt;div id=&quot;modal&quot;&gt;&lt;div class=&quot;box&quot;&gt;&lt;h2 id=&quot;mTitle&quot;&gt;&lt;/h2&gt;&lt;div id=&quot;mIntro&quot; class=&quot;intro&quot;&gt;&lt;/div&gt;&lt;input id=&quot;field&quot; class=&quot;field&quot;&gt;&lt;div id=&quot;preview&quot; class=&quot;preview&quot;&gt;&lt;/div&gt;&lt;div class=&quot;modalActions&quot;&gt;&lt;button id=&quot;cancel&quot; class=&quot;btn danger&quot;&gt;ОТМЕНА&lt;/button&gt;&lt;button id=&quot;confirm&quot; class=&quot;btn&quot;&gt;ПОДТВЕРДИТЬ&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div id=&quot;toast&quot; class=&quot;toast&quot;&gt;&lt;/div&gt;
+&lt;script&gt;
+let STATE={connected:false,address:&#x27;&#x27;,gameGram:0,walletGram:null,history:[],telegram:{id:&#x27;&#x27;,name:&#x27;Вне Telegram&#x27;}};
+let mode=&#x27;&#x27;;
+const $=id=&gt;document.getElementById(id);
+function fmt(v){if(v===null||v===undefined||!Number.isFinite(Number(v)))return &#x27;—&#x27;;return Math.max(0,Number(v)||0).toLocaleString(&#x27;ru-RU&#x27;,{maximumFractionDigits:2})}
+function mask(a){a=String(a||&#x27;&#x27;);if(a.length&lt;16)return a||&#x27;Не привязан&#x27;;return a.slice(0,7)+&#x27;…&#x27;+a.slice(-7)}
+function toast(t){$(&#x27;toast&#x27;).textContent=t;$(&#x27;toast&#x27;).classList.add(&#x27;on&#x27;);clearTimeout(window.__t);window.__t=setTimeout(()=&gt;$(&#x27;toast&#x27;).classList.remove(&#x27;on&#x27;),2200)}
+function render(){
+  $(&#x27;status&#x27;).textContent=STATE.connected?&#x27;● ПРИВЯЗАН&#x27;:&#x27;○ НЕ ПРИВЯЗАН&#x27;;$(&#x27;status&#x27;).classList.toggle(&#x27;on&#x27;,STATE.connected);
+  $(&#x27;tgName&#x27;).textContent=(STATE.telegram&amp;&amp;STATE.telegram.name)||&#x27;—&#x27;;$(&#x27;tgId&#x27;).textContent=(STATE.telegram&amp;&amp;STATE.telegram.id)||&#x27;—&#x27;;
+  $(&#x27;address&#x27;).textContent=STATE.connected?mask(STATE.address):&#x27;Не привязан&#x27;;$(&#x27;address&#x27;).title=STATE.address||&#x27;&#x27;;
+  $(&#x27;link&#x27;).textContent=STATE.connected?&#x27;ПЕРЕПРИВЯЗАТЬ&#x27;:&#x27;ПРИВЯЗАТЬ&#x27;;$(&#x27;unlink&#x27;).disabled=!STATE.connected;$(&#x27;deposit&#x27;).disabled=!STATE.connected;$(&#x27;withdraw&#x27;).disabled=!STATE.connected;
+  $(&#x27;gameGram&#x27;).textContent=fmt(STATE.gameGram);$(&#x27;walletGram&#x27;).textContent=fmt(STATE.walletGram);
+  const h=Array.isArray(STATE.history)?STATE.history.slice().reverse().slice(0,30):[];
+  $(&#x27;history&#x27;).innerHTML=h.length?h.map(x=&gt;&#x27;&lt;div class=&quot;row&quot;&gt;&lt;span&gt;&#x27;+esc(x.text||&#x27;Операция&#x27;)+&#x27;&lt;/span&gt;&lt;strong&gt;&#x27;+esc(x.amountText||&#x27;&#x27;)+&#x27;&lt;/strong&gt;&lt;/div&gt;&#x27;).join(&#x27;&#x27;):&#x27;&lt;div class=&quot;empty&quot;&gt;Операций пока нет&lt;/div&gt;&#x27;;
+}
+function esc(v){return String(v).replace(/[&amp;&lt;&gt;&quot;&#x27;]/g,c=&gt;({&#x27;&amp;&#x27;:&#x27;&amp;amp;&#x27;,&#x27;&lt;&#x27;:&#x27;&amp;lt;&#x27;,&#x27;&gt;&#x27;:&#x27;&amp;gt;&#x27;,&#x27;&quot;&#x27;:&#x27;&amp;quot;&#x27;,&quot;&#x27;&quot;:&#x27;&amp;#39;&#x27;}[c]))}
+function openModal(m){mode=m;$(&#x27;modal&#x27;).classList.add(&#x27;on&#x27;);$(&#x27;field&#x27;).value=&#x27;&#x27;;
+  if(m===&#x27;link&#x27;){$(&#x27;mTitle&#x27;).textContent=STATE.connected?&#x27;ПЕРЕПРИВЯЗАТЬ GRAM WALLET&#x27;:&#x27;ПРИВЯЗАТЬ GRAM WALLET&#x27;;$(&#x27;mIntro&#x27;).textContent=&#x27;Введи TON-адрес Gram Wallet. В HTML-прототипе сохраняется привязка к текущему Telegram ID; серверная проверка подключается отдельно.&#x27;;$(&#x27;field&#x27;).type=&#x27;text&#x27;;$(&#x27;field&#x27;).inputMode=&#x27;text&#x27;;$(&#x27;field&#x27;).placeholder=&#x27;UQ… / EQ… / 0:…&#x27;;$(&#x27;preview&#x27;).innerHTML=&#x27;Поддерживается TON-адрес кошелька.&#x27;;}
+  else {const w=m===&#x27;withdraw&#x27;;$(&#x27;mTitle&#x27;).textContent=w?&#x27;ВЫВЕСТИ GRAM&#x27;:&#x27;ПОПОЛНИТЬ GRAM&#x27;;$(&#x27;mIntro&#x27;).textContent=w?&#x27;Из игры → Gram Wallet · комиссия 10%&#x27;:&#x27;Gram Wallet → игра · комиссия 0%&#x27;;$(&#x27;field&#x27;).type=&#x27;number&#x27;;$(&#x27;field&#x27;).inputMode=&#x27;decimal&#x27;;$(&#x27;field&#x27;).min=&#x27;0.01&#x27;;$(&#x27;field&#x27;).step=&#x27;0.01&#x27;;$(&#x27;field&#x27;).placeholder=&#x27;Введите сумму Gram&#x27;;updatePreview();}
+  setTimeout(()=&gt;$(&#x27;field&#x27;).focus(),50)
+}
+function closeModal(){mode=&#x27;&#x27;;$(&#x27;modal&#x27;).classList.remove(&#x27;on&#x27;)}
+function updatePreview(){if(mode===&#x27;link&#x27;)return;const a=Math.max(0,Number($(&#x27;field&#x27;).value)||0);$(&#x27;preview&#x27;).innerHTML=mode===&#x27;withdraw&#x27;?(&#x27;Списать из игры: &lt;strong&gt;&#x27;+fmt(a)+&#x27; Gram&lt;/strong&gt;&lt;br&gt;Комиссия: &lt;strong&gt;&#x27;+fmt(a*.10)+&#x27; Gram&lt;/strong&gt;&lt;br&gt;В кошелёк: &lt;strong&gt;&#x27;+fmt(a*.90)+&#x27; Gram&lt;/strong&gt;&#x27;):(&#x27;Из кошелька: &lt;strong&gt;&#x27;+fmt(a)+&#x27; Gram&lt;/strong&gt;&lt;br&gt;В игру: &lt;strong&gt;&#x27;+fmt(a)+&#x27; Gram&lt;/strong&gt;&#x27;)}
+$(&#x27;field&#x27;).addEventListener(&#x27;input&#x27;,updatePreview);$(&#x27;cancel&#x27;).onclick=closeModal;
+$(&#x27;link&#x27;).onclick=()=&gt;openModal(&#x27;link&#x27;);$(&#x27;unlink&#x27;).onclick=()=&gt;parent.postMessage({type:&#x27;gramWalletUnlink&#x27;},&#x27;*&#x27;);$(&#x27;deposit&#x27;).onclick=()=&gt;openModal(&#x27;deposit&#x27;);$(&#x27;withdraw&#x27;).onclick=()=&gt;openModal(&#x27;withdraw&#x27;);
+$(&#x27;confirm&#x27;).onclick=()=&gt;{if(mode===&#x27;link&#x27;){const address=$(&#x27;field&#x27;).value.trim();parent.postMessage({type:&#x27;gramWalletLink&#x27;,address},&#x27;*&#x27;);return}const amount=Math.round((Number($(&#x27;field&#x27;).value)||0)*100)/100;if(!(amount&gt;0)){toast(&#x27;Введите сумму&#x27;);return}parent.postMessage({type:mode===&#x27;withdraw&#x27;?&#x27;gramWalletWithdraw&#x27;:&#x27;gramWalletDeposit&#x27;,amount},&#x27;*&#x27;)};
+window.addEventListener(&#x27;message&#x27
+===== function render(){ #3 @ 4313168 =====
+es.style.transform=&#x27;translateX(0)&#x27;;
+  page.querySelector(&#x27;#walletLink&#x27;).onclick=()=&gt;parent.postMessage({type:&#x27;premiumWalletLink&#x27;},&#x27;*&#x27;);
+  page.querySelector(&#x27;#walletDeposit&#x27;).onclick=()=&gt;openWalletModal(&#x27;deposit&#x27;);
+  page.querySelector(&#x27;#walletWithdraw&#x27;).onclick=()=&gt;openWalletModal(&#x27;withdraw&#x27;);
+}
+function openWalletModal(action){
+  if(!GAME_STATE.walletConnected){flash(&#x27;Сначала привяжи кошелёк&#x27;);return}
+  walletDraft={action:action};bundleDraft=null;classChangeDraft=null;premiumStatusDraft=null;premiumGoodDraft=null;walletDraft=null;
+  const withdraw=action===&#x27;withdraw&#x27;;
+  document.getElementById(&#x27;bundleModalTitle&#x27;).textContent=withdraw?&#x27;ВЫВЕСТИ GRAM&#x27;:&#x27;ПОПОЛНИТЬ GRAM&#x27;;
+  document.getElementById(&#x27;bundleModalIntro&#x27;).textContent=withdraw?&#x27;Комиссия вывода 10%&#x27;:&#x27;Перевод из привязанного кошелька в игру без комиссии&#x27;;
+  document.getElementById(&#x27;bundleModalBody&#x27;).innerHTML=&#x27;&lt;input id=&quot;walletAmount&quot; class=&quot;walletAmount&quot; inputmode=&quot;decimal&quot; type=&quot;number&quot; min=&quot;0.01&quot; step=&quot;0.01&quot; placeholder=&quot;Введите Gram&quot;&gt;&#x27;+
+    &#x27;&lt;div class=&quot;walletPreview&quot; id=&quot;walletPreview&quot;&gt;&#x27;+(withdraw?&#x27;Списывается из игры. Комиссия 10%.&#x27;:&#x27;Доступно в кошельке: &lt;strong&gt;&#x27;+walletFmt(GAME_STATE.walletGram)+&#x27; Gram&lt;/strong&gt;&#x27;)+&#x27;&lt;/div&gt;&#x27;;
+  document.getElementById(&#x27;bundleConfirm&#x27;).textContent=withdraw?&#x27;ВЫВЕСТИ&#x27;:&#x27;ПОПОЛНИТЬ&#x27;;
+  document.getElementById(&#x27;bundleModal&#x27;).classList.add(&#x27;show&#x27;);
+  const inp=document.getElementById(&#x27;walletAmount&#x27;),preview=document.getElementById(&#x27;walletPreview&#x27;);
+  inp.oninput=()=&gt;{const a=Math.max(0,Number(inp.value)||0);preview.innerHTML=withdraw?(&#x27;Сумма: &lt;strong&gt;&#x27;+walletFmt(a)+&#x27; Gram&lt;/strong&gt;&lt;br&gt;Комиссия: &lt;strong&gt;&#x27;+walletFmt(a*.10)+&#x27; Gram&lt;/strong&gt;&lt;br&gt;В кошелёк: &lt;strong&gt;&#x27;+walletFmt(a*.90)+&#x27; Gram&lt;/strong&gt;&#x27;):(&#x27;Из кошелька: &lt;strong&gt;&#x27;+walletFmt(a)+&#x27; Gram&lt;/strong&gt;&lt;br&gt;В игру: &lt;strong&gt;&#x27;+walletFmt(a)+&#x27; Gram&lt;/strong&gt;&#x27;);};
+}
+
+function render(){
+  if(active===&#x27;bundles&#x27;)renderBundles();
+  else if(active===&#x27;premium&#x27;)renderPremiumStatus();
+  else renderGeneric();
+}
+
+
+function bundleSummary(id){
+  if(id===&#x27;starter&#x27;)return &#x27;100 малых HP + 100 малых MP · полный серый комплект текущего класса +3 · 5 Камней портала.&#x27;;
+  if(id===&#x27;growth&#x27;)return &#x27;100 малых HP + 100 малых MP · полный зелёный комплект текущего класса +4 · 5 премиум HP + 5 премиум MP.&#x27;;
+  if(id===&#x27;adventurer&#x27;)return &#x27;Полный зелёный комплект текущего класса: 7 предметов +5 · зелёный питомец на выбор +5.&#x27;;
+  if(id===&#x27;unique&#x27;)return &#x27;Полный синий комплект текущего класса: 7 предметов +5 · синий питомец на выбор +5.&#x27;;
+  return &#x27;Полный эпический комплект текущего класса: 7 предметов +5 · уникальный эпик-пет «Звёздный Хранитель» +5 · статы автоматически под класс.&#x27;;
+}
+function choiceGearHtml(id,need){
+  const rarity=id===&#x27;epic&#x27;?&#x27;epic&#x27;:&#x27;rare&#x27;;
+  const g=gearForBundle(rarity);
+  return &#x27;&lt;div class=&quot;choiceTitle&quot;&gt;Выбери снаряжение · &#x27;+need+&#x27; шт. · &#x27;+rarityTag(rarity)+&#x27;&lt;/div&gt;&lt;div class=&quot;choiceGrid&quot;&gt;&#x27;+GEAR_ORDER.map(slot=&gt;{
+    const x=g[slot]||{};
+    return &#x27;&lt;button class=&quot;choice gearChoice &#x27;+rarity+&#x27;&quot; data-slot=&quot;&#x27;+slot+&#x27;&quot;&gt;&#x27;+
+      (x.img?&#x27;&lt;img src=&quot;&#x27;+x.img+&#x27;&quot;&gt;&#x27;:&#x27;&#x27;)+&#x27;&lt;span&gt;&#x27;+(x.name||SLOT_LABEL[slot])+&#x27;&lt;/span&gt;&lt;/button&gt;&#x27;;
+  }).join(&#x27;&#x27;)+&#x27;&lt;/div&gt;&#x27;;
+}
+function choicePetHtml(label,rarity){
+  const pets=PREMIUM_ASSETS.pets||{};
+  rarity=rarity||&#x27;common&#x27;;
+  return &#x27;&lt;div class=&quot;choiceTitle&quot;&gt;Выбери питомца · &#x27;+label+&#x27; · &#x27;+rarityTag(rarity)+&#x27;&lt;/div&gt;&lt;div class=&quot;choiceGrid&quot;&gt;&#x27;+Object.keys(pets).map(name=&gt;
+    &#x27;&lt;button class=&quot;choice petChoice &#x27;+rarity+&#x27;&quot; data-pet=&quot;&#x27;+name+&#x27;&quot;&gt;&#x27;+
+      &#x27;&lt;img src=&quot;&#x27;+pets[name]+&#x27;&quot;&gt;&lt;span&gt;&#x27;+name+&#x27;&lt;/span&gt;&lt;small style=&quot;display:block;margin-top:3px;color:#9e917d;font-size:7px;line-height:1.15&quot;&gt;&#x27;+(((PET_PLUS5_DESC[name]||{})[rarity])||&#x27;&#x27;)+&#x27;&lt;/small&gt;&lt;/button&gt;&#x27;
+  ).join(&#x27;&#x27;)+&#x27;&lt;/div&gt;&#x27;;
+}
+function stellarEpicPetHtml(){
+  return &#x27;&lt;div class=&quot;choiceTitle&quot;&gt;Уникальный питомец · Эпик +5 · адаптация под класс&lt;/div&gt;&#x27;+
+    &#x27;&lt;div style=&quot;display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #7f4da8;border-radius:8px;background:#160d1d&quot;&gt;&#x27;+
+      &#x27;&lt;img src=&quot;data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAADwwklEQVR42uy9d5heV3Uu/q59+tf79KIZ1RlVS7bcZ9w7YMiIFgKh2HQIJQlJyMzkhiSEGgK+FychwA0lGtONe9EY46Ziq8ynPprevvl6O3Xv3x+SjXEgl2LysxMtPefR80z7ztn7fdd619pr70N46Rn9ij8ncNbO2n9joxdcvy5BXhY2ODjIzk71WftlUeAXEeC/43OetbP2P8MEQAKgnQOQBgH2k/fdfP5P3nVD9Pnfe+F1dtR+d3Y2/P7/YEMA5aO3sGGArw7hD1dEfR2n9dBZsJ8lwH9z739G+COazxMAmBa5JVs2AGAkPXCWAGcJ8N/fetNp6hnoAQAKrm5JGh2dHQCQfHfPWQL8F5t8dgj+i7z+s/JncJCa5+dZGsA3Lr44ordH1pizogUAsOv095/72eHhs6XesxHg5Q/+ZxE9MjDAetNpatM0Zk4GlNbe9kuFwpK6V1v1qY2/7weAfoCl02l6liy/iERn7cWzswP7OwT+0OAgpdNpendPj1KeBzul5bwmWWZhxpgXaWhcL458rmnH1f32U7uXJp5aeufS1rc+qqTvUuZ8PgHTlEzXddsCAWvX8DAfOrPwR2cXAM9GgJcy8J/vrXvTaboyGmXTlYoUbKrHehuCiZieCAWbm7WEV9ymq+JcFul2ZUNtCYRxk1M5FJNDaqJdtdvbo3owlGdsYmJC7h0YoOdHg+d9zkvNgdFZApzV+ni+fIk2NVGkHBCoGm5M05ojEbulWrIj0bB3lT/EQpB8JBkKBXzy+UnH3BLw6ysMXQ2Jour4k4zFtU6Wj0bZ2Sj+uzHp7BD89jYIsP5ndT4GWKZvgNmHmpkR1RkyISnaZUm+aFW1bPhirf4uvyRdFtfM3/M1KEFa10dUPQ5WKISlYLKBDFbmNfOU7dVMpZb1csLivN4A36PzuL35FmZebKA3nRZDAPUDNHrW+5/NAf5/gDwbBDCEIUEYIoGhMwFgkAjD/LmoICD9y99/0uc5SqCzwpvDLo+3SOWLjRC9IbjFbpHXrIPo+gOi3D0Ch0eFc0rUisf5/fNu8u5lETiVhyi6PuSlv9g1t4NGvOf9XQI9lw88Ly2g5wWk/9/wJM4S4L+llz/dtDaMYfGLJnnnzp3Sjh07vL+49Msb5Jq+QxXCaAzbqVSoEIkZebkhWo2GQvVAaJ2eYHFfmFb4GBquI4qfC9hZsOzdnE+Me/ZYxqxnKFNZkooHj0h2xQwWKq4xeTLvWyjboVI47u366yfeeghbb5G/vBW49fbbnRfO6QAG2OloNML/E0A+C9YXE7RnCfDfIAKKF4JpBD0Cz/PsF7f/YVdCxKkr6pems+qtKkmr43pACRoRr7lZb2rXK2taWkp2tNnl4cY6Aq2ypLQYQDQBJLoYuCJxapahN4J7FkHSQF5JUGXCFYxcqTblYekYeNYW1vEiqnmLZfMRMXeygc/m+cRs2Vo4uuQoM8uOBKV6PJWc//xMJl+tsJq3J3P+ItGz9zrIgDQBI+KXAXMQg3SG1MD/wAoTnQX/z4DwrIc/DfoRAeA50F+z4o2XmC4TPiu01Se3/JHn+IXwFNGdCsS3dlfg1rmoe1G5e2XQLU1m
+===== function render(){ #4 @ 7861276 =====
+==side&amp;&amp;selected.idx===i)s.classList.add(&#x27;selected&#x27;);
+    s.onclick=()=&gt;{
+      if(!it){selected={side:null,idx:-1};render();return}
+      selected={side:side,idx:i};render();
+      inspectStorageItem(it,side);
+    };
+    track.appendChild(s);
+  }
+}
+function cap(mode){return Number((ST.caps||{})[mode])||({personal:200,clan:500,premium:50}[mode]||200)}
+function clanCanTakeItem(it){
+  if(activeStoreMode()!==&#x27;clan&#x27;)return true;
+  const a=ST.clanAccess||{};
+  if(a.isLeader||a.withdrawMode===&#x27;all&#x27;)return true;
+  if(a.withdrawMode!==&#x27;selected&#x27;||!it)return false;
+  return Number((a.allowed||{})[it.uid]||0)&gt;0;
+}
+function updateClanButtons(){
+  const mode=activeStoreMode(),a=ST.clanAccess||{},isClan=mode===&#x27;clan&#x27;,isPremium=mode===&#x27;premium&#x27;;
+  const put=document.getElementById(&#x27;put&#x27;),take=document.getElementById(&#x27;take&#x27;),
+        takeAll=document.getElementById(&#x27;takeAll&#x27;),putAll=document.getElementById(&#x27;putAll&#x27;);
+
+  if(isPremium&amp;&amp;!ST.premiumAccess){
+    clanRights.style.display=&#x27;block&#x27;;
+    clanRights.textContent=&#x27;🔒 PREMIUM НЕ АКТИВЕН · МОЖНО ТОЛЬКО ЗАБИРАТЬ ВЕЩИ&#x27;;
+    clanRights.className=&#x27;warn&#x27;;
+    put.disabled=true;putAll.disabled=true;
+    take.disabled=false;takeAll.disabled=false;
+    return;
+  }
+
+  clanRights.style.display=isClan?&#x27;block&#x27;:&#x27;none&#x27;;
+  if(!isClan){[put,take,takeAll,putAll].forEach(b=&gt;b.disabled=false);return}
+  if(!a.storageUnlocked){
+    put.disabled=true;putAll.disabled=true;take.disabled=true;takeAll.disabled=true;
+    clanRights.textContent=&#x27;🔒 КЛАНОВЫЙ СКЛАД НЕ ОТКРЫТ · 1 000 000 GOLD&#x27;;
+    clanRights.className=&#x27;warn&#x27;;
+    return;
+  }
+  const canPut=!!(a.isLeader||a.canDeposit);
+  const canTake=!!(a.isLeader||a.withdrawMode===&#x27;all&#x27;||a.withdrawMode===&#x27;selected&#x27;);
+  put.disabled=!canPut;putAll.disabled=!canPut;take.disabled=!canTake;takeAll.disabled=!canTake;
+  clanRights.textContent=a.isLeader?&#x27;ГЛАВА · ПОЛНЫЙ ДОСТУП&#x27;:
+    ((canPut?&#x27;КЛАСТЬ ✓&#x27;:&#x27;КЛАСТЬ ✕&#x27;)+&#x27; · &#x27;+(a.withdrawMode===&#x27;all&#x27;?&#x27;ЗАБИРАТЬ ВСЁ ✓&#x27;:a.withdrawMode===&#x27;selected&#x27;?&#x27;ТОЛЬКО РАЗРЕШЁННЫЕ ВЕЩИ&#x27;:&#x27;ЗАБИРАТЬ ✕&#x27;));
+  clanRights.className=(canPut||canTake)?&#x27;good&#x27;:&#x27;warn&#x27;;
+}
+function render(){
+  const bag=Array.isArray(ST.bag)?ST.bag:[];
+  invCount.textContent=bag.length+&#x27; / 100&#x27;;
+  build(invTrack,bag,100,&#x27;bag&#x27;);
+
+  document.querySelectorAll(&#x27;.tab&#x27;).forEach(t=&gt;t.classList.toggle(&#x27;active&#x27;,t.dataset.mode===currentMode));
+  sortPanel.style.display=currentMode===&#x27;sort&#x27;?&#x27;block&#x27;:&#x27;none&#x27;;
+  storeViewport.style.display=currentMode===&#x27;sort&#x27;?&#x27;none&#x27;:&#x27;block&#x27;;
+
+  if(currentMode===&#x27;sort&#x27;){
+    storeTitle.textContent=&#x27;СОРТИРОВКА&#x27;;
+    storeCount.textContent=&#x27;&#x27;;
+    modeNote.textContent=&#x27;Сортируется инвентарь и последнее открытое хранилище&#x27;;
+  }else{
+    const arr=(ST.storage&amp;&amp;Array.isArray(ST.storage[currentMode]))?ST.storage[currentMode]:[];
+    const titles={personal:&#x27;ХРАНИЛИЩЕ&#x27;,clan:&#x27;КЛАНОВОЕ ХРАНИЛИЩЕ&#x27;,premium:&#x27;ПРЕМИУМ ХРАНИЛИЩЕ&#x27;};
+    storeTitle.textContent=titles[currentMode]||&#x27;ХРАНИЛИЩЕ&#x27;;
+    storeCount.textContent=arr.length+&#x27; / &#x27;+cap(currentMode);
+    build(storeTrack,arr,cap(currentMode),&#x27;store&#x27;);
+    modeNote.textContent=currentMode===&#x27;personal&#x27;
+      ?&#x27;Личное хранилище персонажа&#x27;
+      :currentMode===&#x27;clan&#x27;
+        ?((ST.clanAccess&amp;&amp;ST.clanAccess.clanName)||&#x27;Клановое хранилище&#x27;)
+        :(ST.premiumAccess?&#x27;Премиум-хранилище · доступ активно&#x27;:&#x27;Премиум-хранилище · без Premium можно только забирать&#x27;);
+  }
+  updateClanButtons();
+  const c=ST.currencies||{};
+  const nums=document.querySelectorAll(&#x27;#footer strong&#x27;);
+  if(nums[0])nums[0].textContent=Number(c.gold||0).toLocaleString(&#x27;ru-RU&#x27;);
+  if(nums[1])nums[1].textContent=Number(c.gram||0).toLocaleString(&#x27;ru-RU&#x27;);
+  if(nums[2])nums[2].textContent=Number(c.ppa||0).toLocaleString(&#x27;ru-RU&#x27;);
+}
+function makeSwipe(view,track){
+  // V209: native scrolling only. The old transform/pointer swipe fought
+  // browser scrolling on tablets and could leave lower inventory slots unreachable.
+  if(!view||!track)return;
+  track.style.transform=&#x27;none&#x27;;
+  track.style.transition=&#x27;none&#x27;;
+  view.style.overflowY=&#x27;auto&#x27;;
+  view.style.overflowX=&#x27;hidden&#x27;;
+  view.style.touchAction=&#x27;pan-y&#x27;;
+  view.style.webkitOverflowScrolling=&#x27;touch&#x27;;
+  view._reset=()=&gt;{view.scrollTop=0;};
+}
+makeSwipe(invViewport,invTrack);
+makeSwipe(storeViewport,storeTrack);
+
+let lastStoreMode=&#x27;personal&#x27;;
+function setMode(name){
+  if(name!==&#x27;sort&#x27;)lastStoreMode=name;
+  currentMode=name;
+  selected={side:null,idx:-1};
+  if(storeViewport._reset)storeViewport._reset();
+  render();
+}
+document.querySelectorAll(&#x27;.tab&#x27;).forEach(t=&gt;t.onclick=()=&gt;setMode(t.dataset.mode));
+
+function activeStoreMode(){return currentMode===&#x27;sort&#x27;?lastStoreMode:currentMode}
+document.getElementById(&#x27;put&#x27;).onclick=()=&gt;{
+  if(activeStoreMode()===&#x27;premium&#x27;&amp;&amp;!ST.premiumAccess){flash(&#x27;Нужен Premium · забирать старые вещи можно&#x27;);return}
+  if(activeStoreMode()===&#x27;clan&#x27;&amp;&amp;document.getElementById(&#x27;put&#x27;).disabled){flash(&#x27;Нет права класть в клановый склад&#x27;);return}
+  if(selected.side!==&#x27;bag&#x27;){flash(&#x27;Выбери предмет в инвентаре&#x27;);return}
+  parent.postMessage({type:&#x27;storageMove&#x27;,direction:&#x27;put&#x27;,mode:activeStoreMode(),idx:selected.idx,source:&#x27;keeper&#x27;},&#x27;*&#x27;);
+};
+document.getElementById(&#x27;take&#x27;).onclick=()=&gt;{
+  if(activeStoreMode()===&#x27;clan&#x27;&amp;&amp;document.getElementById(&#x27;take&#x27;).disabled){flash(&#x27;Нет права забирать из кланового склада&#x27;);return}
+  if(selected.side!==&#x27;store&#x27;){flash(&#x27;Выбери предмет в хранилище&#x27;);return}
+  const arr=(ST.storage&amp;&amp;ST.storage.clan)||[],it=activeStoreMode()===&#x27;clan&#x27;?arr[selected.idx]:null;
+  if(activeStoreMode()===&#x27;clan&#x27;&amp;&amp;!clanCanTakeItem(it)){flash(&#x27;Глава не дал доступ к этой вещи&#x27;);return}
+  parent.postMessage({type:&#x27;storageMove&#x27;,direction:&#x27;take&#x27;,mode:activeStoreMode(),idx:selected.idx,source:&#x27;keeper&#x27;},&#x27;*&#x27;);
+};
+document.getElementById(&#x27;takeAll&#x27;).onclick=()=&gt;{
+  if(activeStoreMode()===&#x27;clan&#x27;&amp;&amp;document.getElementById(&#x27;takeAll&#x27;).disabled){flash(&#x27;Нет права забирать из кланового скла
+===== function render(){ #5 @ 8228592 =====
+ementById(&#x27;dPrice&#x27;),dOwned=document.getElementById(&#x27;dOwned&#x27;),dDesc=document.getElementById(&#x27;dDesc&#x27;),preview=document.getElementById(&#x27;preview&#x27;),activeLine=document.getElementById(&#x27;activeLine&#x27;),qtyBox=document.getElementById(&#x27;qtyBox&#x27;),qtyInput=document.getElementById(&#x27;qtyInput&#x27;),totalLine=document.getElementById(&#x27;totalLine&#x27;);
+function flash(t){toast.textContent=t;toast.classList.add(&#x27;show&#x27;);clearTimeout(window._t);window._t=setTimeout(()=&gt;toast.classList.remove(&#x27;show&#x27;),850)}
+function fmt(n){return Number(n||0).toLocaleString(&#x27;ru-RU&#x27;)}
+function priceCurrency(p){return p&amp;&amp;p.currency===&#x27;ppa&#x27;?&#x27;PPA&#x27;:&#x27;Gold&#x27;}
+function priceIcon(p){return p&amp;&amp;p.currency===&#x27;ppa&#x27;?&#x27;PPA&#x27;:&#x27;🪙&#x27;}
+function productOwned(p){return Number((STATE.counts||{})[p.owned]||0)}
+function rem(ms){if(!ms||ms&lt;=0)return &#x27;&#x27;;let s=Math.ceil(ms/1000),m=Math.floor(s/60),r=s%60;return m+&#x27;:&#x27;+String(r).padStart(2,&#x27;0&#x27;)}
+function visual(p,cls){return p&amp;&amp;p.img?&#x27;&lt;img src=&quot;&#x27;+p.img+&#x27;&quot; alt=&quot;&quot;&gt;&#x27;:&#x27;?&#x27;}
+function clampQty(v){v=Math.floor(Number(v)||1);return Math.max(1,Math.min(999,v))}
+function setQty(v){qty=clampQty(v);qtyInput.value=qty;renderDetail()}
+function renderDetail(){
+ const p=PRODUCTS.find(x=&gt;x.id===selected);
+ if(!p){preview.innerHTML=&#x27;?&#x27;;dName.textContent=&#x27;—&#x27;;dPrice.textContent=&#x27;—&#x27;;dOwned.textContent=&#x27;—&#x27;;dDesc.textContent=&#x27;Выберите товар слева.&#x27;;activeLine.textContent=&#x27;&#x27;;qtyBox.classList.remove(&#x27;show&#x27;);totalLine.textContent=&#x27;Итого: —&#x27;;return}
+ preview.innerHTML=visual(p,&#x27;big&#x27;);dName.textContent=p.name;dPrice.textContent=fmt(p.price)+&#x27; &#x27;+priceCurrency(p)+&#x27; / 1 шт.&#x27;;dOwned.textContent=productOwned(p);dDesc.textContent=p.desc;
+ qty=clampQty(qty);qtyInput.value=qty;qtyBox.classList.add(&#x27;show&#x27;);totalLine.textContent=&#x27;Итого: &#x27;+fmt(p.price*qty)+&#x27; &#x27;+priceCurrency(p)+&#x27; · &#x27;+qty+&#x27; шт.&#x27;;
+ if(p.activeKey){let r=Math.max(0,Number((STATE.active||{})[p.activeKey]||0));activeLine.textContent=r&gt;0?&#x27;Активно ещё: &#x27;+rem(r):&#x27;&#x27;} else activeLine.textContent=&#x27;&#x27;;
+}
+function render(){
+ const q=(document.getElementById(&#x27;search&#x27;).value||&#x27;&#x27;).trim().toLowerCase(),list=PRODUCTS.filter(p=&gt;p.tab===active&amp;&amp;(!q||p.name.toLowerCase().includes(q)));
+ document.getElementById(&#x27;count&#x27;).textContent=list.length+&#x27; товар&#x27;+(list.length===1?&#x27;&#x27;:&#x27;ов&#x27;);grid.innerHTML=&#x27;&#x27;;
+ if(!list.length){grid.innerHTML=&#x27;&lt;div class=&quot;empty&quot;&gt;&#x27;+(active===&#x27;misc&#x27;?&#x27;Ассортимент раздела «Разное» добавим позже.&#x27;:&#x27;В этом разделе пока нет товаров.&#x27;)+&#x27;&lt;/div&gt;&#x27;;renderDetail();return}
+ list.forEach(p=&gt;{const c=document.createElement(&#x27;div&#x27;);c.className=&#x27;card&#x27;+(selected===p.id?&#x27; sel&#x27;:&#x27;&#x27;);c.innerHTML=&#x27;&lt;div class=&quot;icon&quot;&gt;&#x27;+visual(p,&#x27;icon&#x27;)+&#x27;&lt;/div&gt;&lt;div class=&quot;name&quot;&gt;&#x27;+p.name+&#x27;&lt;/div&gt;&lt;div class=&quot;owned&quot;&gt;У вас: &#x27;+productOwned(p)+&#x27;&lt;/div&gt;&lt;div class=&quot;price&quot;&gt;&#x27;+priceIcon(p)+&#x27; &#x27;+fmt(p.price)+&#x27;&lt;/div&gt;&#x27;;
+ c.onclick=()=&gt;{selected=p.id;qty=1;render();renderDetail()};grid.appendChild(c)});renderDetail();
+}
+document.querySelectorAll(&#x27;.tab&#x27;).forEach(b=&gt;b.onclick=()=&gt;{document.querySelectorAll(&#x27;.tab&#x27;).forEach(x=&gt;x.classList.remove(&#x27;active&#x27;));b.classList.add(&#x27;active&#x27;);active=b.dataset.tab;selected=null;qty=1;render()});
+document.getElementById(&#x27;search&#x27;).addEventListener(&#x27;input&#x27;,render);
+document.getElementById(&#x27;qtyMinus&#x27;).onclick=()=&gt;setQty(qty-1);document.getElementById(&#x27;qtyPlus&#x27;).onclick=()=&gt;setQty(qty+1);document.getElementById(&#x27;qtyMax&#x27;).onclick=()=&gt;setQty(999);qtyInput.addEventListener(&#x27;input&#x27;,()=&gt;{qty=clampQty(qtyInput.value);renderDetail()});qtyInput.addEventListener(&#x27;blur&#x27;,()=&gt;setQty(qtyInput.value));
+document.getElementById(&#x27;detailBuy&#x27;).onclick=()=&gt;{if(!selected){flash(&#x27;Сначала выберите товар&#x27;);return}parent.postMessage({type:&#x27;merchantBuy&#x27;,id:selected,qty:clampQty(qty)},&#x27;*&#x27;)};
+document.getElementById(&#x27;close&#x27;).onclick=()=&gt;parent.postMessage({type:&#x27;merchantClose&#x27;},&#x27;*&#x27;);
+window.addEventListener(&#x27;message&#x27;,ev=&gt;{const d=ev.data||{};if(d.type===&#x27;merchantState&#x27;){STATE=d.state||STATE;document.getElementById(&#x27;gold&#x27;).textContent=fmt(STATE.gold);document.getElementById(&#x27;gram&#x27;).textContent=fmt(STATE.gram);document.getElementById(&#x27;ppa&#x27;).textContent=fmt(STATE.ppa);render()}else if(d.type===&#x27;merchantNotice&#x27;)flash(d.text||&#x27;Готово&#x27;)});
+setInterval(()=&gt;{if(frameElement&amp;&amp;frameElement.style.display===&#x27;none&#x27;)return;if(STATE.active)Object.keys(STATE.active).forEach(k=&gt;STATE.active[k]=Math.max(0,Number(STATE.active[k]||0)-1000));renderDetail()},1000);
+render();parent.postMessage({type:&#x27;merchantReady&#x27;},&#x27;*&#x27;);
+&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;"></iframe>
+
+
+<canvas id="mmap" width="200" height="133"></canvas>
+<div id="locName"></div>
+
+
+<iframe id="auctionFrame" title="Аукцион" srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;ru&quot;&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no&quot;&gt;
+&lt;style&gt;
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:Georgia,&#x27;Times New Roman&#x27;,serif;color:#ddd}
+button,input,select{font:inherit;color:inherit}
+#stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:4px}
+#auction{position:relative;width:min(98vw,920px);aspect-ratio:1226/1283;max-height:98vh;user-select:none;filter:drop-shadow(0 14px 28px #000)}
+#bg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
+#close{position:absolute;right:2.7%;top:1.8%;z-index:1100;touch-action:manipulation;pointer-events:auto;width:5.2%;aspect-ratio:1;border-radius:50%;border:1px solid #8c4b2c;background:rgba(35,18,13,.92);color:#efb06e;font-size:clamp(14px,2.6vw,26px);cursor:pointer}
+.hit{position:absolute;z-index:10;border:0;background:transparent;cursor:pointer;border-radius:6px}
+.tab{top:21.7%;height:5.2%}
+
+===== function render(){ #6 @ 15560506 =====
+ot; data-tab=&quot;overview&quot;&gt;ОБЗОР&lt;/button&gt;
+    &lt;button class=&quot;tab&quot; data-tab=&quot;join&quot;&gt;СОЗДАТЬ / ВСТУПИТЬ&lt;/button&gt;
+    &lt;button class=&quot;tab&quot; data-tab=&quot;members&quot;&gt;УЧАСТНИКИ&lt;/button&gt;
+    &lt;button class=&quot;tab&quot; data-tab=&quot;storage&quot;&gt;СКЛАД&lt;/button&gt;
+    &lt;button class=&quot;tab&quot; data-tab=&quot;trade&quot;&gt;ОБМЕН&lt;/button&gt;
+    &lt;button class=&quot;tab&quot; data-tab=&quot;bosses&quot;&gt;БОССЫ&lt;/button&gt;
+    &lt;button class=&quot;tab&quot; data-tab=&quot;bonuses&quot;&gt;БОНУСЫ&lt;/button&gt;
+    &lt;button class=&quot;tab&quot; data-tab=&quot;wars&quot;&gt;ВОЙНЫ&lt;/button&gt;
+    &lt;button class=&quot;tab&quot; data-tab=&quot;history&quot;&gt;ЖУРНАЛ&lt;/button&gt;
+  &lt;/div&gt;
+  &lt;div id=&quot;main&quot;&gt;&lt;/div&gt;
+&lt;/div&gt;
+&lt;div id=&quot;modal&quot;&gt;&lt;div id=&quot;modalBox&quot;&gt;
+  &lt;div id=&quot;modalTitle&quot;&gt;НАСТРОЙКИ&lt;/div&gt;
+  &lt;div id=&quot;modalBody&quot;&gt;&lt;/div&gt;
+  &lt;div class=&quot;modalActions&quot;&gt;&lt;button id=&quot;modalCancel&quot;&gt;ЗАКРЫТЬ&lt;/button&gt;&lt;button id=&quot;modalSave&quot;&gt;СОХРАНИТЬ&lt;/button&gt;&lt;/div&gt;
+&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;notice&quot; id=&quot;notice&quot;&gt;&lt;/div&gt;
+&lt;script&gt;
+let TAB=&#x27;overview&#x27;;
+let STATE={
+  connected:false,
+  clan:null,
+  self:null,
+  members:[],
+  applications:[],
+  authority:{},
+  storageUnlocked:false,
+  storage:{used:0,max:500,items:[]},
+  bag:[],
+  permissions:{},
+  history:[],
+  events:[],
+  bosses:[],
+  wars:[],
+  gold:0,
+  tradeEligible:false,
+  tradeInventory:[],
+  tradeSession:null,
+  joinBlockedUntil:0,
+  joinCooldownText:&#x27;&#x27;,
+  clanCoins:0,
+  clanBosses:[],
+  clanBossRaid:null,
+  clanProgress:null,
+  siegeReward:null,
+  siege:null
+};
+const main=document.getElementById(&#x27;main&#x27;);
+const notice=document.getElementById(&#x27;notice&#x27;);
+
+function flash(t){
+  notice.textContent=t||&#x27;&#x27;;notice.classList.add(&#x27;on&#x27;);
+  clearTimeout(flash._t);flash._t=setTimeout(()=&gt;notice.classList.remove(&#x27;on&#x27;),2200)
+}
+function clanName(){return STATE.clan&amp;&amp;STATE.clan.name?STATE.clan.name:&#x27;КЛАН НЕ СОЗДАН&#x27;}
+function siegeHasClan(){
+  const c=STATE.clan;
+  return !!(c&amp;&amp;String(c.id||c.clanId||c.uid||c.name||&#x27;&#x27;).trim());
+}
+function render(){
+  document.querySelectorAll(&#x27;.tab&#x27;).forEach(b=&gt;b.classList.toggle(&#x27;on&#x27;,b.dataset.tab===TAB));
+  if(TAB===&#x27;overview&#x27;)renderOverview();
+  else if(TAB===&#x27;join&#x27;)renderJoin();
+  else if(TAB===&#x27;members&#x27;)renderMembers();
+  else if(TAB===&#x27;storage&#x27;)renderStorage();
+  else if(TAB===&#x27;trade&#x27;)renderTrade();
+  else if(TAB===&#x27;bosses&#x27;)renderBosses();
+  else if(TAB===&#x27;bonuses&#x27;)renderBonuses();
+  else if(TAB===&#x27;wars&#x27;)renderWars();
+  else renderHistory();
+}
+function renderOverview(){
+  let c=STATE.clan;
+  const leader=c?((STATE.members||[]).find(x=&gt;x.id===c.leaderId)||{}):{};
+  main.innerHTML=
+    &#x27;&lt;div class=&quot;hero&quot;&gt;&lt;div class=&quot;heroTitle&quot;&gt;&#x27;+clanName()+&#x27;&lt;/div&gt;&#x27;+
+    &#x27;&lt;div class=&quot;heroText&quot;&gt;&#x27;+(c?&#x27;Клановая информация получена с сервера.&#x27;:&#x27;Клановые данные появятся после подключения онлайн-сервера.&#x27;)+&#x27;&lt;/div&gt;&#x27;+
+    &#x27;&lt;div class=&quot;status&quot;&gt;&lt;span&gt;Режим&lt;/span&gt;&lt;b&gt;&#x27;+(STATE.connected?&#x27;СЕРВЕР&#x27;:&#x27;НЕ ПОДКЛЮЧЁН&#x27;)+&#x27;&lt;/b&gt;&lt;/div&gt;&#x27;+
+    (c?&#x27;&lt;div class=&quot;status&quot;&gt;&lt;span&gt;Глава&lt;/span&gt;&lt;b&gt;&#x27;+esc(leader.name||&#x27;—&#x27;)+&#x27;&lt;/b&gt;&lt;/div&gt;&#x27;:&#x27;&#x27;)+
+    &#x27;&lt;/div&gt;&#x27;+
+    &#x27;&lt;div class=&quot;grid&quot;&gt;&#x27;+
+      &#x27;&lt;div class=&quot;card&quot;&gt;&lt;h3&gt;👥 СОСТАВ&lt;/h3&gt;&lt;p&gt;&#x27;+(c?(&#x27;Участников: &#x27;+(STATE.members||[]).length+&#x27; · заявок: &#x27;+(STATE.applications||[]).length):&#x27;Клан ещё не создан.&#x27;)+&#x27;&lt;/p&gt;&lt;span class=&quot;lock&quot;&gt;УПРАВЛЕНИЕ&lt;/span&gt;&lt;/div&gt;&#x27;+
+      &#x27;&lt;div class=&quot;card&quot;&gt;&lt;h3&gt;🏰 КЛАНОВЫЙ СКЛАД&lt;/h3&gt;&lt;p&gt;Общий склад на 500 мест с индивидуальными правами.&lt;/p&gt;&lt;span class=&quot;lock&quot;&gt;&#x27;+((STATE.storage&amp;&amp;STATE.storage.used)||0)+&#x27; / 500&lt;/span&gt;&lt;/div&gt;&#x27;+
+      &#x27;&lt;div class=&quot;card&quot;&gt;&lt;h3&gt;📜 ИСТОРИЯ&lt;/h3&gt;&lt;p&gt;События клана и отдельный журнал действий со складом.&lt;/p&gt;&lt;span class=&quot;lock&quot;&gt;&#x27;+((STATE.events||[]).length+(STATE.history||[]).length)+&#x27; записей&lt;/span&gt;&lt;/div&gt;&#x27;+
+      &#x27;&lt;div class=&quot;card&quot;&gt;&lt;h3&gt;🏆 РАЗВИТИЕ КЛАНА&lt;/h3&gt;&lt;p&gt;10 уровней · 9 очков постоянных бонусов.&lt;/p&gt;&lt;span class=&quot;lock&quot;&gt;ВКЛАД → БОНУСЫ&lt;/span&gt;&lt;/div&gt;&#x27;+
+    &#x27;&lt;/div&gt;&#x27;+
+    (c?&#x27;&lt;button class=&quot;leaveClanBtn&quot; id=&quot;leaveClanBtn&quot;&gt;ВЫЙТИ ИЗ КЛАНА&lt;/button&gt;&#x27;:&#x27;&#x27;);
+  const lb=document.getElementById(&#x27;leaveClanBtn&#x27;);
+  if(lb)lb.onclick=()=&gt;{
+    if(!window.confirm(&#x27;Выйти из клана? После выхода нельзя вступить или создать другой клан 24 часа.&#x27;))return;
+    parent.postMessage({type:&#x27;clanLeave&#x27;},&#x27;*&#x27;);
+  };
+}
+function renderJoin(){
+  if(!STATE.connected){
+    main.innerHTML=
+      &#x27;&lt;div class=&quot;storageUnlock&quot;&gt;&lt;div&gt;&lt;div class=&quot;lockIco&quot;&gt;🌐&lt;/div&gt;&#x27;+
+      &#x27;&lt;div class=&quot;heroTitle&quot;&gt;КЛАНОВЫЙ СЕРВЕР НЕ ПОДКЛЮЧЁН&lt;/div&gt;&#x27;+
+      &#x27;&lt;div class=&quot;heroText&quot; style=&quot;max-width:560px;margin:8px auto&quot;&gt;Локальные кланы отключены. Создание, заявки и вступление работают только с реальными серверными данными.&lt;/div&gt;&#x27;+
+      &#x27;&lt;/div&gt;&lt;/div&gt;&#x27;;
+    return;
+  }
+  if(!STATE.clan&amp;&amp;Number(STATE.joinBlockedUntil||0)&gt;Date.now()){
+    main.innerHTML=
+      &#x27;&lt;div class=&quot;hero&quot;&gt;&lt;div class=&quot;heroTitle&quot;&gt;ВСТУПЛЕНИЕ В КЛАН ВРЕМЕННО ЗАБЛОКИРОВАНО&lt;/div&gt;&#x27;+
+      &#x27;&lt;div class=&quot;heroText&quot;&gt;После добровольного выхода из клана действует задержка 24 часа.&lt;/div&gt;&lt;/div&gt;&#x27;+
+      &#x27;&lt;div class=&quot;cooldownBox&quot;&gt;До возможности вступить или создать новый клан осталось:&lt;br&gt;&lt;br&gt;&#x27;+
+      &#x27;&lt;b style=&quot;font-size:16px&quot;&gt;&#x27;+esc(STATE.joinCooldownText||&#x27;до 24 часов&#x27;)+&#x27;&lt;/b&gt;&lt;/div&gt;&#x27;;
+    return;
+  }
+  if(STATE.clan){
+    main.innerHTML=
+      &#x27;&lt;div class=&quot;hero&quot;&gt;&lt;div class=&quot;heroTitle&quot;&gt;ЗАЯВКИ В КЛАН&lt;/div&gt;&#x2
+===== function render(){ #7 @ 15721576 =====
+s||0)&lt;Number(it.price||0);
+   const meta=locked?(&#x27;Нужен &#x27;+it.rankReq+&#x27; · &#x27;+it.minRating):(&#x27;Сегодня: &#x27;+it.left+&#x27; / &#x27;+it.limit);
+   return &#x27;&lt;div class=&quot;shopItem&quot;&gt;&lt;div class=&quot;shopTop&quot;&gt;&lt;div class=&quot;shopIcon&quot;&gt;&#x27;+it.icon+&#x27;&lt;/div&gt;&lt;div class=&quot;shopName&quot;&gt;&#x27;+it.name+
+     &#x27;&lt;div class=&quot;shopMeta&quot;&gt;&#x27;+meta+&#x27;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;button class=&quot;shopBuy&quot; data-shop=&quot;&#x27;+it.id+&#x27;&quot; &#x27;+((locked||done||poor)?&#x27;disabled&#x27;:&#x27;&#x27;)+&#x27;&gt;&#x27;+
+     (locked?&#x27;ЗАКРЫТО&#x27;:done?&#x27;ЛИМИТ ИСЧЕРПАН&#x27;:(&#x27;КУПИТЬ · &#x27;+it.price+&#x27; ⚔&#x27;))+&#x27;&lt;/button&gt;&lt;/div&gt;&#x27;;
+ }).join(&#x27;&#x27;);
+ list.querySelectorAll(&#x27;.shopBuy&#x27;).forEach(b=&gt;b.onclick=()=&gt;parent.postMessage({type:&#x27;arenaShopBuy&#x27;,id:b.dataset.shop},&#x27;*&#x27;));
+}
+
+function fmtHistTime(sec){
+ sec=Math.max(0,Math.floor(Number(sec)||0));
+ return Math.floor(sec/60)+&#x27;:&#x27;+String(sec%60).padStart(2,&#x27;0&#x27;)
+}
+function renderHistory(){
+ const box=document.getElementById(&#x27;historyList&#x27;),a=Array.isArray(STATE.history)?STATE.history:[];
+ if(!box)return;
+ if(!a.length){box.innerHTML=&#x27;&lt;div id=&quot;shopEmpty&quot;&gt;Матчей пока нет&lt;/div&gt;&#x27;;return}
+ box.innerHTML=a.slice(0,10).map(function(x){
+   const cls=x.won?&#x27;histWin&#x27;:&#x27;histLoss&#x27;;
+   const title=x.won?&#x27;ПОБЕДА&#x27;:&#x27;ПОРАЖЕНИЕ&#x27;;
+   const mode=String(x.mode||&#x27;1x1&#x27;).replace(&#x27;x&#x27;,&#x27;×&#x27;);
+   const d=Number(x.ratingDelta||0);
+   return &#x27;&lt;div class=&quot;histItem&quot;&gt;&lt;div class=&quot;histTop&quot;&gt;&lt;span class=&quot;&#x27;+cls+&#x27;&quot;&gt;&#x27;+title+&#x27; · &#x27;+mode+&#x27;&lt;/span&gt;&lt;span class=&quot;histScore&quot;&gt;&#x27;+(x.score||&#x27;0 : 0&#x27;)+&#x27;&lt;/span&gt;&lt;/div&gt;&#x27;+
+     &#x27;&lt;div class=&quot;histMeta&quot;&gt;K/D &#x27;+Number(x.kills||0)+&#x27;/&#x27;+Number(x.deaths||0)+&#x27; · урон &#x27;+Number(x.damageDealt||0)+&#x27; · &#x27;+fmtHistTime(x.durationSec||0)+
+     &#x27;&lt;br&gt;рейтинг &#x27;+(d&gt;=0?&#x27;+&#x27;:&#x27;&#x27;)+d+&#x27; · жетоны +&#x27;+Number(x.tokens||0)+&#x27;&lt;/div&gt;&lt;/div&gt;&#x27;
+ }).join(&#x27;&#x27;)
+}
+function render(){
+ document.getElementById(&#x27;lvl&#x27;).textContent=Number(STATE.level||1);
+ document.getElementById(&#x27;kills&#x27;).textContent=Number(STATE.kills||0).toLocaleString(&#x27;ru-RU&#x27;);
+ document.getElementById(&#x27;best&#x27;).textContent=Number(STATE.bestWave||0);
+ const p=STATE.pvp||{};
+ document.getElementById(&#x27;duelLeft&#x27;).textContent=Number(p.duelLeft||0)+&#x27; / &#x27;+(5+Number(p.duelBought||0));
+ document.getElementById(&#x27;teamLeft&#x27;).textContent=Number(p.teamLeft||0)+&#x27; / &#x27;+(10+Number(p.teamBought||0));
+ document.getElementById(&#x27;arenaTokens&#x27;).textContent=Number(STATE.arenaTokens||0).toLocaleString(&#x27;ru-RU&#x27;);
+ const ai=STATE.aiChallenge||{},ad=document.getElementById(&#x27;aiModeDesc&#x27;);
+ if(ad)ad.textContent=&#x27;3 общие попытки · осталось &#x27;+Number(ai.left||0)+&#x27; · сброс 18:00 · 👑 &#x27;+(ai.championName||&#x27;—&#x27;)+(ai.championClaimed?&#x27; · бонус взят&#x27;:&#x27;&#x27;);
+ const xb=STATE.arenaXpBoost||{},wd=document.getElementById(&#x27;wavesModeDesc&#x27;);
+ if(wd)wd.textContent=&#x27;Мобы 1 → 40 · Феникс после 20 · Владыка после 40. XP ×&#x27;+Number(xb.mul||3)+&#x27; — усиленных заходов осталось &#x27;+Number(xb.left||0)+&#x27; / &#x27;+Number(xb.limit||2)+&#x27; сегодня.&#x27;;
+ renderRating();renderShop();renderHistory();syncBuy();syncEnter()
+}
+
+function syncBuy(){
+ const p=STATE.pvp||{},kind=pvpKind(),b=document.getElementById(&#x27;buyAttempt&#x27;);
+ const bought=Number(kind===&#x27;duel&#x27;?p.duelBought:p.teamBought)||0;
+ const cost=kind===&#x27;duel&#x27;?p.duelBuyCost:p.teamBuyCost;
+ if(cost===null||bought&gt;=Number(p.buyCap||5)){b.disabled=true;b.textContent=&#x27;ЛИМИТ +5 НА СЕГОДНЯ&#x27;;return}
+ b.disabled=Number(STATE.arenaTokens||0)&lt;Number(cost||0);
+ b.textContent=&#x27;КУПИТЬ +1 &#x27;+(kind===&#x27;duel&#x27;?&#x27;1×1&#x27;:&#x27;КОМАНДНУЮ&#x27;)+&#x27; · &#x27;+cost+&#x27; ЖЕТОНОВ&#x27;
+}
+
+document.getElementById(&#x27;closeBtn&#x27;).onclick=()=&gt;parent.postMessage({type:&#x27;arenaMenuClose&#x27;},&#x27;*&#x27;);
+
+function syncEnter(){
+ const b=document.getElementById(&#x27;enterBtn&#x27;),tp=document.getElementById(&#x27;teamPick&#x27;),p=STATE.pvp||{};
+ tp.classList.toggle(&#x27;on&#x27;,MODE===&#x27;team&#x27;);
+ if(MODE===&#x27;waves&#x27;){
+   const xb=STATE.arenaXpBoost||{},left=Number(xb.left||0);
+   b.disabled=false;b.textContent=left&gt;0?(&#x27;ВОЙТИ · XP ×3 · ОСТАЛОСЬ &#x27;+left):&#x27;ВОЙТИ · ОБЫЧНЫЙ XP&#x27;
+ }
+ else if(MODE===&#x27;team&#x27;){
+   const left=PVP===&#x27;1x1&#x27;?Number(p.duelLeft||0):Number(p.teamLeft||0);
+   b.disabled=false;b.textContent=&#x27;ОТКРЫТЬ &#x27;+PVP.replace(&#x27;x&#x27;,&#x27;×&#x27;)+&#x27; · ПОПЫТОК &#x27;+left
+ }
+ else if(MODE===&#x27;ai&#x27;){
+   const ai=STATE.aiChallenge||{},left=Number(ai.left||0);
+   b.disabled=left&lt;=0;
+   b.textContent=left&gt;0?(&#x27;ИИ-ИСПЫТАНИЕ · ПОПЫТОК &#x27;+left+&#x27; / &#x27;+Number(ai.limit||3)):&#x27;ПОПЫТКИ ИИ ИСЧЕРПАНЫ · СБРОС 18:00&#x27;
+ }
+ else{b.disabled=true;b.textContent=&#x27;РЕЖИМ НЕДОСТУПЕН&#x27;}
+}
+
+document.getElementById(&#x27;buyAttempt&#x27;).onclick=()=&gt;parent.postMessage({type:&#x27;arenaBuyAttempt&#x27;,kind:pvpKind()},&#x27;*&#x27;);
+document.getElementById(&#x27;enterBtn&#x27;).onclick=()=&gt;{
+ if(MODE===&#x27;waves&#x27;)parent.postMessage({type:&#x27;arenaEnter&#x27;,mode:&#x27;waves&#x27;},&#x27;*&#x27;);
+ else if(MODE===&#x27;team&#x27;)parent.postMessage({type:&#x27;arenaEnter&#x27;,mode:&#x27;pvp&#x27;+PVP.replace(&#x27;x&#x27;,&#x27;&#x27;)},&#x27;*&#x27;);
+ else if(MODE===&#x27;ai&#x27;)parent.postMessage({type:&#x27;arenaEnter&#x27;,mode:&#x27;ai&#x27;},&#x27;*&#x27;)
+};
+
+document.querySelectorAll(&#x27;.mode.ready&#x27;).forEach(x=&gt;x.onclick=()=&gt;{
+ MODE=x.dataset.mode||&#x27;waves&#x27;;document.querySelectorAll(&#x27;.mode&#x27;).forEach(m=&gt;m.classList.remove(&#x27;sel&#x27;));x.classList.add(&#x27;sel&#x27;);syncEnter()
+});
+document.querySelectorAll(&#x27;.pvpPick&#x27;).forEach(x=&gt;x.onclick=e=&gt;{
+ e.stopPropagation();PVP=x.dataset.pvp||&#x27;1x1&#x27;;document.querySelectorAll(&#x27;.pvpPick&#x27;).forEach(b=&gt;b.classList.toggle(&#x27;on&#x27;,b===x));syncBuy();syncEnter()
+});
+document.querySelectorAll(&#x27;.rtab&#x27;).forEach(x=&gt;x.onclick=()=&gt;setRView(x.dataset.rview));
+
+setRView(&#x27;attempts&#x27;);syncEnter();syncBuy();
+window.addEventListener(&#x27;message&#x27;,e=&gt;{
+ const d=e.data||{};
+ if(d.type===&#x27;arenaMenuState&#x27;
+===== function render(){ #8 @ 97863706 =====
+00';
+        }else if(_wbs.killedThisCycle){
+          waveEl.textContent='КРИСТАЛЬНЫЙ ТИТАН ПОВЕРЖЕН · до отката '+worldBossTimeLeftText(_wbs.nextResetAt-Date.now())+' · 18:00';
+        }else{
+          waveEl.textContent='КРИСТАЛЬНЫЙ ТИТАН ДОСТУПЕН · ежедневный откат 18:00';
+        }
+      }else{waveEl.style.display='none'}
+    }
+
+    // PvP warmup / round / score HUD.
+    const pvpCd=document.getElementById('pvpCountdown');
+    if(pvpCd){
+      const inPvp=P.scene==='pvp1'||P.scene==='pvpteam';
+      const teamPreview=P.scene==='pvpteam'&&!PVP_MATCH.active;
+      if(inPvp&&!teamPreview){
+        pvpCd.style.display='block';
+        const scoreHead=PVP_MATCH.active
+          ?'<div style="font-size:11px;color:#f0c371;margin-bottom:3px">РАУНД '+PVP_MATCH.round+' / '+PVP_MATCH.maxRounds+' · '+pvpMatchScoreText()+'</div>'
+          :'';
+        if(pvpRoundBannerUntil>Date.now()){
+          pvpCd.innerHTML=scoreHead+'<div style="font-size:22px;color:#ffd27a">'+pvpRoundBannerText+'</div>';
+        }else if(!pvpCombatEnabled&&pvpWarmupUntil>0){
+          const sec=Math.max(1,Math.ceil((pvpWarmupUntil-Date.now())/1000));
+          pvpCd.innerHTML=scoreHead+'<div style="font-size:10px;color:#c8bca8;margin-bottom:3px">МОЖНО ЗАНИМАТЬ ПОЗИЦИЮ · УРОН ОТКЛЮЧЁН</div>'+sec;
+        }else if(pvpFightBannerUntil>Date.now()){
+          pvpCd.innerHTML=scoreHead+'<div style="font-size:28px;color:#ff765d">БОЙ!</div>';
+        }else{
+          pvpCd.innerHTML=scoreHead+'<div style="font-size:11px;color:#ff9d78">PvP ВКЛЮЧЁН</div>';
+        }
+      }else{
+        pvpCd.style.display='none';
+      }
+    }
+
+  
+}
+
+// Spawning handled by wave system
+}
+
+// Render
+const cam={x:0,y:0};
+let __ppaVignetteGradient=null,__ppaVignetteKey='';
+function ppaGetVignetteGradient(){
+  const key=cv.width+'x'+cv.height;
+  if(!__ppaVignetteGradient||__ppaVignetteKey!==key){
+    __ppaVignetteKey=key;
+    const g=cx.createRadialGradient(cv.width/2,cv.height/2,cv.height/3,cv.width/2,cv.height/2,cv.height);
+    g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.65)');
+    __ppaVignetteGradient=g;
+  }
+  return __ppaVignetteGradient;
+}
+// Camera zoom is scene-specific. Dungeon is brought a little closer while
+// the town and arena keep their existing framing.
+const CAMERA_ZOOM={safe:1,arena:1,dungeon:1.18,clanboss1:1.05,clansiege:1.38};
+function cameraZoom(){return CAMERA_ZOOM[P.scene]||1}
+
+function render(){
+  const scCam=SCENES[P.scene];
+  const mw=scCam.w||WORLD,mh=scCam.h||WORLD;
+  const zoom=cameraZoom();
+  const viewW=cv.width/zoom,viewH=cv.height/zoom;
+  cam.x=P.x-viewW/2;cam.y=P.y-viewH/2;
+  // Clamp camera to the map — no empty space beyond the edges
+  cam.x=mw<=viewW?(mw-viewW)/2:Math.max(0,Math.min(cam.x,mw-viewW));
+  cam.y=mh<=viewH?(mh-viewH)/2:Math.max(0,Math.min(cam.y,mh-viewH));
+
+  // Clear/fill the physical screen first, then scale only the world.
+  cx.setTransform(1,0,0,1,0,0);
+  cx.fillStyle=P.scene==='safe'?'#3a3528':'#1a1a1a';
+  cx.fillRect(0,0,cv.width,cv.height);
+  cx.save();
+  cx.scale(zoom,zoom);
+
+  // Base fill: tiles for safe zone (no black void), dark for arena/dungeon
+  if(P.scene==='safe'){
+    const ts=96;
+    for(let y=0;y<viewH;y+=ts){
+      for(let x=0;x<viewW;x+=ts){
+        const wx=x+cam.x,wy=y+cam.y;
+        cx.fillStyle=((Math.floor(wx/ts)+Math.floor(wy/ts))%2===0)?'#3a3528':'#423d30';
+        cx.fillRect(x,y,ts,ts);
+      }
+    }
+  }else{
+    cx.fillStyle='#1a1a1a';cx.fillRect(0,0,viewW,viewH);
+  }
+
+  // Background image — each scene is a single self-contained 1024x1024 map,
+  // drawn exactly once at its world position. No tiling/repeating, so the two
+  // locations never visually overlap or duplicate.
+  const sc2=SCENES[P.scene];
+  const bg=sc2.bg;
+  if(bg.complete&&bg.naturalWidth>0){
+    cx.drawImage(bg,-cam.x,-cam.y,sc2.w||WORLD,sc2.h||WORLD);
+    if(P.scene==='clanboss1'&&CLAN_BOSS_SHOW_MASK&&imgClanBoss1Mask.complete&&imgClanBoss1Mask.naturalWidth>0){
+      cx.save();cx.globalAlpha=.72;
+      cx.drawImage(imgClanBoss1Mask,-cam.x,-cam.y,CLAN_BOSS_WORLD,CLAN_BOSS_WORLD);
+      cx.restore();
+    }
+  }else{
+    cx.fillStyle=P.scene==='safe'?'#1a1510':'#1a0a0a';
+    cx.fillRect(0,0,cv.width,cv.height);
+  }
+
+  // Darken background slightly for readability
+  cx.fillStyle='rgba(0,0,0,0.16)';
+  cx.fillRect(0,0,viewW,viewH);
+
+  // Town fence stays town-only. NPCs may exist in other peaceful scenes too.
+  if(P.scene==='safe')drawFence();
+  if(P.scene==='fartzone')drawFartZoneMines();
+  if(SCENES[P.scene]&&SCENES[P.scene].npcs)drawNPC();
+  if(P.scene==='clansiege')drawClanSiegeWorld();
+  // V187: dungeon exit is a physical portal in the respawn room.
+  if(sc2.portal)drawPortal();
+
+  // Target marker (red circle)
+  if(P.tid!=null){
+    const t=EN.find(e=>e.id==P.tid);
+    if(t&&targetIsValid(t)&&!(P.scene==='clanboss1'&&t.isClanBoss)){
+      const tx=t.x-cam.x,ty=t.y-cam.y;
+      const pulse=Math.sin(Date.now()*0.007)*0.15+0.85;
+      // Semi-transparent red fill
+      const targetR=(t.type&&t.type.slimeScavenger)?15:t.sz*1.3;
+      cx.fillStyle='rgba(255,0,0,0.18)';
+      cx.beginPath();cx.arc(tx,ty,targetR,0,Math.PI*2);cx.fill();
+      // Red ring
+      cx.strokeStyle='rgba(255,50,50,0.7)';cx.lineWidth=3;
+      cx.beginPath();cx.arc(tx,ty,targetR*pulse,0,Math.PI*2);cx.stroke();
+      // Rotating dots
+      const ra=Date.now()*0.003;
+      for(let i=0;i<4;i++){
+        const a=ra+i*Math.PI/2;
+        cx.fillStyle='rgba(255,90,90,0.85)';
+        cx.beginPath();cx.arc(tx+Math.cos(a)*t.sz*1.5,ty+Math.sin(a)*t.sz*1.5,3,0,Math.PI*2);cx.fill();
+      }
+      // Target line from player
+      cx.strokeStyle='rgba(255,50,50,0.2)';cx.lineWidth=1;
+      cx.setLineDash([5,5]);
+      cx.beginPath();cx.moveTo(P.x-cam.x,P.y-cam.y);cx.lineTo(tx,ty);cx.stroke();
+      cx.setLineDash([]);
+    }
+  }
+
+  // Particles (under entities)
+  for(const p of PT){
+    const px=p.x-cam.x,py=p.y-cam.y;
+    if(px<-40||py<-40||px>viewW+40||py>viewH+40)continue;
+    const a=p.life/p.ml,sz=Math.max(1,p.sz*a);
+    cx.globalAlpha=a;cx.fillStyle=p.col;
+    cx.fillRect(Math.round(px-sz*.5),Math.round(py-sz*.5),Math.ceil(sz),Math.ceil(sz));
+  }
+  cx.globalAlpha=1;
+
+  // V106 corpses + death traces stay under living entities and have no collision.
+  ppaDrawDeathRemnants();
+
+  // Personal world-boss chests.
+  drawWorldBossPersonalChests();
+
+  // Loot on the floor
+  for(const l of LOOT){
+    const lx=l.x-cam.x,ly=l.y-cam.y+Math.sin(l.bob)*3;
+    if(lx<-50||ly<-50||lx>viewW+50||ly>viewH+50)continue;
+    cx.fillStyle='rgba(0,0,0,0.4)';cx.beginPath();cx.ellipse(lx,ly+10,10,4,0,0,Math.PI*2);cx.fill();
+    if(l.kind==='gold'){
+      const g=cx.createRadialGradient(lx,ly,0,lx,ly,16);
+      g.addColorStop(0,'rgba(255,220,90,0.55)');g.addColorStop(1,'rgba(255,180,0,0)');
+      cx.fillStyle=g;cx.beginPath();cx.arc(lx,ly,16,0,Math.PI*2);cx.fill();
+      cx.font='16px monospace';cx.textAlign='center';cx.fillText('🪙',lx,ly
