@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v610-phoenix-clean-progress-art-20260928';
+const CLIENT_BUILD = 'v611-dungeon-mask-layout-test-20260928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -89,6 +89,72 @@ const gameDir = path.join(publicDir, 'game');
 fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
+
+// === DUNGEON MASK LAYOUT TEST =============================================
+// First pass: map + exact walk mask only. Dungeon mobs are temporarily disabled.
+const PPA_DUNGEON_TEST_FLOOR_PATH=path.join(ROOT,'данж.png');
+const PPA_DUNGEON_TEST_MASK_PATH=path.join(ROOT,'маскаs.png');
+if(!fs.existsSync(PPA_DUNGEON_TEST_FLOOR_PATH)||!fs.existsSync(PPA_DUNGEON_TEST_MASK_PATH)){
+  throw new Error('Dungeon layout test requires данж.png and маскаs.png in repository root');
+}
+const PPA_DUNGEON_TEST_MASK_META=await sharp(PPA_DUNGEON_TEST_MASK_PATH).metadata();
+const PPA_DUNGEON_TEST_ART_W=2048,PPA_DUNGEON_TEST_ART_H=996;
+if(PPA_DUNGEON_TEST_MASK_META.width!==2048||PPA_DUNGEON_TEST_MASK_META.height!==996||!PPA_DUNGEON_TEST_MASK_META.hasAlpha){
+  throw new Error('маскаs.png must be transparent RGBA 2048x996');
+}
+const PPA_DUNGEON_TEST_FLOOR_META=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH).metadata();
+if(PPA_DUNGEON_TEST_FLOOR_META.width!==2048||PPA_DUNGEON_TEST_FLOOR_META.height<996){
+  throw new Error('данж.png must be 2048px wide and at least 996px high');
+}
+
+// 4096px render art. The original floor is tiled, not stretched:
+// stones remain smaller and sharper than on the old one-piece dungeon art.
+const PPA_DUNGEON_BOTTOM_H=1992-1097;
+const PPA_DUNGEON_BOTTOM_TILE=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH)
+  .extract({left:0,top:0,width:2048,height:PPA_DUNGEON_BOTTOM_H}).png().toBuffer();
+const PPA_DUNGEON_TILED_FLOOR=await sharp({
+  create:{width:4096,height:1992,channels:4,background:{r:2,g:2,b:2,alpha:1}}
+}).composite([
+  {input:PPA_DUNGEON_TEST_FLOOR_PATH,left:0,top:0},
+  {input:PPA_DUNGEON_TEST_FLOOR_PATH,left:2048,top:0},
+  {input:PPA_DUNGEON_BOTTOM_TILE,left:0,top:1097},
+  {input:PPA_DUNGEON_BOTTOM_TILE,left:2048,top:1097}
+]).png().toBuffer();
+const PPA_DUNGEON_RENDER_MASK=await sharp(PPA_DUNGEON_TEST_MASK_PATH)
+  .resize(4096,1992,{fit:'fill',kernel:'nearest'}).png().toBuffer();
+const PPA_DUNGEON_CLIPPED_FLOOR=await sharp(PPA_DUNGEON_TILED_FLOOR)
+  .composite([{input:PPA_DUNGEON_RENDER_MASK,blend:'dest-in'}]).png().toBuffer();
+const PPA_DUNGEON_TEST_MAP=await sharp({
+  create:{width:4096,height:1992,channels:4,background:{r:0,g:0,b:0,alpha:1}}
+}).composite([{input:PPA_DUNGEON_CLIPPED_FLOOR,left:0,top:0}])
+  .webp({quality:94,alphaQuality:100,effort:5,smartSubsample:false}).toBuffer();
+fs.writeFileSync(path.join(assetsDir,'dungeon-layout-test.webp'),PPA_DUNGEON_TEST_MAP);
+
+// Collision is compiled from mask alpha. We keep dgWalk/dgCircleWalk/dgSlide unchanged.
+const PPA_DUNGEON_COLL_W=1024,PPA_DUNGEON_COLL_H=Math.round(996/2048*1024);
+const PPA_DUNGEON_MASK_RAW=await sharp(PPA_DUNGEON_TEST_MASK_PATH)
+  .resize(PPA_DUNGEON_COLL_W,PPA_DUNGEON_COLL_H,{fit:'fill',kernel:'nearest'})
+  .ensureAlpha().raw().toBuffer({resolveWithObject:true});
+const PPA_DUNGEON_WALK_BITS=Buffer.alloc(Math.ceil(PPA_DUNGEON_COLL_W*PPA_DUNGEON_COLL_H/8),0);
+let PPA_DUNGEON_WALK_COUNT=0;
+for(let y=0;y<PPA_DUNGEON_COLL_H;y++)for(let x=0;x<PPA_DUNGEON_COLL_W;x++){
+  const pi=y*PPA_DUNGEON_COLL_W+x,off=pi*PPA_DUNGEON_MASK_RAW.info.channels;
+  const red=PPA_DUNGEON_MASK_RAW.data[off]||0,alpha=PPA_DUNGEON_MASK_RAW.data[off+3]||0;
+  if(alpha>=96&&red>=96){
+    PPA_DUNGEON_WALK_BITS[pi>>3]|=(1<<(7-(pi&7)));
+    PPA_DUNGEON_WALK_COUNT++;
+  }
+}
+const PPA_DUNGEON_WALK_RATIO=PPA_DUNGEON_WALK_COUNT/(PPA_DUNGEON_COLL_W*PPA_DUNGEON_COLL_H);
+if(PPA_DUNGEON_WALK_RATIO<0.20||PPA_DUNGEON_WALK_RATIO>0.55){
+  throw new Error('Dungeon mask walk ratio invalid: '+PPA_DUNGEON_WALK_RATIO);
+}
+const PPA_DUNGEON_WALK_B64=PPA_DUNGEON_WALK_BITS.toString('base64');
+// Preserve the old ~9526 world-pixel width so player speed/size remains comparable.
+const PPA_DUNGEON_TEST_SCALE=(1852*5.1435)/2048;
+console.log('[PPA BUILD] Dungeon test art 4096x1992 · collision '+PPA_DUNGEON_COLL_W+'x'+PPA_DUNGEON_COLL_H+' · walk '+(PPA_DUNGEON_WALK_RATIO*100).toFixed(1)+'%');
+// ==========================================================================
+
 
 // Safe visual-only Phoenix startup art. Does not affect game startup logic.
 const PPA_VISUAL_BOOT_PARTS=['loading-screen.part00.b64','loading-screen.part01.b64','loading-screen.part02.b64'];
@@ -314,6 +380,45 @@ let output = source.replace(dataUri, (full, mime, b64) => {
   count++;
   return url;
 });
+
+
+/* === USER DUNGEON MASK · COLLISION TEST ================================= */
+{
+  const dgMaskBlock=/const DG_ART_W=1852,\s*DG_ART_H=849;[\s\S]*?const DG_WALK=new Uint8Array\(DG\.gw\*DG\.gh\);\s*\(function\(\)\{const bin=atob\('[A-Za-z0-9+/=]+'\);for\(let i=0;i<bin\.length;i\+\+\)\{for\(let b=0;b<8;b\+\+\)\{const idx=i\*8\+b;if\(idx<DG_WALK\.length\)DG_WALK\[idx\]=\(bin\.charCodeAt\(i\)>>\(7-b\)\)&1\}\}\}\)\(\);/;
+  if(!dgMaskBlock.test(output))throw new Error('Dungeon source collision block not found');
+  const dgReplacement=[
+    'const DG_ART_W='+PPA_DUNGEON_TEST_ART_W+', DG_ART_H='+PPA_DUNGEON_TEST_ART_H+';',
+    'const DG_SCALE='+PPA_DUNGEON_TEST_SCALE+';',
+    'const DG_W=Math.round(DG_ART_W*DG_SCALE), DG_H=Math.round(DG_ART_H*DG_SCALE);',
+    'const DG_RESPAWN_IMG=[50,518];',
+    'const DG_EXIT_PORTAL_IMG=[18,518];',
+    'const DG_BOSS_IMG=[1880,508];',
+    'const DG={gw:'+PPA_DUNGEON_COLL_W+',gh:'+PPA_DUNGEON_COLL_H+',cellX:DG_W/'+PPA_DUNGEON_COLL_W+',cellY:DG_H/'+PPA_DUNGEON_COLL_H+'};',
+    'const DG_WALK=new Uint8Array(DG.gw*DG.gh);',
+    "(function(){const bin=atob('"+PPA_DUNGEON_WALK_B64+"');for(let i=0;i<bin.length;i++){for(let b=0;b<8;b++){const idx=i*8+b;if(idx<DG_WALK.length)DG_WALK[idx]=(bin.charCodeAt(i)>>(7-b))&1}}})();"
+  ].join('\n');
+  output=output.replace(dgMaskBlock,dgReplacement);
+
+  const imgDecl='const imgDungeon=new Image();';
+  if(!output.includes(imgDecl))throw new Error('imgDungeon declaration not found');
+  output=output.replace(
+    imgDecl,
+    imgDecl+"const imgDungeonLayoutTest=new Image();imgDungeonLayoutTest.decoding='async';imgDungeonLayoutTest.src='/assets/dungeon-layout-test.webp?v='+String(window.PPA_CLIENT_BUILD||'v611');"
+  );
+
+  const sceneBg="dungeon:{name:'ПОДЗЕМЕЛЬЕ',sub:'Уровни 1–20 · Зал Феникса',bg:imgDungeon,";
+  if(!output.includes(sceneBg))throw new Error('Dungeon scene background target not found');
+  output=output.replace(
+    sceneBg,
+    "dungeon:{name:'ПОДЗЕМЕЛЬЕ',sub:'ТЕСТ НОВОЙ КАРТЫ · БЕЗ МОБОВ',bg:imgDungeonLayoutTest,"
+  );
+
+  // Temporary test flag is available before the game body scripts execute.
+  if(!output.includes('<head>'))throw new Error('Dungeon test <head> target missing');
+  output=output.replace('<head>','<head><script>window.PPA_DUNGEON_LAYOUT_TEST=true;<\/script>');
+}
+console.log('[PPA BUILD] Dungeon test: uploaded art + exact mask connected; old map still present for rollback');
+/* ======================================================================== */
 
 output = output.replace(
   'https://telegram.org/js/telegram-web-app.js"',
@@ -1527,8 +1632,17 @@ ppaPatchRegex(
 ppaPatchRegex(
   'spawnMobAtPoint server gate',
   /function\s+spawnMobAtPoint\s*\(\s*si\s*,\s*fx\s*\)\s*\{/,
-  "function spawnMobAtPoint(si,fx){if(window.PPA_REALTIME_V2_ACTIVE&&P&&P.scene==='dungeon'&&!window.__PPA_SERVER_SPAWN_CALL)return;"
+  "function spawnMobAtPoint(si,fx){if(window.PPA_DUNGEON_LAYOUT_TEST)return;if(window.PPA_REALTIME_V2_ACTIVE&&P&&P.scene==='dungeon'&&!window.__PPA_SERVER_SPAWN_CALL)return;"
 );
+
+ppaPatchRegex(
+  'dungeon layout test no enemies',
+  /function\s+update\(\)\s*\{\s*if\(P\.dead\)return;/,
+  "function update(){\n  if(P.dead)return;\n  if(window.PPA_DUNGEON_LAYOUT_TEST&&P.scene==='dungeon'&&Array.isArray(EN)&&EN.length){EN.length=0;}"
+);
+if(!output.includes("window.PPA_DUNGEON_LAYOUT_TEST&&P.scene==='dungeon'&&Array.isArray(EN)")){
+  throw new Error('Dungeon layout test enemy-clear hook did not apply');
+}
 
 ppaPatchRegex(
   'local mob attack gate',
