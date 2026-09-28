@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v603-mimic-epic-art-exact-20260926';
+const CLIENT_BUILD = 'v606-phoenix-visual-safe-20260928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -89,6 +89,21 @@ const gameDir = path.join(publicDir, 'game');
 fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
+
+// Safe visual-only Phoenix startup art. Does not affect game startup logic.
+const PPA_VISUAL_BOOT_PARTS=['loading-screen.part00.b64','loading-screen.part01.b64','loading-screen.part02.b64'];
+const PPA_VISUAL_BOOT_B64=PPA_VISUAL_BOOT_PARTS.map((name)=>{
+  const p=path.join(ROOT,'assets-src',name);
+  if(!fs.existsSync(p))throw new Error('Phoenix visual startup source missing: '+name);
+  return fs.readFileSync(p,'utf8').trim();
+}).join('').replace(/\\s+/g,'');
+const PPA_VISUAL_BOOT_BUF=Buffer.from(PPA_VISUAL_BOOT_B64,'base64');
+const PPA_VISUAL_BOOT_META=await sharp(PPA_VISUAL_BOOT_BUF).metadata();
+if(PPA_VISUAL_BOOT_META.format!=='webp'||PPA_VISUAL_BOOT_META.width!==480||PPA_VISUAL_BOOT_META.height!==852||PPA_VISUAL_BOOT_BUF.length<25000){
+  throw new Error('Phoenix visual startup source is invalid or incomplete');
+}
+fs.writeFileSync(path.join(assetsDir,'ppa-start-screen.webp'),PPA_VISUAL_BOOT_BUF);
+console.log('[PPA BUILD] Safe Phoenix visual startup overlay: 480x852 WebP ready.');
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
 fs.writeFileSync(path.join(assetsDir,'clan-boss-chest.webp'),PPA_CLAN_BOSS_CHEST_BUF);
 for(const name of PPA_RURI_RESOURCE_FILES){
@@ -293,6 +308,17 @@ if (!output.includes('data-ppa-tonconnect="1"')) {
 
 if (!output.includes('<head>')) throw new Error('PPA <head> not found');
 output = output.replace('<head>', `<head>\n<script>window.PPA_CLIENT_BUILD=${JSON.stringify(CLIENT_BUILD)};window.PPA_REALTIME_V2_ACTIVE=true;window.PPA_BOSS_TEST_OPEN=false;window.PPA_TEST_ALL_DUNGEONS=false;</script>`);
+
+const PPA_VISUAL_BOOT_URL='/assets/ppa-start-screen.webp?v='+CLIENT_BUILD;
+output=output.replace('</head>',
+  '<link rel="preload" as="image" href="'+PPA_VISUAL_BOOT_URL+'">'+
+  '<script src="/game/phoenix-visual-start.js?v='+CLIENT_BUILD+'"></script></head>'
+);
+// Remove only old visible startup signatures; no startup behavior is changed.
+output=output.replace(/С\\s+любовью\\s+RayZenGX/gi,'').replace(/\\bbuild256\\b/gi,'');
+if(!output.includes('phoenix-visual-start.js')||!output.includes('ppa-start-screen.webp')){
+  throw new Error('Safe Phoenix visual startup overlay did not apply');
+}
 
 const legacyInitNeedle = 'async function PPAOnlineInit(){\n';
 if (!output.includes(legacyInitNeedle)) throw new Error('Legacy PPAOnlineInit patch target not found');
@@ -7832,6 +7858,7 @@ const filesToPublish = [
   ['gateway/telegram-safe-ui.js','telegram-safe-ui.js','Telegram safe UI helper missing'],
   ['gateway/mobile-hud-tweaks.js','mobile-hud-tweaks.js','Mobile HUD tweaks missing'],
   ['gateway/social-ui.js','social-ui.js','Social UI missing'],
+  ['gateway/phoenix-visual-start.js','phoenix-visual-start.js','Phoenix visual startup runtime missing'],
 ];
 for (const [srcName,dstName,err] of filesToPublish) {
   const src=path.join(ROOT,srcName);if(!fs.existsSync(src))throw new Error(`${err}: ${srcName}`);
