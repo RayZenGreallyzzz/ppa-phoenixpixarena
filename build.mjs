@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v616-dungeon-clean-floor-no-inner-shadow-20260928';
+const CLIENT_BUILD = 'v617-dungeon-real-masonry-walls-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -94,17 +94,23 @@ fs.mkdirSync(gameDir, { recursive: true });
 // Map + exact walk mask. Dungeon mobs stay disabled while the new geometry is tested.
 const PPA_DUNGEON_TEST_FLOOR_PATH=path.join(ROOT,'данж.png');
 const PPA_DUNGEON_TEST_MASK_PATH=path.join(ROOT,'маскаs.png');
-if(!fs.existsSync(PPA_DUNGEON_TEST_FLOOR_PATH)||!fs.existsSync(PPA_DUNGEON_TEST_MASK_PATH)){
-  throw new Error('Dungeon layout test requires данж.png and маскаs.png in repository root');
+const PPA_DUNGEON_WALL_ATLAS_PATH=path.join(ROOT,'8401da71-9cc8-4645-80a8-19b1671706ad.png');
+if(!fs.existsSync(PPA_DUNGEON_TEST_FLOOR_PATH)||!fs.existsSync(PPA_DUNGEON_TEST_MASK_PATH)||!fs.existsSync(PPA_DUNGEON_WALL_ATLAS_PATH)){
+  throw new Error('Dungeon layout test requires данж.png, маскаs.png and the uploaded stone-wall atlas');
 }
 
 const PPA_DUNGEON_TEST_MASK_META=await sharp(PPA_DUNGEON_TEST_MASK_PATH).metadata();
 const PPA_DUNGEON_TEST_FLOOR_META=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH).metadata();
+const PPA_DUNGEON_WALL_ATLAS_META=await sharp(PPA_DUNGEON_WALL_ATLAS_PATH).metadata();
 if(!PPA_DUNGEON_TEST_MASK_META.width||!PPA_DUNGEON_TEST_MASK_META.height)throw new Error('маскаs.png metadata is invalid');
 if(!PPA_DUNGEON_TEST_FLOOR_META.width||!PPA_DUNGEON_TEST_FLOOR_META.height)throw new Error('данж.png metadata is invalid');
+if(!PPA_DUNGEON_WALL_ATLAS_META.width||!PPA_DUNGEON_WALL_ATLAS_META.height||PPA_DUNGEON_WALL_ATLAS_META.width<920||PPA_DUNGEON_WALL_ATLAS_META.height<200){
+  throw new Error('Uploaded dungeon wall atlas metadata is invalid');
+}
 
 console.log('[PPA BUILD] Dungeon mask source: '+PPA_DUNGEON_TEST_MASK_META.width+'x'+PPA_DUNGEON_TEST_MASK_META.height+' alpha='+(!!PPA_DUNGEON_TEST_MASK_META.hasAlpha));
 console.log('[PPA BUILD] Dungeon floor source: '+PPA_DUNGEON_TEST_FLOOR_META.width+'x'+PPA_DUNGEON_TEST_FLOOR_META.height);
+console.log('[PPA BUILD] Dungeon wall atlas: '+PPA_DUNGEON_WALL_ATLAS_META.width+'x'+PPA_DUNGEON_WALL_ATLAS_META.height+' alpha='+(!!PPA_DUNGEON_WALL_ATLAS_META.hasAlpha));
 
 // Geometry follows the uploaded MASK aspect ratio.
 const PPA_DUNGEON_TEST_ART_W=2048;
@@ -139,8 +145,8 @@ if(PPA_DUNGEON_WALK_RATIO<0.08||PPA_DUNGEON_WALK_RATIO>0.65){
 }
 const PPA_DUNGEON_WALK_B64=PPA_DUNGEON_WALK_BITS.toString('base64');
 
-// Lightweight 3/4 chamfer distance. This lets the BUILD create a thick wall
-// around the exact mask without adding any per-frame work to the game.
+// Lightweight 3/4 chamfer distance. It creates a wall band entirely OUTSIDE
+// the walkable mask, so decorative masonry never covers valid collision space.
 function ppaDungeonChamferDistance(seed){
   const w=PPA_DUNGEON_COLL_W,h=PPA_DUNGEON_COLL_H,INF=0x3fff;
   const d=new Uint16Array(w*h);
@@ -168,32 +174,36 @@ function ppaDungeonChamferDistance(seed){
   return d;
 }
 
-// Outside distance creates the thick stone wall. Inside distance gives a narrow
-// contact shadow so the walkable floor visibly sits below the wall.
 const PPA_DUNGEON_OUTSIDE_DIST=ppaDungeonChamferDistance(PPA_DUNGEON_WALK);
-const PPA_DUNGEON_OUTSIDE_SEED=new Uint8Array(PPA_DUNGEON_WALK.length);
-for(let i=0;i<PPA_DUNGEON_WALK.length;i++)PPA_DUNGEON_OUTSIDE_SEED[i]=PPA_DUNGEON_WALK[i]?0:1;
-const PPA_DUNGEON_INSIDE_DIST=ppaDungeonChamferDistance(PPA_DUNGEON_OUTSIDE_SEED);
-
-const PPA_DUNGEON_WALL_RADIUS=18;       // ~72 render px: deliberately thick masonry.
-const PPA_DUNGEON_WALL_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_WALK.length*4);
+const PPA_DUNGEON_WALL_RADIUS=18; // ~72 render px. Always outside walkable cells.
+const PPA_DUNGEON_WALL_H_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_WALK.length*4);
+const PPA_DUNGEON_WALL_V_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_WALK.length*4);
 const PPA_DUNGEON_FLOOR_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_WALK.length*4);
-const PPA_DUNGEON_EDGE_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_WALK.length*4);
 let PPA_DUNGEON_WALL_COUNT=0;
-for(let i=0;i<PPA_DUNGEON_WALK.length;i++){
-  const o=i*4;
-  PPA_DUNGEON_WALL_MASK_RGBA[o]=PPA_DUNGEON_WALL_MASK_RGBA[o+1]=PPA_DUNGEON_WALL_MASK_RGBA[o+2]=255;
+
+for(let y=0;y<PPA_DUNGEON_COLL_H;y++)for(let x=0;x<PPA_DUNGEON_COLL_W;x++){
+  const i=y*PPA_DUNGEON_COLL_W+x,o=i*4;
+  PPA_DUNGEON_WALL_H_MASK_RGBA[o]=PPA_DUNGEON_WALL_H_MASK_RGBA[o+1]=PPA_DUNGEON_WALL_H_MASK_RGBA[o+2]=255;
+  PPA_DUNGEON_WALL_V_MASK_RGBA[o]=PPA_DUNGEON_WALL_V_MASK_RGBA[o+1]=PPA_DUNGEON_WALL_V_MASK_RGBA[o+2]=255;
   PPA_DUNGEON_FLOOR_MASK_RGBA[o]=PPA_DUNGEON_FLOOR_MASK_RGBA[o+1]=PPA_DUNGEON_FLOOR_MASK_RGBA[o+2]=255;
-  PPA_DUNGEON_EDGE_MASK_RGBA[o]=PPA_DUNGEON_EDGE_MASK_RGBA[o+1]=PPA_DUNGEON_EDGE_MASK_RGBA[o+2]=255;
 
   const walk=PPA_DUNGEON_WALK[i]===1;
-  const wall=!walk&&PPA_DUNGEON_OUTSIDE_DIST[i]<=PPA_DUNGEON_WALL_RADIUS*3;
-  const edge=!walk&&PPA_DUNGEON_OUTSIDE_DIST[i]<=3*3;
-
   PPA_DUNGEON_FLOOR_MASK_RGBA[o+3]=walk?255:0;
-  PPA_DUNGEON_WALL_MASK_RGBA[o+3]=wall?255:0;
-  PPA_DUNGEON_EDGE_MASK_RGBA[o+3]=edge?255:0;
-  if(wall)PPA_DUNGEON_WALL_COUNT++;
+  if(walk)continue;
+
+  const wall=PPA_DUNGEON_OUTSIDE_DIST[i]<=PPA_DUNGEON_WALL_RADIUS*3;
+  if(!wall)continue;
+
+  // Gradient of distance gives the boundary normal. Masonry runs along the
+  // tangent: horizontal texture for top/bottom, rotated texture for left/right.
+  const dl=x>0?PPA_DUNGEON_OUTSIDE_DIST[i-1]:PPA_DUNGEON_OUTSIDE_DIST[i];
+  const dr=x+1<PPA_DUNGEON_COLL_W?PPA_DUNGEON_OUTSIDE_DIST[i+1]:PPA_DUNGEON_OUTSIDE_DIST[i];
+  const du=y>0?PPA_DUNGEON_OUTSIDE_DIST[i-PPA_DUNGEON_COLL_W]:PPA_DUNGEON_OUTSIDE_DIST[i];
+  const dd=y+1<PPA_DUNGEON_COLL_H?PPA_DUNGEON_OUTSIDE_DIST[i+PPA_DUNGEON_COLL_W]:PPA_DUNGEON_OUTSIDE_DIST[i];
+  const gx=Math.abs(dr-dl),gy=Math.abs(dd-du);
+  if(gx>gy)PPA_DUNGEON_WALL_V_MASK_RGBA[o+3]=255;
+  else PPA_DUNGEON_WALL_H_MASK_RGBA[o+3]=255;
+  PPA_DUNGEON_WALL_COUNT++;
 }
 
 async function ppaDungeonMaskToRender(buf){
@@ -204,16 +214,15 @@ async function ppaDungeonMaskToRender(buf){
 }
 const [
   PPA_DUNGEON_FLOOR_MASK_RENDER,
-  PPA_DUNGEON_WALL_MASK_RENDER,
-  PPA_DUNGEON_EDGE_MASK_RENDER
+  PPA_DUNGEON_WALL_H_MASK_RENDER,
+  PPA_DUNGEON_WALL_V_MASK_RENDER
 ]=await Promise.all([
   ppaDungeonMaskToRender(PPA_DUNGEON_FLOOR_MASK_RGBA),
-  ppaDungeonMaskToRender(PPA_DUNGEON_WALL_MASK_RGBA),
-  ppaDungeonMaskToRender(PPA_DUNGEON_EDGE_MASK_RGBA)
+  ppaDungeonMaskToRender(PPA_DUNGEON_WALL_H_MASK_RGBA),
+  ppaDungeonMaskToRender(PPA_DUNGEON_WALL_V_MASK_RGBA)
 ]);
 
-// Use the user's 10k source as the stone material. Nothing is upscaled from a
-// small texture: all three visual layers are derived from the same high-res art.
+// Use the user's 10k source as the clean walkable floor.
 const PPA_DUNGEON_BASE_FLOOR=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH)
   .resize(PPA_DUNGEON_RENDER_W,PPA_DUNGEON_RENDER_H,{
     fit:'cover',position:'centre',kernel:sharp.kernel.lanczos3,withoutEnlargement:false
@@ -221,38 +230,52 @@ const PPA_DUNGEON_BASE_FLOOR=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH)
   .png()
   .toBuffer();
 
-// Deep rock mass outside the corridors: same stone family, darker and calmer.
+// Deep rock mass outside the corridors.
 const PPA_DUNGEON_OUTER_STONE=await sharp(PPA_DUNGEON_BASE_FLOOR)
   .modulate({brightness:0.28,saturation:0.42})
   .blur(0.35)
   .png()
   .toBuffer();
 
-// Thick masonry ring: brighter than the rock mass, darker/heavier than the floor.
-const PPA_DUNGEON_WALL_STONE=await sharp(PPA_DUNGEON_BASE_FLOOR)
-  .modulate({brightness:0.52,saturation:0.68})
-  .sharpen({sigma:0.9,m1:0.7,m2:1.4})
+// Real masonry comes from the uploaded transparent wall sheet. We take the
+// long clean wall face from the sheet, resize it to the exact wall thickness,
+// repeat it at build-time, and rotate the same masonry for vertical sections.
+const PPA_DUNGEON_WALL_FACE=await sharp(PPA_DUNGEON_WALL_ATLAS_PATH)
+  .extract({left:440,top:120,width:480,height:80})
+  .resize(432,72,{fit:'fill',kernel:sharp.kernel.lanczos3})
   .png()
   .toBuffer();
+const PPA_DUNGEON_WALL_FACE_V=await sharp(PPA_DUNGEON_WALL_FACE).rotate(90).png().toBuffer();
+
+function ppaDungeonPatternSvg(tile,tileW,tileH){
+  const b64=tile.toString('base64');
+  return Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="'+PPA_DUNGEON_RENDER_W+'" height="'+PPA_DUNGEON_RENDER_H+'">'+
+    '<defs><pattern id="p" width="'+tileW+'" height="'+tileH+'" patternUnits="userSpaceOnUse">'+
+    '<image href="data:image/png;base64,'+b64+'" width="'+tileW+'" height="'+tileH+'" preserveAspectRatio="none"/>'+
+    '</pattern></defs><rect width="100%" height="100%" fill="url(#p)"/></svg>'
+  );
+}
+const PPA_DUNGEON_WALL_H_TEXTURE=await sharp(ppaDungeonPatternSvg(PPA_DUNGEON_WALL_FACE,432,72)).png().toBuffer();
+const PPA_DUNGEON_WALL_V_TEXTURE=await sharp(ppaDungeonPatternSvg(PPA_DUNGEON_WALL_FACE_V,72,432)).png().toBuffer();
 
 const PPA_DUNGEON_FLOOR_LAYER=await sharp(PPA_DUNGEON_BASE_FLOOR)
   .composite([{input:PPA_DUNGEON_FLOOR_MASK_RENDER,blend:'dest-in'}])
   .png()
   .toBuffer();
-const PPA_DUNGEON_WALL_LAYER=await sharp(PPA_DUNGEON_WALL_STONE)
-  .composite([{input:PPA_DUNGEON_WALL_MASK_RENDER,blend:'dest-in'}])
+const PPA_DUNGEON_WALL_H_LAYER=await sharp(PPA_DUNGEON_WALL_H_TEXTURE)
+  .composite([{input:PPA_DUNGEON_WALL_H_MASK_RENDER,blend:'dest-in'}])
+  .png()
+  .toBuffer();
+const PPA_DUNGEON_WALL_V_LAYER=await sharp(PPA_DUNGEON_WALL_V_TEXTURE)
+  .composite([{input:PPA_DUNGEON_WALL_V_MASK_RENDER,blend:'dest-in'}])
   .png()
   .toBuffer();
 
-// Thin top-edge highlight keeps the wall readable without darkening the walkable floor.
-const PPA_DUNGEON_EDGE_LAYER=await sharp({
-  create:{width:PPA_DUNGEON_RENDER_W,height:PPA_DUNGEON_RENDER_H,channels:4,background:{r:128,g:120,b:108,alpha:0.20}}
-}).composite([{input:PPA_DUNGEON_EDGE_MASK_RENDER,blend:'dest-in'}]).png().toBuffer();
-
 const PPA_DUNGEON_TEST_MAP=await sharp(PPA_DUNGEON_OUTER_STONE)
   .composite([
-    {input:PPA_DUNGEON_WALL_LAYER,left:0,top:0},
-    {input:PPA_DUNGEON_EDGE_LAYER,left:0,top:0},
+    {input:PPA_DUNGEON_WALL_H_LAYER,left:0,top:0},
+    {input:PPA_DUNGEON_WALL_V_LAYER,left:0,top:0},
     {input:PPA_DUNGEON_FLOOR_LAYER,left:0,top:0}
   ])
   .webp({quality:95,alphaQuality:100,effort:5,smartSubsample:false})
@@ -261,7 +284,7 @@ fs.writeFileSync(path.join(assetsDir,'dungeon-layout-test.webp'),PPA_DUNGEON_TES
 
 // Preserve the old ~9526 world-pixel width so player speed/size remains comparable.
 const PPA_DUNGEON_TEST_SCALE=(1852*5.1435)/PPA_DUNGEON_TEST_ART_W;
-console.log('[PPA BUILD] Dungeon stone walls: outer rock + '+PPA_DUNGEON_WALL_RADIUS+'px collision-grid masonry ring + inner depth shadow');
+console.log('[PPA BUILD] Dungeon real walls: uploaded masonry atlas applied OUTSIDE collision only; old bright outline removed');
 console.log('[PPA BUILD] Dungeon normalized: logical '+PPA_DUNGEON_TEST_ART_W+'x'+PPA_DUNGEON_TEST_ART_H+' · render '+PPA_DUNGEON_RENDER_W+'x'+PPA_DUNGEON_RENDER_H+' · collision '+PPA_DUNGEON_COLL_W+'x'+PPA_DUNGEON_COLL_H+' · walk '+(PPA_DUNGEON_WALK_RATIO*100).toFixed(1)+'% · wall '+(PPA_DUNGEON_WALL_COUNT/PPA_DUNGEON_WALK.length*100).toFixed(1)+'%');
 // ==========================================================================
 
