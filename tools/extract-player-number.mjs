@@ -23,6 +23,6 @@ for(const n of defs){
     p+=n.length;
   }
 }
-fs.writeFileSync('diag-player-assets.txt',defsOut);
+fs.appendFileSync('diag-player-number.txt','\n\n'+defsOut);
 
 // rerun asset extraction
