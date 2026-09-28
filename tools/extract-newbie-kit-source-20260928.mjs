@@ -29,3 +29,4 @@ for(const n of needles){
 }
 fs.writeFileSync('diag-newbie-kit-source-small.txt',out);
 console.log('wrote',out.length);
+
