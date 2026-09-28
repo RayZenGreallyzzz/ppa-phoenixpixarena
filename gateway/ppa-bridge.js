@@ -7,6 +7,7 @@
   var saveQueue=Promise.resolve();
   var knownSaveVersion=null;
   var saveConflict=null;
+  var cloudSaveLoaded=false;
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var x=tg();return x&&x.initData?String(x.initData):''}
@@ -30,10 +31,36 @@
     return j;
   }
 
+  function authTelegramId(a){
+    try{return String((a&&a.profile&&a.profile.telegramId)||(a&&a.user&&a.user.id)||'').trim()}catch(_){return ''}
+  }
+
+  function localSaveBoundToTelegram(s,a){
+    if(!s||typeof s!=='object')return false;
+    var tid=authTelegramId(a);
+    if(!tid)return false;
+    var bound=String(s.profileTelegramId||s.telegramId||'').trim();
+    return !!bound&&bound===tid;
+  }
+
+  function purgeForeignLocalCharacter(a){
+    try{
+      var raw=localStorage.getItem('pxSave')||localStorage.getItem('pxSaveLastGood')||'';
+      if(!raw)return;
+      var s=null;try{s=JSON.parse(raw)}catch(_){}
+      if(localSaveBoundToTelegram(s,a))return;
+      localStorage.removeItem('pxSave');
+      localStorage.removeItem('pxSaveLastGood');
+      localStorage.removeItem('ppaPlayerNameV205');
+      sessionStorage.removeItem('ppaTgMigrationDecisionV278');
+    }catch(_){}
+  }
+
   async function auth(){
     if(cachedAuth)return cachedAuth;
     try{var w=tg();if(w){w.ready();w.expand()}}catch(_){}
     cachedAuth=await call('/api/auth');
+    purgeForeignLocalCharacter(cachedAuth);
     return cachedAuth;
   }
 
@@ -52,7 +79,8 @@
         if(built&&typeof built==='object')return built;
       }
     }catch(_){}
-    return localSave();
+    var s=localSave();
+    return localSaveBoundToTelegram(s,cachedAuth)?s:null;
   }
 
   function localNickname(){
@@ -91,6 +119,10 @@
 
   function queueSave(state,version){
     saveQueue=saveQueue.catch(function(){}).then(async function(){
+      if(!cloudSaveLoaded){
+        var e=new Error('Облачный сейв ещё не загружен. Локальный кэш не может перезаписать Telegram-сейв.');
+        e.code='CLOUD_SAVE_NOT_LOADED';e.status=409;throw e;
+      }
       var now=Date.now();
       var wait=Math.max(0,1200-(now-lastSaveAt));
       if(wait)await new Promise(function(resolve){setTimeout(resolve,wait)});
@@ -157,7 +189,7 @@
       localStorage.removeItem('ppaPlayerNameV205');
       sessionStorage.removeItem('ppaTgMigrationDecisionV278');
     }catch(_){}
-    cachedAuth=null;knownSaveVersion=null;saveConflict=null;
+    cachedAuth=null;knownSaveVersion=null;saveConflict=null;cloudSaveLoaded=false;
 
     try{window.alert((r&&r.message)||'Stella удалена. Mini App будет перезапущен.') }catch(_){}
     try{window.location.reload()}catch(_){}
@@ -194,9 +226,22 @@
     isAvailable:available,
     ppaAuthTelegram:auth,
     ppaLoadProfile:loadProfileServerOnly,
-    ppaLoadSave:async function(){await auth();var r=await call('/api/save/load');noteSaveVersion(r&&r.version!=null?r.version:0);return r},
+    ppaLoadSave:async function(){
+      await auth();
+      var r=await call('/api/save/load');
+      noteSaveVersion(r&&r.version!=null?r.version:0);
+      cloudSaveLoaded=true;
+      return r;
+    },
     ppaSaveGame:async function(state,version){await auth();return queueSave(state,version)},
-    ppaRegisterCharacter:async function(nickname,classKey){return authed('/api/character/register',{nickname:nickname,classKey:classKey||''})},
+    ppaRegisterCharacter:async function(nickname,classKey){
+      await auth();
+      var r=await call('/api/character/register',{nickname:nickname,classKey:classKey||''});
+      var loaded=await call('/api/save/load');
+      noteSaveVersion(loaded&&loaded.version!=null?loaded.version:0);
+      cloudSaveLoaded=true;
+      return r;
+    },
     ppaSyncNicknameFromSave:async function(){return authed('/api/profile/load')},
     ppaRequestNicknameChange:renameWithSyncedCard,
     ppaDeleteStellaTestAccount:deleteStellaTestAccount,
