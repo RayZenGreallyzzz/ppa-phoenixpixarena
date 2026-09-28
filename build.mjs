@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v622-dungeon-room-mob-redistribution-20260929';
+const CLIENT_BUILD = 'v623-dungeon-enable-room-mobs-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -677,9 +677,9 @@ let output = source.replace(dataUri, (full, mime, b64) => {
 
   // Temporary test flag is available before the game body scripts execute.
   if(!output.includes('<head>'))throw new Error('Dungeon test <head> target missing');
-  output=output.replace('<head>','<head><script>window.PPA_DUNGEON_LAYOUT_TEST=true;<\/script>');
+  output=output.replace('<head>','<head><script>window.PPA_DUNGEON_LAYOUT_TEST=true;window.PPA_DUNGEON_MOBS_ENABLED=true;<\/script>');
 }
-console.log('[PPA BUILD] Dungeon test: uploaded art + exact mask connected; old map still present for rollback');
+console.log('[PPA BUILD] Dungeon test: uploaded art + exact mask connected; redistributed mobs ENABLED, bosses still gated');
 /* ======================================================================== */
 
 output = output.replace(
