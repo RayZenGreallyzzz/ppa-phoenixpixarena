@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v609-phoenix-immediate-telegram-ready-20260928';
+const CLIENT_BUILD = 'v610-phoenix-clean-progress-art-20260928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -102,8 +102,29 @@ const PPA_VISUAL_BOOT_META=await sharp(PPA_VISUAL_BOOT_BUF).metadata();
 if(PPA_VISUAL_BOOT_META.format!=='webp'||PPA_VISUAL_BOOT_META.width!==480||PPA_VISUAL_BOOT_META.height!==852||PPA_VISUAL_BOOT_BUF.length<25000){
   throw new Error('Phoenix visual startup source is invalid or incomplete');
 }
-fs.writeFileSync(path.join(assetsDir,'ppa-start-screen.webp'),PPA_VISUAL_BOOT_BUF);
-console.log('[PPA BUILD] Safe Phoenix visual startup overlay: 480x852 WebP ready.');
+const PPA_BOOT_CLEAN_MASK=Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="292">'+
+  '<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">'+
+  '<stop offset="0%" stop-color="#050302" stop-opacity="0"/>'+
+  '<stop offset="12%" stop-color="#050302" stop-opacity=".72"/>'+
+  '<stop offset="25%" stop-color="#050302" stop-opacity=".97"/>'+
+  '<stop offset="36%" stop-color="#050302" stop-opacity="1"/>'+
+  '<stop offset="100%" stop-color="#050302" stop-opacity="1"/>'+
+  '</linearGradient></defs>'+
+  '<rect width="480" height="292" fill="url(#g)"/>'+
+  '</svg>'
+);
+const PPA_VISUAL_BOOT_CLEAN_BUF=await sharp(PPA_VISUAL_BOOT_BUF)
+  .composite([{input:PPA_BOOT_CLEAN_MASK,left:0,top:560}])
+  .webp({quality:92,alphaQuality:100,effort:4})
+  .toBuffer();
+const PPA_VISUAL_BOOT_CLEAN_META=await sharp(PPA_VISUAL_BOOT_CLEAN_BUF).metadata();
+if(PPA_VISUAL_BOOT_CLEAN_META.width!==480||PPA_VISUAL_BOOT_CLEAN_META.height!==852){
+  throw new Error('Phoenix clean startup background dimensions invalid');
+}
+const PPA_VISUAL_BOOT_CLEAN_B64=PPA_VISUAL_BOOT_CLEAN_BUF.toString('base64');
+fs.writeFileSync(path.join(assetsDir,'ppa-start-screen.webp'),PPA_VISUAL_BOOT_CLEAN_BUF);
+console.log('[PPA BUILD] Phoenix clean startup art: baked 68%/old progress removed.');
 const PPA_VISUAL_BOOT_RUNTIME=fs.readFileSync(path.join(ROOT,'gateway','phoenix-visual-start.js'),'utf8');
 fs.writeFileSync(path.join(assetsDir,'ruri-move.webp'),PPA_RURI_MOVE_ART.buf);
 fs.writeFileSync(path.join(assetsDir,'clan-boss-chest.webp'),PPA_CLAN_BOSS_CHEST_BUF);
@@ -312,9 +333,9 @@ if (!output.includes('data-ppa-tonconnect="1"')) {
 if (!output.includes('<head>')) throw new Error('PPA <head> not found');
 
 const PPA_BOOT_INLINE_CSS=
-  'html.ppaBootActive::before{content:""!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;z-index:2147483645!important;background:#050302 url("data:image/webp;base64,'+PPA_VISUAL_BOOT_B64+'") center center/cover no-repeat!important;opacity:1!important;visibility:visible!important;pointer-events:none!important;transform:none!important;transform-origin:0 0!important;transition:opacity .22s ease!important}'+
+  'html.ppaBootActive::before{content:""!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;z-index:2147483645!important;background:#050302 url("data:image/webp;base64,'+PPA_VISUAL_BOOT_CLEAN_B64+'") center center/cover no-repeat!important;opacity:1!important;visibility:visible!important;pointer-events:none!important;transform:none!important;transform-origin:0 0!important;transition:opacity .22s ease!important}'+
   'html.ppaBootActive.ppaBootLeaving::before{opacity:0!important}'+
-  '#ppaBootHud{position:fixed!important;left:0!important;right:0!important;bottom:0!important;height:29vh!important;min-height:190px!important;z-index:2147483646!important;display:flex!important;align-items:flex-start!important;justify-content:center!important;box-sizing:border-box!important;padding:22px 7vw max(20px,env(safe-area-inset-bottom))!important;background:linear-gradient(to bottom,rgba(5,3,2,.05) 0%,rgba(5,3,2,.94) 28%,#050302 100%)!important;pointer-events:none!important;transform:none!important;transition:opacity .22s ease!important}'+
+  '#ppaBootHud{position:fixed!important;left:0!important;right:0!important;bottom:0!important;height:29vh!important;min-height:190px!important;z-index:2147483646!important;display:flex!important;align-items:flex-start!important;justify-content:center!important;box-sizing:border-box!important;padding:22px 7vw max(20px,env(safe-area-inset-bottom))!important;background:linear-gradient(to bottom,rgba(5,3,2,.96) 0%,rgba(5,3,2,.99) 18%,#050302 100%)!important;pointer-events:none!important;transform:none!important;transition:opacity .22s ease!important}'+
   'html.ppaBootLeaving #ppaBootHud{opacity:0!important}'+
   '#ppaBootCard{width:min(680px,86vw)!important;text-align:center!important;color:#f3dfc4!important;font-family:Georgia,"Times New Roman",serif!important;text-shadow:0 2px 5px #000!important}'+
   '#ppaBootTrack{height:16px!important;box-sizing:border-box!important;border:2px solid #9b5c25!important;border-radius:3px!important;padding:2px!important;background:#0d0907!important;box-shadow:0 0 0 1px #e0aa62 inset,0 0 12px rgba(255,116,19,.30)!important;overflow:hidden!important}'+
