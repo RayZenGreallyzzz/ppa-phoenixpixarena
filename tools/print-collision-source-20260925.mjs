@@ -78,3 +78,28 @@ for(const term of [
     pos+=term.length;
   }
 }
+
+
+console.log('\n===== DUNGEON CONSTANTS / RENDER EXACT =====');
+for(const term of [
+  'const DG=',
+  'const DG_W=',
+  'DG_SCALE=',
+  'DG_WALK',
+  'DG_IMG',
+  'DG_MAP',
+  'dungeonMap',
+  'dungeonImg',
+  'drawImage(DG',
+  'drawImage(dg',
+  'function drawWorld',
+  'function drawGame',
+  'function drawScene',
+  "if(P.scene==='dungeon')"
+]){
+  let pos=0,n=0;
+  while((pos=src.indexOf(term,pos))>=0&&n<12){
+    console.log('\n--- EXACT '+term+' '+(++n)+' @ '+pos+' ---\n'+src.slice(Math.max(0,pos-5000),Math.min(src.length,pos+9000)));
+    pos+=term.length;
+  }
+}
