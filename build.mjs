@@ -307,13 +307,14 @@ if (!output.includes(legacyCleanupNeedle)) throw new Error('Legacy ppaOnlineClea
 output = output.replace(legacyCleanupNeedle, "function ppaOnlineCleanup(){\n  if(window.PPA_REALTIME_V2_ACTIVE)return;\n");
 
 const migrationNeedle = 'var migrationState=ppaMigrationSaveObject();\n      if(ppaSaveHasCharacterState(migrationState)){';
-const migrationPatch = "var migrationState=ppaMigrationSaveObject();\n      if(profileNick&&/^[A-Za-zА-Яа-яЁё0-9_]{3,18}$/u.test(profileNick))migrationState.playerName=profileNick;\n      if(ppaSaveHasCharacterState(migrationState)){";
-if (!output.includes(migrationNeedle)) throw new Error('PPA Telegram migration patch target not found');
+const migrationPatch = "var migrationState=null;\n      if(false){";
+if (!output.includes(migrationNeedle)) throw new Error('PPA Telegram migration disable target not found');
 output = output.replace(migrationNeedle, migrationPatch);
+console.log('[PPA BUILD] Device-to-Telegram save migration disabled; Telegram cloud identity is authoritative');
 
 const catchNeedle = "  }catch(err){\n    console.error('PPA Gateway bootstrap:',err);\n    ppaShowGatewayError('Не удалось подтвердить Telegram-сессию. Закройте Mini App и откройте игру снова через бота.');\n    return true;\n  }finally{";
-const catchPatch = "  }catch(err){\n    console.error('PPA Gateway bootstrap:',err);\n    var _ppaErrCode=String((err&&err.code)||('HTTP_'+String((err&&err.status)||'ERR')));\n    var _ppaErrMsg=String((err&&err.message)||'Ошибка Gateway');\n    var _ppaLocalClass=(P&&P._saved&&P._saved.cls)?classKeyFromName(P._saved.cls):'';\n    if(_ppaLocalClass&&CLASS_BASE[_ppaLocalClass]){\n      PPA_CLOUD.ready=false;\n      try{showPickup('ОБЛАКО НЕДОСТУПНО · ЛОКАЛЬНЫЙ СЕЙВ','#ffb36b')}catch(_){}\n      applyClass({name:CLASS_BASE[_ppaLocalClass].name});\n      beginGame();\n      return true;\n    }\n    ppaShowGatewayError('Gateway: '+_ppaErrCode+' · '+_ppaErrMsg);\n    return true;\n  }finally{";
-if (!output.includes(catchNeedle)) throw new Error('PPA Gateway fallback patch target not found');
+const catchPatch = "  }catch(err){\n    console.error('PPA Gateway bootstrap:',err);\n    var _ppaErrCode=String((err&&err.code)||('HTTP_'+String((err&&err.status)||'ERR')));\n    var _ppaErrMsg=String((err&&err.message)||'Ошибка Gateway');\n    PPA_CLOUD.ready=false;\n    ppaShowGatewayError('Облачный сейв недоступен · '+_ppaErrCode+' · '+_ppaErrMsg);\n    return true;\n  }finally{";
+if (!output.includes(catchNeedle)) throw new Error('PPA Gateway cloud-only fallback target not found');
 output = output.replace(catchNeedle, catchPatch);
 
 const saveToolsRe = /&lt;div id=&quot;saveTools&quot;&gt;[\s\S]*?&lt;\/div&gt;\s*&lt;\/section&gt;/;
