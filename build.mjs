@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v625-dungeon-strict-room-levels-boss-center-20260929';
+const CLIENT_BUILD = 'v626-dungeon-full-odd-even-room-rows-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -236,82 +236,109 @@ const PPA_DUNGEON_BOSS_IMG=_ppaBossCore
   :[Math.min(PPA_DUNGEON_TEST_ART_W-90,1880),Math.round(PPA_DUNGEON_TEST_ART_H*0.51)];
 
 const PPA_DUNGEON_ROOM_META=[];
-function ppaDungeonCoreBlocked(q){
+
+// The new dungeon is a strict paired layout:
+// upper row = 1,3,5...19; lower row = 2,4,6...20.
+// Detect EACH row independently so one side can never steal room slots from the other.
+const PPA_DUNGEON_MID_Y=PPA_DUNGEON_TEST_ART_H*0.5;
+const PPA_DUNGEON_ROOM_X_MIN=150;
+const PPA_DUNGEON_ROOM_X_MAX=Math.max(
+  PPA_DUNGEON_ROOM_X_MIN+900,
+  Math.min(PPA_DUNGEON_TEST_ART_W-150,PPA_DUNGEON_BOSS_IMG[0]-235)
+);
+
+function ppaDungeonRoomCandidateBlocked(q){
   if(!q)return true;
-  if(q.x<135)return true;
+  if(q.x<PPA_DUNGEON_ROOM_X_MIN||q.x>PPA_DUNGEON_ROOM_X_MAX)return true;
   if(Math.hypot(q.x-50,q.y-518)<150)return true;
   if(Math.hypot(q.x-PPA_DUNGEON_BOSS_IMG[0],q.y-PPA_DUNGEON_BOSS_IMG[1])<245)return true;
-  return q.clear<24;
-}
-function ppaDungeonCoreNearExisting(q,gap=112){
-  for(const r of PPA_DUNGEON_ROOM_META)if(Math.hypot(q.x-r.x,q.y-r.y)<gap)return true;
-  return false;
-}
-function ppaDungeonPushCore(q,inherited){
-  if(ppaDungeonCoreBlocked(q)||ppaDungeonCoreNearExisting(q))return false;
-  PPA_DUNGEON_ROOM_META.push({
-    x:Math.round(q.x),y:Math.round(q.y),level:1,size:q.clear>=46?'large':'small',
-    count:q.clear>=58?12:(q.clear>=42?10:8),
-    inherited:!!inherited,coreClear:q.clear
-  });
-  return true;
+  return q.clear<20;
 }
 
-// Legacy room anchors only help us locate physical chambers. Duplicate anchors
-// landing in the same new room are collapsed here, preventing mixed levels.
-for(const old of PPA_DUNGEON_OLD_ROOM_META){
-  const q=ppaDungeonFindRoomCore(old.x*PPA_DUNGEON_ROOM_SX,old.y*PPA_DUNGEON_ROOM_SY,175);
-  ppaDungeonPushCore(q,true);
-}
+function ppaDungeonDetectStrictRow(top){
+  const yMin=top?34:Math.round(PPA_DUNGEON_MID_Y+62);
+  const yMax=top?Math.round(PPA_DUNGEON_MID_Y-62):PPA_DUNGEON_TEST_ART_H-34;
+  const candidates=[];
 
-// Fill empty/new rooms from the new collision mask itself.
-function ppaDungeonAddCandidatePass(minClear,gap){
-  const cand=[];
-  const mid=PPA_DUNGEON_TEST_ART_H*0.5;
-  for(let y=34;y<PPA_DUNGEON_TEST_ART_H-34;y+=6){
-    if(Math.abs(y-mid)<58)continue; // main corridor is never a room
-    for(let x=130;x<PPA_DUNGEON_TEST_ART_W-120;x+=6){
+  for(let x=PPA_DUNGEON_ROOM_X_MIN;x<=PPA_DUNGEON_ROOM_X_MAX;x+=4){
+    let best=null;
+    for(let y=yMin;y<=yMax;y+=4){
       const i=y*PPA_DUNGEON_COLL_W+x;
       if(PPA_DUNGEON_WALK[i]!==1)continue;
       const clear=PPA_DUNGEON_INNER_DIST[i]/3;
-      if(clear<minClear)continue;
-      if(Math.hypot(x-PPA_DUNGEON_BOSS_IMG[0],y-PPA_DUNGEON_BOSS_IMG[1])<245)continue;
-      if(Math.hypot(x-50,y-518)<150)continue;
-      cand.push({x,y,clear});
+      if(clear<20)continue;
+      if(!best||clear>best.clear)best={x,y,clear};
+    }
+    if(best&&!ppaDungeonRoomCandidateBlocked(best))candidates.push(best);
+  }
+
+  function choose(gap,minClear){
+    const pool=candidates
+      .filter(q=>q.clear>=minClear)
+      .sort((u,v)=>(v.clear-u.clear)||(u.x-v.x));
+    const chosen=[];
+    for(const q of pool){
+      if(chosen.some(r=>Math.abs(q.x-r.x)<gap))continue;
+      chosen.push(q);
+      if(chosen.length>=10)break;
+    }
+    return chosen.sort((u,v)=>u.x-v.x);
+  }
+
+  let row=choose(122,26);
+  if(row.length<10)row=choose(108,23);
+  if(row.length<10)row=choose(94,20);
+
+  // Final fallback: split the usable width into ten slots and find the
+  // deepest walkable room interior in every slot.
+  if(row.length<10){
+    row=[];
+    const span=PPA_DUNGEON_ROOM_X_MAX-PPA_DUNGEON_ROOM_X_MIN;
+    for(let slot=0;slot<10;slot++){
+      const left=PPA_DUNGEON_ROOM_X_MIN+span*slot/10;
+      const right=PPA_DUNGEON_ROOM_X_MIN+span*(slot+1)/10;
+      let best=null,bestScore=-Infinity;
+      for(let y=yMin;y<=yMax;y+=3){
+        for(let x=Math.round(left);x<=Math.round(right);x+=3){
+          const i=y*PPA_DUNGEON_COLL_W+x;
+          if(PPA_DUNGEON_WALK[i]!==1)continue;
+          const clear=PPA_DUNGEON_INNER_DIST[i]/3;
+          if(clear<16)continue;
+          const slotCenter=(left+right)*0.5;
+          const score=clear*8-Math.abs(x-slotCenter)*0.08;
+          if(score>bestScore){bestScore=score;best={x,y,clear};}
+        }
+      }
+      if(best)row.push(best);
     }
   }
-  cand.sort((u,v)=>(v.clear-u.clear)||(u.x-v.x));
-  for(const q of cand){
-    if(PPA_DUNGEON_ROOM_META.length>=20)break;
-    let near=false;
-    for(const r of PPA_DUNGEON_ROOM_META)if(Math.hypot(q.x-r.x,q.y-r.y)<gap){near=true;break}
-    if(near)continue;
-    ppaDungeonPushCore(q,false);
-  }
-}
-ppaDungeonAddCandidatePass(32,112);
-if(PPA_DUNGEON_ROOM_META.length<20)ppaDungeonAddCandidatePass(27,96);
-if(PPA_DUNGEON_ROOM_META.length<20)ppaDungeonAddCandidatePass(23,88);
 
-if(PPA_DUNGEON_ROOM_META.length>20){
-  PPA_DUNGEON_ROOM_META.sort((u,v)=>(v.coreClear-u.coreClear)||(u.x-v.x));
-  PPA_DUNGEON_ROOM_META.length=20;
+  if(row.length!==10){
+    throw new Error('Dungeon strict row detection failed: '+(top?'top':'bottom')+'='+row.length+'/10');
+  }
+  return row;
 }
 
-// Strict progression: upper branch = odd levels, lower branch = even levels.
-// Every physical room therefore contains mobs of ONE level only.
-const PPA_DUNGEON_MID_Y=PPA_DUNGEON_TEST_ART_H*0.5;
-const _ppaTop=PPA_DUNGEON_ROOM_META.filter(r=>r.y<PPA_DUNGEON_MID_Y).sort((u,v)=>u.x-v.x||u.y-v.y);
-const _ppaBottom=PPA_DUNGEON_ROOM_META.filter(r=>r.y>=PPA_DUNGEON_MID_Y).sort((u,v)=>u.x-v.x||u.y-v.y);
-function ppaDungeonAssignRowLevels(row,start){
-  for(let i=0;i<row.length;i++){
-    const slot=row.length<=1?0:Math.round(i*9/(row.length-1));
-    row[i].level=Math.max(1,Math.min(20,start+slot*2));
-  }
+const _ppaTop=ppaDungeonDetectStrictRow(true);
+const _ppaBottom=ppaDungeonDetectStrictRow(false);
+
+for(let i=0;i<10;i++){
+  const tq=_ppaTop[i],bq=_ppaBottom[i];
+  PPA_DUNGEON_ROOM_META.push({
+    x:Math.round(tq.x),y:Math.round(tq.y),level:1+i*2,
+    size:tq.clear>=46?'large':'small',
+    count:tq.clear>=58?12:(tq.clear>=40?10:8),
+    inherited:false,coreClear:tq.clear,row:'top',slot:i
+  });
+  PPA_DUNGEON_ROOM_META.push({
+    x:Math.round(bq.x),y:Math.round(bq.y),level:2+i*2,
+    size:bq.clear>=46?'large':'small',
+    count:bq.clear>=58?12:(bq.clear>=40?10:8),
+    inherited:false,coreClear:bq.clear,row:'bottom',slot:i
+  });
 }
-ppaDungeonAssignRowLevels(_ppaTop,1);
-ppaDungeonAssignRowLevels(_ppaBottom,2);
-PPA_DUNGEON_ROOM_META.sort((u,v)=>u.level-v.level||u.x-v.x||u.y-v.y);
+
+PPA_DUNGEON_ROOM_META.sort((u,v)=>u.level-v.level);
 
 const PPA_DUNGEON_ACTIVE_SPAWNS=[];
 const PPA_DUNGEON_ROOM_BOUNDS=[];
@@ -377,7 +404,7 @@ for(let ri=0;ri<PPA_DUNGEON_ROOM_META.length;ri++)ppaDungeonBuildRoomSpawns(PPA_
 const PPA_DUNGEON_ROOM_META_RUNTIME=PPA_DUNGEON_ROOM_META.map(r=>({
   x:r.x,y:r.y,level:r.level,size:r.size,count:r.count
 }));
-console.log('[PPA BUILD] Dungeon strict rooms: top='+_ppaTop.length+' bottom='+_ppaBottom.length+' total='+PPA_DUNGEON_ROOM_META_RUNTIME.length);
+console.log('[PPA BUILD] Dungeon strict rows FULL: top odd='+_ppaTop.length+'/10 bottom even='+_ppaBottom.length+'/10 total='+PPA_DUNGEON_ROOM_META_RUNTIME.length);
 console.log('[PPA BUILD] Dungeon room levels: '+PPA_DUNGEON_ROOM_META_RUNTIME.map(r=>r.level+'@'+r.x+','+r.y).join(' | '));
 console.log('[PPA BUILD] Dungeon room-only mobs: '+PPA_DUNGEON_ACTIVE_SPAWNS.length+' spawns · boss center '+PPA_DUNGEON_BOSS_IMG[0]+','+PPA_DUNGEON_BOSS_IMG[1]);
 // ==========================================================================
