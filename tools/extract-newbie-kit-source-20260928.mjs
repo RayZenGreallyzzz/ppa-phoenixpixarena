@@ -40,3 +40,4 @@ for(const m of src.matchAll(/(?:const|let|var)\s+([A-Za-z0-9_$]*(?:SLOT|Slot|slo
 const out={skills,potion,invPotion,gearFunctions};
 fs.writeFileSync('diag-newbie-kit-source-small.txt',JSON.stringify(out,null,2));
 console.log('wrote',JSON.stringify(out).length);
+
