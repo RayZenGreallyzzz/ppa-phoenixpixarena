@@ -86,7 +86,51 @@ function cleanRoom(v) {
 function cleanName(v) { return String(v || 'Игрок').trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 24) || 'Игрок'; }
 function cleanText(v) { return String(v || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, 180); }
 function lowerName(v) { return cleanName(v).toLocaleLowerCase('ru-RU'); }
-function cleanPid(v) { v = String(v || '').trim(); return /^tg:\d{1,24}$/.test(v) ? v : ''; }
+function cleanPid(v) {
+  v = String(v || '').trim();
+  return /^(?:p:[a-f0-9]{32}|tg:\d{1,24})$/.test(v) ? v : '';
+}
+
+let realtimePidSchemaReady = false;
+async function ensureRealtimePidSchema(env) {
+  if (realtimePidSchemaReady) return true;
+  try {
+    await env.DB.prepare('ALTER TABLE players ADD COLUMN realtime_pid TEXT').run();
+  } catch (_) {
+    // Existing databases already have the column after the first successful migration.
+  }
+  await env.DB.prepare(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_players_realtime_pid ON players(realtime_pid) WHERE realtime_pid IS NOT NULL AND realtime_pid<>''"
+  ).run();
+  realtimePidSchemaReady = true;
+  return true;
+}
+
+async function realtimePidFor(env, telegramId) {
+  telegramId = String(telegramId || '').trim();
+  if (!telegramId) throw Object.assign(new Error('Telegram user missing'), { status: 401 });
+  await ensureRealtimePidSchema(env);
+
+  let row = await env.DB.prepare('SELECT realtime_pid FROM players WHERE telegram_id=?1 LIMIT 1').bind(telegramId).first();
+  let pid = cleanPid(row && row.realtime_pid);
+  if (pid && pid.startsWith('p:')) return pid;
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const candidate = 'p:' + crypto.randomUUID().replace(/-/g, '').toLowerCase();
+    try {
+      await env.DB.prepare(
+        "UPDATE players SET realtime_pid=?1 WHERE telegram_id=?2 AND (realtime_pid IS NULL OR realtime_pid='')"
+      ).bind(candidate, telegramId).run();
+    } catch (_) {
+      continue;
+    }
+    row = await env.DB.prepare('SELECT realtime_pid FROM players WHERE telegram_id=?1 LIMIT 1').bind(telegramId).first();
+    pid = cleanPid(row && row.realtime_pid);
+    if (pid && pid.startsWith('p:')) return pid;
+  }
+
+  throw Object.assign(new Error('Realtime player ID unavailable'), { status: 503 });
+}
 function cleanClass(v) {
   v = String(v || '').trim().toLowerCase();
   return ['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'].includes(v) ? v : '';
@@ -94,14 +138,14 @@ function cleanClass(v) {
 
 async function playerIdentity(env, user) {
   const id = String(user.id);
+  const pid = await realtimePidFor(env, id);
   const player = await env.DB.prepare('SELECT nickname,class_key,telegram_first_name,telegram_username FROM players WHERE telegram_id=?1').bind(id).first();
   const member = await env.DB.prepare(
     'SELECT cm.clan_id,c.name AS clan_name FROM clan_members cm LEFT JOIN clans c ON c.id=cm.clan_id WHERE cm.telegram_id=?1'
   ).bind(id).first();
   return {
-    telegramId: id,
-    pid: 'tg:' + id,
-    name: cleanName((player && player.nickname) || user.first_name || user.username || ('TG ' + id)),
+    pid,
+    name: cleanName((player && player.nickname) || user.first_name || user.username || 'Игрок'),
     classKey: String((player && player.class_key) || '').slice(0, 24),
     clanId: member ? String(member.clan_id || '').slice(0, 80) : '',
     clanName: member ? String(member.clan_name || '').trim().slice(0, 24) : '',
@@ -468,11 +512,29 @@ export async function handleRealtimeRequest(request, env) {
       if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') return new Response('WebSocket required', { status: 426 });
       if (!env.REALTIME) return new Response('Realtime binding missing', { status: 503 });
       const p = await readTicket(url.searchParams.get('ticket') || '', env.BOT_TOKEN);
+      const pid = cleanPid(p.pid);
+      if (!pid) throw Object.assign(new Error('Realtime player ID invalid'), { status: 401 });
+
+      // New tickets expose only the opaque realtime pid. Telegram ID is resolved
+      // server-side at websocket upgrade and is never broadcast as the player id.
+      let telegramId = '';
+      if (pid.startsWith('p:')) {
+        await ensureRealtimePidSchema(env);
+        const row = await env.DB.prepare(
+          'SELECT telegram_id FROM players WHERE realtime_pid=?1 LIMIT 1'
+        ).bind(pid).first();
+        telegramId = String((row && row.telegram_id) || '');
+      } else {
+        // 90-second rolling compatibility for tickets issued before this deploy.
+        telegramId = String(p.telegramId || '');
+      }
+      if (!telegramId) throw Object.assign(new Error('Realtime account not found'), { status: 401 });
+
       const id = env.REALTIME.idFromName('ppa-global-v1');
       const stub = env.REALTIME.get(id);
       const h = new Headers(request.headers);
-      h.set('x-ppa-player-id', p.pid);
-      h.set('x-ppa-telegram-id', p.telegramId);
+      h.set('x-ppa-player-id', pid);
+      h.set('x-ppa-telegram-id', telegramId);
       h.set('x-ppa-player-name', p.name);
       h.set('x-ppa-clan-id', p.clanId || '');
       h.set('x-ppa-clan-name', p.clanName || '');
