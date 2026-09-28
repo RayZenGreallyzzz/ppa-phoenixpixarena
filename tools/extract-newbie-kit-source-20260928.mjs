@@ -37,7 +37,13 @@ for(const m of src.matchAll(/(?:const|let|var)\s+([A-Za-z0-9_$]*(?:SLOT|Slot|slo
   if(gearFunctions.length>=55)break;
 }
 
-const out={skills,potion,invPotion,gearFunctions};
+const targeted={};
+for(const needle of ['function genItem','genItem=','function currentGearClassKey','var SLOTS=[','function classGearArt','function randomGearClassKey','function skillProgressRank','function grimoireBookCounts']){
+  const p=src.indexOf(needle);
+  targeted[needle]=p>=0?src.slice(Math.max(0,p-500),Math.min(src.length,p+5000)):'';
+}
+
+const out={skills,potion,invPotion,gearFunctions,targeted};
 fs.writeFileSync('diag-newbie-kit-source-small.txt',JSON.stringify(out,null,2));
 console.log('wrote',JSON.stringify(out).length);
 
