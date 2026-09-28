@@ -5,6 +5,9 @@
 
   var boot=document.getElementById('ppaPhoenixBoot');
   if(!boot)return;
+  // Keep the loader out of the legacy scaled <body> and in the browser top layer.
+  try{if(boot.parentNode!==document.documentElement)document.documentElement.appendChild(boot)}catch(_){}
+  try{if(typeof boot.showPopover==='function'&&!boot.matches(':popover-open'))boot.showPopover()}catch(_){}
 
   var fill=document.getElementById('ppaBootProgressFill');
   var percent=document.getElementById('ppaBootPercent');
@@ -209,7 +212,8 @@
           boot.classList.add('ppaBootDone');
           try{localStorage.setItem('ppa_boot_seen_v2','1');}catch(_){}
           setTimeout(function(){
-            if(boot&&boot.parentNode)boot.parentNode.removeChild(boot);
+            try{if(boot&&typeof boot.hidePopover==='function'&&boot.matches(':popover-open'))boot.hidePopover()}catch(_){}
+          if(boot&&boot.parentNode)boot.parentNode.removeChild(boot);
           },260);
         },180);
       });
