@@ -373,6 +373,24 @@ if(!output.includes('const PPA_DUNGEON_ACTIVE_RX=360;') ||
 console.log('[PPA BUILD] Dungeon oval active zone: 360 x 620 radii; combat/bosses exempt');
 /* ======================================================================== */
 
+/* === DUNGEON MOB BODY COLLISION · TEMP FPS TEST ========================= */
+// TEMPORARY diagnostic only: disable player<->mob body blocking in dungeons.
+// Dungeon wall collision (dgSlide), movement speed, joystick, mob AI/aggro,
+// damage and rendering stay unchanged. Arena body collision stays enabled.
+if(!ppaPatchRegex(
+  'TEMP disable dungeon player-mob body collision',
+  /if\(P\.scene==='dungeon'\|\|P\.scene==='arena'\)\{\s*const _bodyMv=ppaMoveWithWorldBodyCollision\(P\.x,P\.y,nx-P\.x,ny-P\.y,P\.sz\*\.24\);/,
+  `if(P.scene==='arena'){
+    const _bodyMv=ppaMoveWithWorldBodyCollision(P.x,P.y,nx-P.x,ny-P.y,P.sz*.24);`
+)) {
+  throw new Error('TEMP dungeon body-collision FPS test target not found');
+}
+if(output.includes("if(P.scene==='dungeon'||P.scene==='arena'){\n    const _bodyMv=ppaMoveWithWorldBodyCollision")) {
+  throw new Error('TEMP dungeon body-collision FPS test did not isolate dungeon');
+}
+console.log('[PPA BUILD] TEMP FPS TEST: dungeon player-mob body collision OFF; walls/arena unchanged');
+/* ======================================================================== */
+
 /* === NATIVE TABBED EVENTS CENTER ======================================== */
 // Replace the legacy events iframe at build time instead of trying to overlay it
 // at runtime. Parent-side event mechanics/messages remain unchanged.
