@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v615-dungeon-thick-stone-walls-20260928';
+const CLIENT_BUILD = 'v616-dungeon-clean-floor-no-inner-shadow-20260928';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -176,27 +176,22 @@ for(let i=0;i<PPA_DUNGEON_WALK.length;i++)PPA_DUNGEON_OUTSIDE_SEED[i]=PPA_DUNGEO
 const PPA_DUNGEON_INSIDE_DIST=ppaDungeonChamferDistance(PPA_DUNGEON_OUTSIDE_SEED);
 
 const PPA_DUNGEON_WALL_RADIUS=18;       // ~72 render px: deliberately thick masonry.
-const PPA_DUNGEON_INNER_SHADOW_RADIUS=5; // ~20 render px: depth at the wall foot.
 const PPA_DUNGEON_WALL_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_WALK.length*4);
 const PPA_DUNGEON_FLOOR_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_WALK.length*4);
-const PPA_DUNGEON_SHADOW_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_WALK.length*4);
 const PPA_DUNGEON_EDGE_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_WALK.length*4);
 let PPA_DUNGEON_WALL_COUNT=0;
 for(let i=0;i<PPA_DUNGEON_WALK.length;i++){
   const o=i*4;
   PPA_DUNGEON_WALL_MASK_RGBA[o]=PPA_DUNGEON_WALL_MASK_RGBA[o+1]=PPA_DUNGEON_WALL_MASK_RGBA[o+2]=255;
   PPA_DUNGEON_FLOOR_MASK_RGBA[o]=PPA_DUNGEON_FLOOR_MASK_RGBA[o+1]=PPA_DUNGEON_FLOOR_MASK_RGBA[o+2]=255;
-  PPA_DUNGEON_SHADOW_MASK_RGBA[o]=PPA_DUNGEON_SHADOW_MASK_RGBA[o+1]=PPA_DUNGEON_SHADOW_MASK_RGBA[o+2]=255;
   PPA_DUNGEON_EDGE_MASK_RGBA[o]=PPA_DUNGEON_EDGE_MASK_RGBA[o+1]=PPA_DUNGEON_EDGE_MASK_RGBA[o+2]=255;
 
   const walk=PPA_DUNGEON_WALK[i]===1;
   const wall=!walk&&PPA_DUNGEON_OUTSIDE_DIST[i]<=PPA_DUNGEON_WALL_RADIUS*3;
-  const shadow=walk&&PPA_DUNGEON_INSIDE_DIST[i]<=PPA_DUNGEON_INNER_SHADOW_RADIUS*3;
   const edge=!walk&&PPA_DUNGEON_OUTSIDE_DIST[i]<=3*3;
 
   PPA_DUNGEON_FLOOR_MASK_RGBA[o+3]=walk?255:0;
   PPA_DUNGEON_WALL_MASK_RGBA[o+3]=wall?255:0;
-  PPA_DUNGEON_SHADOW_MASK_RGBA[o+3]=shadow?255:0;
   PPA_DUNGEON_EDGE_MASK_RGBA[o+3]=edge?255:0;
   if(wall)PPA_DUNGEON_WALL_COUNT++;
 }
@@ -210,12 +205,10 @@ async function ppaDungeonMaskToRender(buf){
 const [
   PPA_DUNGEON_FLOOR_MASK_RENDER,
   PPA_DUNGEON_WALL_MASK_RENDER,
-  PPA_DUNGEON_SHADOW_MASK_RENDER,
   PPA_DUNGEON_EDGE_MASK_RENDER
 ]=await Promise.all([
   ppaDungeonMaskToRender(PPA_DUNGEON_FLOOR_MASK_RGBA),
   ppaDungeonMaskToRender(PPA_DUNGEON_WALL_MASK_RGBA),
-  ppaDungeonMaskToRender(PPA_DUNGEON_SHADOW_MASK_RGBA),
   ppaDungeonMaskToRender(PPA_DUNGEON_EDGE_MASK_RGBA)
 ]);
 
@@ -251,10 +244,7 @@ const PPA_DUNGEON_WALL_LAYER=await sharp(PPA_DUNGEON_WALL_STONE)
   .png()
   .toBuffer();
 
-// Inner foot-shadow + thin top-edge highlight add depth without runtime filters.
-const PPA_DUNGEON_SHADOW_LAYER=await sharp({
-  create:{width:PPA_DUNGEON_RENDER_W,height:PPA_DUNGEON_RENDER_H,channels:4,background:{r:0,g:0,b:0,alpha:0.42}}
-}).composite([{input:PPA_DUNGEON_SHADOW_MASK_RENDER,blend:'dest-in'}]).png().toBuffer();
+// Thin top-edge highlight keeps the wall readable without darkening the walkable floor.
 const PPA_DUNGEON_EDGE_LAYER=await sharp({
   create:{width:PPA_DUNGEON_RENDER_W,height:PPA_DUNGEON_RENDER_H,channels:4,background:{r:128,g:120,b:108,alpha:0.20}}
 }).composite([{input:PPA_DUNGEON_EDGE_MASK_RENDER,blend:'dest-in'}]).png().toBuffer();
@@ -263,8 +253,7 @@ const PPA_DUNGEON_TEST_MAP=await sharp(PPA_DUNGEON_OUTER_STONE)
   .composite([
     {input:PPA_DUNGEON_WALL_LAYER,left:0,top:0},
     {input:PPA_DUNGEON_EDGE_LAYER,left:0,top:0},
-    {input:PPA_DUNGEON_FLOOR_LAYER,left:0,top:0},
-    {input:PPA_DUNGEON_SHADOW_LAYER,left:0,top:0}
+    {input:PPA_DUNGEON_FLOOR_LAYER,left:0,top:0}
   ])
   .webp({quality:95,alphaQuality:100,effort:5,smartSubsample:false})
   .toBuffer();
