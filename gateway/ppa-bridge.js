@@ -238,22 +238,36 @@
       cloudSaveLoaded=true;
 
       // First registration may add server-owned starter items (newbie chest).
-      // Apply that fresh cloud save to the live game immediately; otherwise
-      // INV.bag would keep the pre-registration empty in-memory inventory until
-      // the next full app restart.
+      // Do NOT hot-run the full legacy loadGame() here: it is a startup loader
+      // and can reset unrelated live state. Apply only the authoritative fields
+      // created by registration.
       try{
         var st=loaded&&loaded.state&&typeof loaded.state==='object'?loaded.state:null;
         if(st){
           localStorage.setItem('pxSave',JSON.stringify(st));
           localStorage.setItem('pxSaveLastGood',JSON.stringify(st));
           try{sessionStorage.removeItem('ppaCloudLoadedStamp')}catch(_){}
-          if(typeof loadGame==='function')loadGame();
+
+          var serverNick=String(st.playerName||st.nickname||(r&&r.profile&&r.profile.nickname)||nickname||'').trim();
+          if(serverNick){
+            try{if(typeof INV!=='undefined'&&INV)INV.playerName=serverNick}catch(_){}
+            try{window.PPA_PLAYER_NAME=serverNick}catch(_){}
+            try{localStorage.setItem('ppaPlayerNameV205',serverNick)}catch(_){}
+            try{if(typeof PPA_ONLINE!=='undefined'&&PPA_ONLINE)PPA_ONLINE.selfName=serverNick}catch(_){}
+          }
+
+          try{
+            if(typeof INV!=='undefined'&&INV&&Array.isArray(st.bag)){
+              INV.bag=st.bag.map(function(it){return it&&typeof it==='object'?Object.assign({},it):it});
+            }
+          }catch(_){}
+
           try{if(window.PPA_REFRESH_NEWBIE_CHEST)window.PPA_REFRESH_NEWBIE_CHEST()}catch(_){}
           try{if(typeof sendInvState==='function')sendInvState()}catch(_){}
           try{if(typeof updateUI==='function')updateUI()}catch(_){}
         }
       }catch(applyErr){
-        console.warn('PPA fresh registration cloud apply',applyErr);
+        console.warn('PPA fresh registration targeted apply',applyErr);
       }
 
       try{if(window.PPA_REALTIME_RECONNECT)setTimeout(function(){window.PPA_REALTIME_RECONNECT()},60)}catch(_){}
