@@ -64,28 +64,11 @@
 
   function validNick(v){return /^[A-Za-zА-Яа-яЁё0-9_]{3,18}$/u.test(String(v||'').trim())}
 
-  async function loadProfileWithSafeFirstMigration(){
+  async function loadProfileServerOnly(){
+    // Telegram account is the only identity authority. Never discover, offer,
+    // register or migrate a character from this device's localStorage.
     await auth();
-    var result=await call('/api/profile/load');
-    var profile=result&&result.profile?result.profile:null;
-    if(!profile||profile.nickname)return result;
-    var s=localSave();
-    var nick=String((s&&s.playerName)||localNickname()||'').trim();
-    if(!s||!validNick(nick))return result;
-    var decision='';
-    try{decision=sessionStorage.getItem('ppaTgMigrationDecisionV278')||''}catch(_){}
-    if(decision==='new')return result;
-    if(decision!=='keep'){
-      var ok=false;
-      try{ok=window.confirm('Найден персонаж «'+nick+'» на этом устройстве.\n\nПривязать его к вашему Telegram ID и перенести сохранение в облако?')}catch(_){ok=false}
-      decision=ok?'keep':'new';
-      try{sessionStorage.setItem('ppaTgMigrationDecisionV278',decision)}catch(_){}
-      if(!ok)return result;
-    }
-    var cls=String((s&&s.cls)||'');
-    var registered=await call('/api/character/register',{nickname:nick,classKey:cls});
-    if(registered&&registered.profile)return {ok:true,profile:registered.profile};
-    return result;
+    return call('/api/profile/load');
   }
 
   function noteSaveVersion(v){
@@ -210,11 +193,11 @@
   Object.assign(window.PPA,{
     isAvailable:available,
     ppaAuthTelegram:auth,
-    ppaLoadProfile:loadProfileWithSafeFirstMigration,
+    ppaLoadProfile:loadProfileServerOnly,
     ppaLoadSave:async function(){await auth();var r=await call('/api/save/load');noteSaveVersion(r&&r.version!=null?r.version:0);return r},
     ppaSaveGame:async function(state,version){await auth();return queueSave(state,version)},
     ppaRegisterCharacter:async function(nickname,classKey){return authed('/api/character/register',{nickname:nickname,classKey:classKey||''})},
-    ppaSyncNicknameFromSave:async function(){return authed('/api/profile/sync-nickname',{nickname:localNickname()})},
+    ppaSyncNicknameFromSave:async function(){return authed('/api/profile/load')},
     ppaRequestNicknameChange:renameWithSyncedCard,
     ppaDeleteStellaTestAccount:deleteStellaTestAccount,
 
