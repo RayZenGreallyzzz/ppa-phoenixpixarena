@@ -47,3 +47,4 @@ const out={skills,potion,invPotion,gearFunctions,targeted};
 fs.writeFileSync('diag-newbie-kit-source-small.txt',JSON.stringify(out,null,2));
 console.log('wrote',JSON.stringify(out).length);
 
+
