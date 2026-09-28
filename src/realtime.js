@@ -136,8 +136,32 @@ function cleanClass(v) {
   return ['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'].includes(v) ? v : '';
 }
 
+async function ensureRealtimePlayerRow(env, user) {
+  const id = String(user && user.id != null ? user.id : '').trim();
+  if (!id) throw Object.assign(new Error('Telegram user missing'), { status: 401 });
+  const now = Date.now();
+  await env.DB.prepare(`
+    INSERT INTO players (
+      telegram_id, telegram_username, telegram_first_name, telegram_last_name,
+      nickname, nickname_key, class_key, created_at, updated_at, last_auth_at
+    ) VALUES (?1, ?2, ?3, ?4, NULL, NULL, NULL, ?5, ?5, ?5)
+    ON CONFLICT(telegram_id) DO UPDATE SET
+      telegram_username=excluded.telegram_username,
+      telegram_first_name=excluded.telegram_first_name,
+      telegram_last_name=excluded.telegram_last_name,
+      last_auth_at=excluded.last_auth_at
+  `).bind(
+    id,
+    String(user.username || ''),
+    String(user.first_name || ''),
+    String(user.last_name || ''),
+    now,
+  ).run();
+  return id;
+}
+
 async function playerIdentity(env, user) {
-  const id = String(user.id);
+  const id = await ensureRealtimePlayerRow(env, user);
   const pid = await realtimePidFor(env, id);
   const player = await env.DB.prepare('SELECT nickname,class_key,telegram_first_name,telegram_username FROM players WHERE telegram_id=?1').bind(id).first();
   const member = await env.DB.prepare(
