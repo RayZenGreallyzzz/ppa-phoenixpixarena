@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v618-dungeon-no-outline-clean-floor-20260929';
+const CLIENT_BUILD = 'v619-dungeon-smooth-edge-buffer-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -106,17 +106,18 @@ if(!PPA_DUNGEON_TEST_FLOOR_META.width||!PPA_DUNGEON_TEST_FLOOR_META.height)throw
 console.log('[PPA BUILD] Dungeon mask source: '+PPA_DUNGEON_TEST_MASK_META.width+'x'+PPA_DUNGEON_TEST_MASK_META.height+' alpha='+(!!PPA_DUNGEON_TEST_MASK_META.hasAlpha));
 console.log('[PPA BUILD] Dungeon floor source: '+PPA_DUNGEON_TEST_FLOOR_META.width+'x'+PPA_DUNGEON_TEST_FLOOR_META.height);
 
-// Geometry follows the uploaded mask aspect ratio.
 const PPA_DUNGEON_TEST_ART_W=2048;
 const PPA_DUNGEON_TEST_ART_H=Math.round(PPA_DUNGEON_TEST_ART_W*PPA_DUNGEON_TEST_MASK_META.height/PPA_DUNGEON_TEST_MASK_META.width);
 const PPA_DUNGEON_RENDER_W=4096;
 const PPA_DUNGEON_RENDER_H=Math.round(PPA_DUNGEON_RENDER_W*PPA_DUNGEON_TEST_MASK_META.height/PPA_DUNGEON_TEST_MASK_META.width);
 
-// Collision remains exactly mask-driven.
-const PPA_DUNGEON_COLL_W=1024;
+// Double the collision resolution used by the test map. This makes the mask edge
+// 2 render px per collision cell instead of ~4 px, removing the coarse stair-step
+// corners that could catch the player's circle while sliding along a wall.
+const PPA_DUNGEON_COLL_W=2048;
 const PPA_DUNGEON_COLL_H=Math.round(PPA_DUNGEON_COLL_W*PPA_DUNGEON_TEST_MASK_META.height/PPA_DUNGEON_TEST_MASK_META.width);
 const PPA_DUNGEON_MASK_RAW=await sharp(PPA_DUNGEON_TEST_MASK_PATH)
-  .resize(PPA_DUNGEON_COLL_W,PPA_DUNGEON_COLL_H,{fit:'fill',kernel:'nearest'})
+  .resize(PPA_DUNGEON_COLL_W,PPA_DUNGEON_COLL_H,{fit:'fill',kernel:sharp.kernel.lanczos3})
   .ensureAlpha()
   .raw()
   .toBuffer({resolveWithObject:true});
@@ -127,7 +128,7 @@ let PPA_DUNGEON_WALK_COUNT=0;
 for(let y=0;y<PPA_DUNGEON_COLL_H;y++)for(let x=0;x<PPA_DUNGEON_COLL_W;x++){
   const pi=y*PPA_DUNGEON_COLL_W+x,off=pi*PPA_DUNGEON_MASK_RAW.info.channels;
   const red=PPA_DUNGEON_MASK_RAW.data[off]||0,alpha=PPA_DUNGEON_MASK_RAW.data[off+3]||0;
-  if(red>=96&&alpha>=32){
+  if(red>=112&&alpha>=48){
     PPA_DUNGEON_WALK[pi]=1;
     PPA_DUNGEON_WALK_BITS[pi>>3]|=(1<<(7-(pi&7)));
     PPA_DUNGEON_WALK_COUNT++;
@@ -139,23 +140,70 @@ if(PPA_DUNGEON_WALK_RATIO<0.08||PPA_DUNGEON_WALK_RATIO>0.65){
 }
 const PPA_DUNGEON_WALK_B64=PPA_DUNGEON_WALK_BITS.toString('base64');
 
-// Floor-only mask: no outline and no decorative wall band.
-const PPA_DUNGEON_FLOOR_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_WALK.length*4);
-for(let i=0;i<PPA_DUNGEON_WALK.length;i++){
+// Runtime floor visual uses the original high-res mask directly rather than the
+// lower-resolution collision grid. This removes visible "teeth" from the edge.
+const PPA_DUNGEON_VISUAL_MASK=await sharp(PPA_DUNGEON_TEST_MASK_PATH)
+  .resize(PPA_DUNGEON_RENDER_W,PPA_DUNGEON_RENDER_H,{fit:'fill',kernel:sharp.kernel.lanczos3})
+  .ensureAlpha()
+  .raw()
+  .toBuffer({resolveWithObject:true});
+
+const PPA_DUNGEON_FLOOR_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_RENDER_W*PPA_DUNGEON_RENDER_H*4);
+const PPA_DUNGEON_BUFFER_MASK_RGBA=Buffer.alloc(PPA_DUNGEON_RENDER_W*PPA_DUNGEON_RENDER_H*4);
+const PPA_DUNGEON_VISUAL_WALK=new Uint8Array(PPA_DUNGEON_RENDER_W*PPA_DUNGEON_RENDER_H);
+
+for(let y=0;y<PPA_DUNGEON_RENDER_H;y++)for(let x=0;x<PPA_DUNGEON_RENDER_W;x++){
+  const i=y*PPA_DUNGEON_RENDER_W+x;
+  const so=i*PPA_DUNGEON_VISUAL_MASK.info.channels;
+  const red=PPA_DUNGEON_VISUAL_MASK.data[so]||0,alpha=PPA_DUNGEON_VISUAL_MASK.data[so+3]||0;
+  const walk=red>=112&&alpha>=48;
+  PPA_DUNGEON_VISUAL_WALK[i]=walk?1:0;
   const o=i*4;
   PPA_DUNGEON_FLOOR_MASK_RGBA[o]=255;
   PPA_DUNGEON_FLOOR_MASK_RGBA[o+1]=255;
   PPA_DUNGEON_FLOOR_MASK_RGBA[o+2]=255;
-  PPA_DUNGEON_FLOOR_MASK_RGBA[o+3]=PPA_DUNGEON_WALK[i]?255:0;
+  PPA_DUNGEON_FLOOR_MASK_RGBA[o+3]=walk?255:0;
 }
-const PPA_DUNGEON_FLOOR_MASK_RENDER=await sharp(
-  PPA_DUNGEON_FLOOR_MASK_RGBA,
-  {raw:{width:PPA_DUNGEON_COLL_W,height:PPA_DUNGEON_COLL_H,channels:4}}
-).resize(PPA_DUNGEON_RENDER_W,PPA_DUNGEON_RENDER_H,{fit:'fill',kernel:'nearest'})
- .png()
- .toBuffer();
 
-// Clean walkable floor from the user's hi-res source.
+// Small OUTSIDE-only buffer: dark rock no longer reaches the collision edge.
+// It is not a wall/outline; it is just normal floor stone extending ~18 render px
+// beyond the walkable boundary so the contour stays clean and visually soft.
+const PPA_DUNGEON_BUFFER_PX=18;
+const bw=PPA_DUNGEON_RENDER_W,bh=PPA_DUNGEON_RENDER_H;
+const dist=new Uint16Array(bw*bh);
+const INF=65535;
+for(let i=0;i<dist.length;i++)dist[i]=PPA_DUNGEON_VISUAL_WALK[i]?0:INF;
+for(let y=0;y<bh;y++)for(let x=0;x<bw;x++){
+  const i=y*bw+x;if(dist[i]===0)continue;let v=dist[i];
+  if(x>0)v=Math.min(v,dist[i-1]+1);
+  if(y>0){
+    v=Math.min(v,dist[i-bw]+1);
+    if(x>0)v=Math.min(v,dist[i-bw-1]+1);
+    if(x+1<bw)v=Math.min(v,dist[i-bw+1]+1);
+  }
+  dist[i]=v;
+}
+for(let y=bh-1;y>=0;y--)for(let x=bw-1;x>=0;x--){
+  const i=y*bw+x;if(dist[i]===0)continue;let v=dist[i];
+  if(x+1<bw)v=Math.min(v,dist[i+1]+1);
+  if(y+1<bh){
+    v=Math.min(v,dist[i+bw]+1);
+    if(x>0)v=Math.min(v,dist[i+bw-1]+1);
+    if(x+1<bw)v=Math.min(v,dist[i+bw+1]+1);
+  }
+  dist[i]=v;
+}
+for(let i=0;i<dist.length;i++){
+  const o=i*4;
+  PPA_DUNGEON_BUFFER_MASK_RGBA[o]=255;
+  PPA_DUNGEON_BUFFER_MASK_RGBA[o+1]=255;
+  PPA_DUNGEON_BUFFER_MASK_RGBA[o+2]=255;
+  PPA_DUNGEON_BUFFER_MASK_RGBA[o+3]=(!PPA_DUNGEON_VISUAL_WALK[i]&&dist[i]<=PPA_DUNGEON_BUFFER_PX)?255:0;
+}
+
+const PPA_DUNGEON_FLOOR_MASK_RENDER=await sharp(PPA_DUNGEON_FLOOR_MASK_RGBA,{raw:{width:bw,height:bh,channels:4}}).png().toBuffer();
+const PPA_DUNGEON_BUFFER_MASK_RENDER=await sharp(PPA_DUNGEON_BUFFER_MASK_RGBA,{raw:{width:bw,height:bh,channels:4}}).png().toBuffer();
+
 const PPA_DUNGEON_BASE_FLOOR=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH)
   .resize(PPA_DUNGEON_RENDER_W,PPA_DUNGEON_RENDER_H,{
     fit:'cover',position:'centre',kernel:sharp.kernel.lanczos3,withoutEnlargement:false
@@ -163,8 +211,6 @@ const PPA_DUNGEON_BASE_FLOOR=await sharp(PPA_DUNGEON_TEST_FLOOR_PATH)
   .png()
   .toBuffer();
 
-// Outside stays as the darker stone mass. There is intentionally no bright
-// edge, no procedural masonry ring, and no wall sprite overlay.
 const PPA_DUNGEON_OUTER_STONE=await sharp(PPA_DUNGEON_BASE_FLOOR)
   .modulate({brightness:0.28,saturation:0.42})
   .blur(0.35)
@@ -176,16 +222,29 @@ const PPA_DUNGEON_FLOOR_LAYER=await sharp(PPA_DUNGEON_BASE_FLOOR)
   .png()
   .toBuffer();
 
+// Buffer uses the SAME floor material, just slightly darker, so there is no
+// bright outline and no fake wall. It only keeps the outer shadow away.
+const PPA_DUNGEON_BUFFER_STONE=await sharp(PPA_DUNGEON_BASE_FLOOR)
+  .modulate({brightness:0.72,saturation:0.78})
+  .png()
+  .toBuffer();
+const PPA_DUNGEON_BUFFER_LAYER=await sharp(PPA_DUNGEON_BUFFER_STONE)
+  .composite([{input:PPA_DUNGEON_BUFFER_MASK_RENDER,blend:'dest-in'}])
+  .png()
+  .toBuffer();
+
 const PPA_DUNGEON_TEST_MAP=await sharp(PPA_DUNGEON_OUTER_STONE)
-  .composite([{input:PPA_DUNGEON_FLOOR_LAYER,left:0,top:0}])
+  .composite([
+    {input:PPA_DUNGEON_BUFFER_LAYER,left:0,top:0},
+    {input:PPA_DUNGEON_FLOOR_LAYER,left:0,top:0}
+  ])
   .webp({quality:95,alphaQuality:100,effort:5,smartSubsample:false})
   .toBuffer();
 fs.writeFileSync(path.join(assetsDir,'dungeon-layout-test.webp'),PPA_DUNGEON_TEST_MAP);
 
-// Preserve the old ~9526 world-pixel width so player speed/size remains comparable.
 const PPA_DUNGEON_TEST_SCALE=(1852*5.1435)/PPA_DUNGEON_TEST_ART_W;
-console.log('[PPA BUILD] Dungeon clean geometry: outline/wall overlay removed; dark outer stone + clean walkable floor only');
-console.log('[PPA BUILD] Dungeon normalized: logical '+PPA_DUNGEON_TEST_ART_W+'x'+PPA_DUNGEON_TEST_ART_H+' · render '+PPA_DUNGEON_RENDER_W+'x'+PPA_DUNGEON_RENDER_H+' · collision '+PPA_DUNGEON_COLL_W+'x'+PPA_DUNGEON_COLL_H+' · walk '+(PPA_DUNGEON_WALK_RATIO*100).toFixed(1)+'%');
+console.log('[PPA BUILD] Dungeon edge fix: high-res visual contour + '+PPA_DUNGEON_BUFFER_PX+'px outside stone buffer; no outline/walls');
+console.log('[PPA BUILD] Dungeon collision upgraded: '+PPA_DUNGEON_COLL_W+'x'+PPA_DUNGEON_COLL_H+' · walk '+(PPA_DUNGEON_WALK_RATIO*100).toFixed(1)+'%');
 // ==========================================================================
 
 
