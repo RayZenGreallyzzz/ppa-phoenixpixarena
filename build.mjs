@@ -363,6 +363,31 @@ if (!output.includes(classChosenStartNeedle)) throw new Error('PPA classChosen s
 output = output.replace(classChosenStartNeedle, classChosenStartPatch);
 console.log('[PPA BUILD] Character registration now completes before beginGame');
 
+// A class_key alone is NOT a completed character. Older broken builds could
+// persist class_key before nickname registration, producing a nameless hero
+// that skipped the class/nickname screen forever. Require authoritative server
+// nickname + class before automatic world entry; incomplete profiles go back
+// through /api/character/register.
+const bootstrapCharacterNeedle = `    if(ck&&CLASS_BASE[ck]){
+      applyClass({name:CLASS_BASE[ck].name});
+      beginGame();
+      return true;
+    }
+    return false;`;
+const bootstrapCharacterPatch = `    if(profileNickOk&&ck&&CLASS_BASE[ck]){
+      applyClass({name:CLASS_BASE[ck].name});
+      beginGame();
+      return true;
+    }
+    if(ck&&!profileNickOk){
+      console.warn('PPA: incomplete Telegram character profile (class without nickname); registration required.');
+      try{INV.playerName='';window.PPA_PLAYER_NAME='';localStorage.removeItem('ppaPlayerNameV205')}catch(_){}
+    }
+    return false;`;
+if(!output.includes(bootstrapCharacterNeedle))throw new Error('PPA completed-character bootstrap target not found');
+output=output.replace(bootstrapCharacterNeedle,bootstrapCharacterPatch);
+console.log('[PPA BUILD] Auto-entry now requires server nickname + class');
+
 const saveToolsRe = /&lt;div id=&quot;saveTools&quot;&gt;[\s\S]*?&lt;\/div&gt;\s*&lt;\/section&gt;/;
 if (!saveToolsRe.test(output)) throw new Error('PPA save tools block not found');
 const accountDeleteTools =
