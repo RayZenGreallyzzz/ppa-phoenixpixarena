@@ -48,3 +48,5 @@ for(const n of startNeedles){
   }
 }
 fs.appendFileSync('diag-player-number.txt','\n\n'+startOut);
+
+// startup label scan trigger
