@@ -94,6 +94,39 @@
       return Math.hypot(x-Number(P.x||0),y-Number(P.y||0))<=MATERIALIZE_R;
     }catch(_){return false}
   }
+
+  // Smoothing is a visual helper only. Keep it close to the local camera/player;
+  // far authoritative mobs can accept their 10 Hz server position directly.
+  function smoothRelevantXY(x,y){
+    try{
+      if(typeof P==='undefined'||!P)return true;
+      x=Number(x);y=Number(y);
+      if(!Number.isFinite(x)||!Number.isFinite(y))return false;
+      var rx=540,ry=800;
+      try{if(typeof PPA_DUNGEON_ACTIVE_RX!=='undefined')rx=Math.max(rx,Number(PPA_DUNGEON_ACTIVE_RX)||0)+180}catch(_){}
+      try{if(typeof PPA_DUNGEON_ACTIVE_RY!=='undefined')ry=Math.max(ry,Number(PPA_DUNGEON_ACTIVE_RY)||0)+180}catch(_){}
+      var dx=x-Number(P.x||0),dy=y-Number(P.y||0);
+      return (dx*dx)/(rx*rx)+(dy*dy)/(ry*ry)<=1;
+    }catch(_){return true}
+  }
+
+  function queueSmooth(e,x,y,moving){
+    try{
+      if(!e)return;
+      x=Number(x);y=Number(y);
+      if(!Number.isFinite(x)||!Number.isFinite(y))return;
+      e.__ppaTargetX=x;e.__ppaTargetY=y;
+      // Stationary/remote-far mobs do not need a second animation loop.
+      if(!moving||!smoothRelevantXY(x,y)){
+        applying++;
+        try{e.x=x;e.y=y}finally{applying--}
+        smoothEntities.delete(e);
+        return;
+      }
+      smoothEntities.add(e);
+      requestSmooth();
+    }catch(_){}
+  }
   function removeEntity(e){
     try{
       var a=entities(),i=a.indexOf(e);
@@ -363,7 +396,7 @@
       room:room(),serverRoom:String(rd.serverRoom||''),instance:Number(rd.dungeonInstance)||0,
       ready:authReady,count:authority.size,catalog:catalogCount||authority.size,
       mobs:mobs,locked:locked,dead:deadUntil.size,keyHash:'ok',authHash:'ok',localHash:'near',
-      maxDelta:Math.round(maxDelta),samples:[]
+      maxDelta:Math.round(maxDelta),smooth:smoothEntities.size,samples:[]
     };
     diagCacheAt=now;
     return diagCache;
@@ -523,8 +556,7 @@
           if(!Number.isFinite(Number(e.x))||!Number.isFinite(Number(e.y))||_dist>180||e.__ppaSmoothReady!==true){
             e.x=x;e.y=y;e.__ppaSmoothReady=true;
           }
-          e.__ppaTargetX=x;e.__ppaTargetY=y;
-          smoothEntities.add(e);requestSmooth();
+          queueSmooth(e,x,y,moving);
         }
         e.aggro=aggro;
         if(Number.isFinite(dir)){
@@ -588,8 +620,8 @@
           if(Number.isFinite(Number(st.x))&&Number.isFinite(Number(st.y))){
             var _tx=Number(st.x),_ty=Number(st.y),_dd=Math.hypot(_tx-Number(e.x||0),_ty-Number(e.y||0));
             e.__ppaServerX=_tx;e.__ppaServerY=_ty;
-            if(_dd>150||e.__ppaSmoothReady!==true){e.x=_tx;e.y=_ty;e.__ppaSmoothReady=true}
-            else{e.__ppaTargetX=_tx;e.__ppaTargetY=_ty;smoothEntities.add(e);requestSmooth()}
+            if(_dd>150||e.__ppaSmoothReady!==true){e.x=_tx;e.y=_ty;e.__ppaSmoothReady=true;smoothEntities.delete(e)}
+            else queueSmooth(e,_tx,_ty,!!st.moving);
           }
           if(Number.isFinite(Number(st.sz))&&Number(st.sz)>0)e.sz=Number(st.sz);
           e.aggro=!!st.aggro;
@@ -769,8 +801,8 @@
             if(Number.isFinite(Number(m.x))&&Number.isFinite(Number(m.y))){
               var _ax=Number(m.x),_ay=Number(m.y),_ad=Math.hypot(_ax-Number(e.x||0),_ay-Number(e.y||0));
               e.__ppaServerX=_ax;e.__ppaServerY=_ay;
-              if(_ad>150||e.__ppaSmoothReady!==true){e.x=_ax;e.y=_ay;e.__ppaSmoothReady=true}
-              else{e.__ppaTargetX=_ax;e.__ppaTargetY=_ay;smoothEntities.add(e);requestSmooth()}
+              if(_ad>150||e.__ppaSmoothReady!==true){e.x=_ax;e.y=_ay;e.__ppaSmoothReady=true;smoothEntities.delete(e)}
+              else queueSmooth(e,_ax,_ay,false);
             }
             if(Number.isFinite(dir)){var vd=visualDir(dir);e.spiderDir=vd;e.animDir=vd;e.__ppaServerDir=dir;e.__ppaVisualDir=vd;applyBossVisualDir(e,dir,false)}
             e.spiderMoving=false;e.animMoving=false;
@@ -811,7 +843,7 @@
       }
     }catch(_){}
     if(!serverMode||!smoothEntities.size){smoothLast=0;return}
-    var minStep=smoothMobile()?30:16;
+    var minStep=smoothMobile()?50:16;
     if(smoothLast&&ts-smoothLast<minStep){smoothRaf=requestAnimationFrame(smoothServerMovement);return}
     var dt=smoothLast?Math.max(8,Math.min(50,ts-smoothLast)):minStep;smoothLast=ts;
     var alpha=1-Math.exp(-dt/52);
@@ -820,6 +852,11 @@
         if(!e||!keyOf(e)||!(Number(e.hp)>0)){smoothEntities.delete(e);return}
         var tx=Number(e.__ppaServerX),ty=Number(e.__ppaServerY);
         if(!Number.isFinite(tx)||!Number.isFinite(ty)){smoothEntities.delete(e);return}
+        if(!smoothRelevantXY(tx,ty)){
+          applying++;
+          try{e.x=tx;e.y=ty}finally{applying--}
+          smoothEntities.delete(e);return;
+        }
         var x=Number(e.x),y=Number(e.y),dx=tx-x,dy=ty-y,d=Math.hypot(dx,dy);
         applying++;
         try{
