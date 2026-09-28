@@ -91,11 +91,29 @@
     return it;
   }
 
-  function findChest(preferred){
+  function locateChest(preferred){
     try{
-      if(preferred&&INV.bag.indexOf(preferred)>=0&&isChest(preferred))return preferred;
-      return (INV.bag||[]).find(isChest)||null;
-    }catch(_){return null}
+      var groups=[];
+      if(Array.isArray(INV.bag))groups.push(INV.bag);
+      if(INV.storage&&Array.isArray(INV.storage.personal))groups.push(INV.storage.personal);
+      for(var g=0;g<groups.length;g++){
+        var arr=groups[g];
+        if(preferred){
+          var pi=arr.indexOf(preferred);
+          if(pi>=0&&isChest(preferred))return {item:preferred,arr:arr,index:pi};
+        }
+      }
+      for(var g2=0;g2<groups.length;g2++){
+        var arr2=groups[g2];
+        for(var i=0;i<arr2.length;i++)if(isChest(arr2[i]))return {item:arr2[i],arr:arr2,index:i};
+      }
+    }catch(_){}
+    return null;
+  }
+
+  function findChest(preferred){
+    var loc=locateChest(preferred);
+    return loc?loc.item:null;
   }
 
   function sync(){
@@ -109,7 +127,8 @@
 
   function openNow(preferred){
     if(busy)return false;
-    var chest=findChest(preferred);
+    var loc=locateChest(preferred);
+    var chest=loc&&loc.item;
     if(!chest){try{showPickup('Сундук новичка уже открыт','#ffd16b')}catch(_){};return false}
     var ck=currentClass();
     if(!ck||!ACTIVE[ck]){
@@ -117,17 +136,16 @@
       return false;
     }
     var bag=INV.bag||[];
-    var idx=bag.indexOf(chest);
-    if(idx<0)return false;
-    // Removing the chest frees one cell, then seven gear pieces are added.
-    if((bag.length-1+SLOTS.length)>100){
-      try{showPickup('Нужно минимум 6 свободных ячеек в сумке','#ff9b73')}catch(_){}
+    var source=loc.arr,idx=loc.index;
+    var freesBagCell=source===bag?1:0;
+    if((bag.length-freesBagCell+SLOTS.length)>100){
+      try{showPickup('Нужно минимум '+String(SLOTS.length-freesBagCell)+' свободных ячеек в сумке','#ff9b73')}catch(_){}
       return false;
     }
 
     busy=true;
     try{
-      bag.splice(idx,1);
+      source.splice(idx,1);
       SLOTS.forEach(function(slot){bag.push(makeGear(slot,ck))});
 
       INV.grimoires=INV.grimoires||{};
