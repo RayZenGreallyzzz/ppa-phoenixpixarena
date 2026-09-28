@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v626-dungeon-full-odd-even-room-rows-20260929';
+const CLIENT_BUILD = 'v627-dungeon-fill-every-physical-room-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -141,15 +141,18 @@ if(PPA_DUNGEON_WALK_RATIO<0.08||PPA_DUNGEON_WALK_RATIO>0.65){
 const PPA_DUNGEON_WALK_B64=PPA_DUNGEON_WALK_BITS.toString('base64');
 
 // === NEW DUNGEON MOB LAYOUT ===============================================
-// The new map has different room geometry from the legacy dungeon. Legacy level
-// anchors are hints only; each physical room receives exactly one mob level.
+// Physical layout of the new map:
+//   TOP branches    = odd levels  1,3,5...19
+//   BOTTOM branches = even levels 2,4,6...20
+// Every vertical branch contains 3-4 PHYSICAL rooms. All rooms in one branch
+// use the same mob level. This replaces the legacy "one room per level" layout.
 function ppaParseDungeonJsonConst(name){
   const re=new RegExp('const\\s+'+name+'=(\\[[\\s\\S]*?\\]);');
   const m=source.match(re);
   if(!m)throw new Error('Dungeon source constant not found: '+name);
   return JSON.parse(m[1]);
 }
-const PPA_DUNGEON_OLD_ROOM_META=ppaParseDungeonJsonConst('DG_ROOM_META');
+ppaParseDungeonJsonConst('DG_ROOM_META');
 ppaParseDungeonJsonConst('DG_ACTIVE_SPAWNS');
 
 function ppaDungeonInsideDistance(walk,w,h){
@@ -178,8 +181,6 @@ function ppaDungeonInsideDistance(walk,w,h){
   return d;
 }
 const PPA_DUNGEON_INNER_DIST=ppaDungeonInsideDistance(PPA_DUNGEON_WALK,PPA_DUNGEON_COLL_W,PPA_DUNGEON_COLL_H);
-const PPA_DUNGEON_ROOM_SX=PPA_DUNGEON_TEST_ART_W/1852;
-const PPA_DUNGEON_ROOM_SY=PPA_DUNGEON_TEST_ART_H/849;
 
 function ppaDungeonCellOk(x,y,minClear=9){
   x=Math.round(x);y=Math.round(y);
@@ -221,7 +222,7 @@ function ppaDungeonFindRoomCore(x,y,maxR=180){
   return {x:q.x,y:q.y,clear:PPA_DUNGEON_INNER_DIST[q.y*PPA_DUNGEON_COLL_W+q.x]/3};
 }
 
-// Find the deepest point of the large right-hand boss chamber.
+// Boss chamber remains separate from regular level branches.
 const _ppaBossCore=ppaDungeonFindRoomCore(
   Math.min(PPA_DUNGEON_TEST_ART_W-90,1880),
   Math.round(PPA_DUNGEON_TEST_ART_H*0.51),
@@ -235,179 +236,188 @@ const PPA_DUNGEON_BOSS_IMG=_ppaBossCore
   ?[Math.round(_ppaBossCore.x),Math.round(_ppaBossCore.y)]
   :[Math.min(PPA_DUNGEON_TEST_ART_W-90,1880),Math.round(PPA_DUNGEON_TEST_ART_H*0.51)];
 
-const PPA_DUNGEON_ROOM_META=[];
+// Erode the walk mask by ~20 logical px. Narrow connectors disappear while
+// each actual room remains as its own component. This matches the new map:
+// 31 upper rooms + 30 lower rooms, grouped into ten branches per side.
+function ppaDungeonDetectPhysicalRooms(){
+  const w=PPA_DUNGEON_COLL_W,h=PPA_DUNGEON_COLL_H,total=w*h;
+  const seen=new Uint8Array(total);
+  const queue=new Int32Array(total);
+  const rooms=[];
+  const minClear=20*3;
+  const midY=PPA_DUNGEON_TEST_ART_H*0.5;
+  const bossCut=Math.min(PPA_DUNGEON_TEST_ART_W-150,PPA_DUNGEON_BOSS_IMG[0]-245);
 
-// The new dungeon is a strict paired layout:
-// upper row = 1,3,5...19; lower row = 2,4,6...20.
-// Detect EACH row independently so one side can never steal room slots from the other.
-const PPA_DUNGEON_MID_Y=PPA_DUNGEON_TEST_ART_H*0.5;
-const PPA_DUNGEON_ROOM_X_MIN=150;
-const PPA_DUNGEON_ROOM_X_MAX=Math.max(
-  PPA_DUNGEON_ROOM_X_MIN+900,
-  Math.min(PPA_DUNGEON_TEST_ART_W-150,PPA_DUNGEON_BOSS_IMG[0]-235)
-);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const seed=y*w+x;
+    if(seen[seed]||PPA_DUNGEON_WALK[seed]!==1||PPA_DUNGEON_INNER_DIST[seed]<minClear)continue;
 
-function ppaDungeonRoomCandidateBlocked(q){
-  if(!q)return true;
-  if(q.x<PPA_DUNGEON_ROOM_X_MIN||q.x>PPA_DUNGEON_ROOM_X_MAX)return true;
-  if(Math.hypot(q.x-50,q.y-518)<150)return true;
-  if(Math.hypot(q.x-PPA_DUNGEON_BOSS_IMG[0],q.y-PPA_DUNGEON_BOSS_IMG[1])<245)return true;
-  return q.clear<20;
-}
+    let qh=0,qt=0;
+    queue[qt++]=seed;seen[seed]=1;
+    let area=0,sumX=0,sumY=0,minX=x,maxX=x,minY=y,maxY=y,maxClear=0;
 
-function ppaDungeonDetectStrictRow(top){
-  const yMin=top?34:Math.round(PPA_DUNGEON_MID_Y+62);
-  const yMax=top?Math.round(PPA_DUNGEON_MID_Y-62):PPA_DUNGEON_TEST_ART_H-34;
-  const candidates=[];
-
-  for(let x=PPA_DUNGEON_ROOM_X_MIN;x<=PPA_DUNGEON_ROOM_X_MAX;x+=4){
-    let best=null;
-    for(let y=yMin;y<=yMax;y+=4){
-      const i=y*PPA_DUNGEON_COLL_W+x;
-      if(PPA_DUNGEON_WALK[i]!==1)continue;
+    while(qh<qt){
+      const i=queue[qh++],cy=Math.floor(i/w),cx=i-cy*w;
+      area++;sumX+=cx;sumY+=cy;
+      if(cx<minX)minX=cx;if(cx>maxX)maxX=cx;
+      if(cy<minY)minY=cy;if(cy>maxY)maxY=cy;
       const clear=PPA_DUNGEON_INNER_DIST[i]/3;
-      if(clear<20)continue;
-      if(!best||clear>best.clear)best={x,y,clear};
+      if(clear>maxClear)maxClear=clear;
+
+      const push=(ni)=>{
+        if(ni<0||ni>=total||seen[ni])return;
+        if(PPA_DUNGEON_WALK[ni]!==1||PPA_DUNGEON_INNER_DIST[ni]<minClear)return;
+        seen[ni]=1;queue[qt++]=ni;
+      };
+      if(cx>0)push(i-1);
+      if(cx+1<w)push(i+1);
+      if(cy>0)push(i-w);
+      if(cy+1<h)push(i+w);
     }
-    if(best&&!ppaDungeonRoomCandidateBlocked(best))candidates.push(best);
-  }
 
-  function choose(gap,minClear){
-    const pool=candidates
-      .filter(q=>q.clear>=minClear)
-      .sort((u,v)=>(v.clear-u.clear)||(u.x-v.x));
-    const chosen=[];
-    for(const q of pool){
-      if(chosen.some(r=>Math.abs(q.x-r.x)<gap))continue;
-      chosen.push(q);
-      if(chosen.length>=10)break;
-    }
-    return chosen.sort((u,v)=>u.x-v.x);
-  }
+    if(area<300)continue;
+    const rx=sumX/area,ry=sumY/area;
+    if(rx<95||rx>bossCut)continue;
+    let side=null;
+    if(ry<midY-55)side='top';
+    else if(ry>midY+55)side='bottom';
+    else continue;
 
-  let row=choose(122,26);
-  if(row.length<10)row=choose(108,23);
-  if(row.length<10)row=choose(94,20);
-
-  // Final fallback: split the usable width into ten slots and find the
-  // deepest walkable room interior in every slot.
-  if(row.length<10){
-    row=[];
-    const span=PPA_DUNGEON_ROOM_X_MAX-PPA_DUNGEON_ROOM_X_MIN;
-    for(let slot=0;slot<10;slot++){
-      const left=PPA_DUNGEON_ROOM_X_MIN+span*slot/10;
-      const right=PPA_DUNGEON_ROOM_X_MIN+span*(slot+1)/10;
-      let best=null,bestScore=-Infinity;
-      for(let y=yMin;y<=yMax;y+=3){
-        for(let x=Math.round(left);x<=Math.round(right);x+=3){
-          const i=y*PPA_DUNGEON_COLL_W+x;
-          if(PPA_DUNGEON_WALK[i]!==1)continue;
-          const clear=PPA_DUNGEON_INNER_DIST[i]/3;
-          if(clear<16)continue;
-          const slotCenter=(left+right)*0.5;
-          const score=clear*8-Math.abs(x-slotCenter)*0.08;
-          if(score>bestScore){bestScore=score;best={x,y,clear};}
-        }
-      }
-      if(best)row.push(best);
-    }
+    rooms.push({
+      x:rx,y:ry,side,area,maxClear,
+      minX,maxX,minY,maxY
+    });
   }
-
-  if(row.length!==10){
-    throw new Error('Dungeon strict row detection failed: '+(top?'top':'bottom')+'='+row.length+'/10');
-  }
-  return row;
+  return rooms;
 }
 
-const _ppaTop=ppaDungeonDetectStrictRow(true);
-const _ppaBottom=ppaDungeonDetectStrictRow(false);
+function ppaDungeonGroupBranches(rooms,side){
+  const src=rooms.filter(r=>r.side===side).sort((a,b)=>a.x-b.x);
+  const groups=[];
+  const clusterGap=78;
+  for(const room of src){
+    let g=groups[groups.length-1];
+    if(!g||Math.abs(room.x-g.x)>clusterGap){
+      g={side,rooms:[],x:room.x};
+      groups.push(g);
+    }
+    g.rooms.push(room);
+    g.x=g.rooms.reduce((s,r)=>s+r.x,0)/g.rooms.length;
+  }
+  groups.sort((a,b)=>a.x-b.x);
 
+  if(groups.length!==10){
+    throw new Error('Dungeon '+side+' branch detection failed: '+groups.length+'/10');
+  }
+  for(let i=0;i<groups.length;i++){
+    const g=groups[i];
+    g.rooms.sort((a,b)=>a.y-b.y);
+    if(g.rooms.length<3||g.rooms.length>4){
+      throw new Error('Dungeon '+side+' branch '+(i+1)+' has '+g.rooms.length+' rooms; expected 3-4');
+    }
+  }
+  return groups;
+}
+
+const PPA_DUNGEON_PHYSICAL_ROOMS=ppaDungeonDetectPhysicalRooms();
+const _ppaTopBranches=ppaDungeonGroupBranches(PPA_DUNGEON_PHYSICAL_ROOMS,'top');
+const _ppaBottomBranches=ppaDungeonGroupBranches(PPA_DUNGEON_PHYSICAL_ROOMS,'bottom');
+
+const PPA_DUNGEON_LEVEL_BRANCHES=[];
 for(let i=0;i<10;i++){
-  const tq=_ppaTop[i],bq=_ppaBottom[i];
-  PPA_DUNGEON_ROOM_META.push({
-    x:Math.round(tq.x),y:Math.round(tq.y),level:1+i*2,
-    size:tq.clear>=46?'large':'small',
-    count:tq.clear>=58?12:(tq.clear>=40?10:8),
-    inherited:false,coreClear:tq.clear,row:'top',slot:i
-  });
-  PPA_DUNGEON_ROOM_META.push({
-    x:Math.round(bq.x),y:Math.round(bq.y),level:2+i*2,
-    size:bq.clear>=46?'large':'small',
-    count:bq.clear>=58?12:(bq.clear>=40?10:8),
-    inherited:false,coreClear:bq.clear,row:'bottom',slot:i
-  });
+  PPA_DUNGEON_LEVEL_BRANCHES.push({level:1+i*2,side:'top',slot:i,rooms:_ppaTopBranches[i].rooms});
+  PPA_DUNGEON_LEVEL_BRANCHES.push({level:2+i*2,side:'bottom',slot:i,rooms:_ppaBottomBranches[i].rooms});
+}
+PPA_DUNGEON_LEVEL_BRANCHES.sort((a,b)=>a.level-b.level);
+
+// Keep runtime metadata at exactly twenty logical levels. A level now owns
+// several physical rooms in its branch, preventing mixed levels in one row.
+const PPA_DUNGEON_ROOM_META_RUNTIME=[];
+const PPA_DUNGEON_ROOM_BOUNDS=[];
+const PPA_DUNGEON_ACTIVE_SPAWNS=[];
+
+function ppaDungeonMobCountForPhysicalRoom(room){
+  if(room.maxClear>=55||room.area>=6000)return 6;
+  if(room.maxClear>=43||room.area>=4500)return 5;
+  return 4;
 }
 
-PPA_DUNGEON_ROOM_META.sort((u,v)=>u.level-v.level);
-
-const PPA_DUNGEON_ACTIVE_SPAWNS=[];
-const PPA_DUNGEON_ROOM_BOUNDS=[];
-function ppaDungeonBuildRoomSpawns(room,ri){
-  const want=Math.max(7,Math.min(12,room.count|0)),pts=[];
+function ppaDungeonSpawnPhysicalRoom(room,ri,ordinalStart){
+  const want=ppaDungeonMobCountForPhysicalRoom(room);
+  const pts=[];
   const cx=Math.round(room.x),cy=Math.round(room.y);
-  const ci=cy*PPA_DUNGEON_COLL_W+cx;
-  const centerClear=Number(room.coreClear)||((PPA_DUNGEON_INNER_DIST[ci]||0)/3);
-  const minRoomClear=Math.max(17,Math.min(25,Math.floor(centerClear*0.46)));
-  const maxR=Math.max(38,Math.min(room.size==='large'?96:68,Math.floor(centerClear*1.45)));
-  const minGap=20;
-
-  const sameRoomCore=(x,y)=>{
-    const dx=x-room.x,dy=y-room.y,d=Math.hypot(dx,dy);
-    const steps=Math.max(1,Math.ceil(d/5));
-    for(let s=1;s<=steps;s++){
-      const t=s/steps,px=Math.round(room.x+dx*t),py=Math.round(room.y+dy*t);
-      if(px<0||py<0||px>=PPA_DUNGEON_COLL_W||py>=PPA_DUNGEON_COLL_H)return false;
-      const ii=py*PPA_DUNGEON_COLL_W+px;
-      if(PPA_DUNGEON_WALK[ii]!==1||PPA_DUNGEON_INNER_DIST[ii]<minRoomClear*3)return false;
-    }
-    return true;
-  };
+  const rx=Math.max(24,(room.maxX-room.minX)*0.50+10);
+  const ry=Math.max(24,(room.maxY-room.minY)*0.50+10);
+  const minClear=14,minGap=17;
 
   const accept=(x,y)=>{
     x=Math.round(x);y=Math.round(y);
-    if(!ppaDungeonCellOk(x,y,minRoomClear))return false;
-    if(Math.hypot(x-50,y-518)<150)return false;
-    if(Math.hypot(x-PPA_DUNGEON_BOSS_IMG[0],y-PPA_DUNGEON_BOSS_IMG[1])<235)return false;
-    if(Math.hypot(x-room.x,y-room.y)>maxR||!sameRoomCore(x,y))return false;
+    if(!ppaDungeonCellOk(x,y,minClear))return false;
+    if(x<room.minX-10||x>room.maxX+10||y<room.minY-10||y>room.maxY+10)return false;
+    const nx=(x-cx)/rx,ny=(y-cy)/ry;
+    if(nx*nx+ny*ny>1.0)return false;
+    if(Math.hypot(x-PPA_DUNGEON_BOSS_IMG[0],y-PPA_DUNGEON_BOSS_IMG[1])<260)return false;
     for(const p of pts)if(Math.hypot(x-p[0],y-p[1])<minGap)return false;
     pts.push([x,y]);return true;
   };
 
-  accept(room.x,room.y);
+  const snapped=ppaDungeonSnapInterior(cx,cy,minClear,55);
+  if(snapped)accept(snapped.x,snapped.y);
   const golden=2.399963229728653;
-  for(let k=1;k<360&&pts.length<want;k++){
-    const t=k/359,r=12+Math.sqrt(t)*(maxR-12),ang=k*golden+ri*0.83;
-    accept(room.x+Math.cos(ang)*r,room.y+Math.sin(ang)*r);
+  for(let k=1;k<260&&pts.length<want;k++){
+    const t=k/259,r=Math.sqrt(t),ang=k*golden+ri*0.47;
+    accept(cx+Math.cos(ang)*rx*r,cy+Math.sin(ang)*ry*r);
   }
   if(pts.length<want){
-    for(let yy=-maxR;yy<=maxR&&pts.length<want;yy+=11){
-      for(let xx=-maxR;xx<=maxR&&pts.length<want;xx+=11){
-        if(xx*xx+yy*yy<=maxR*maxR)accept(room.x+xx,room.y+yy);
-      }
+    for(let y=room.minY-6;y<=room.maxY+6&&pts.length<want;y+=10){
+      for(let x=room.minX-6;x<=room.maxX+6&&pts.length<want;x+=10)accept(x,y);
     }
   }
 
-  for(let j=0;j<pts.length;j++)PPA_DUNGEON_ACTIVE_SPAWNS.push([pts[j][0],pts[j][1],ri,j]);
-
-  let minX=room.x-34,minY=room.y-34,maxX=room.x+34,maxY=room.y+34;
-  if(pts.length){
-    minX=Math.min(...pts.map(p=>p[0]))-20;minY=Math.min(...pts.map(p=>p[1]))-20;
-    maxX=Math.max(...pts.map(p=>p[0]))+20;maxY=Math.max(...pts.map(p=>p[1]))+20;
+  for(let j=0;j<pts.length;j++){
+    PPA_DUNGEON_ACTIVE_SPAWNS.push([pts[j][0],pts[j][1],ri,ordinalStart+j]);
   }
+  return pts.length;
+}
+
+for(let ri=0;ri<PPA_DUNGEON_LEVEL_BRANCHES.length;ri++){
+  const branch=PPA_DUNGEON_LEVEL_BRANCHES[ri];
+  const rs=branch.rooms;
+  const nearest=branch.side==='top'
+    ?rs.reduce((a,b)=>a.y>b.y?a:b)
+    :rs.reduce((a,b)=>a.y<b.y?a:b);
+  const avgX=rs.reduce((s,r)=>s+r.x,0)/rs.length;
+  const maxClear=Math.max(...rs.map(r=>r.maxClear));
+
+  let ordinal=0;
+  for(const room of rs)ordinal+=ppaDungeonSpawnPhysicalRoom(room,ri,ordinal);
+
+  PPA_DUNGEON_ROOM_META_RUNTIME.push({
+    x:Math.round(avgX),
+    y:Math.round(nearest.y),
+    level:branch.level,
+    size:maxClear>=50?'large':'small',
+    count:ordinal
+  });
+
+  const minX=Math.min(...rs.map(r=>r.minX))-22;
+  const minY=Math.min(...rs.map(r=>r.minY))-22;
+  const maxX=Math.max(...rs.map(r=>r.maxX))+22;
+  const maxY=Math.max(...rs.map(r=>r.maxY))+22;
   PPA_DUNGEON_ROOM_BOUNDS.push([
     Math.max(0,Math.round(minX)),Math.max(0,Math.round(minY)),
-    Math.min(PPA_DUNGEON_TEST_ART_W-1,Math.round(maxX)),Math.min(PPA_DUNGEON_TEST_ART_H-1,Math.round(maxY))
+    Math.min(PPA_DUNGEON_TEST_ART_W-1,Math.round(maxX)),
+    Math.min(PPA_DUNGEON_TEST_ART_H-1,Math.round(maxY))
   ]);
 }
-for(let ri=0;ri<PPA_DUNGEON_ROOM_META.length;ri++)ppaDungeonBuildRoomSpawns(PPA_DUNGEON_ROOM_META[ri],ri);
 
-const PPA_DUNGEON_ROOM_META_RUNTIME=PPA_DUNGEON_ROOM_META.map(r=>({
-  x:r.x,y:r.y,level:r.level,size:r.size,count:r.count
-}));
-console.log('[PPA BUILD] Dungeon strict rows FULL: top odd='+_ppaTop.length+'/10 bottom even='+_ppaBottom.length+'/10 total='+PPA_DUNGEON_ROOM_META_RUNTIME.length);
-console.log('[PPA BUILD] Dungeon room levels: '+PPA_DUNGEON_ROOM_META_RUNTIME.map(r=>r.level+'@'+r.x+','+r.y).join(' | '));
+const _ppaTopCounts=_ppaTopBranches.map(g=>g.rooms.length);
+const _ppaBottomCounts=_ppaBottomBranches.map(g=>g.rooms.length);
+console.log('[PPA BUILD] Dungeon physical rooms: top='+_ppaTopCounts.reduce((a,b)=>a+b,0)+' bottom='+_ppaBottomCounts.reduce((a,b)=>a+b,0));
+console.log('[PPA BUILD] Dungeon branch rooms top odd: '+_ppaTopCounts.join(',')+' · bottom even: '+_ppaBottomCounts.join(','));
+console.log('[PPA BUILD] Dungeon level fill: '+PPA_DUNGEON_ROOM_META_RUNTIME.map((r,i)=>r.level+'='+PPA_DUNGEON_LEVEL_BRANCHES[i].rooms.length+' rooms/'+r.count+' mobs').join(' | '));
 console.log('[PPA BUILD] Dungeon room-only mobs: '+PPA_DUNGEON_ACTIVE_SPAWNS.length+' spawns · boss center '+PPA_DUNGEON_BOSS_IMG[0]+','+PPA_DUNGEON_BOSS_IMG[1]);
-// ==========================================================================
+
 
 // Runtime floor visual uses the original high-res mask directly rather than the
 // lower-resolution collision grid. This removes visible "teeth" from the edge.
