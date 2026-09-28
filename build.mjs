@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v620-dungeon-buffer-tile-tone-20260929';
+const CLIENT_BUILD = 'v621-dungeon-v616-wallband-no-white-outline-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -165,10 +165,10 @@ for(let y=0;y<PPA_DUNGEON_RENDER_H;y++)for(let x=0;x<PPA_DUNGEON_RENDER_W;x++){
   PPA_DUNGEON_FLOOR_MASK_RGBA[o+3]=walk?255:0;
 }
 
-// Small OUTSIDE-only buffer: dark rock no longer reaches the collision edge.
-// It is not a wall/outline; it is just normal floor stone extending ~18 render px
-// beyond the walkable boundary so the contour stays clean and visually soft.
-const PPA_DUNGEON_BUFFER_PX=18;
+// OUTSIDE-only visual wall band. It starts exactly after the walkable mask,
+// so no decorative pixels enter collision space. This restores the clear v616
+// separation between floor and outer rock, but WITHOUT the old white edge highlight.
+const PPA_DUNGEON_BUFFER_PX=72;
 const bw=PPA_DUNGEON_RENDER_W,bh=PPA_DUNGEON_RENDER_H;
 const dist=new Uint16Array(bw*bh);
 const INF=65535;
@@ -222,10 +222,11 @@ const PPA_DUNGEON_FLOOR_LAYER=await sharp(PPA_DUNGEON_BASE_FLOOR)
   .png()
   .toBuffer();
 
-// Buffer uses the SAME floor material, only ~14% darker and nearly the same saturation.
-// It reads as the same tile family while keeping the outer shadow away.
+// Dark masonry band: clearly non-walkable, but still made from the same stone family.
+// This is the v616-style wall tone with the bright/white outline intentionally removed.
 const PPA_DUNGEON_BUFFER_STONE=await sharp(PPA_DUNGEON_BASE_FLOOR)
-  .modulate({brightness:0.86,saturation:0.96})
+  .modulate({brightness:0.52,saturation:0.68})
+  .sharpen({sigma:0.9,m1:0.7,m2:1.4})
   .png()
   .toBuffer();
 const PPA_DUNGEON_BUFFER_LAYER=await sharp(PPA_DUNGEON_BUFFER_STONE)
@@ -243,7 +244,7 @@ const PPA_DUNGEON_TEST_MAP=await sharp(PPA_DUNGEON_OUTER_STONE)
 fs.writeFileSync(path.join(assetsDir,'dungeon-layout-test.webp'),PPA_DUNGEON_TEST_MAP);
 
 const PPA_DUNGEON_TEST_SCALE=(1852*5.1435)/PPA_DUNGEON_TEST_ART_W;
-console.log('[PPA BUILD] Dungeon edge fix: high-res visual contour + '+PPA_DUNGEON_BUFFER_PX+'px outside stone buffer; no outline/walls');
+console.log('[PPA BUILD] Dungeon edge fix: smooth 2048 collision + '+PPA_DUNGEON_BUFFER_PX+'px outside-only dark masonry band; white outline removed');
 console.log('[PPA BUILD] Dungeon collision upgraded: '+PPA_DUNGEON_COLL_W+'x'+PPA_DUNGEON_COLL_H+' · walk '+(PPA_DUNGEON_WALK_RATIO*100).toFixed(1)+'%');
 // ==========================================================================
 
