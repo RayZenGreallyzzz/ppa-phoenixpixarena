@@ -1,0 +1,1364 @@
+
+===== choose.addEventListener #1 @ 1953563 =====
+=document.createElement('img');
+  img.className='card';
+  img.src=CARD_IMAGES[c.key];
+  img.alt='Карточка класса '+(DISPLAY_NAMES[c.key]||c.name);
+  img.draggable=false;
+  a.appendChild(img);
+  track.appendChild(a);
+
+  const b=document.createElement('button');
+  b.setAttribute('aria-label','Класс '+(DISPLAY_NAMES[c.key]||c.name));
+  b.onclick=()=>{current=i;drag=0;render(true);};
+  dots.appendChild(b);
+});
+
+function render(animated=false){
+  const w=viewport.clientWidth||1;
+  track.style.transition=animated?'transform .24s ease-out':'none';
+  track.style.transform=`translate3d(${-current*w+drag}px,0,0)`;
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===current));
+  classNow.textContent=DISPLAY_NAMES[classes[current].key]||classes[current].name;
+}
+
+function start(x){startX=x;drag=0;track.style.transition='none'}
+function move(x){
+  if(startX===null)return;
+  drag=x-startX;
+  render(false);
+}
+function end(){
+  if(startX===null)return;
+  const d=drag;
+  startX=null;drag=0;
+  if(d>42)current=(current-1+classes.length)%classes.length;
+  else if(d<-42)current=(current+1)%classes.length;
+  render(true);
+}
+
+viewport.addEventListener('touchstart',e=>{
+  if(!e.touches.length)return;start(e.touches[0].clientX);
+},{passive:true});
+viewport.addEventListener('touchmove',e=>{
+  if(startX===null||!e.touches.length)return;
+  move(e.touches[0].clientX);
+  e.preventDefault();
+},{passive:false});
+viewport.addEventListener('touchend',end,{passive:true});
+viewport.addEventListener('touchcancel',()=>{startX=null;drag=0;render(true)},{passive:true});
+viewport.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX)});
+window.addEventListener('mousemove',e=>move(e.clientX));
+window.addEventListener('mouseup',end);
+window.addEventListener('resize',()=>render(false));
+
+choose.addEventListener('click',()=>{
+  const c=classes[current];
+  const nickname=String(nickInput.value||'').trim();
+  const err=validateNick(nickname);
+  if(err){
+    nickHint.textContent=err;
+    nickHint.classList.add('bad');
+    try{nickInput.focus()}catch(_){}
+    return;
+  }
+  parent.postMessage({
+    type:'classChosen',
+    nickname:nickname,
+    cls:{name:c.name,type:c.type,hp:c.hp,mp:c.mp,atk:c.atk,def_:c.def_,spd:c.spd,crit:c.crit}
+  },'*');
+});
+
+render(false);
+</script>
+</body>
+</html>
+===== getElementById('choose') #1 @ 1950981 =====
+rBGBTRjg/0o75z+rqt7RnWu0E6mEJsRVmRfTbYOyBglRUVeNnk/6Osm+m1ICfs87sg7i9/Zt1VwgE9tb+GBqYQpjKsv5bpKcGCe+QQ6M/w1gXsj/wCkDn/pB/dqu7QANe2g8Y0YSyrIzfamXVrEPhQA27+wH4aw9fCXjk08BfbeFjOP2arikgHWMDnUwhGSrG5eUZamlGnKBb7YdH7DxrH5aMhC0/Zp+I5Kg7g/LnGq4EA6yEgjSlgRDyFaE322UFJppKT+s8Cf4a3k34xKaaQ7SiQ2MJIfxj/Z1VAgZ17bg6G7ajjcrK1fKIqAhmAQkHI3Ogkfu0g7eSHXHFKgElz72Hcf2agdgJGvbB30cACGIlWVPUFSAAIWQOOXf92t3eoJdaS2unhSQSQPF7H9mqspA741jaM40N23km3juasZvfBGIIA/6T/drxvJC0bVU5Kk5zguef7NVzYM6U2DOmLAUmIqwKvQK2gQtoSQQA56fhrwvNtttSW6ft3ZyS7nv+Gq9gDy1jaD5amERCklSqblbH/sR+vjE/2aUF3fmw0Ye5sHOCv/AHaiA2ntjWQhJPbUQBzUyzdqWXt4gAjZs2lYx9e3fTuZfyp0MxnaejZxhQVhQx6HGq2EJ9NbeGNKWgpw46J1MrZkx1NNxy2FHklQP9mn1OvSVAQhK2g7tABBIwoDtkY+WolLSSCDrC0pCe2j1KZqYXdbDrCmnYThCnCvLb2zAP6Pbtpwu9ojiG0Lpa1Jb+7+eAx+7VZQgK7868GxxpSwIio4ZKyvXnFkNtJVTnAGjuQA+OD/AKukvytjOBYegOOBZyoB4AE/s1XwgEE61SkEfTRDQEC4nVWSJdsSGVhqnuYWAFBTwPHy40ou+GCkIFOUEDkDxR3/AGaq4SN2vbRnGpgCmM6Kym8o+1YTT1grzuPijPPfy0gi7G22VNCI6ptXdKnv7cagSkawEg5GjhCGIqdRdUdpwOIppCwMbi7k/wANN5twomNupEYoLicZKgQP3ai9gIzrxQNGIQLpVop19iFQIVMVC8RMVbqw4HMElZBPGPlrZ6+23mVtOU8qQsYI8XHH7NVXYkg8ayEA5+WmSqzpv1LaSlNPG3KdoLmdoHcduc6cKv8AbcUV/Z68q7/nh/dqoBAJOtkoST/doQmkq6wupiYiyDTPEbUcqQp7hWAceXf569qmhCVdxr2lwAoio8aFf//Z"};
+const DISPLAY_NAMES={"assassin":"АССАСИН","priest":"ЖРЕЦ","archer":"ЛУЧНИК","paladin":"ПАЛАДИН","mage":"МАГ","barbarian":"БЕРСЕРК","tank":"ТАНК","gnome":"ГНОМ-КАНОНИР"};
+const CLASS_ORDER=["assassin","priest","archer","paladin","mage","barbarian","tank","gnome"];
+const byKey=Object.fromEntries(rawClasses.map(c=>[c.key,c]));
+const classes=CLASS_ORDER.map(k=>byKey[k]).filter(Boolean);
+
+let current=0,startX=null,drag=0;
+const track=document.getElementById('track');
+const viewport=document.getElementById('viewport');
+const dots=document.getElementById('dots');
+const choose=document.getElementById('choose');
+const classNow=document.getElementById('classNow');
+const nickInput=document.getElementById('nickInput');
+const nickHint=document.getElementById('nickHint');
+function validateNick(v){
+  v=String(v||'').trim();
+  if(v.length<3||v.length>18)return 'Ник: 3–18 символов';
+  if(!/^[A-Za-zА-Яа-яЁё0-9_]+$/u.test(v))return 'Только буквы, цифры и _';
+  return '';
+}
+nickInput.addEventListener('input',()=>{
+  const e=validateNick(nickInput.value);
+  nickHint.textContent=e||'Ник подходит ✓';
+  nickHint.classList.toggle('bad',!!e);
+});
+nickInput.addEventListener('pointerdown',e=>e.stopPropagation());
+nickInput.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+
+classes.forEach((c,i)=>{
+  const a=document.createElement('article');
+  const img=document.createElement('img');
+  img.className='card';
+  img.src=CARD_IMAGES[c.key];
+  img.alt='Карточка класса '+(DISPLAY_NAMES[c.key]||c.name);
+  img.draggable=false;
+  a.appendChild(img);
+  track.appendChild(a);
+
+  const b=document.createElement('button');
+  b.setAttribute('aria-label','Класс '+(DISPLAY_NAMES[c.key]||c.name));
+  b.onclick=()=>{current=i;drag=0;render(true);};
+  dots.appendChild(b);
+});
+
+function render(animated=false){
+  const w=viewport.clientWidth||1;
+  track.style.transition=animated?'transform .24s ease-out':'none';
+  track.style.transform=`translate3d(${-current*w+drag}px,0,0)`;
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===current));
+  classNow.textContent=DISPLAY_NAMES[classes[current].key]||classes[current].name;
+}
+
+function start(x){startX=x;drag=0;track.style.transition='none'}
+function move(x){
+  if(startX===null)return;
+  drag=x-startX;
+  render(false);
+}
+function end(){
+  if(startX===null)return;
+  const d=drag;
+  startX=null;drag=0;
+  if(d>42)current=(current-1+classes.length)%classes.length;
+  else if(d<-42)current=(current+1)%classes.length;
+  render(true);
+}
+
+viewport.addEventListener('touchstart',e=>{
+  if(!e.touches.length)return;start(e.touches[0].clientX);
+},{passive:true});
+viewport.addEventListener('touchmove',e=>{
+  if(startX===null||!e.touches.length)return;
+  move(e.touches[0].clientX);
+  e.preventDefault();
+},{passive:false});
+viewport.addEventListener('touchend',end,{passive:true});
+viewport.addEventListener('touchcancel',()=>{startX=null;drag=0;render(true)},{passive:true});
+viewport.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX)});
+window.addEventListener('mousemove',e=>move(e.clientX));
+window.addEventListener('mouseup',end);
+window.addEventListener('resize',()=>render(false));
+
+choose.addEventListener('click',()=>{
+  const c=classes[current];
+  const nickname=String(nickInput.value||'').trim();
+  const err=validateNick(nickname);
+  if(err){
+    nickHint.textContent=err;
+    nickHint.classList.add('bad');
+    try{nickInput.focus()}catch(_){}
+    return;
+  }
+  parent.postMessage({
+    type:'classChosen',
+    nickname:nickname,
+    cls:{name:c.name,type:c.type,hp:c.hp,mp:c.mp,atk:c.atk,def_:c.def_,spd:c.spd,crit:c.crit}
+  },'*');
+});
+
+render(false);
+</script>
+</body>
+</html>
+===== classChosen #1 @ 1953880 =====
+key]||c.name));
+  b.onclick=()=>{current=i;drag=0;render(true);};
+  dots.appendChild(b);
+});
+
+function render(animated=false){
+  const w=viewport.clientWidth||1;
+  track.style.transition=animated?'transform .24s ease-out':'none';
+  track.style.transform=`translate3d(${-current*w+drag}px,0,0)`;
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===current));
+  classNow.textContent=DISPLAY_NAMES[classes[current].key]||classes[current].name;
+}
+
+function start(x){startX=x;drag=0;track.style.transition='none'}
+function move(x){
+  if(startX===null)return;
+  drag=x-startX;
+  render(false);
+}
+function end(){
+  if(startX===null)return;
+  const d=drag;
+  startX=null;drag=0;
+  if(d>42)current=(current-1+classes.length)%classes.length;
+  else if(d<-42)current=(current+1)%classes.length;
+  render(true);
+}
+
+viewport.addEventListener('touchstart',e=>{
+  if(!e.touches.length)return;start(e.touches[0].clientX);
+},{passive:true});
+viewport.addEventListener('touchmove',e=>{
+  if(startX===null||!e.touches.length)return;
+  move(e.touches[0].clientX);
+  e.preventDefault();
+},{passive:false});
+viewport.addEventListener('touchend',end,{passive:true});
+viewport.addEventListener('touchcancel',()=>{startX=null;drag=0;render(true)},{passive:true});
+viewport.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX)});
+window.addEventListener('mousemove',e=>move(e.clientX));
+window.addEventListener('mouseup',end);
+window.addEventListener('resize',()=>render(false));
+
+choose.addEventListener('click',()=>{
+  const c=classes[current];
+  const nickname=String(nickInput.value||'').trim();
+  const err=validateNick(nickname);
+  if(err){
+    nickHint.textContent=err;
+    nickHint.classList.add('bad');
+    try{nickInput.focus()}catch(_){}
+    return;
+  }
+  parent.postMessage({
+    type:'classChosen',
+    nickname:nickname,
+    cls:{name:c.name,type:c.type,hp:c.hp,mp:c.mp,atk:c.atk,def_:c.def_,spd:c.spd,crit:c.crit}
+  },'*');
+});
+
+render(false);
+</script>
+</body>
+</html>
+===== nickInput #1 @ 2900 =====
+:1.25;text-shadow:0 0 12px rgba(224,161,58,.45),2px 2px #000;
+}
+.sub{
+  margin:6px 0 0;color:var(--muted);font:bold clamp(8px,2.2vw,11px)/1.3 monospace;
+  letter-spacing:.20em;text-transform:uppercase
+}
+.selector{
+  min-height:0;display:grid;grid-template-rows:minmax(0,1fr) 18px;gap:5px;
+  width:100%;max-width:760px;margin:0 auto
+}
+.viewport{
+  position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;cursor:grab
+}
+.track{height:100%;display:flex;will-change:transform}
+article{
+  flex:0 0 100%;height:100%;display:flex;align-items:center;justify-content:center;
+  padding:2px 4px;user-select:none
+}
+.card{
+  display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;
+  filter:drop-shadow(0 7px 11px rgba(0,0,0,.65));pointer-events:none
+}
+.dots{display:flex;justify-content:center;align-items:center;gap:7px;height:18px}
+.dots button{
+  border:1px solid #5a4535;padding:0;width:8px;height:8px;border-radius:50%;
+  background:#302824;transition:.16s;cursor:pointer
+}
+.dots button.on{width:22px;border-radius:7px;background:var(--gold);border-color:#f0c166;box-shadow:0 0 7px rgba(224,166,64,.5)}
+.bottom{position:relative;z-index:5;text-align:center;padding-top:7px}
+.classNow{
+  min-height:18px;margin-bottom:4px;color:#c6a06a;font:bold 9px monospace;
+  letter-spacing:.15em
+}
+.choose{
+  min-width:190px;max-width:min(80vw,330px);height:46px;border:1px solid #a36031;border-radius:6px;
+  background:linear-gradient(#73251e,#421512);color:#f7deba;cursor:pointer;
+  font:bold 11px monospace;letter-spacing:.16em;
+  box-shadow:inset 0 0 0 1px #2a0d0b,0 3px 10px rgba(0,0,0,.45)
+}
+.nickWrap{width:min(82vw,330px);margin:0 auto 6px;text-align:center}
+.nickLabel{display:block;color:#a98a61;font:bold 7px monospace;letter-spacing:.12em;margin-bottom:4px}
+.nickInput{width:100%;height:34px;border:1px solid #744126;border-radius:6px;background:rgba(9,6,6,.92);color:#f5d9b0;text-align:center;outline:none;font:bold 12px monospace;letter-spacing:.08em;user-select:text;-webkit-user-select:text}
+.nickInput:focus{border-color:#c7743a;box-shadow:0 0 10px rgba(196,70,38,.35)}
+.nickHint{min-height:12px;margin-top:3px;color:#8d7765;font:7px monospace}
+.nickHint.bad{color:#ff8d7f}
+
+.choose:active{transform:scale(.97);background:#94372b}
+@media (orientation:portrait){
+  main{padding-left:8px;padding-right:8px}
+  .selector{max-width:520px}
+}
+@media (orientation:landscape){
+  main{grid-template-rows:auto minmax(0,1fr) auto;padding-top:max(5px,env(safe-area-inset-top));padding-bottom:max(5px,env(safe-area-inset-bottom))}
+  header{padding-bottom:3px}
+  h1{font-size:clamp(13px,2.2vw,19px)}
+  .sub{margin-top:2px;font-size:7px}
+  .selector{max-width:900px;grid-template-rows:minmax(0,1fr) 13px;gap:2px}
+  .dots{height:13px}
+  .bottom{padding-top:2px}
+  .classNow{min-height:12px;margin-bottom:1px;font-size:7px}
+  .choose{height:34px;min-width:170px;font-size:9px}
+}
+@media (max-height:430px){
+  header{padding:0}
+  .sub{display:block}
+  .bottom{padding-top:1px}
+  .choose{height:31px}
+}
+
+
+/* === V156 RESPONSIVE CLASS SELECT ======================================= */
+@media (max-width:520px) and (orientation:portrait){
+  main{
+    padding:max(8px,env(safe-area-inset-top)) 7px max(8px,env(safe-area-inset-bottom));
+    grid-template-rows:auto minmax(0,1fr) auto
+  }
+  header h1{font-size:clamp(19px,6vw,27px)}
+  header .sub{font-size:7px}
+  .selector{max-width:none}
+  #choose{min-height:48px;font-size:14px}
+  #classNow{font-size:11px}
+}
+
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>PHOENIX PIX ARENA</h1>
+  <p class="sub">СВАЙПНИ, ЧТОБЫ ВЫБРАТЬ КЛАСС</p>
+</header>
+
+<section class="selector">
+  <div class="viewport" id="viewport"><div class="track" id="track"></div></div>
+  <div class="dots" id="dots"></div>
+</section>
+
+<div class="bottom">
+  <div class="classNow" id="classNow"></div>
+  <div class="nickWrap">
+    <label class="nickLabel" for="nickInput">ИГРОВОЙ НИК</label>
+    <input class="nickInput" id="nickInput" maxlength="18" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="3–18 символов">
+    <div class="nickHint" id="nickHint">Буквы, цифры и _</div>
+  </div>
+  <button class="choose" id="choose">ВЫБРАТЬ</button>
+</div>
+</main>
+
+<script>
+const rawClasses=[{"key":"tank","name":"СТРАЖ","type":"Ближний бой","desc":"Живая стена из стали. Держит удар за весь отряд и ломает строй молотом.","hp":260,"mp":20,"atk":12,"def_":34,"crit":"3%","spd":2.0},{"key":"barbarian","name":"ВАРВАР","type":"Ближний бой","desc":"Ярость вместо брони. Чем больше ран — тем страшнее его топоры.","hp":150,"mp":30,"atk":20,"def_":12,"crit":"10%","spd":3.5},{"key":"paladin","name":"ПАЛАДИН","type":"Ближний бой","desc":"Клинок веры и щит света. Бьёт нежить и лечит союзников в бою.","hp":170,"mp":100,"atk":14,"def_":18,"crit":"10%","spd":3.2},{"key":"gnome","name":"ГНОМ","type":"Дальний бой","desc":"Мастер пороха. Одним выстрелом сносит полосу врагов, но перезаряжается вечность.","hp":130,"mp":50,"atk":30,"def_":10,"crit":"5%","spd":2.0},{"key":"archer","name":"ЛУЧНИК","type":"Дальний бой","desc":"Тень леса. Быстрые ноги, точный глаз и стрела в щель забрала.","hp":90,"mp":80,"atk":16,"def_":6,"crit":"15%","spd":4.0},{"key":"mage","name":"МАГ","type":"Дальний бой","desc":"Хранитель древних формул. Хрупок телом, но выжигает поле целиком.","hp":70,"mp":150,"atk":25,"def_":4,"crit":"5%","spd":2.5},{"key":"assassin","name":"УБИЙЦА","type":"Ближний бой","desc":"Дым и два клинка. Появляется за спиной и уходит раньше крика.","hp":100,"mp":60,"atk":15,"def_":5,"crit":"20%","spd":4.5},{"key":"priest","name":"ЖРЕЦ","type":"Поддержка","desc":"Держит грань между жизнью и смертью. Поднимает павших, ломает проклятия.","hp":110,"mp":140,"atk":10,"def_":8,"crit":"5%","spd":2.8}];
+const CARD_IMAGES={"assassin":"data:image/png;base64,/9j/4QCARXhpZgAATU0AKgAAAAgABAEAAAQAAAABAAABxAEBAAQAAAABAAAFAwEyAAIAAAAUAAAAPodpAAQAAAABAAAAUgAAAAAyMDI2OjA5OjA1IDE3OjMwOjQ4AAABkAMAAgAAABQAAABkAAAAADIwMjY6MDk6MDUgMTQ6MzA6NDgA/+AAEEpGSUYAAQEAAAEAAQAA/
+===== nickInput #2 @ 3138 =====
+rid;grid-template-rows:minmax(0,1fr) 18px;gap:5px;
+  width:100%;max-width:760px;margin:0 auto
+}
+.viewport{
+  position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;cursor:grab
+}
+.track{height:100%;display:flex;will-change:transform}
+article{
+  flex:0 0 100%;height:100%;display:flex;align-items:center;justify-content:center;
+  padding:2px 4px;user-select:none
+}
+.card{
+  display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;
+  filter:drop-shadow(0 7px 11px rgba(0,0,0,.65));pointer-events:none
+}
+.dots{display:flex;justify-content:center;align-items:center;gap:7px;height:18px}
+.dots button{
+  border:1px solid #5a4535;padding:0;width:8px;height:8px;border-radius:50%;
+  background:#302824;transition:.16s;cursor:pointer
+}
+.dots button.on{width:22px;border-radius:7px;background:var(--gold);border-color:#f0c166;box-shadow:0 0 7px rgba(224,166,64,.5)}
+.bottom{position:relative;z-index:5;text-align:center;padding-top:7px}
+.classNow{
+  min-height:18px;margin-bottom:4px;color:#c6a06a;font:bold 9px monospace;
+  letter-spacing:.15em
+}
+.choose{
+  min-width:190px;max-width:min(80vw,330px);height:46px;border:1px solid #a36031;border-radius:6px;
+  background:linear-gradient(#73251e,#421512);color:#f7deba;cursor:pointer;
+  font:bold 11px monospace;letter-spacing:.16em;
+  box-shadow:inset 0 0 0 1px #2a0d0b,0 3px 10px rgba(0,0,0,.45)
+}
+.nickWrap{width:min(82vw,330px);margin:0 auto 6px;text-align:center}
+.nickLabel{display:block;color:#a98a61;font:bold 7px monospace;letter-spacing:.12em;margin-bottom:4px}
+.nickInput{width:100%;height:34px;border:1px solid #744126;border-radius:6px;background:rgba(9,6,6,.92);color:#f5d9b0;text-align:center;outline:none;font:bold 12px monospace;letter-spacing:.08em;user-select:text;-webkit-user-select:text}
+.nickInput:focus{border-color:#c7743a;box-shadow:0 0 10px rgba(196,70,38,.35)}
+.nickHint{min-height:12px;margin-top:3px;color:#8d7765;font:7px monospace}
+.nickHint.bad{color:#ff8d7f}
+
+.choose:active{transform:scale(.97);background:#94372b}
+@media (orientation:portrait){
+  main{padding-left:8px;padding-right:8px}
+  .selector{max-width:520px}
+}
+@media (orientation:landscape){
+  main{grid-template-rows:auto minmax(0,1fr) auto;padding-top:max(5px,env(safe-area-inset-top));padding-bottom:max(5px,env(safe-area-inset-bottom))}
+  header{padding-bottom:3px}
+  h1{font-size:clamp(13px,2.2vw,19px)}
+  .sub{margin-top:2px;font-size:7px}
+  .selector{max-width:900px;grid-template-rows:minmax(0,1fr) 13px;gap:2px}
+  .dots{height:13px}
+  .bottom{padding-top:2px}
+  .classNow{min-height:12px;margin-bottom:1px;font-size:7px}
+  .choose{height:34px;min-width:170px;font-size:9px}
+}
+@media (max-height:430px){
+  header{padding:0}
+  .sub{display:block}
+  .bottom{padding-top:1px}
+  .choose{height:31px}
+}
+
+
+/* === V156 RESPONSIVE CLASS SELECT ======================================= */
+@media (max-width:520px) and (orientation:portrait){
+  main{
+    padding:max(8px,env(safe-area-inset-top)) 7px max(8px,env(safe-area-inset-bottom));
+    grid-template-rows:auto minmax(0,1fr) auto
+  }
+  header h1{font-size:clamp(19px,6vw,27px)}
+  header .sub{font-size:7px}
+  .selector{max-width:none}
+  #choose{min-height:48px;font-size:14px}
+  #classNow{font-size:11px}
+}
+
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>PHOENIX PIX ARENA</h1>
+  <p class="sub">СВАЙПНИ, ЧТОБЫ ВЫБРАТЬ КЛАСС</p>
+</header>
+
+<section class="selector">
+  <div class="viewport" id="viewport"><div class="track" id="track"></div></div>
+  <div class="dots" id="dots"></div>
+</section>
+
+<div class="bottom">
+  <div class="classNow" id="classNow"></div>
+  <div class="nickWrap">
+    <label class="nickLabel" for="nickInput">ИГРОВОЙ НИК</label>
+    <input class="nickInput" id="nickInput" maxlength="18" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="3–18 символов">
+    <div class="nickHint" id="nickHint">Буквы, цифры и _</div>
+  </div>
+  <button class="choose" id="choose">ВЫБРАТЬ</button>
+</div>
+</main>
+
+<script>
+const rawClasses=[{"key":"tank","name":"СТРАЖ","type":"Ближний бой","desc":"Живая стена из стали. Держит удар за весь отряд и ломает строй молотом.","hp":260,"mp":20,"atk":12,"def_":34,"crit":"3%","spd":2.0},{"key":"barbarian","name":"ВАРВАР","type":"Ближний бой","desc":"Ярость вместо брони. Чем больше ран — тем страшнее его топоры.","hp":150,"mp":30,"atk":20,"def_":12,"crit":"10%","spd":3.5},{"key":"paladin","name":"ПАЛАДИН","type":"Ближний бой","desc":"Клинок веры и щит света. Бьёт нежить и лечит союзников в бою.","hp":170,"mp":100,"atk":14,"def_":18,"crit":"10%","spd":3.2},{"key":"gnome","name":"ГНОМ","type":"Дальний бой","desc":"Мастер пороха. Одним выстрелом сносит полосу врагов, но перезаряжается вечность.","hp":130,"mp":50,"atk":30,"def_":10,"crit":"5%","spd":2.0},{"key":"archer","name":"ЛУЧНИК","type":"Дальний бой","desc":"Тень леса. Быстрые ноги, точный глаз и стрела в щель забрала.","hp":90,"mp":80,"atk":16,"def_":6,"crit":"15%","spd":4.0},{"key":"mage","name":"МАГ","type":"Дальний бой","desc":"Хранитель древних формул. Хрупок телом, но выжигает поле целиком.","hp":70,"mp":150,"atk":25,"def_":4,"crit":"5%","spd":2.5},{"key":"assassin","name":"УБИЙЦА","type":"Ближний бой","desc":"Дым и два клинка. Появляется за спиной и уходит раньше крика.","hp":100,"mp":60,"atk":15,"def_":5,"crit":"20%","spd":4.5},{"key":"priest","name":"ЖРЕЦ","type":"Поддержка","desc":"Держит грань между жизнью и смертью. Поднимает павших, ломает проклятия.","hp":110,"mp":140,"atk":10,"def_":8,"crit":"5%","spd":2.8}];
+const CARD_IMAGES={"assassin":"data:image/png;base64,/9j/4QCARXhpZgAATU0AKgAAAAgABAEAAAQAAAABAAABxAEBAAQAAAABAAAFAwEyAAIAAAAUAAAAPodpAAQAAAABAAAAUgAAAAAyMDI2OjA5OjA1IDE3OjMwOjQ4AAABkAMAAgAAABQAAABkAAAAADIwMjY6MDk6MDUgMTQ6MzA6NDgA/+AAEEpGSUYAAQEAAAEAAQAA/+IB2ElDQ19QUk9GSUxFAAEBAAAByAAAAAAEMAAAbW50clJHQiBYWVogB+AAAQABAAAAAAAAYWNzcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAPbWAAEAAAAA0y0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJZGVzYwAAAPAAAAAkclhZWgAAARQAAAAUZ1hZWgA
+===== nickInput #3 @ 4995 =====
+rgba(196,70,38,.35)}
+.nickHint{min-height:12px;margin-top:3px;color:#8d7765;font:7px monospace}
+.nickHint.bad{color:#ff8d7f}
+
+.choose:active{transform:scale(.97);background:#94372b}
+@media (orientation:portrait){
+  main{padding-left:8px;padding-right:8px}
+  .selector{max-width:520px}
+}
+@media (orientation:landscape){
+  main{grid-template-rows:auto minmax(0,1fr) auto;padding-top:max(5px,env(safe-area-inset-top));padding-bottom:max(5px,env(safe-area-inset-bottom))}
+  header{padding-bottom:3px}
+  h1{font-size:clamp(13px,2.2vw,19px)}
+  .sub{margin-top:2px;font-size:7px}
+  .selector{max-width:900px;grid-template-rows:minmax(0,1fr) 13px;gap:2px}
+  .dots{height:13px}
+  .bottom{padding-top:2px}
+  .classNow{min-height:12px;margin-bottom:1px;font-size:7px}
+  .choose{height:34px;min-width:170px;font-size:9px}
+}
+@media (max-height:430px){
+  header{padding:0}
+  .sub{display:block}
+  .bottom{padding-top:1px}
+  .choose{height:31px}
+}
+
+
+/* === V156 RESPONSIVE CLASS SELECT ======================================= */
+@media (max-width:520px) and (orientation:portrait){
+  main{
+    padding:max(8px,env(safe-area-inset-top)) 7px max(8px,env(safe-area-inset-bottom));
+    grid-template-rows:auto minmax(0,1fr) auto
+  }
+  header h1{font-size:clamp(19px,6vw,27px)}
+  header .sub{font-size:7px}
+  .selector{max-width:none}
+  #choose{min-height:48px;font-size:14px}
+  #classNow{font-size:11px}
+}
+
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>PHOENIX PIX ARENA</h1>
+  <p class="sub">СВАЙПНИ, ЧТОБЫ ВЫБРАТЬ КЛАСС</p>
+</header>
+
+<section class="selector">
+  <div class="viewport" id="viewport"><div class="track" id="track"></div></div>
+  <div class="dots" id="dots"></div>
+</section>
+
+<div class="bottom">
+  <div class="classNow" id="classNow"></div>
+  <div class="nickWrap">
+    <label class="nickLabel" for="nickInput">ИГРОВОЙ НИК</label>
+    <input class="nickInput" id="nickInput" maxlength="18" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="3–18 символов">
+    <div class="nickHint" id="nickHint">Буквы, цифры и _</div>
+  </div>
+  <button class="choose" id="choose">ВЫБРАТЬ</button>
+</div>
+</main>
+
+<script>
+const rawClasses=[{"key":"tank","name":"СТРАЖ","type":"Ближний бой","desc":"Живая стена из стали. Держит удар за весь отряд и ломает строй молотом.","hp":260,"mp":20,"atk":12,"def_":34,"crit":"3%","spd":2.0},{"key":"barbarian","name":"ВАРВАР","type":"Ближний бой","desc":"Ярость вместо брони. Чем больше ран — тем страшнее его топоры.","hp":150,"mp":30,"atk":20,"def_":12,"crit":"10%","spd":3.5},{"key":"paladin","name":"ПАЛАДИН","type":"Ближний бой","desc":"Клинок веры и щит света. Бьёт нежить и лечит союзников в бою.","hp":170,"mp":100,"atk":14,"def_":18,"crit":"10%","spd":3.2},{"key":"gnome","name":"ГНОМ","type":"Дальний бой","desc":"Мастер пороха. Одним выстрелом сносит полосу врагов, но перезаряжается вечность.","hp":130,"mp":50,"atk":30,"def_":10,"crit":"5%","spd":2.0},{"key":"archer","name":"ЛУЧНИК","type":"Дальний бой","desc":"Тень леса. Быстрые ноги, точный глаз и стрела в щель забрала.","hp":90,"mp":80,"atk":16,"def_":6,"crit":"15%","spd":4.0},{"key":"mage","name":"МАГ","type":"Дальний бой","desc":"Хранитель древних формул. Хрупок телом, но выжигает поле целиком.","hp":70,"mp":150,"atk":25,"def_":4,"crit":"5%","spd":2.5},{"key":"assassin","name":"УБИЙЦА","type":"Ближний бой","desc":"Дым и два клинка. Появляется за спиной и уходит раньше крика.","hp":100,"mp":60,"atk":15,"def_":5,"crit":"20%","spd":4.5},{"key":"priest","name":"ЖРЕЦ","type":"Поддержка","desc":"Держит грань между жизнью и смертью. Поднимает павших, ломает проклятия.","hp":110,"mp":140,"atk":10,"def_":8,"crit":"5%","spd":2.8}];
+const CARD_IMAGES={"assassin":"data:image/png;base64,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
+===== nickInput #4 @ 5044 =====
+rgin-top:3px;color:#8d7765;font:7px monospace}
+.nickHint.bad{color:#ff8d7f}
+
+.choose:active{transform:scale(.97);background:#94372b}
+@media (orientation:portrait){
+  main{padding-left:8px;padding-right:8px}
+  .selector{max-width:520px}
+}
+@media (orientation:landscape){
+  main{grid-template-rows:auto minmax(0,1fr) auto;padding-top:max(5px,env(safe-area-inset-top));padding-bottom:max(5px,env(safe-area-inset-bottom))}
+  header{padding-bottom:3px}
+  h1{font-size:clamp(13px,2.2vw,19px)}
+  .sub{margin-top:2px;font-size:7px}
+  .selector{max-width:900px;grid-template-rows:minmax(0,1fr) 13px;gap:2px}
+  .dots{height:13px}
+  .bottom{padding-top:2px}
+  .classNow{min-height:12px;margin-bottom:1px;font-size:7px}
+  .choose{height:34px;min-width:170px;font-size:9px}
+}
+@media (max-height:430px){
+  header{padding:0}
+  .sub{display:block}
+  .bottom{padding-top:1px}
+  .choose{height:31px}
+}
+
+
+/* === V156 RESPONSIVE CLASS SELECT ======================================= */
+@media (max-width:520px) and (orientation:portrait){
+  main{
+    padding:max(8px,env(safe-area-inset-top)) 7px max(8px,env(safe-area-inset-bottom));
+    grid-template-rows:auto minmax(0,1fr) auto
+  }
+  header h1{font-size:clamp(19px,6vw,27px)}
+  header .sub{font-size:7px}
+  .selector{max-width:none}
+  #choose{min-height:48px;font-size:14px}
+  #classNow{font-size:11px}
+}
+
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>PHOENIX PIX ARENA</h1>
+  <p class="sub">СВАЙПНИ, ЧТОБЫ ВЫБРАТЬ КЛАСС</p>
+</header>
+
+<section class="selector">
+  <div class="viewport" id="viewport"><div class="track" id="track"></div></div>
+  <div class="dots" id="dots"></div>
+</section>
+
+<div class="bottom">
+  <div class="classNow" id="classNow"></div>
+  <div class="nickWrap">
+    <label class="nickLabel" for="nickInput">ИГРОВОЙ НИК</label>
+    <input class="nickInput" id="nickInput" maxlength="18" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="3–18 символов">
+    <div class="nickHint" id="nickHint">Буквы, цифры и _</div>
+  </div>
+  <button class="choose" id="choose">ВЫБРАТЬ</button>
+</div>
+</main>
+
+<script>
+const rawClasses=[{"key":"tank","name":"СТРАЖ","type":"Ближний бой","desc":"Живая стена из стали. Держит удар за весь отряд и ломает строй молотом.","hp":260,"mp":20,"atk":12,"def_":34,"crit":"3%","spd":2.0},{"key":"barbarian","name":"ВАРВАР","type":"Ближний бой","desc":"Ярость вместо брони. Чем больше ран — тем страшнее его топоры.","hp":150,"mp":30,"atk":20,"def_":12,"crit":"10%","spd":3.5},{"key":"paladin","name":"ПАЛАДИН","type":"Ближний бой","desc":"Клинок веры и щит света. Бьёт нежить и лечит союзников в бою.","hp":170,"mp":100,"atk":14,"def_":18,"crit":"10%","spd":3.2},{"key":"gnome","name":"ГНОМ","type":"Дальний бой","desc":"Мастер пороха. Одним выстрелом сносит полосу врагов, но перезаряжается вечность.","hp":130,"mp":50,"atk":30,"def_":10,"crit":"5%","spd":2.0},{"key":"archer","name":"ЛУЧНИК","type":"Дальний бой","desc":"Тень леса. Быстрые ноги, точный глаз и стрела в щель забрала.","hp":90,"mp":80,"atk":16,"def_":6,"crit":"15%","spd":4.0},{"key":"mage","name":"МАГ","type":"Дальний бой","desc":"Хранитель древних формул. Хрупок телом, но выжигает поле целиком.","hp":70,"mp":150,"atk":25,"def_":4,"crit":"5%","spd":2.5},{"key":"assassin","name":"УБИЙЦА","type":"Ближний бой","desc":"Дым и два клинка. Появляется за спиной и уходит раньше крика.","hp":100,"mp":60,"atk":15,"def_":5,"crit":"20%","spd":4.5},{"key":"priest","name":"ЖРЕЦ","type":"Поддержка","desc":"Держит грань между жизнью и смертью. Поднимает павших, ломает проклятия.","hp":110,"mp":140,"atk":10,"def_":8,"crit":"5%","spd":2.8}];
+const CARD_IMAGES={"assassin":"data:image/png;base64,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
+===== nickInput #5 @ 5059 =====
+lor:#8d7765;font:7px monospace}
+.nickHint.bad{color:#ff8d7f}
+
+.choose:active{transform:scale(.97);background:#94372b}
+@media (orientation:portrait){
+  main{padding-left:8px;padding-right:8px}
+  .selector{max-width:520px}
+}
+@media (orientation:landscape){
+  main{grid-template-rows:auto minmax(0,1fr) auto;padding-top:max(5px,env(safe-area-inset-top));padding-bottom:max(5px,env(safe-area-inset-bottom))}
+  header{padding-bottom:3px}
+  h1{font-size:clamp(13px,2.2vw,19px)}
+  .sub{margin-top:2px;font-size:7px}
+  .selector{max-width:900px;grid-template-rows:minmax(0,1fr) 13px;gap:2px}
+  .dots{height:13px}
+  .bottom{padding-top:2px}
+  .classNow{min-height:12px;margin-bottom:1px;font-size:7px}
+  .choose{height:34px;min-width:170px;font-size:9px}
+}
+@media (max-height:430px){
+  header{padding:0}
+  .sub{display:block}
+  .bottom{padding-top:1px}
+  .choose{height:31px}
+}
+
+
+/* === V156 RESPONSIVE CLASS SELECT ======================================= */
+@media (max-width:520px) and (orientation:portrait){
+  main{
+    padding:max(8px,env(safe-area-inset-top)) 7px max(8px,env(safe-area-inset-bottom));
+    grid-template-rows:auto minmax(0,1fr) auto
+  }
+  header h1{font-size:clamp(19px,6vw,27px)}
+  header .sub{font-size:7px}
+  .selector{max-width:none}
+  #choose{min-height:48px;font-size:14px}
+  #classNow{font-size:11px}
+}
+
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>PHOENIX PIX ARENA</h1>
+  <p class="sub">СВАЙПНИ, ЧТОБЫ ВЫБРАТЬ КЛАСС</p>
+</header>
+
+<section class="selector">
+  <div class="viewport" id="viewport"><div class="track" id="track"></div></div>
+  <div class="dots" id="dots"></div>
+</section>
+
+<div class="bottom">
+  <div class="classNow" id="classNow"></div>
+  <div class="nickWrap">
+    <label class="nickLabel" for="nickInput">ИГРОВОЙ НИК</label>
+    <input class="nickInput" id="nickInput" maxlength="18" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="3–18 символов">
+    <div class="nickHint" id="nickHint">Буквы, цифры и _</div>
+  </div>
+  <button class="choose" id="choose">ВЫБРАТЬ</button>
+</div>
+</main>
+
+<script>
+const rawClasses=[{"key":"tank","name":"СТРАЖ","type":"Ближний бой","desc":"Живая стена из стали. Держит удар за весь отряд и ломает строй молотом.","hp":260,"mp":20,"atk":12,"def_":34,"crit":"3%","spd":2.0},{"key":"barbarian","name":"ВАРВАР","type":"Ближний бой","desc":"Ярость вместо брони. Чем больше ран — тем страшнее его топоры.","hp":150,"mp":30,"atk":20,"def_":12,"crit":"10%","spd":3.5},{"key":"paladin","name":"ПАЛАДИН","type":"Ближний бой","desc":"Клинок веры и щит света. Бьёт нежить и лечит союзников в бою.","hp":170,"mp":100,"atk":14,"def_":18,"crit":"10%","spd":3.2},{"key":"gnome","name":"ГНОМ","type":"Дальний бой","desc":"Мастер пороха. Одним выстрелом сносит полосу врагов, но перезаряжается вечность.","hp":130,"mp":50,"atk":30,"def_":10,"crit":"5%","spd":2.0},{"key":"archer","name":"ЛУЧНИК","type":"Дальний бой","desc":"Тень леса. Быстрые ноги, точный глаз и стрела в щель забрала.","hp":90,"mp":80,"atk":16,"def_":6,"crit":"15%","spd":4.0},{"key":"mage","name":"МАГ","type":"Дальний бой","desc":"Хранитель древних формул. Хрупок телом, но выжигает поле целиком.","hp":70,"mp":150,"atk":25,"def_":4,"crit":"5%","spd":2.5},{"key":"assassin","name":"УБИЙЦА","type":"Ближний бой","desc":"Дым и два клинка. Появляется за спиной и уходит раньше крика.","hp":100,"mp":60,"atk":15,"def_":5,"crit":"20%","spd":4.5},{"key":"priest","name":"ЖРЕЦ","type":"Поддержка","desc":"Держит грань между жизнью и смертью. Поднимает павших, ломает проклятия.","hp":110,"mp":140,"atk":10,"def_":8,"crit":"5%","spd":2.8}];
+const CARD_IMAGES={"assassin":"data:image/png;base64,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
+===== nickInput #6 @ 1951065 =====
+YQpjKsv5bpKcGCe+QQ6M/w1gXsj/wCkDn/pB/dqu7QANe2g8Y0YSyrIzfamXVrEPhQA27+wH4aw9fCXjk08BfbeFjOP2arikgHWMDnUwhGSrG5eUZamlGnKBb7YdH7DxrH5aMhC0/Zp+I5Kg7g/LnGq4EA6yEgjSlgRDyFaE322UFJppKT+s8Cf4a3k34xKaaQ7SiQ2MJIfxj/Z1VAgZ17bg6G7ajjcrK1fKIqAhmAQkHI3Ogkfu0g7eSHXHFKgElz72Hcf2agdgJGvbB30cACGIlWVPUFSAAIWQOOXf92t3eoJdaS2unhSQSQPF7H9mqspA741jaM40N23km3juasZvfBGIIA/6T/drxvJC0bVU5Kk5zguef7NVzYM6U2DOmLAUmIqwKvQK2gQtoSQQA56fhrwvNtttSW6ft3ZyS7nv+Gq9gDy1jaD5amERCklSqblbH/sR+vjE/2aUF3fmw0Ye5sHOCv/AHaiA2ntjWQhJPbUQBzUyzdqWXt4gAjZs2lYx9e3fTuZfyp0MxnaejZxhQVhQx6HGq2EJ9NbeGNKWgpw46J1MrZkx1NNxy2FHklQP9mn1OvSVAQhK2g7tABBIwoDtkY+WolLSSCDrC0pCe2j1KZqYXdbDrCmnYThCnCvLb2zAP6Pbtpwu9ojiG0Lpa1Jb+7+eAx+7VZQgK7868GxxpSwIio4ZKyvXnFkNtJVTnAGjuQA+OD/AKukvytjOBYegOOBZyoB4AE/s1XwgEE61SkEfTRDQEC4nVWSJdsSGVhqnuYWAFBTwPHy40ou+GCkIFOUEDkDxR3/AGaq4SN2vbRnGpgCmM6Kym8o+1YTT1grzuPijPPfy0gi7G22VNCI6ptXdKnv7cagSkawEg5GjhCGIqdRdUdpwOIppCwMbi7k/wANN5twomNupEYoLicZKgQP3ai9gIzrxQNGIQLpVop19iFQIVMVC8RMVbqw4HMElZBPGPlrZ6+23mVtOU8qQsYI8XHH7NVXYkg8ayEA5+WmSqzpv1LaSlNPG3KdoLmdoHcduc6cKv8AbcUV/Z68q7/nh/dqoBAJOtkoST/doQmkq6wupiYiyDTPEbUcqQp7hWAceXf569qmhCVdxr2lwAoio8aFf//Z"};
+const DISPLAY_NAMES={"assassin":"АССАСИН","priest":"ЖРЕЦ","archer":"ЛУЧНИК","paladin":"ПАЛАДИН","mage":"МАГ","barbarian":"БЕРСЕРК","tank":"ТАНК","gnome":"ГНОМ-КАНОНИР"};
+const CLASS_ORDER=["assassin","priest","archer","paladin","mage","barbarian","tank","gnome"];
+const byKey=Object.fromEntries(rawClasses.map(c=>[c.key,c]));
+const classes=CLASS_ORDER.map(k=>byKey[k]).filter(Boolean);
+
+let current=0,startX=null,drag=0;
+const track=document.getElementById('track');
+const viewport=document.getElementById('viewport');
+const dots=document.getElementById('dots');
+const choose=document.getElementById('choose');
+const classNow=document.getElementById('classNow');
+const nickInput=document.getElementById('nickInput');
+const nickHint=document.getElementById('nickHint');
+function validateNick(v){
+  v=String(v||'').trim();
+  if(v.length<3||v.length>18)return 'Ник: 3–18 символов';
+  if(!/^[A-Za-zА-Яа-яЁё0-9_]+$/u.test(v))return 'Только буквы, цифры и _';
+  return '';
+}
+nickInput.addEventListener('input',()=>{
+  const e=validateNick(nickInput.value);
+  nickHint.textContent=e||'Ник подходит ✓';
+  nickHint.classList.toggle('bad',!!e);
+});
+nickInput.addEventListener('pointerdown',e=>e.stopPropagation());
+nickInput.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+
+classes.forEach((c,i)=>{
+  const a=document.createElement('article');
+  const img=document.createElement('img');
+  img.className='card';
+  img.src=CARD_IMAGES[c.key];
+  img.alt='Карточка класса '+(DISPLAY_NAMES[c.key]||c.name);
+  img.draggable=false;
+  a.appendChild(img);
+  track.appendChild(a);
+
+  const b=document.createElement('button');
+  b.setAttribute('aria-label','Класс '+(DISPLAY_NAMES[c.key]||c.name));
+  b.onclick=()=>{current=i;drag=0;render(true);};
+  dots.appendChild(b);
+});
+
+function render(animated=false){
+  const w=viewport.clientWidth||1;
+  track.style.transition=animated?'transform .24s ease-out':'none';
+  track.style.transform=`translate3d(${-current*w+drag}px,0,0)`;
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===current));
+  classNow.textContent=DISPLAY_NAMES[classes[current].key]||classes[current].name;
+}
+
+function start(x){startX=x;drag=0;track.style.transition='none'}
+function move(x){
+  if(startX===null)return;
+  drag=x-startX;
+  render(false);
+}
+function end(){
+  if(startX===null)return;
+  const d=drag;
+  startX=null;drag=0;
+  if(d>42)current=(current-1+classes.length)%classes.length;
+  else if(d<-42)current=(current+1)%classes.length;
+  render(true);
+}
+
+viewport.addEventListener('touchstart',e=>{
+  if(!e.touches.length)return;start(e.touches[0].clientX);
+},{passive:true});
+viewport.addEventListener('touchmove',e=>{
+  if(startX===null||!e.touches.length)return;
+  move(e.touches[0].clientX);
+  e.preventDefault();
+},{passive:false});
+viewport.addEventListener('touchend',end,{passive:true});
+viewport.addEventListener('touchcancel',()=>{startX=null;drag=0;render(true)},{passive:true});
+viewport.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX)});
+window.addEventListener('mousemove',e=>move(e.clientX));
+window.addEventListener('mouseup',end);
+window.addEventListener('resize',()=>render(false));
+
+choose.addEventListener('click',()=>{
+  const c=classes[current];
+  const nickname=String(nickInput.value||'').trim();
+  const err=validateNick(nickname);
+  if(err){
+    nickHint.textContent=err;
+    nickHint.classList.add('bad');
+    try{nickInput.focus()}catch(_){}
+    return;
+  }
+  parent.postMessage({
+    type:'classChosen',
+    nickname:nickname,
+    cls:{name:c.name,type:c.type,hp:c.hp,mp:c.mp,atk:c.atk,def_:c.def_,spd:c.spd,crit:c.crit}
+  },'*');
+});
+
+render(false);
+</script>
+</body>
+</html>
+===== nickInput #7 @ 1951100 =====
+B/dqu7QANe2g8Y0YSyrIzfamXVrEPhQA27+wH4aw9fCXjk08BfbeFjOP2arikgHWMDnUwhGSrG5eUZamlGnKBb7YdH7DxrH5aMhC0/Zp+I5Kg7g/LnGq4EA6yEgjSlgRDyFaE322UFJppKT+s8Cf4a3k34xKaaQ7SiQ2MJIfxj/Z1VAgZ17bg6G7ajjcrK1fKIqAhmAQkHI3Ogkfu0g7eSHXHFKgElz72Hcf2agdgJGvbB30cACGIlWVPUFSAAIWQOOXf92t3eoJdaS2unhSQSQPF7H9mqspA741jaM40N23km3juasZvfBGIIA/6T/drxvJC0bVU5Kk5zguef7NVzYM6U2DOmLAUmIqwKvQK2gQtoSQQA56fhrwvNtttSW6ft3ZyS7nv+Gq9gDy1jaD5amERCklSqblbH/sR+vjE/2aUF3fmw0Ye5sHOCv/AHaiA2ntjWQhJPbUQBzUyzdqWXt4gAjZs2lYx9e3fTuZfyp0MxnaejZxhQVhQx6HGq2EJ9NbeGNKWgpw46J1MrZkx1NNxy2FHklQP9mn1OvSVAQhK2g7tABBIwoDtkY+WolLSSCDrC0pCe2j1KZqYXdbDrCmnYThCnCvLb2zAP6Pbtpwu9ojiG0Lpa1Jb+7+eAx+7VZQgK7868GxxpSwIio4ZKyvXnFkNtJVTnAGjuQA+OD/AKukvytjOBYegOOBZyoB4AE/s1XwgEE61SkEfTRDQEC4nVWSJdsSGVhqnuYWAFBTwPHy40ou+GCkIFOUEDkDxR3/AGaq4SN2vbRnGpgCmM6Kym8o+1YTT1grzuPijPPfy0gi7G22VNCI6ptXdKnv7cagSkawEg5GjhCGIqdRdUdpwOIppCwMbi7k/wANN5twomNupEYoLicZKgQP3ai9gIzrxQNGIQLpVop19iFQIVMVC8RMVbqw4HMElZBPGPlrZ6+23mVtOU8qQsYI8XHH7NVXYkg8ayEA5+WmSqzpv1LaSlNPG3KdoLmdoHcduc6cKv8AbcUV/Z68q7/nh/dqoBAJOtkoST/doQmkq6wupiYiyDTPEbUcqQp7hWAceXf569qmhCVdxr2lwAoio8aFf//Z"};
+const DISPLAY_NAMES={"assassin":"АССАСИН","priest":"ЖРЕЦ","archer":"ЛУЧНИК","paladin":"ПАЛАДИН","mage":"МАГ","barbarian":"БЕРСЕРК","tank":"ТАНК","gnome":"ГНОМ-КАНОНИР"};
+const CLASS_ORDER=["assassin","priest","archer","paladin","mage","barbarian","tank","gnome"];
+const byKey=Object.fromEntries(rawClasses.map(c=>[c.key,c]));
+const classes=CLASS_ORDER.map(k=>byKey[k]).filter(Boolean);
+
+let current=0,startX=null,drag=0;
+const track=document.getElementById('track');
+const viewport=document.getElementById('viewport');
+const dots=document.getElementById('dots');
+const choose=document.getElementById('choose');
+const classNow=document.getElementById('classNow');
+const nickInput=document.getElementById('nickInput');
+const nickHint=document.getElementById('nickHint');
+function validateNick(v){
+  v=String(v||'').trim();
+  if(v.length<3||v.length>18)return 'Ник: 3–18 символов';
+  if(!/^[A-Za-zА-Яа-яЁё0-9_]+$/u.test(v))return 'Только буквы, цифры и _';
+  return '';
+}
+nickInput.addEventListener('input',()=>{
+  const e=validateNick(nickInput.value);
+  nickHint.textContent=e||'Ник подходит ✓';
+  nickHint.classList.toggle('bad',!!e);
+});
+nickInput.addEventListener('pointerdown',e=>e.stopPropagation());
+nickInput.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+
+classes.forEach((c,i)=>{
+  const a=document.createElement('article');
+  const img=document.createElement('img');
+  img.className='card';
+  img.src=CARD_IMAGES[c.key];
+  img.alt='Карточка класса '+(DISPLAY_NAMES[c.key]||c.name);
+  img.draggable=false;
+  a.appendChild(img);
+  track.appendChild(a);
+
+  const b=document.createElement('button');
+  b.setAttribute('aria-label','Класс '+(DISPLAY_NAMES[c.key]||c.name));
+  b.onclick=()=>{current=i;drag=0;render(true);};
+  dots.appendChild(b);
+});
+
+function render(animated=false){
+  const w=viewport.clientWidth||1;
+  track.style.transition=animated?'transform .24s ease-out':'none';
+  track.style.transform=`translate3d(${-current*w+drag}px,0,0)`;
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===current));
+  classNow.textContent=DISPLAY_NAMES[classes[current].key]||classes[current].name;
+}
+
+function start(x){startX=x;drag=0;track.style.transition='none'}
+function move(x){
+  if(startX===null)return;
+  drag=x-startX;
+  render(false);
+}
+function end(){
+  if(startX===null)return;
+  const d=drag;
+  startX=null;drag=0;
+  if(d>42)current=(current-1+classes.length)%classes.length;
+  else if(d<-42)current=(current+1)%classes.length;
+  render(true);
+}
+
+viewport.addEventListener('touchstart',e=>{
+  if(!e.touches.length)return;start(e.touches[0].clientX);
+},{passive:true});
+viewport.addEventListener('touchmove',e=>{
+  if(startX===null||!e.touches.length)return;
+  move(e.touches[0].clientX);
+  e.preventDefault();
+},{passive:false});
+viewport.addEventListener('touchend',end,{passive:true});
+viewport.addEventListener('touchcancel',()=>{startX=null;drag=0;render(true)},{passive:true});
+viewport.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX)});
+window.addEventListener('mousemove',e=>move(e.clientX));
+window.addEventListener('mouseup',end);
+window.addEventListener('resize',()=>render(false));
+
+choose.addEventListener('click',()=>{
+  const c=classes[current];
+  const nickname=String(nickInput.value||'').trim();
+  const err=validateNick(nickname);
+  if(err){
+    nickHint.textContent=err;
+    nickHint.classList.add('bad');
+    try{nickInput.focus()}catch(_){}
+    return;
+  }
+  parent.postMessage({
+    type:'classChosen',
+    nickname:nickname,
+    cls:{name:c.name,type:c.type,hp:c.hp,mp:c.mp,atk:c.atk,def_:c.def_,spd:c.spd,crit:c.crit}
+  },'*');
+});
+
+render(false);
+</script>
+</body>
+</html>
+===== nickInput #8 @ 1951365 =====
+eoJdaS2unhSQSQPF7H9mqspA741jaM40N23km3juasZvfBGIIA/6T/drxvJC0bVU5Kk5zguef7NVzYM6U2DOmLAUmIqwKvQK2gQtoSQQA56fhrwvNtttSW6ft3ZyS7nv+Gq9gDy1jaD5amERCklSqblbH/sR+vjE/2aUF3fmw0Ye5sHOCv/AHaiA2ntjWQhJPbUQBzUyzdqWXt4gAjZs2lYx9e3fTuZfyp0MxnaejZxhQVhQx6HGq2EJ9NbeGNKWgpw46J1MrZkx1NNxy2FHklQP9mn1OvSVAQhK2g7tABBIwoDtkY+WolLSSCDrC0pCe2j1KZqYXdbDrCmnYThCnCvLb2zAP6Pbtpwu9ojiG0Lpa1Jb+7+eAx+7VZQgK7868GxxpSwIio4ZKyvXnFkNtJVTnAGjuQA+OD/AKukvytjOBYegOOBZyoB4AE/s1XwgEE61SkEfTRDQEC4nVWSJdsSGVhqnuYWAFBTwPHy40ou+GCkIFOUEDkDxR3/AGaq4SN2vbRnGpgCmM6Kym8o+1YTT1grzuPijPPfy0gi7G22VNCI6ptXdKnv7cagSkawEg5GjhCGIqdRdUdpwOIppCwMbi7k/wANN5twomNupEYoLicZKgQP3ai9gIzrxQNGIQLpVop19iFQIVMVC8RMVbqw4HMElZBPGPlrZ6+23mVtOU8qQsYI8XHH7NVXYkg8ayEA5+WmSqzpv1LaSlNPG3KdoLmdoHcduc6cKv8AbcUV/Z68q7/nh/dqoBAJOtkoST/doQmkq6wupiYiyDTPEbUcqQp7hWAceXf569qmhCVdxr2lwAoio8aFf//Z"};
+const DISPLAY_NAMES={"assassin":"АССАСИН","priest":"ЖРЕЦ","archer":"ЛУЧНИК","paladin":"ПАЛАДИН","mage":"МАГ","barbarian":"БЕРСЕРК","tank":"ТАНК","gnome":"ГНОМ-КАНОНИР"};
+const CLASS_ORDER=["assassin","priest","archer","paladin","mage","barbarian","tank","gnome"];
+const byKey=Object.fromEntries(rawClasses.map(c=>[c.key,c]));
+const classes=CLASS_ORDER.map(k=>byKey[k]).filter(Boolean);
+
+let current=0,startX=null,drag=0;
+const track=document.getElementById('track');
+const viewport=document.getElementById('viewport');
+const dots=document.getElementById('dots');
+const choose=document.getElementById('choose');
+const classNow=document.getElementById('classNow');
+const nickInput=document.getElementById('nickInput');
+const nickHint=document.getElementById('nickHint');
+function validateNick(v){
+  v=String(v||'').trim();
+  if(v.length<3||v.length>18)return 'Ник: 3–18 символов';
+  if(!/^[A-Za-zА-Яа-яЁё0-9_]+$/u.test(v))return 'Только буквы, цифры и _';
+  return '';
+}
+nickInput.addEventListener('input',()=>{
+  const e=validateNick(nickInput.value);
+  nickHint.textContent=e||'Ник подходит ✓';
+  nickHint.classList.toggle('bad',!!e);
+});
+nickInput.addEventListener('pointerdown',e=>e.stopPropagation());
+nickInput.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+
+classes.forEach((c,i)=>{
+  const a=document.createElement('article');
+  const img=document.createElement('img');
+  img.className='card';
+  img.src=CARD_IMAGES[c.key];
+  img.alt='Карточка класса '+(DISPLAY_NAMES[c.key]||c.name);
+  img.draggable=false;
+  a.appendChild(img);
+  track.appendChild(a);
+
+  const b=document.createElement('button');
+  b.setAttribute('aria-label','Класс '+(DISPLAY_NAMES[c.key]||c.name));
+  b.onclick=()=>{current=i;drag=0;render(true);};
+  dots.appendChild(b);
+});
+
+function render(animated=false){
+  const w=viewport.clientWidth||1;
+  track.style.transition=animated?'transform .24s ease-out':'none';
+  track.style.transform=`translate3d(${-current*w+drag}px,0,0)`;
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===current));
+  classNow.textContent=DISPLAY_NAMES[classes[current].key]||classes[current].name;
+}
+
+function start(x){startX=x;drag=0;track.style.transition='none'}
+function move(x){
+  if(startX===null)return;
+  drag=x-startX;
+  render(false);
+}
+function end(){
+  if(startX===null)return;
+  const d=drag;
+  startX=null;drag=0;
+  if(d>42)current=(current-1+classes.length)%classes.length;
+  else if(d<-42)current=(current+1)%classes.length;
+  render(true);
+}
+
+viewport.addEventListener('touchstart',e=>{
+  if(!e.touches.length)return;start(e.touches[0].clientX);
+},{passive:true});
+viewport.addEventListener('touchmove',e=>{
+  if(startX===null||!e.touches.length)return;
+  move(e.touches[0].clientX);
+  e.preventDefault();
+},{passive:false});
+viewport.addEventListener('touchend',end,{passive:true});
+viewport.addEventListener('touchcancel',()=>{startX=null;drag=0;render(true)},{passive:true});
+viewport.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX)});
+window.addEventListener('mousemove',e=>move(e.clientX));
+window.addEventListener('mouseup',end);
+window.addEventListener('resize',()=>render(false));
+
+choose.addEventListener('click',()=>{
+  const c=classes[current];
+  const nickname=String(nickInput.value||'').trim();
+  const err=validateNick(nickname);
+  if(err){
+    nickHint.textContent=err;
+    nickHint.classList.add('bad');
+    try{nickInput.focus()}catch(_){}
+    return;
+  }
+  parent.postMessage({
+    type:'classChosen',
+    nickname:nickname,
+    cls:{name:c.name,type:c.type,hp:c.hp,mp:c.mp,atk:c.atk,def_:c.def_,spd:c.spd,crit:c.crit}
+  },'*');
+});
+
+render(false);
+</script>
+</body>
+</html>
+===== nickInput #9 @ 1951429 =====
+5Kk5zguef7NVzYM6U2DOmLAUmIqwKvQK2gQtoSQQA56fhrwvNtttSW6ft3ZyS7nv+Gq9gDy1jaD5amERCklSqblbH/sR+vjE/2aUF3fmw0Ye5sHOCv/AHaiA2ntjWQhJPbUQBzUyzdqWXt4gAjZs2lYx9e3fTuZfyp0MxnaejZxhQVhQx6HGq2EJ9NbeGNKWgpw46J1MrZkx1NNxy2FHklQP9mn1OvSVAQhK2g7tABBIwoDtkY+WolLSSCDrC0pCe2j1KZqYXdbDrCmnYThCnCvLb2zAP6Pbtpwu9ojiG0Lpa1Jb+7+eAx+7VZQgK7868GxxpSwIio4ZKyvXnFkNtJVTnAGjuQA+OD/AKukvytjOBYegOOBZyoB4AE/s1XwgEE61SkEfTRDQEC4nVWSJdsSGVhqnuYWAFBTwPHy40ou+GCkIFOUEDkDxR3/AGaq4SN2vbRnGpgCmM6Kym8o+1YTT1grzuPijPPfy0gi7G22VNCI6ptXdKnv7cagSkawEg5GjhCGIqdRdUdpwOIppCwMbi7k/wANN5twomNupEYoLicZKgQP3ai9gIzrxQNGIQLpVop19iFQIVMVC8RMVbqw4HMElZBPGPlrZ6+23mVtOU8qQsYI8XHH7NVXYkg8ayEA5+WmSqzpv1LaSlNPG3KdoLmdoHcduc6cKv8AbcUV/Z68q7/nh/dqoBAJOtkoST/doQmkq6wupiYiyDTPEbUcqQp7hWAceXf569qmhCVdxr2lwAoio8aFf//Z"};
+const DISPLAY_NAMES={"assassin":"АССАСИН","priest":"ЖРЕЦ","archer":"ЛУЧНИК","paladin":"ПАЛАДИН","mage":"МАГ","barbarian":"БЕРСЕРК","tank":"ТАНК","gnome":"ГНОМ-КАНОНИР"};
+const CLASS_ORDER=["assassin","priest","archer","paladin","mage","barbarian","tank","gnome"];
+const byKey=Object.fromEntries(rawClasses.map(c=>[c.key,c]));
+const classes=CLASS_ORDER.map(k=>byKey[k]).filter(Boolean);
+
+let current=0,startX=null,drag=0;
+const track=document.getElementById('track');
+const viewport=document.getElementById('viewport');
+const dots=document.getElementById('dots');
+const choose=document.getElementById('choose');
+const classNow=document.getElementById('classNow');
+const nickInput=document.getElementById('nickInput');
+const nickHint=document.getElementById('nickHint');
+function validateNick(v){
+  v=String(v||'').trim();
+  if(v.length<3||v.length>18)return 'Ник: 3–18 символов';
+  if(!/^[A-Za-zА-Яа-яЁё0-9_]+$/u.test(v))return 'Только буквы, цифры и _';
+  return '';
+}
+nickInput.addEventListener('input',()=>{
+  const e=validateNick(nickInput.value);
+  nickHint.textContent=e||'Ник подходит ✓';
+  nickHint.classList.toggle('bad',!!e);
+});
+nickInput.addEventListener('pointerdown',e=>e.stopPropagation());
+nickInput.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+
+classes.forEach((c,i)=>{
+  const a=document.createElement('article');
+  const img=document.createElement('img');
+  img.className='card';
+  img.src=CARD_IMAGES[c.key];
+  img.alt='Карточка класса '+(DISPLAY_NAMES[c.key]||c.name);
+  img.draggable=false;
+  a.appendChild(img);
+  track.appendChild(a);
+
+  const b=document.createElement('button');
+  b.setAttribute('aria-label','Класс '+(DISPLAY_NAMES[c.key]||c.name));
+  b.onclick=()=>{current=i;drag=0;render(true);};
+  dots.appendChild(b);
+});
+
+function render(animated=false){
+  const w=viewport.clientWidth||1;
+  track.style.transition=animated?'transform .24s ease-out':'none';
+  track.style.transform=`translate3d(${-current*w+drag}px,0,0)`;
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===current));
+  classNow.textContent=DISPLAY_NAMES[classes[current].key]||classes[current].name;
+}
+
+function start(x){startX=x;drag=0;track.style.transition='none'}
+function move(x){
+  if(startX===null)return;
+  drag=x-startX;
+  render(false);
+}
+function end(){
+  if(startX===null)return;
+  const d=drag;
+  startX=null;drag=0;
+  if(d>42)current=(current-1+classes.length)%classes.length;
+  else if(d<-42)current=(current+1)%classes.length;
+  render(true);
+}
+
+viewport.addEventListener('touchstart',e=>{
+  if(!e.touches.length)return;start(e.touches[0].clientX);
+},{passive:true});
+viewport.addEventListener('touchmove',e=>{
+  if(startX===null||!e.touches.length)return;
+  move(e.touches[0].clientX);
+  e.preventDefault();
+},{passive:false});
+viewport.addEventListener('touchend',end,{passive:true});
+viewport.addEventListener('touchcancel',()=>{startX=null;drag=0;render(true)},{passive:true});
+viewport.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX)});
+window.addEventListener('mousemove',e=>move(e.clientX));
+window.addEventListener('mouseup',end);
+window.addEventListener('resize',()=>render(false));
+
+choose.addEventListener('click',()=>{
+  const c=classes[current];
+  const nickname=String(nickInput.value||'').trim();
+  const err=validateNick(nickname);
+  if(err){
+    nickHint.textContent=err;
+    nickHint.classList.add('bad');
+    try{nickInput.focus()}catch(_){}
+    return;
+  }
+  parent.postMessage({
+    type:'classChosen',
+    nickname:nickname,
+    cls:{name:c.name,type:c.type,hp:c.hp,mp:c.mp,atk:c.atk,def_:c.def_,spd:c.spd,crit:c.crit}
+  },'*');
+});
+
+render(false);
+</script>
+</body>
+</html>
+===== nickInput #10 @ 1951535 =====
+Ye5sHOCv/AHaiA2ntjWQhJPbUQBzUyzdqWXt4gAjZs2lYx9e3fTuZfyp0MxnaejZxhQVhQx6HGq2EJ9NbeGNKWgpw46J1MrZkx1NNxy2FHklQP9mn1OvSVAQhK2g7tABBIwoDtkY+WolLSSCDrC0pCe2j1KZqYXdbDrCmnYThCnCvLb2zAP6Pbtpwu9ojiG0Lpa1Jb+7+eAx+7VZQgK7868GxxpSwIio4ZKyvXnFkNtJVTnAGjuQA+OD/AKukvytjOBYegOOBZyoB4AE/s1XwgEE61SkEfTRDQEC4nVWSJdsSGVhqnuYWAFBTwPHy40ou+GCkIFOUEDkDxR3/AGaq4SN2vbRnGpgCmM6Kym8o+1YTT1grzuPijPPfy0gi7G22VNCI6ptXdKnv7cagSkawEg5GjhCGIqdRdUdpwOIppCwMbi7k/wANN5twomNupEYoLicZKgQP3ai9gIzrxQNGIQLpVop19iFQIVMVC8RMVbqw4HMElZBPGPlrZ6+23mVtOU8qQsYI8XHH7NVXYkg8ayEA5+WmSqzpv1LaSlNPG3KdoLmdoHcduc6cKv8AbcUV/Z68q7/nh/dqoBAJOtkoST/doQmkq6wupiYiyDTPEbUcqQp7hWAceXf569qmhCVdxr2lwAoio8aFf//Z"};
+const DISPLAY_NAMES={"assassin":"АССАСИН","priest":"ЖРЕЦ","archer":"ЛУЧНИК","paladin":"ПАЛАДИН","mage":"МАГ","barbarian":"БЕРСЕРК","tank":"ТАНК","gnome":"ГНОМ-КАНОНИР"};
+const CLASS_ORDER=["assassin","priest","archer","paladin","mage","barbarian","tank","gnome"];
+const byKey=Object.fromEntries(rawClasses.map(c=>[c.key,c]));
+const classes=CLASS_ORDER.map(k=>byKey[k]).filter(Boolean);
+
+let current=0,startX=null,drag=0;
+const track=document.getElementById('track');
+const viewport=document.getElementById('viewport');
+const dots=document.getElementById('dots');
+const choose=document.getElementById('choose');
+const classNow=document.getElementById('classNow');
+const nickInput=document.getElementById('nickInput');
+const nickHint=document.getElementById('nickHint');
+function validateNick(v){
+  v=String(v||'').trim();
+  if(v.length<3||v.length>18)return 'Ник: 3–18 символов';
+  if(!/^[A-Za-zА-Яа-яЁё0-9_]+$/u.test(v))return 'Только буквы, цифры и _';
+  return '';
+}
+nickInput.addEventListener('input',()=>{
+  const e=validateNick(nickInput.value);
+  nickHint.textContent=e||'Ник подходит ✓';
+  nickHint.classList.toggle('bad',!!e);
+});
+nickInput.addEventListener('pointerdown',e=>e.stopPropagation());
+nickInput.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+
+classes.forEach((c,i)=>{
+  const a=document.createElement('article');
+  const img=document.createElement('img');
+  img.className='card';
+  img.src=CARD_IMAGES[c.key];
+  img.alt='Карточка класса '+(DISPLAY_NAMES[c.key]||c.name);
+  img.draggable=false;
+  a.appendChild(img);
+  track.appendChild(a);
+
+  const b=document.createElement('button');
+  b.setAttribute('aria-label','Класс '+(DISPLAY_NAMES[c.key]||c.name));
+  b.onclick=()=>{current=i;drag=0;render(true);};
+  dots.appendChild(b);
+});
+
+function render(animated=false){
+  const w=viewport.clientWidth||1;
+  track.style.transition=animated?'transform .24s ease-out':'none';
+  track.style.transform=`translate3d(${-current*w+drag}px,0,0)`;
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===current));
+  classNow.textContent=DISPLAY_NAMES[classes[current].key]||classes[current].name;
+}
+
+function start(x){startX=x;drag=0;track.style.transition='none'}
+function move(x){
+  if(startX===null)return;
+  drag=x-startX;
+  render(false);
+}
+function end(){
+  if(startX===null)return;
+  const d=drag;
+  startX=null;drag=0;
+  if(d>42)current=(current-1+classes.length)%classes.length;
+  else if(d<-42)current=(current+1)%classes.length;
+  render(true);
+}
+
+viewport.addEventListener('touchstart',e=>{
+  if(!e.touches.length)return;start(e.touches[0].clientX);
+},{passive:true});
+viewport.addEventListener('touchmove',e=>{
+  if(startX===null||!e.touches.length)return;
+  move(e.touches[0].clientX);
+  e.preventDefault();
+},{passive:false});
+viewport.addEventListener('touchend',end,{passive:true});
+viewport.addEventListener('touchcancel',()=>{startX=null;drag=0;render(true)},{passive:true});
+viewport.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX)});
+window.addEventListener('mousemove',e=>move(e.clientX));
+window.addEventListener('mouseup',end);
+window.addEventListener('resize',()=>render(false));
+
+choose.addEventListener('click',()=>{
+  const c=classes[current];
+  const nickname=String(nickInput.value||'').trim();
+  const err=validateNick(nickname);
+  if(err){
+    nickHint.textContent=err;
+    nickHint.classList.add('bad');
+    try{nickInput.focus()}catch(_){}
+    return;
+  }
+  parent.postMessage({
+    type:'classChosen',
+    nickname:nickname,
+    cls:{name:c.name,type:c.type,hp:c.hp,mp:c.mp,atk:c.atk,def_:c.def_,spd:c.spd,crit:c.crit}
+  },'*');
+});
+
+render(false);
+</script>
+</body>
+</html>
+===== nickInput #11 @ 1951601 =====
+QVhQx6HGq2EJ9NbeGNKWgpw46J1MrZkx1NNxy2FHklQP9mn1OvSVAQhK2g7tABBIwoDtkY+WolLSSCDrC0pCe2j1KZqYXdbDrCmnYThCnCvLb2zAP6Pbtpwu9ojiG0Lpa1Jb+7+eAx+7VZQgK7868GxxpSwIio4ZKyvXnFkNtJVTnAGjuQA+OD/AKukvytjOBYegOOBZyoB4AE/s1XwgEE61SkEfTRDQEC4nVWSJdsSGVhqnuYWAFBTwPHy40ou+GCkIFOUEDkDxR3/AGaq4SN2vbRnGpgCmM6Kym8o+1YTT1grzuPijPPfy0gi7G22VNCI6ptXdKnv7cagSkawEg5GjhCGIqdRdUdpwOIppCwMbi7k/wANN5twomNupEYoLicZKgQP3ai9gIzrxQNGIQLpVop19iFQIVMVC8RMVbqw4HMElZBPGPlrZ6+23mVtOU8qQsYI8XHH7NVXYkg8ayEA5+WmSqzpv1LaSlNPG3KdoLmdoHcduc6cKv8AbcUV/Z68q7/nh/dqoBAJOtkoST/doQmkq6wupiYiyDTPEbUcqQp7hWAceXf569qmhCVdxr2lwAoio8aFf//Z"};
+const DISPLAY_NAMES={"assassin":"АССАСИН","priest":"ЖРЕЦ","archer":"ЛУЧНИК","paladin":"ПАЛАДИН","mage":"МАГ","barbarian":"БЕРСЕРК","tank":"ТАНК","gnome":"ГНОМ-КАНОНИР"};
+const CLASS_ORDER=["assassin","priest","archer","paladin","mage","barbarian","tank","gnome"];
+const byKey=Object.fromEntries(rawClasses.map(c=>[c.key,c]));
+const classes=CLASS_ORDER.map(k=>byKey[k]).filter(Boolean);
+
+let current=0,startX=null,drag=0;
+const track=document.getElementById('track');
+const viewport=document.getElementById('viewport');
+const dots=document.getElementById('dots');
+const choose=document.getElementById('choose');
+const classNow=document.getElementById('classNow');
+const nickInput=document.getElementById('nickInput');
+const nickHint=document.getElementById('nickHint');
+function validateNick(v){
+  v=String(v||'').trim();
+  if(v.length<3||v.length>18)return 'Ник: 3–18 символов';
+  if(!/^[A-Za-zА-Яа-яЁё0-9_]+$/u.test(v))return 'Только буквы, цифры и _';
+  return '';
+}
+nickInput.addEventListener('input',()=>{
+  const e=validateNick(nickInput.value);
+  nickHint.textContent=e||'Ник подходит ✓';
+  nickHint.classList.toggle('bad',!!e);
+});
+nickInput.addEventListener('pointerdown',e=>e.stopPropagation());
+nickInput.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+
+classes.forEach((c,i)=>{
+  const a=document.createElement('article');
+  const img=document.createElement('img');
+  img.className='card';
+  img.src=CARD_IMAGES[c.key];
+  img.alt='Карточка класса '+(DISPLAY_NAMES[c.key]||c.name);
+  img.draggable=false;
+  a.appendChild(img);
+  track.appendChild(a);
+
+  const b=document.createElement('button');
+  b.setAttribute('aria-label','Класс '+(DISPLAY_NAMES[c.key]||c.name));
+  b.onclick=()=>{current=i;drag=0;render(true);};
+  dots.appendChild(b);
+});
+
+function render(animated=false){
+  const w=viewport.clientWidth||1;
+  track.style.transition=animated?'transform .24s ease-out':'none';
+  track.style.transform=`translate3d(${-current*w+drag}px,0,0)`;
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===current));
+  classNow.textContent=DISPLAY_NAMES[classes[current].key]||classes[current].name;
+}
+
+function start(x){startX=x;drag=0;track.style.transition='none'}
+function move(x){
+  if(startX===null)return;
+  drag=x-startX;
+  render(false);
+}
+function end(){
+  if(startX===null)return;
+  const d=drag;
+  startX=null;drag=0;
+  if(d>42)current=(current-1+classes.length)%classes.length;
+  else if(d<-42)current=(current+1)%classes.length;
+  render(true);
+}
+
+viewport.addEventListener('touchstart',e=>{
+  if(!e.touches.length)return;start(e.touches[0].clientX);
+},{passive:true});
+viewport.addEventListener('touchmove',e=>{
+  if(startX===null||!e.touches.length)return;
+  move(e.touches[0].clientX);
+  e.preventDefault();
+},{passive:false});
+viewport.addEventListener('touchend',end,{passive:true});
+viewport.addEventListener('touchcancel',()=>{startX=null;drag=0;render(true)},{passive:true});
+viewport.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX)});
+window.addEventListener('mousemove',e=>move(e.clientX));
+window.addEventListener('mouseup',end);
+window.addEventListener('resize',()=>render(false));
+
+choose.addEventListener('click',()=>{
+  const c=classes[current];
+  const nickname=String(nickInput.value||'').trim();
+  const err=validateNick(nickname);
+  if(err){
+    nickHint.textContent=err;
+    nickHint.classList.add('bad');
+    try{nickInput.focus()}catch(_){}
+    return;
+  }
+  parent.postMessage({
+    type:'classChosen',
+    nickname:nickname,
+    cls:{name:c.name,type:c.type,hp:c.hp,mp:c.mp,atk:c.atk,def_:c.def_,spd:c.spd,crit:c.crit}
+  },'*');
+});
+
+render(false);
+</script>
+</body>
+</html>
+===== nickInput #12 @ 1953653 =====
+g.alt='Карточка класса '+(DISPLAY_NAMES[c.key]||c.name);
+  img.draggable=false;
+  a.appendChild(img);
+  track.appendChild(a);
+
+  const b=document.createElement('button');
+  b.setAttribute('aria-label','Класс '+(DISPLAY_NAMES[c.key]||c.name));
+  b.onclick=()=>{current=i;drag=0;render(true);};
+  dots.appendChild(b);
+});
+
+function render(animated=false){
+  const w=viewport.clientWidth||1;
+  track.style.transition=animated?'transform .24s ease-out':'none';
+  track.style.transform=`translate3d(${-current*w+drag}px,0,0)`;
+  [...dots.children].forEach((d,i)=>d.classList.toggle('on',i===current));
+  classNow.textContent=DISPLAY_NAMES[classes[current].key]||classes[current].name;
+}
+
+function start(x){startX=x;drag=0;track.style.transition='none'}
+function move(x){
+  if(startX===null)return;
+  drag=x-startX;
+  render(false);
+}
+function end(){
+  if(startX===null)return;
+  const d=drag;
+  startX=null;drag=0;
+  if(d>42)current=(current-1+classes.length)%classes.length;
+  else if(d<-42)current=(current+1)%classes.length;
+  render(true);
+}
+
+viewport.addEventListener('touchstart',e=>{
+  if(!e.touches.length)return;start(e.touches[0].clientX);
+},{passive:true});
+viewport.addEventListener('touchmove',e=>{
+  if(startX===null||!e.touches.length)return;
+  move(e.touches[0].clientX);
+  e.preventDefault();
+},{passive:false});
+viewport.addEventListener('touchend',end,{passive:true});
+viewport.addEventListener('touchcancel',()=>{startX=null;drag=0;render(true)},{passive:true});
+viewport.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX)});
+window.addEventListener('mousemove',e=>move(e.clientX));
+window.addEventListener('mouseup',end);
+window.addEventListener('resize',()=>render(false));
+
+choose.addEventListener('click',()=>{
+  const c=classes[current];
+  const nickname=String(nickInput.value||'').trim();
+  const err=validateNick(nickname);
+  if(err){
+    nickHint.textContent=err;
+    nickHint.classList.add('bad');
+    try{nickInput.focus()}catch(_){}
+    return;
+  }
+  parent.postMessage({
+    type:'classChosen',
+    nickname:nickname,
+    cls:{name:c.name,type:c.type,hp:c.hp,mp:c.mp,atk:c.atk,def_:c.def_,spd:c.spd,crit:c.crit}
+  },'*');
+});
+
+render(false);
+</script>
+</body>
+</html>
