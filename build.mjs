@@ -8,7 +8,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v628-dungeon-room-density-plus4-plus9-20260929';
+const CLIENT_BUILD = 'v629-dungeon-add-plus3-plus9-spread-20260929';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -336,45 +336,87 @@ const PPA_DUNGEON_ROOM_META_RUNTIME=[];
 const PPA_DUNGEON_ROOM_BOUNDS=[];
 const PPA_DUNGEON_ACTIVE_SPAWNS=[];
 
-function ppaDungeonMobCountForPhysicalRoom(room){
-  // Keep the current density as the baseline, then add exactly:
-  // +4 mobs to small physical rooms and +9 mobs to large physical rooms.
+function ppaDungeonMobCountsForPhysicalRoom(room){
+  // Preserve the CURRENT density boost (+4 small / +9 large), then add on top:
+  // +3 more mobs to small rooms and +9 more mobs to large rooms.
   let base=4;
   if(room.maxClear>=55||room.area>=6000)base=6;
   else if(room.maxClear>=43||room.area>=4500)base=5;
   const isLarge=room.maxClear>=50;
-  return base+(isLarge?9:4);
+  const current=base+(isLarge?9:4);
+  const extra=isLarge?9:3;
+  return {current,total:current+extra,isLarge};
 }
 
 function ppaDungeonSpawnPhysicalRoom(room,ri,ordinalStart){
-  const want=ppaDungeonMobCountForPhysicalRoom(room);
+  const counts=ppaDungeonMobCountsForPhysicalRoom(room);
+  const currentWant=counts.current,want=counts.total,isLarge=counts.isLarge;
   const pts=[];
   const cx=Math.round(room.x),cy=Math.round(room.y);
   const rx=Math.max(24,(room.maxX-room.minX)*0.50+10);
   const ry=Math.max(24,(room.maxY-room.minY)*0.50+10);
   const minClear=14,minGap=17;
 
-  const accept=(x,y)=>{
+  const accept=(x,y,gap=minGap)=>{
     x=Math.round(x);y=Math.round(y);
     if(!ppaDungeonCellOk(x,y,minClear))return false;
     if(x<room.minX-10||x>room.maxX+10||y<room.minY-10||y>room.maxY+10)return false;
     const nx=(x-cx)/rx,ny=(y-cy)/ry;
     if(nx*nx+ny*ny>1.0)return false;
     if(Math.hypot(x-PPA_DUNGEON_BOSS_IMG[0],y-PPA_DUNGEON_BOSS_IMG[1])<260)return false;
-    for(const p of pts)if(Math.hypot(x-p[0],y-p[1])<minGap)return false;
+    for(const p of pts)if(Math.hypot(x-p[0],y-p[1])<gap)return false;
     pts.push([x,y]);return true;
   };
 
+  // First recreate the CURRENT layout unchanged.
   const snapped=ppaDungeonSnapInterior(cx,cy,minClear,55);
   if(snapped)accept(snapped.x,snapped.y);
   const golden=2.399963229728653;
-  for(let k=1;k<260&&pts.length<want;k++){
+  for(let k=1;k<260&&pts.length<currentWant;k++){
     const t=k/259,r=Math.sqrt(t),ang=k*golden+ri*0.47;
     accept(cx+Math.cos(ang)*rx*r,cy+Math.sin(ang)*ry*r);
   }
+  if(pts.length<currentWant){
+    for(let y=room.minY-6;y<=room.maxY+6&&pts.length<currentWant;y+=10){
+      for(let x=room.minX-6;x<=room.maxX+6&&pts.length<currentWant;x+=10)accept(x,y);
+    }
+  }
+
+  // Add only the NEW mobs on top. Large-room additions are pseudo-random but
+  // deterministic per room, with rejection spacing so they never form a pile.
+  let seed=(
+    Math.imul((cx+1)|0,73856093)^
+    Math.imul((cy+1)|0,19349663)^
+    Math.imul((ri+1)|0,83492791)
+  )>>>0;
+  if(!seed)seed=1;
+  const rnd=()=>{
+    seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;
+    return (seed>>>0)/4294967296;
+  };
+
+  if(isLarge){
+    for(let k=0;k<1200&&pts.length<want;k++){
+      const a=rnd()*Math.PI*2;
+      const r=Math.sqrt(rnd())*0.94;
+      accept(cx+Math.cos(a)*rx*r,cy+Math.sin(a)*ry*r,22);
+    }
+    for(let k=0;k<900&&pts.length<want;k++){
+      const a=rnd()*Math.PI*2;
+      const r=Math.sqrt(rnd())*0.96;
+      accept(cx+Math.cos(a)*rx*r,cy+Math.sin(a)*ry*r,19);
+    }
+  }else{
+    for(let k=260;k<520&&pts.length<want;k++){
+      const t=(k-259)/261,r=Math.sqrt(t),ang=k*golden+ri*0.47;
+      accept(cx+Math.cos(ang)*rx*r,cy+Math.sin(ang)*ry*r,18);
+    }
+  }
+
+  // Safety fallback only if geometry is unusually tight.
   if(pts.length<want){
-    for(let y=room.minY-6;y<=room.maxY+6&&pts.length<want;y+=10){
-      for(let x=room.minX-6;x<=room.maxX+6&&pts.length<want;x+=10)accept(x,y);
+    for(let y=room.minY-6;y<=room.maxY+6&&pts.length<want;y+=9){
+      for(let x=room.minX-6;x<=room.maxX+6&&pts.length<want;x+=9)accept(x,y,16);
     }
   }
 
@@ -421,7 +463,7 @@ console.log('[PPA BUILD] Dungeon physical rooms: top='+_ppaTopCounts.reduce((a,b
 console.log('[PPA BUILD] Dungeon branch rooms top odd: '+_ppaTopCounts.join(',')+' · bottom even: '+_ppaBottomCounts.join(','));
 console.log('[PPA BUILD] Dungeon level fill: '+PPA_DUNGEON_ROOM_META_RUNTIME.map((r,i)=>r.level+'='+PPA_DUNGEON_LEVEL_BRANCHES[i].rooms.length+' rooms/'+r.count+' mobs').join(' | '));
 console.log('[PPA BUILD] Dungeon room-only mobs: '+PPA_DUNGEON_ACTIVE_SPAWNS.length+' spawns · boss center '+PPA_DUNGEON_BOSS_IMG[0]+','+PPA_DUNGEON_BOSS_IMG[1]);
-console.log('[PPA BUILD] Dungeon density boost: small rooms +4 mobs · large rooms +9 mobs');
+console.log('[PPA BUILD] Dungeon density: preserved +4/+9, then added +3 small / +9 large; large extras anti-cluster random');
 
 
 // Runtime floor visual uses the original high-res mask directly rather than the
