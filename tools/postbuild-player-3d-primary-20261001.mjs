@@ -26,6 +26,18 @@ fs.mkdirSync(gameDir,{recursive:true});
 fs.copyFileSync(runtimeSrc,runtimeDst);
 for(const file of MODEL_FILES)fs.copyFileSync(path.join(ROOT,file),path.join(gameDir,file));
 
+// Test baseline: normalize every class to the Archer's current visual height.
+// Gameplay geometry remains untouched; this changes only the rendered GLB size.
+let runtime=fs.readFileSync(runtimeDst,'utf8');
+const gnomeSizeNeedle="gnome:{model:'/game/Dwarf.glb?v=20261001i',targetHeight:1.68,visualScale:.88,yawOffset:0}";
+const gnomeSizeCount=runtime.split(gnomeSizeNeedle).length-1;
+if(gnomeSizeCount!==1)throw new Error('Primary 3D build: expected exactly one gnome size config, found '+gnomeSizeCount);
+runtime=runtime.replace(
+  gnomeSizeNeedle,
+  "gnome:{model:'/game/Dwarf.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0}"
+);
+fs.writeFileSync(runtimeDst,runtime,'utf8');
+
 let html=fs.readFileSync(htmlPath,'utf8');
 
 // Clean architectural cutover for ALL eight local player classes.
@@ -69,11 +81,11 @@ html=html.replace(
 
 // Runtime is independent of the legacy sprite system: no playerAnimDef wrappers,
 // no CanvasRenderingContext monkey patches and no transparent replacement atlases.
-const scriptTag='\n<script src="/game/player-3d-runtime.js?v=20261001i"></script>\n';
-if(!html.includes('player-3d-runtime.js?v=20261001i')){
+const scriptTag='\n<script src="/game/player-3d-runtime.js?v=20261001j"></script>\n';
+if(!html.includes('player-3d-runtime.js?v=20261001j')){
   if(!html.includes('</body>'))throw new Error('Primary 3D build: </body> missing');
   html=html.replace('</body>',scriptTag+'</body>');
 }
 
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Primary 3D V2: all 8 classes bypass legacy body render · exact feet anchor · old local nickname bypassed · gameplay/collision/camera untouched');
+console.log('Primary 3D V2.1: all 8 classes use Archer baseline size · legacy body render bypassed · gameplay/collision untouched');
