@@ -26,21 +26,22 @@ fs.mkdirSync(gameDir,{recursive:true});
 fs.copyFileSync(runtimeSrc,runtimeDst);
 for(const file of MODEL_FILES)fs.copyFileSync(path.join(ROOT,file),path.join(gameDir,file));
 
-// Ranger is the visual reference. Keep its current size untouched and calibrate
-// the five GLBs that render too small because their full model bounds include
-// weapon / staff / wide geometry. This affects GLB visuals only.
+// Ranger is the visual reference. Keep its current size untouched.
+// Apply the user's requested multipliers from the CURRENT calibrated sizes:
+// Paladin x2, Berserker x7, Priest x7, Gnome x8, Assassin x8.
+// This affects rendered GLB scale only; gameplay geometry is unchanged.
 let runtime=fs.readFileSync(runtimeDst,'utf8');
 const classCalibrations=[
   ["barbarian:{model:'/game/Berserker_Final.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0}",
-   "barbarian:{model:'/game/Berserker_Final.glb?v=20261001i',targetHeight:2.34,visualScale:1.55,yawOffset:0}"],
+   "barbarian:{model:'/game/Berserker_Final.glb?v=20261001i',targetHeight:2.34,visualScale:10.85,yawOffset:0}"],
   ["paladin:{model:'/game/Paladin_Final.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0}",
-   "paladin:{model:'/game/Paladin_Final.glb?v=20261001i',targetHeight:2.34,visualScale:1.70,yawOffset:0}"],
+   "paladin:{model:'/game/Paladin_Final.glb?v=20261001i',targetHeight:2.34,visualScale:3.40,yawOffset:0}"],
   ["gnome:{model:'/game/Dwarf.glb?v=20261001i',targetHeight:1.68,visualScale:.88,yawOffset:0}",
-   "gnome:{model:'/game/Dwarf.glb?v=20261001i',targetHeight:2.34,visualScale:1.55,yawOffset:0}"],
+   "gnome:{model:'/game/Dwarf.glb?v=20261001i',targetHeight:2.34,visualScale:12.40,yawOffset:0}"],
   ["assassin:{model:'/game/Assassin.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0}",
-   "assassin:{model:'/game/Assassin.glb?v=20261001i',targetHeight:2.34,visualScale:1.55,yawOffset:0}"],
+   "assassin:{model:'/game/Assassin.glb?v=20261001i',targetHeight:2.34,visualScale:12.40,yawOffset:0}"],
   ["priest:{model:'/game/Priest_Final_GitHub.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0}",
-   "priest:{model:'/game/Priest_Final_GitHub.glb?v=20261001i',targetHeight:2.34,visualScale:1.70,yawOffset:0}"]
+   "priest:{model:'/game/Priest_Final_GitHub.glb?v=20261001i',targetHeight:2.34,visualScale:11.90,yawOffset:0}"]
 ];
 for(const [needle,replacement] of classCalibrations){
   const count=runtime.split(needle).length-1;
@@ -92,11 +93,11 @@ html=html.replace(
 
 // Runtime is independent of the legacy sprite system: no playerAnimDef wrappers,
 // no CanvasRenderingContext monkey patches and no transparent replacement atlases.
-const scriptTag='\n<script src="/game/player-3d-runtime.js?v=20261001k"></script>\n';
-if(!html.includes('player-3d-runtime.js?v=20261001k')){
+const scriptTag='\n<script src="/game/player-3d-runtime.js?v=20261001l"></script>\n';
+if(!html.includes('player-3d-runtime.js?v=20261001l')){
   if(!html.includes('</body>'))throw new Error('Primary 3D build: </body> missing');
   html=html.replace('</body>',scriptTag+'</body>');
 }
 
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Primary 3D V2.2: Ranger remains reference size · Assassin/Priest/Paladin/Berserker/Gnome enlarged for first visual calibration · gameplay/collision untouched');
+console.log('Primary 3D V2.3: Ranger unchanged · Paladin x2 · Berserker/Priest x7 · Gnome/Assassin x8 from current calibrated sizes · gameplay/collision untouched');
