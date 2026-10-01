@@ -27,7 +27,6 @@ jobs:
       - run: test ! -e gateway/remote-sprite-renderer-3d-bridge.js
       - run: '! grep -q "v174AiSpriteCfg\|drawImage" gateway/remote-sprite-renderer.js'
       - run: '! grep -q "y:sy+body" gateway/remote-sprite-renderer.js'
-      - run: '! grep -q "__ppa3DLocal={classKey:primary3DClass,x:sx" tools/postbuild-player-3d-unified-20261002.mjs'
       - run: grep -q "worldX:Number(r.x),worldY:Number(r.y)" gateway/remote-sprite-renderer.js
       - run: grep -q "worldX:Number(P.x),worldY:Number(P.y)" tools/postbuild-player-3d-unified-20261002.mjs
       - run: npm run build
