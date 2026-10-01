@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - main
+permissions:
+  contents: write
 jobs:
   print:
     if: contains(github.event.head_commit.message, 'Run player render source printer')
@@ -12,4 +14,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node tools/print-player-render-source-20261001.mjs
+      - run: node tools/print-player-render-source-20261001.mjs > player-render-diagnostic.txt
+      - name: Save diagnostic into repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add player-render-diagnostic.txt
+          git commit -m "Save player render diagnostic" || exit 0
+          git push
