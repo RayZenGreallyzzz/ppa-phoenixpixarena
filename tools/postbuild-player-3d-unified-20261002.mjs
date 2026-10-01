@@ -35,9 +35,12 @@ const gameplayTiming=`const PLAYER_ANIM_TIMING={
   mage:{idle:{frames:4,fps:4},run:{frames:4,fps:9},attack:{frames:4,fps:10}},
   paladin:{idle:{frames:4,fps:4},run:{frames:4,fps:9},attack:{frames:4,fps:10}}
 };
+function playerClassKey(){
+  try{return typeof classKeyFromName==='function'?String(classKeyFromName(P.cls)||'').toLowerCase():''}catch(_){return''}
+}
+function playerIsClass(key){return playerClassKey()===key}
 function playerAnimTiming(name){
-  let k='';
-  try{if(typeof classKeyFromName==='function')k=String(classKeyFromName(P.cls)||'').toLowerCase()}catch(_){}
+  const k=playerClassKey();
   const set=PLAYER_ANIM_TIMING[k]||PLAYER_ANIM_TIMING.default;
   return set[name]||set.idle;
 }
@@ -58,6 +61,26 @@ if(!html.includes("playerAnimTiming('attack')"))throw new Error('Unified 3D buil
 if(html.includes("P.animFrame=P.animFrame%Math.max(1,playerAnimDef('run').frames)"))throw new Error('Unified 3D build: run state still depends on sprite animation definition');
 if(html.includes("const a=playerAnimDef('attack');"))throw new Error('Unified 3D build: attack state still depends on sprite animation definition');
 if(html.includes("const a = playerAnimDef(nextAnim);"))throw new Error('Unified 3D build: idle/run state still depends on sprite animation definition');
+
+// Class gameplay behavior must depend on the semantic class key, never on the
+// existence/name of a sprite renderer. Preserve the exact existing actions and
+// conditions while replacing only their class predicates.
+const gameplayClassReplacements=[
+  ["if(playerUsesGnomeSprites()){ try{gnomeFireCannonball()}catch(_){PLAYER_CANNONBALLS.length=0} }else if(playerUsesArcherSprites()){ try{archerFireArrow()}catch(_){PLAYER_ARROWS.length=0} }else{ melee(); }",
+   "if(playerIsClass('gnome')){ try{gnomeFireCannonball()}catch(_){PLAYER_CANNONBALLS.length=0} }else if(playerIsClass('archer')){ try{archerFireArrow()}catch(_){PLAYER_ARROWS.length=0} }else{ melee(); }"],
+  ["if(movingNow && P.attackMode!=='melee' && !playerUsesArcherSprites() && !playerUsesPriestSprites() && !playerUsesMageSprites()){",
+   "if(movingNow && P.attackMode!=='melee' && !playerIsClass('archer') && !playerIsClass('priest') && !playerIsClass('mage')){"],
+  ["if(P.attacking&&movingForAnim&&P.attackMode!=='melee'&&!playerUsesArcherSprites()&&!playerUsesPriestSprites()&&!playerUsesMageSprites()){",
+   "if(P.attacking&&movingForAnim&&P.attackMode!=='melee'&&!playerIsClass('archer')&&!playerIsClass('priest')&&!playerIsClass('mage')){" ]
+];
+for(const [from,to] of gameplayClassReplacements){
+  const n=html.split(from).length-1;
+  if(n!==1)throw new Error('Unified 3D build: expected one gameplay class predicate target, found '+n+' for '+from);
+  html=html.replace(from,to);
+}
+if(!html.includes("if(playerIsClass('gnome')){ try{gnomeFireCannonball()}"))throw new Error('Unified 3D build: gnome gameplay class route missing');
+if(!html.includes("else if(playerIsClass('archer')){ try{archerFireArrow()}"))throw new Error('Unified 3D build: archer gameplay class route missing');
+for(const [from] of gameplayClassReplacements){if(html.includes(from))throw new Error('Unified 3D build: sprite-named gameplay predicate survived');}
 
 const bobNeedle="const bob=P.scene==='fartzone'?0:Math.sin(P.bob)*(isGnome?2.0:3);";
 if((html.split(bobNeedle).length-1)!==1)throw new Error('Unified 3D build: local bob anchor not unique');
@@ -99,4 +122,4 @@ if(!html.includes('worldX:Number(P.x),worldY:Number(P.y)'))throw new Error('Unif
 if(html.includes(oldLocalAnchorSignature))throw new Error('Unified 3D build: legacy local 3D anchor survived');
 if(!html.includes('player-3d-unified-runtime.js?v=20261002u3'))throw new Error('Unified 3D build: runtime tag missing');
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Unified Player3D: canonical world x/y · one renderer/cache · gameplay animation timing decoupled from sprites · no legacy real-player body rendering');
+console.log('Unified Player3D: canonical world x/y · one renderer/cache · gameplay timing/class behavior decoupled from sprites · no legacy real-player body rendering');
