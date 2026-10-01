@@ -1,13 +1,14 @@
 (function(){
   'use strict';
-  if(window.__PPA_RANGER_3D_TEST_V4)return;
-  window.__PPA_RANGER_3D_TEST_V4=true;
+  if(window.__PPA_RANGER_3D_TEST_V5)return;
+  window.__PPA_RANGER_3D_TEST_V5=true;
 
-  var VIEW_W=240,VIEW_H=360;
-  var state={enabled:true,ready:false,loading:false,error:'',anim:'',face:null,yawDeg:0,fps:0,frames:0,lastFpsAt:performance.now(),modelUrl:'/game/Ranger_Mobile_Bow_Z90.glb?v=20261001d',hide2D:true,moveSpeed:0,moveDir:4};
-  var THREE=null,GLTFLoader=null,renderer=null,scene=null,camera=null,root=null,mixer=null,actions={},host=null,lastAt=performance.now(),currentAction=null;
+  var VIEW_W=260,VIEW_H=400;
+  var state={enabled:true,ready:false,loading:false,error:'',anim:'',face:null,yawDeg:0,fps:0,frames:0,lastFpsAt:performance.now(),modelUrl:'/game/Ranger_Mobile_Bow_Z90.glb?v=20261001e',hide2D:true,moveSpeed:0,moveDir:4};
+  var THREE=null,GLTFLoader=null,renderer=null,scene=null,camera=null,root=null,mixer=null,actions={},host=null,lastAt=performance.now(),currentAction=null,shadow=null;
   var transparentAtlases={};
   var lastPX=null,lastPY=null,lastMoveSampleAt=0,movingUntil=0,lastMotionYaw=0,hasMotionYaw=false,footX=VIEW_W/2,footY=VIEW_H*.84;
+  var CAMERA_YAW=0;
 
   function normalizeClass(v){
     var s=String(v||'').trim(),l=s.toLowerCase();
@@ -33,7 +34,6 @@
   }
   function toast(text,col){try{if(typeof showPickup==='function')showPickup(text,col||'#91ffc1')}catch(_){} }
   function playerAvailable(){try{return typeof P!=='undefined'&&P&&typeof cam!=='undefined'&&cam&&typeof cv!=='undefined'&&cv&&typeof cameraZoom==='function'}catch(_){return false}}
-
   function shortestAngle(a,b){
     var d=(b-a+Math.PI)%(Math.PI*2)-Math.PI;
     if(d<-Math.PI)d+=Math.PI*2;
@@ -46,24 +46,23 @@
       else if(f===8)dir=0;
       else if(f===-1)dir=6;
       else if(f===1)dir=2;
-      return (dir-4)*(Math.PI/4);
-    }catch(_){return 0}
+      return CAMERA_YAW+(4-dir)*(Math.PI/4);
+    }catch(_){return CAMERA_YAW}
   }
   function yawFromVector(dx,dy){
-    // Default model forward is screen-down. Use the real analog movement angle,
-    // never round to one of eight sprite directions.
-    return Math.atan2(dx,-dy)-Math.PI;
+    // Screen movement: down=0, right=+90, up=180, left=-90.
+    // CAMERA_YAW compensates the top-side camera azimuth.
+    return CAMERA_YAW+Math.atan2(dx,dy);
   }
-  function dirForDiag(yaw){
-    return ((Math.round((yaw+Math.PI)/(Math.PI/4))+4)%8+8)%8;
+  function dirForDiag(dx,dy){
+    var a=Math.atan2(dx,-dy);
+    return (Math.round(a/(Math.PI/4))+8)%8;
   }
   function sampleMotion(now){
     try{
       var x=Number(P&&P.x)||0,y=Number(P&&P.y)||0;
       if(lastPX===null||lastPY===null){
-        lastPX=x;lastPY=y;lastMoveSampleAt=now;
-        lastMotionYaw=legacyFaceYaw();hasMotionYaw=true;
-        return false;
+        lastPX=x;lastPY=y;lastMoveSampleAt=now;lastMotionYaw=legacyFaceYaw();hasMotionYaw=true;return false;
       }
       var dt=Math.max(1,now-lastMoveSampleAt),dx=x-lastPX,dy=y-lastPY,d=Math.hypot(dx,dy);
       lastPX=x;lastPY=y;lastMoveSampleAt=now;
@@ -72,30 +71,21 @@
         var raw=yawFromVector(dx,dy);
         lastMotionYaw=hasMotionYaw?shortestAngle(lastMotionYaw,raw):raw;
         hasMotionYaw=true;
-        state.moveDir=dirForDiag(lastMotionYaw);
+        state.moveDir=dirForDiag(dx,dy);
         state.moveSpeed=d/(dt/1000);
-      }else if(now>movingUntil){
-        state.moveSpeed=0;
-      }
+      }else if(now>movingUntil){state.moveSpeed=0}
       return now<movingUntil;
     }catch(_){return false}
   }
   function desiredAnim(moving){
-    try{
-      var a=String(P&&P.anim||'').toLowerCase();
-      if(a.indexOf('attack')>=0)return'attack';
-    }catch(_){}
+    try{var a=String(P&&P.anim||'').toLowerCase();if(a.indexOf('attack')>=0)return'attack'}catch(_){}
     return moving?'run':'idle';
   }
   function switchAnim(name){
     name=String(name||'idle').toLowerCase();
     var next=actions[name]||actions.idle;
     if(!next||next===currentAction)return;
-    try{
-      next.enabled=true;next.reset();next.play();
-      if(currentAction)currentAction.crossFadeTo(next,.10,false);
-      currentAction=next;state.anim=name;
-    }catch(_){}
+    try{next.enabled=true;next.reset();next.play();if(currentAction)currentAction.crossFadeTo(next,.10,false);currentAction=next;state.anim=name}catch(_){}
   }
 
   function transparentAtlas(a){
@@ -132,8 +122,7 @@
     try{
       camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
       var p=new THREE.Vector3(0,0,0).project(camera);
-      footX=(p.x*.5+.5)*VIEW_W;
-      footY=(-p.y*.5+.5)*VIEW_H;
+      footX=(p.x*.5+.5)*VIEW_W;footY=(-p.y*.5+.5)*VIEW_H;
     }catch(_){}
   }
   function placeHost(){
@@ -145,14 +134,12 @@
       var sx=((Number(P.x)||0)-(Number(cam.x)||0))*z;
       var sy=((Number(P.y)||0)-(Number(cam.y)||0))*z;
       var x=rect.left+sx*kx,y=rect.top+sy*ky;
-      var visualScale=Math.max(.32,Math.min(.78,.44*z*Math.max(kx,ky)));
+      var visualScale=Math.max(.32,Math.min(.80,.46*z*Math.max(kx,ky)));
       host.style.left=x+'px';host.style.top=y+'px';
       var el=renderer.domElement;
-      el.style.left=(-footX*visualScale)+'px';
-      el.style.top=(-footY*visualScale)+'px';
-      el.style.width=(VIEW_W*visualScale)+'px';
-      el.style.height=(VIEW_H*visualScale)+'px';
-      return x>rect.left-200&&x<rect.right+200&&y>rect.top-280&&y<rect.bottom+160;
+      el.style.left=(-footX*visualScale)+'px';el.style.top=(-footY*visualScale)+'px';
+      el.style.width=(VIEW_W*visualScale)+'px';el.style.height=(VIEW_H*visualScale)+'px';
+      return x>rect.left-220&&x<rect.right+220&&y>rect.top-320&&y<rect.bottom+180;
     }catch(_){return false}
   }
 
@@ -163,24 +150,28 @@
       var lm=await import('https://esm.sh/three@0.180.0/examples/jsm/loaders/GLTFLoader.js');GLTFLoader=lm.GLTFLoader;
 
       host=document.createElement('div');host.id='ppaRanger3DTestLayer';
-      host.style.cssText='position:fixed;width:1px;height:1px;left:-999px;top:-999px;pointer-events:none;z-index:4;overflow:visible;contain:none;';
-      document.body.appendChild(host);
+      host.style.cssText='position:fixed;width:1px;height:1px;left:-999px;top:-999px;pointer-events:none;z-index:4;overflow:visible;contain:none;';document.body.appendChild(host);
 
       renderer=new THREE.WebGLRenderer({alpha:true,antialias:false,powerPreference:'high-performance'});
       renderer.setPixelRatio(1);renderer.setSize(VIEW_W,VIEW_H,false);renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;
-      renderer.toneMapping=THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure=1.18;
-      renderer.domElement.style.cssText='position:absolute;display:block;pointer-events:none;max-width:none;max-height:none;filter:saturate(1.28) contrast(1.06) brightness(1.04);';
-      host.appendChild(renderer.domElement);
+      renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.18;
+      renderer.domElement.style.cssText='position:absolute;display:block;pointer-events:none;max-width:none;max-height:none;filter:saturate(1.28) contrast(1.06) brightness(1.04);';host.appendChild(renderer.domElement);
 
       scene=new THREE.Scene();
-      var halfH=2.25,halfW=halfH*(VIEW_W/VIEW_H);
-      camera=new THREE.OrthographicCamera(-halfW,halfW,halfH,-halfH,.01,50);
-      camera.position.set(0,3.55,8.2);camera.lookAt(0,1.12,0);camera.updateProjectionMatrix();
+      var halfH=2.55,halfW=halfH*(VIEW_W/VIEW_H);
+      camera=new THREE.OrthographicCamera(-halfW,halfW,halfH,-halfH,.01,60);
+      camera.position.set(4.4,6.6,8.0);camera.lookAt(0,1.00,0);camera.updateProjectionMatrix();
+      CAMERA_YAW=Math.atan2(camera.position.x,camera.position.z);
 
       scene.add(new THREE.HemisphereLight(0xfff7ea,0x263451,1.55));
-      var sun=new THREE.DirectionalLight(0xfff0cf,3.10);sun.position.set(3.8,7.0,5.8);scene.add(sun);
-      var fill=new THREE.DirectionalLight(0x9ec8ff,.78);fill.position.set(-4.0,3.0,3.0);scene.add(fill);
+      var sun=new THREE.DirectionalLight(0xfff0cf,3.10);sun.position.set(4.5,8.0,5.5);scene.add(sun);
+      var fill=new THREE.DirectionalLight(0x9ec8ff,.82);fill.position.set(-4.0,3.5,2.5);scene.add(fill);
+
+      shadow=new THREE.Mesh(
+        new THREE.CircleGeometry(.62,32),
+        new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.30,depthWrite:false})
+      );
+      shadow.rotation.x=-Math.PI/2;shadow.scale.set(1.0,.46,1.0);shadow.position.set(0,.012,0);shadow.renderOrder=-1;scene.add(shadow);
 
       root=new THREE.Group();scene.add(root);
       var gltf=await new GLTFLoader().loadAsync(state.modelUrl);
@@ -197,7 +188,7 @@
       });
       lastMotionYaw=legacyFaceYaw();hasMotionYaw=true;root.rotation.y=lastMotionYaw;
       switchAnim('idle');updateFootProjection();
-      state.ready=true;state.loading=false;installHide2D();toast('RANGER 3D 360/COLOR TEST · ON','#91ffc1');requestAnimationFrame(frame);
+      state.ready=true;state.loading=false;installHide2D();toast('RANGER 3D TOP-SIDE TEST · ON','#91ffc1');requestAnimationFrame(frame);
     }catch(e){
       state.loading=false;state.error=String(e&&e.message||e||'3D load error');console.warn('[PPA Ranger 3D]',e);toast('RANGER 3D · LOAD ERROR','#ff7b7b');
     }
@@ -219,8 +210,7 @@
         var target=hasMotionYaw?lastMotionYaw:legacyFaceYaw();
         var desired=shortestAngle(root.rotation.y,target);
         root.rotation.y+=(desired-root.rotation.y)*Math.min(1,dt*12);
-        state.yawDeg=Math.round(root.rotation.y*180/Math.PI);
-        state.face=state.moveDir;
+        state.yawDeg=Math.round(root.rotation.y*180/Math.PI);state.face=state.moveDir;
       }catch(_){}
       try{renderer.render(scene,camera)}catch(_){}
     }
@@ -232,7 +222,7 @@
     enable:function(v){state.enabled=v!==false;if(host)host.style.display=state.enabled?'block':'none';return state.enabled},
     toggle:function(){state.enabled=!state.enabled;if(host)host.style.display=state.enabled?'block':'none';return state.enabled},
     show2D:function(v){state.hide2D=v===false;return !state.hide2D},
-    diag:function(){return Object.assign({},state,{classKey:currentClass(),playerReady:playerAvailable(),movingUntil:movingUntil,lastPX:lastPX,lastPY:lastPY,footX:footX,footY:footY,lastMotionYaw:lastMotionYaw})}
+    diag:function(){return Object.assign({},state,{classKey:currentClass(),playerReady:playerAvailable(),movingUntil:movingUntil,lastPX:lastPX,lastPY:lastPY,footX:footX,footY:footY,lastMotionYaw:lastMotionYaw,cameraYaw:CAMERA_YAW})}
   };
   window.PPA_RANGER_3D_DIAG=function(){return window.PPA_RANGER3D.diag()};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
