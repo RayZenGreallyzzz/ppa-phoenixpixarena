@@ -18,9 +18,6 @@ for(const f of MODELS)fs.copyFileSync(path.join(ROOT,f),path.join(gameDir,f));
 
 let html=fs.readFileSync(htmlPath,'utf8');
 
-// Find a classic function declaration by lexical brace matching. This is used
-// only for two known legacy functions and deliberately fails closed if the
-// source shape changes.
 function functionRange(src,signature){
   const start=src.indexOf(signature);
   if(start<0)throw new Error('Unified 3D build: function signature missing: '+signature);
@@ -60,10 +57,6 @@ function functionRange(src,signature){
 function replaceFunction(src,signature,replacement){const [a,b]=functionRange(src,signature);return src.slice(0,a)+replacement+src.slice(b)}
 function removeFunction(src,signature){const [a,b]=functionRange(src,signature);return src.slice(0,a)+src.slice(b)}
 
-// Gameplay animation state must not depend on sprite images. Preserve the exact
-// legacy frames/fps values, but expose them as pure class timing data. Three.js
-// owns visual animation; these values only drive P.anim/P.animFrame state and
-// attack completion timing used by existing gameplay/realtime code.
 const animDefNeedle='function playerAnimDef(name){';
 if((html.split(animDefNeedle).length-1)!==1)throw new Error('Unified 3D build: playerAnimDef definition not unique');
 const gameplayTiming=`const PLAYER_ANIM_TIMING={
@@ -114,8 +107,6 @@ for(const [from,to] of timingReplacements){
 if(!html.includes('const PLAYER_ANIM_TIMING={'))throw new Error('Unified 3D build: gameplay animation timing table missing');
 if(!html.includes("playerAnimTiming('attack')"))throw new Error('Unified 3D build: attack state still depends on sprite animation definition');
 
-// Class gameplay behavior must depend on the semantic class key, never on the
-// existence/name of a sprite renderer. Preserve exact existing actions.
 const gameplayClassReplacements=[
   [`if(playerUsesGnomeSprites()){
       try{gnomeFireCannonball()}catch(_){PLAYER_CANNONBALLS.length=0}
@@ -137,15 +128,8 @@ for(const [from,to] of gameplayClassReplacements){
 }
 for(const [from] of gameplayClassReplacements){if(html.includes(from))throw new Error('Unified 3D build: sprite-named gameplay predicate survived')}
 
-// playerAnimDef was only a sprite-image selector. The three gameplay callers
-// above now use pure timing data, so the legacy function is dead and is removed
-// from the shipped client entirely.
 html=removeFunction(html,'function playerAnimDef(name){');
-if(html.includes('playerAnimDef('))throw new Error('Unified 3D build: legacy playerAnimDef reference survived removal');
 
-// Real local players are 3D-only. Replace the complete old Canvas renderer —
-// including sprite sizing, direction rows, shadow/dust and drawImage branches —
-// with one canonical world-state registration function.
 const local3DFunction=`function drawPlayer(){
   /* PPA_PLAYER3D_LOCAL_ONLY_20261002 */
   const primary3DClass=playerClassKey();
@@ -156,6 +140,10 @@ const local3DFunction=`function drawPlayer(){
   try{if(window.PPA_PLAYER3D&&typeof window.PPA_PLAYER3D.local==='function')window.PPA_PLAYER3D.local(__ppa3DLocal)}catch(_){}
 }`;
 html=replaceFunction(html,'function drawPlayer(){',local3DFunction);
+
+// Validate only after both legacy functions are gone: the last historical
+// playerAnimDef call lived inside the old drawPlayer body.
+if(html.includes('playerAnimDef('))throw new Error('Unified 3D build: legacy playerAnimDef reference survived final local-render removal');
 const [drawA,drawB]=functionRange(html,'function drawPlayer(){');
 const drawBody=html.slice(drawA,drawB);
 for(const forbidden of ['playerUses','drawImage','visualBody','phoneCharacter','ANIM[P.anim]','cx.ellipse','PT.push']){
