@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_REMOTE3D_ADAPTER_V1)return;
-  window.__PPA_REMOTE3D_ADAPTER_V1=true;
+  if(window.__PPA_REMOTE3D_ADAPTER_V2)return;
+  window.__PPA_REMOTE3D_ADAPTER_V2=true;
 
   function classKey(v){
     var s=String(v||'').trim(),l=s.toLowerCase();
@@ -34,7 +34,7 @@
   var installed=false;
   function install(){
     if(installed)return true;
-    if(typeof ppaOnlineDrawRemote!=='function'||typeof phoneCharacterBodySize!=='function')return false;
+    if(typeof ppaOnlineDrawRemote!=='function')return false;
     var fallback=ppaOnlineDrawRemote;
     var draw=function(r,now,nearCount){
       if(!r||!r.hasPos)return false;
@@ -48,15 +48,17 @@
       var sx=r.x-cam.x,sy=r.y-cam.y,z=Math.max(.1,Number(cameraZoom())||1);
       var vw=cv.width/z,vh=cv.height/z;if(sx<-120||sy<-170||sx>vw+120||sy>vh+170)return false;
 
-      var sc=(P.scene==='clansiege'&&typeof CLAN_SIEGE_PLAYER_VISUAL_SCALE==='number')?CLAN_SIEGE_PLAYER_VISUAL_SCALE:1;
-      var rs=(typeof PHONE_REMOTE_PLAYER_VISUAL_SCALE==='number'?PHONE_REMOTE_PLAYER_VISUAL_SCALE:1),safe=Math.max(.01,Number(sc)||1);
-      var body=Math.max(8,phoneCharacterBodySize(60,sc)-10/safe)*sc*rs;if(key==='gnome')body*=.72;
+      // Gameplay target size is independent of GLB/sprite dimensions.
+      // Server-provided r.sz wins; otherwise use the established 30-world-unit fallback.
+      var targetBody=Math.max(30,Number(r.sz)||30);
       var m=canvasHitMetrics(now);
       if(m){
-        r.__ppaHitX=sx;r.__ppaHitY=sy;r.__ppaHitBody=Math.max(26,body*.72);r.__ppaHitAt=now;
+        r.__ppaHitX=sx;r.__ppaHitY=sy;r.__ppaHitBody=targetBody;r.__ppaHitAt=now;
         r.__ppaClientX=m.left+sx*m.z*m.kx;r.__ppaClientY=m.top+sy*m.z*m.ky;
-        r.__ppaClientRadius=Math.max(42,Math.min(82,body*m.z*Math.max(m.kx,m.ky)*1.65));
-        r.__ppaUntargetable=Number(r.hiddenUntil)>Date.now();if(r.__ppaUntargetable)r.__ppaClientRadius=0;r.__ppaClientAt=now;
+        r.__ppaUntargetable=Number(r.hiddenUntil)>Date.now();
+        // Touch affordance only; never feeds collision/combat/model scale.
+        r.__ppaClientRadius=r.__ppaUntargetable?0:58;
+        r.__ppaClientAt=now;
       }
 
       var anchor={classKey:key,worldX:Number(r.x),worldY:Number(r.y),nearCount:nearCount};
