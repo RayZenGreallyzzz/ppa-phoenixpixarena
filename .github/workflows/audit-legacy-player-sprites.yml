@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - player-anim-timing-audit-20261002
+  pull_request:
+    branches:
+      - main
 permissions:
   contents: read
 jobs:
