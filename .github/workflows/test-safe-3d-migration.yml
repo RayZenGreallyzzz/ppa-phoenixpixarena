@@ -21,3 +21,5 @@ jobs:
       - run: node --check tools/postbuild-player-3d-decouple-20261001.mjs
       - run: node --check tools/postbuild-remote-player-3d-20261001.mjs
       - run: npm run build
+      - name: Print stress renderer source
+        run: node tools/print-stress-render-source-20261002.mjs
