@@ -18,7 +18,7 @@
   const live=new Map();
   const assets=new Map();
   let THREE=null,GLTFLoader=null,SkeletonUtils=null,renderer=null,scene=null,camera=null,host=null,cameraYaw=0,lastW=0,lastH=0;
-  let installed=false,fallbackDraw=null,frames=0,lastFpsAt=performance.now(),fps=0;
+  let installed=false,fallbackDraw=null,frames=0,lastFpsAt=performance.now(),fps=0,lastFrameAt=performance.now();
 
   function normalizeClass(v){
     const s=String(v||'').trim(),l=s.toLowerCase();
@@ -65,12 +65,32 @@
   }
   async function ensureInstance(entry){
     if(entry.root||entry.loading)return;entry.loading=true;
-    try{const a=await loadAsset(entry.cls);if(!entry.alive)return;const clone=SkeletonUtils.clone(a.scene);entry.root=new THREE.Group();entry.model=clone;entry.root.add(clone);scene.add(entry.root);entry.mixer=new THREE.AnimationMixer(clone);entry.actions={};if(a.idle)entry.actions.idle=entry.mixer.clipAction(a.idle);if(a.run)entry.actions.run=entry.mixer.clipAction(a.run);if(a.attack)entry.actions.attack=entry.mixer.clipAction(a.attack);entry.cfg=a.cfg;entry.current=null;switchAnim(entry,'idle')}catch(e){entry.error=String(e&&e.message||e)}finally{entry.loading=false}
+    try{
+      const a=await loadAsset(entry.cls);if(!entry.alive)return;
+      const clone=SkeletonUtils.clone(a.scene);
+      clone.traverse(o=>{if(!o||!o.material)return;try{if(Array.isArray(o.material))o.material=o.material.map(m=>m&&m.clone?m.clone():m);else if(o.material.clone)o.material=o.material.clone()}catch(_){}});
+      entry.root=new THREE.Group();entry.model=clone;entry.root.add(clone);scene.add(entry.root);
+      entry.mixer=new THREE.AnimationMixer(clone);entry.actions={};if(a.idle)entry.actions.idle=entry.mixer.clipAction(a.idle);if(a.run)entry.actions.run=entry.mixer.clipAction(a.run);if(a.attack)entry.actions.attack=entry.mixer.clipAction(a.attack);entry.cfg=a.cfg;entry.current=null;switchAnim(entry,'idle');
+    }catch(e){entry.error=String(e&&e.message||e)}finally{entry.loading=false}
   }
   function switchAnim(e,name){const next=e.actions&&(e.actions[name]||e.actions.idle);if(!next||next===e.current)return;try{next.enabled=true;next.reset();next.play();if(e.current)e.current.crossFadeTo(next,.10,false);e.current=next;e.anim=name}catch(_){}}
   function dirFromRemote(r,dx,dy){const d=Math.hypot(dx,dy),face=Number(r&&r.face);if(d>.35){const oct=Math.round(Math.atan2(dy,dx)/(Math.PI/4));return((oct+2)+8)%8}if(Number.isFinite(face)){if(face===-1)return 6;if(face===1)return 2;if(face>=0&&face<=7)return Math.round(face);if(face===8)return 0}return 2}
   function screenGround(sx,sy,z,view){try{const rect=cv.getBoundingClientRect(),kx=rect.width/Math.max(1,cv.width),ky=rect.height/Math.max(1,cv.height),px=rect.left+sx*z*kx,py=rect.top+sy*z*ky,ndc=new THREE.Vector2(px/view.w*2-1,1-py/view.h*2),ray=new THREE.Raycaster();ray.setFromCamera(ndc,camera);const hit=new THREE.Vector3();if(!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),0),hit))return null;return hit}catch(_){return null}}
-  function removeEntry(id,e){if(e&&e.root&&scene)scene.remove(e.root);if(e&&e.mixer)try{e.mixer.stopAllAction()}catch(_){}live.delete(id)}
+  function removeEntry(id,e){if(e)e.alive=false;if(e&&e.root&&scene)scene.remove(e.root);if(e&&e.mixer)try{e.mixer.stopAllAction()}catch(_){}live.delete(id)}
+
+  function drawRemoteHud(r,sx,sy,nearCount,hidden){
+    try{
+      if(typeof cx==='undefined'||!cx)return;
+      const remoteScale=(typeof PHONE_REMOTE_PLAYER_VISUAL_SCALE==='number'?PHONE_REMOTE_PLAYER_VISUAL_SCALE:1);
+      let body=48;
+      try{if(typeof phoneCharacterBodySize==='function')body=Math.max(32,Number(phoneCharacterBodySize(60,1))||48)*remoteScale}catch(_){}
+      const topY=sy-Math.max(30,body*.58),dist=Math.hypot(Number(r.x)-Number(P.x),Number(r.y)-Number(P.y));
+      cx.save();if(hidden)cx.globalAlpha=.38;
+      if(Number(r.mhp)>0&&dist<650){const bw=Math.max(30,36*remoteScale);cx.fillStyle='rgba(0,0,0,.68)';cx.fillRect(sx-bw/2,topY-5,bw,4);cx.fillStyle='#47dd78';cx.fillRect(sx-bw/2,topY-5,bw*Math.max(0,Math.min(1,(Number(r.hp)||0)/Number(r.mhp))),4)}
+      if(Number(nearCount)<=14||dist<360){cx.textAlign='center';cx.textBaseline='bottom';cx.lineJoin='round';if(r.clanName){cx.font='700 8px Georgia, serif';cx.lineWidth=2.2;cx.strokeStyle='rgba(8,12,20,.94)';cx.strokeText('['+String(r.clanName).slice(0,18)+']',sx,topY-18);cx.fillStyle='#a9cfff';cx.fillText('['+String(r.clanName).slice(0,18)+']',sx,topY-18)}cx.font='600 10px Georgia, serif';cx.lineWidth=2.4;cx.strokeStyle='rgba(18,8,5,.92)';cx.strokeText(String(r.name||'Игрок').slice(0,18),sx,topY-8);cx.fillStyle='#f2d39a';cx.fillText(String(r.name||'Игрок').slice(0,18),sx,topY-8)}
+      cx.restore();
+    }catch(_){}
+  }
 
   function wrapDraw(){
     if(installed)return true;
@@ -80,7 +100,8 @@
       if(!r||!r.hasPos)return fallbackDraw(r,now,nearCount);
       const cls=normalizeClass(r.cls);if(!cls)return fallbackDraw(r,now,nearCount);
       const id=String(r.id||r.pid||r.playerId||r.name||'');if(!id)return fallbackDraw(r,now,nearCount);
-      let e=live.get(id);if(!e||e.cls!==cls){if(e)removeEntry(id,e);e={id,cls,r,seenAt:performance.now(),alive:true,loading:false,root:null,mixer:null,actions:null,current:null,anim:'',error:''};live.set(id,e);ensureInstance(e)}
+      let e=live.get(id);
+      if(!e||e.cls!==cls){if(e)removeEntry(id,e);e={id,cls,r,seenAt:performance.now(),alive:true,loading:false,root:null,mixer:null,actions:null,current:null,anim:'',error:''};live.set(id,e);ensureInstance(e)}
       e.r=r;e.seenAt=performance.now();e.nearCount=nearCount;
       if(!e.root)return fallbackDraw(r,now,nearCount);
       try{
@@ -88,6 +109,7 @@
         const sx=r.x-cam.x,sy=r.y-cam.y,z=Math.max(.1,Number(cameraZoom())||1),body=48;
         r.__ppaHitX=sx;r.__ppaHitY=sy;r.__ppaHitBody=Math.max(26,body*.72);r.__ppaHitAt=now;
         const rect=cv.getBoundingClientRect(),kx=rect.width/Math.max(1,cv.width),ky=rect.height/Math.max(1,cv.height);r.__ppaClientX=rect.left+sx*z*kx;r.__ppaClientY=rect.top+sy*z*ky;const hidden=Number(r.hiddenUntil)>Date.now();r.__ppaClientRadius=hidden?0:Math.max(42,Math.min(82,body*z*Math.max(kx,ky)*1.65));r.__ppaUntargetable=hidden;r.__ppaClientAt=now;
+        drawRemoteHud(r,sx,sy,nearCount,hidden);
       }catch(_){}
       return true;
     };
@@ -95,8 +117,19 @@
   }
 
   function frame(now){
-    requestAnimationFrame(frame);if(!installed)wrapDraw();if(!THREE||!renderer||!scene||!camera)return;const view=resize();if(!view)return;const z=Math.max(.1,Number(typeof cameraZoom==='function'?cameraZoom():1)||1),dt=.016;
-    for(const [id,e] of live){if(now-e.seenAt>1800||!e.alive){removeEntry(id,e);continue}const r=e.r;if(!r||!e.root)continue;const sx=Number(r.x)-Number(cam&&cam.x||0),sy=Number(r.y)-Number(cam&&cam.y||0),vw=(typeof cv!=='undefined'&&cv)?cv.width/z:view.w, vh=(typeof cv!=='undefined'&&cv)?cv.height/z:view.h;if(sx<-120||sy<-170||sx>vw+120||sy>vh+170){e.root.visible=false;continue}e.root.visible=true;const hit=screenGround(sx,sy,z,view);if(!hit){e.root.visible=false;continue}e.root.position.copy(hit);e.root.scale.setScalar((Number(e.cfg&&e.cfg.visualScale)||1)*z);const dx=(Number(r.tx)||0)-(Number(r.x)||0),dy=(Number(r.ty)||0)-(Number(r.y)||0),moving=Math.hypot(dx,dy)>.55||String(r.anim||'').toLowerCase()==='run';let anim=String(r.anim||'').toLowerCase();if(!['idle','run','attack'].includes(anim))anim=moving?'run':'idle';switchAnim(e,anim);try{if(e.mixer)e.mixer.update(dt)}catch(_){}const dir=dirFromRemote(r,dx,dy),target=cameraYaw+(4-dir)*(Math.PI/4)+(Number(e.cfg&&e.cfg.yawOffset)||0),desired=shortestAngle(e.root.rotation.y,target);e.root.rotation.y+=(desired-e.root.rotation.y)*.22;const hidden=Number(r.hiddenUntil)>Date.now();e.root.traverse(o=>{if(o&&o.material){const mats=Array.isArray(o.material)?o.material:[o.material];for(const m of mats){if(!m)continue;m.transparent=hidden||m.transparent;m.opacity=hidden?.38:1}}})}
+    requestAnimationFrame(frame);if(!installed)wrapDraw();if(!THREE||!renderer||!scene||!camera)return;
+    const view=resize();if(!view)return;const z=Math.max(.1,Number(typeof cameraZoom==='function'?cameraZoom():1)||1),dt=Math.max(0,Math.min(.05,(now-lastFrameAt)/1000));lastFrameAt=now;
+    for(const [id,e] of live){
+      if(now-e.seenAt>1800||!e.alive){removeEntry(id,e);continue}
+      const r=e.r;if(!r||!e.root)continue;
+      const sx=Number(r.x)-Number(cam&&cam.x||0),sy=Number(r.y)-Number(cam&&cam.y||0),vw=(typeof cv!=='undefined'&&cv)?cv.width/z:view.w,vh=(typeof cv!=='undefined'&&cv)?cv.height/z:view.h;
+      if(sx<-120||sy<-170||sx>vw+120||sy>vh+170){e.root.visible=false;continue}
+      e.root.visible=true;const hit=screenGround(sx,sy,z,view);if(!hit){e.root.visible=false;continue}
+      e.root.position.copy(hit);e.root.scale.setScalar((Number(e.cfg&&e.cfg.visualScale)||1)*z);
+      const dx=(Number(r.tx)||0)-(Number(r.x)||0),dy=(Number(r.ty)||0)-(Number(r.y)||0),moving=Math.hypot(dx,dy)>.55||String(r.anim||'').toLowerCase()==='run';let anim=String(r.anim||'').toLowerCase();if(!['idle','run','attack'].includes(anim))anim=moving?'run':'idle';switchAnim(e,anim);try{if(e.mixer)e.mixer.update(dt)}catch(_){}
+      const dir=dirFromRemote(r,dx,dy),target=cameraYaw+(4-dir)*(Math.PI/4)+(Number(e.cfg&&e.cfg.yawOffset)||0),desired=shortestAngle(e.root.rotation.y,target);e.root.rotation.y+=(desired-e.root.rotation.y)*Math.min(1,dt*12);
+      const hidden=Number(r.hiddenUntil)>Date.now();e.root.traverse(o=>{if(o&&o.material){const mats=Array.isArray(o.material)?o.material:[o.material];for(const m of mats){if(!m)continue;m.transparent=hidden||m.userData.__ppaBaseTransparent===true;if(m.userData.__ppaBaseTransparent===undefined)m.userData.__ppaBaseTransparent=!!m.transparent;m.opacity=hidden?.38:1;m.needsUpdate=hidden}}});
+    }
     try{renderer.render(scene,camera)}catch(_){}frames++;if(now-lastFpsAt>=1000){fps=Math.round(frames*1000/(now-lastFpsAt));frames=0;lastFpsAt=now}
   }
 
