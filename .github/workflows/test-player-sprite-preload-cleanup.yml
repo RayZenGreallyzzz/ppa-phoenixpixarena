@@ -1,0 +1,38 @@
+name: Test player sprite preload cleanup
+on:
+  push:
+    branches:
+      - player-sprite-preload-cleanup-20261002
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - run: node --check tools/postbuild-player-sprite-preload-cleanup-20261002.mjs
+      - run: npm run build
+      - name: Verify player sprite preloads are gone
+        run: |
+          grep -q "PPA_PLAYER_SPRITE_PRELOAD_DISABLED_20261002" public/index.html
+          grep -q "player-3d-unified-runtime.js" public/index.html
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('public/index.html','utf8');
+          const start=html.indexOf('const RESOURCES=[');
+          const end=html.indexOf('\n];',start);
+          if(start<0||end<0)throw new Error('RESOURCES block missing');
+          const block=html.slice(start,end);
+          const vars=['imgIdle','imgRun','imgAtk','imgGnomeIdle','imgGnomeRun','imgGnomeAttack','imgArcherIdle','imgArcherRun','imgArcherAttack','imgAssassinIdle','imgAssassinRun','imgAssassinAttack','imgTankIdle','imgTankRun','imgTankAttack','imgBerserkerIdle','imgBerserkerRun','imgBerserkerAttack','imgPriestIdle','imgPriestRun','imgPriestAttack','imgMageIdle','imgMageRun','imgMageAttack','imgPaladinIdle','imgPaladinRun','imgPaladinAttack'];
+          for(const v of vars)if(new RegExp('img:'+v+'(?:,|\\})').test(block))throw new Error('legacy player preload survived: '+v);
+          if(!block.includes("name:'Safe Zone Map'"))throw new Error('Safe Zone resource missing');
+          if(!block.includes("name:'Arena Map'"))throw new Error('Arena resource missing');
+          console.log('verified: 27 legacy player sprite preloads removed; non-player resources intact');
+          NODE
