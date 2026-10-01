@@ -59,7 +59,7 @@
         r.__ppaUntargetable=Number(r.hiddenUntil)>Date.now();if(r.__ppaUntargetable)r.__ppaClientRadius=0;r.__ppaClientAt=now;
       }
 
-      var anchor={classKey:key,x:sx,y:sy+body*.40,zoom:z,body:body,nearCount:nearCount};
+      var anchor={classKey:key,worldX:Number(r.x),worldY:Number(r.y),nearCount:nearCount};
       try{if(window.PPA_PLAYER3D&&typeof PPA_PLAYER3D.remote==='function')PPA_PLAYER3D.remote(r,anchor)}catch(_){}
       return true;
     };
