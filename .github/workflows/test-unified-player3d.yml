@@ -18,14 +18,22 @@ jobs:
           node-version: '24'
       - run: npm install
       - run: node --check gateway/player-3d-unified-runtime.js
-      - run: node --check gateway/remote-player-3d-adapter.js
+      - run: node --check gateway/remote-sprite-renderer.js
       - run: node --check tools/postbuild-player-3d-unified-20261002.mjs
+      - run: test ! -e gateway/remote-player-3d-adapter.js
+      - run: test ! -e tools/postbuild-remote-player-3d-20261001.mjs
+      - run: test ! -e gateway/remote-player-3d-runtime.js
+      - run: test ! -e gateway/remote-player-3d-runtime-v2.js
+      - run: test ! -e gateway/remote-sprite-renderer-3d-bridge.js
+      - run: '! grep -q "v174AiSpriteCfg\|drawImage" gateway/remote-sprite-renderer.js'
       - run: npm run build
       - name: Verify unified renderer owns all real players
         run: |
           grep -q "__PPA_PLAYER3D_UNIFIED_V1" public/game/player-3d-unified-runtime.js
           grep -q "__PPA_REMOTE3D_ADAPTER_V1" public/game/remote-sprite-renderer.js
-          grep -q "player-3d-unified-runtime.js?v=20261002u1" public/index.html
+          ! grep -q "v174AiSpriteCfg\|drawImage" public/game/remote-sprite-renderer.js
+          grep -q "player-3d-unified-runtime.js?v=20261002u2" public/index.html
+          grep -q "remote-sprite-renderer.js?v=20261002u2" public/index.html
           ! grep -q "player-3d-runtime.js?v=" public/index.html
           ! grep -q "remote-player-3d-runtime.js?v=" public/index.html
           grep -q "window.__PPA3D_LOCAL_PENDING=__ppa3DLocal" public/index.html
