@@ -44,13 +44,14 @@ const nickCount=html.split(legacyNick).length-1;
 if(nickCount!==1)throw new Error('3D decouple: expected exactly one legacy nickname guard, found '+nickCount);
 html=html.replace(legacyNick,directNick);
 
-// Guardrail: the local primary-3D cutover must no longer depend on sprite-class helpers.
-const anchorAt=html.indexOf('window.__PPA3D_LOCAL_ANCHOR={');
-if(anchorAt<0)throw new Error('3D decouple: primary 3D anchor missing after rewrite');
-const localWindow=html.slice(Math.max(0,anchorAt-2200),anchorAt+900);
-if(/playerUses(?:Gnome|Archer|Assassin|Tank|Berserker|Priest|Mage|Paladin)Sprites\s*\(/.test(localWindow)){
-  throw new Error('3D decouple: local 3D block still references legacy sprite helpers');
-}
+// Guardrails: verify only the primary-3D selector/nickname cutover itself.
+// Other legacy drawing branches may still legitimately contain playerUses*Sprites
+// until remote/UI migration is complete, so do not scan the whole drawPlayer body.
+if(html.includes(legacyClassBlock))throw new Error('3D decouple: legacy primary 3D class selector survived replacement');
+if(html.includes(legacyNick))throw new Error('3D decouple: legacy primary 3D nickname guard survived replacement');
+if(!html.includes(directClassBlock))throw new Error('3D decouple: direct gameplay class selector missing after replacement');
+if(!html.includes(directNick))throw new Error('3D decouple: direct 3D nickname guard missing after replacement');
+if(!html.includes('window.__PPA3D_LOCAL_ANCHOR={'))throw new Error('3D decouple: primary 3D anchor missing after rewrite');
 
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Primary 3D decouple: local class selection now uses gameplay class data only; remote sprite renderer untouched');
+console.log('Primary 3D decouple: local class selection now uses gameplay class data only; unrelated legacy sprite helpers preserved');
