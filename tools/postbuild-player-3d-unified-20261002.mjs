@@ -141,8 +141,6 @@ const local3DFunction=`function drawPlayer(){
 }`;
 html=replaceFunction(html,'function drawPlayer(){',local3DFunction);
 
-// Validate only after both legacy functions are gone: the last historical
-// playerAnimDef call lived inside the old drawPlayer body.
 if(html.includes('playerAnimDef('))throw new Error('Unified 3D build: legacy playerAnimDef reference survived final local-render removal');
 const [drawA,drawB]=functionRange(html,'function drawPlayer(){');
 const drawBody=html.slice(drawA,drawB);
@@ -151,9 +149,47 @@ for(const forbidden of ['playerUses','drawImage','visualBody','phoneCharacter','
 }
 if(!drawBody.includes('PPA_PLAYER3D_LOCAL_ONLY_20261002'))throw new Error('Unified 3D build: canonical local 3D drawPlayer missing');
 
+// Player3D owns the local nickname/clan/HP projection from the 3D rig. Remove
+// the old Canvas HUD call and its sprite-size/topY helpers entirely.
 const nickNeedle='try{drawPlayerNickname()}catch(_){}';
-if((html.split(nickNeedle).length-1)!==1)throw new Error('Unified 3D build: local nickname draw not unique');
-html=html.replace(nickNeedle,"try{if(!window.__PPA3D_LOCAL_CLASS)drawPlayerNickname()}catch(_){}");
+if((html.split(nickNeedle).length-1)!==1)throw new Error('Unified 3D build: local nickname draw call not unique');
+html=html.replace(nickNeedle,'/* PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002 */');
+for(const sig of [
+  'function ppaPlayerNickname(){',
+  'function ppaPlayerVisualTopScreenY(){',
+  'function ppaPlayerClanName(){',
+  'function drawPlayerNickname(){'
+])html=removeFunction(html,sig);
+
+// These helpers existed only for local sprite selection/direction. Gameplay was
+// already moved to playerClassKey/playerIsClass, and stress bots use their own
+// v174AiDirIndex/v174AiSpriteCfg path, so remove the dead local sprite layer.
+for(const sig of [
+  'function playerUsesGnomeSprites(){',
+  'function playerUsesArcherSprites(){',
+  'function playerUsesAssassinSprites(){',
+  'function playerUsesTankSprites(){',
+  'function playerUsesBerserkerSprites(){',
+  'function playerUsesPriestSprites(){',
+  'function playerUsesMageSprites(){',
+  'function playerUsesPaladinSprites(){',
+  'function playerUsesEightDirSprites(){',
+  'function playerDir8(){',
+  'function dir8Canonical(dx,dy){'
+])html=removeFunction(html,sig);
+
+for(const dead of [
+  'playerUsesGnomeSprites','playerUsesArcherSprites','playerUsesAssassinSprites','playerUsesTankSprites',
+  'playerUsesBerserkerSprites','playerUsesPriestSprites','playerUsesMageSprites','playerUsesPaladinSprites',
+  'playerUsesEightDirSprites','playerDir8','dir8Canonical','ppaPlayerNickname','ppaPlayerVisualTopScreenY',
+  'ppaPlayerClanName','drawPlayerNickname'
+]){
+  if(html.includes(dead))throw new Error('Unified 3D build: dead local sprite/HUD symbol survived: '+dead);
+}
+if(!html.includes('PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002'))throw new Error('Unified 3D build: Player3D HUD ownership marker missing');
+if(!html.includes('function v174AiSpriteCfg(e){'))throw new Error('Unified 3D build: stress-bot sprite route was damaged');
+if(!html.includes('GNOME_ANIM[a]')||!html.includes('PALADIN_ANIM[a]'))throw new Error('Unified 3D build: stress-bot class atlas route was damaged');
+
 html=html.replace(/\n?<script src="\/game\/player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
 html=html.replace(/\n?<script src="\/game\/remote-player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
 const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261002u4"></script>\n';
@@ -163,4 +199,4 @@ if(!html.includes('window.__PPA3D_LOCAL_PENDING=__ppa3DLocal'))throw new Error('
 if(!html.includes('worldX:Number(P.x),worldY:Number(P.y)'))throw new Error('Unified 3D build: local world-space anchor missing');
 if(!html.includes('player-3d-unified-runtime.js?v=20261002u4'))throw new Error('Unified 3D build: runtime tag missing');
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Unified Player3D V4: real local drawPlayer is 3D-only · legacy playerAnimDef removed · gameplay timing/class behavior sprite-independent');
+console.log('Unified Player3D V4: local/remote real players are 3D-only · legacy local sprite renderer/HUD/direction helpers removed · stress bot sprites isolated');
