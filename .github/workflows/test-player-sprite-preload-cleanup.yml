@@ -1,8 +1,8 @@
-name: Test player sprite preload cleanup
+name: Test player sprite cleanup
 on:
   push:
     branches:
-      - player-sprite-preload-cleanup-20261002
+      - player-sprite-code-cleanup-20261002
   pull_request:
     branches:
       - main
@@ -17,12 +17,21 @@ jobs:
         with:
           node-version: '24'
       - run: npm install
+      - run: node --check gateway/mobile-sprite-performance.js
       - run: node --check tools/postbuild-player-sprite-preload-cleanup-20261002.mjs
+      - name: Verify mobile sprite helper is AI-only
+        run: |
+          ! grep -Eq "playerAnimDef|playerUses[A-Za-z]*Sprites|wrapPlayer" gateway/mobile-sprite-performance.js
+          grep -q "v174AiSpriteCfg" gateway/mobile-sprite-performance.js
+          grep -q "playerSprites:false" gateway/mobile-sprite-performance.js
       - run: npm run build
-      - name: Verify player sprite preloads are gone
+      - name: Verify legacy player sprite runtime paths are gone
         run: |
           grep -q "PPA_PLAYER_SPRITE_PRELOAD_DISABLED_20261002" public/index.html
           grep -q "player-3d-unified-runtime.js" public/index.html
+          grep -q "mobile-sprite-performance.js?v=20261002ai3" public/index.html
+          ! grep -Eq "playerAnimDef|playerUses[A-Za-z]*Sprites|wrapPlayer" public/game/mobile-sprite-performance.js
+          grep -q "v174AiSpriteCfg" public/game/mobile-sprite-performance.js
           node - <<'NODE'
           const fs=require('fs');
           const html=fs.readFileSync('public/index.html','utf8');
@@ -34,5 +43,5 @@ jobs:
           for(const v of vars)if(new RegExp('img:'+v+'(?:,|\\})').test(block))throw new Error('legacy player preload survived: '+v);
           if(!block.includes("name:'Safe Zone Map'"))throw new Error('Safe Zone resource missing');
           if(!block.includes("name:'Arena Map'"))throw new Error('Arena resource missing');
-          console.log('verified: 27 legacy player sprite preloads removed; non-player resources intact');
+          console.log('verified: real-player sprite preload/wrapper paths removed; AI sprite path intact');
           NODE

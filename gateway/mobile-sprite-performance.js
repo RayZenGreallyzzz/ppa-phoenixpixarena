@@ -1,7 +1,10 @@
 (function(){
   'use strict';
-  if(window.__PPA_MOBILE_SPRITE_PERF_V2)return;
+  // Stable capability flag retained for build/runtime compatibility. The
+  // implementation itself is now explicitly AI-only (V3 semantics).
+  if(window.__PPA_MOBILE_SPRITE_PERF_V2||window.__PPA_MOBILE_SPRITE_PERF_AI_ONLY_V3)return;
   window.__PPA_MOBILE_SPRITE_PERF_V2=true;
+  window.__PPA_MOBILE_SPRITE_PERF_AI_ONLY_V3=true;
 
   function mobile(){
     try{
@@ -11,9 +14,9 @@
   }
   if(!mobile())return;
 
-  // Cache both by animation object and by the underlying source image.
-  // Some animation helpers return a fresh wrapper object every frame; caching
-  // only by that wrapper caused repeated giant-atlas resizes and FPS collapse.
+  // Player characters are 3D-only now. This helper is intentionally AI-only:
+  // it may downscale large legacy AI/stress-bot atlases, but it must never
+  // inspect or wrap player animation/sprite helpers again.
   var animCache=typeof WeakMap!=='undefined'?new WeakMap():null;
   var imageCache=typeof WeakMap!=='undefined'?new WeakMap():null;
 
@@ -65,21 +68,6 @@
     }catch(_){return a}
   }
 
-  function wrapPlayer(){
-    try{
-      if(typeof playerAnimDef!=='function')return false;
-      if(playerAnimDef.__ppaLowRes)return true;
-      var base=playerAnimDef;
-      var fn=function(name){
-        var a=base.apply(this,arguments);
-        try{if(typeof playerUsesGnomeSprites==='function'&&playerUsesGnomeSprites())return a}catch(_){}
-        return lowResAnim(a);
-      };
-      fn.__ppaLowRes=1;playerAnimDef=fn;
-      try{window.playerAnimDef=fn}catch(_){}
-      return true;
-    }catch(_){return false}
-  }
   function wrapAi(){
     try{
       if(typeof v174AiSpriteCfg!=='function')return false;
@@ -100,13 +88,12 @@
   }
 
   function install(){
-    var a=wrapPlayer(),b=wrapAi();
-    if(a&&b)return;
+    if(wrapAi())return;
     setTimeout(install,300);
   }
   install();
 
   window.PPA_SPRITE_PERF_DIAG=function(){
-    return{mobile:mobile(),enabled:true,mode:'cached-scaled-atlas',factor:factor()};
+    return{mobile:mobile(),enabled:true,mode:'cached-scaled-ai-atlas',factor:factor(),playerSprites:false};
   };
 })();

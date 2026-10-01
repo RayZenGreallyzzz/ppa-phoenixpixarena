@@ -48,5 +48,8 @@ if(!block.includes("name:'Safe Zone Map'"))throw new Error('Player sprite preloa
 
 const replacement=marker+'\n'+block;
 html=html.slice(0,start)+replacement+html.slice(end+3);
+html=html.replace(/mobile-sprite-performance\.js\?v=[^"']+/g,'mobile-sprite-performance.js?v=20261002ai3');
+if(!html.includes('mobile-sprite-performance.js?v=20261002ai3'))throw new Error('Player sprite cleanup: AI-only mobile helper cache key missing');
+
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Player sprite preload cleanup: removed 27 legacy player sprite resources; maps/mobs/UI preload untouched');
+console.log('Player sprite cleanup: 27 legacy player preloads removed; mobile sprite helper cache bumped for AI-only V3');
