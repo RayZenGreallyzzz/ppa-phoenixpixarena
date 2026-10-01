@@ -1,7 +1,10 @@
 (function(){
   'use strict';
-  if(window.__PPA_MOBILE_SPRITE_PERF_V3)return;
-  window.__PPA_MOBILE_SPRITE_PERF_V3=true;
+  // Stable capability flag retained for build/runtime compatibility. The
+  // implementation itself is now explicitly AI-only (V3 semantics).
+  if(window.__PPA_MOBILE_SPRITE_PERF_V2||window.__PPA_MOBILE_SPRITE_PERF_AI_ONLY_V3)return;
+  window.__PPA_MOBILE_SPRITE_PERF_V2=true;
+  window.__PPA_MOBILE_SPRITE_PERF_AI_ONLY_V3=true;
 
   function mobile(){
     try{
@@ -13,7 +16,7 @@
 
   // Player characters are 3D-only now. This helper is intentionally AI-only:
   // it may downscale large legacy AI/stress-bot atlases, but it must never
-  // inspect or wrap playerAnimDef / playerUses*Sprites again.
+  // inspect or wrap player animation/sprite helpers again.
   var animCache=typeof WeakMap!=='undefined'?new WeakMap():null;
   var imageCache=typeof WeakMap!=='undefined'?new WeakMap():null;
 
