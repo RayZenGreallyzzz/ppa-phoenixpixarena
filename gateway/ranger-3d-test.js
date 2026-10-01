@@ -1,10 +1,11 @@
 (function(){
   'use strict';
-  if(window.__PPA_RANGER_3D_TEST_V1)return;
-  window.__PPA_RANGER_3D_TEST_V1=true;
+  if(window.__PPA_RANGER_3D_TEST_V2)return;
+  window.__PPA_RANGER_3D_TEST_V2=true;
 
-  var state={enabled:true,ready:false,loading:false,error:'',anim:'',face:null,fps:0,frames:0,lastFpsAt:performance.now(),modelUrl:'/game/Ranger_Mobile_Bow_Z90.glb?v=20261001a'};
+  var state={enabled:true,ready:false,loading:false,error:'',anim:'',face:null,fps:0,frames:0,lastFpsAt:performance.now(),modelUrl:'/game/Ranger_Mobile_Bow_Z90.glb?v=20261001b',hide2D:true};
   var THREE=null,GLTFLoader=null,renderer=null,scene=null,camera=null,root=null,mixer=null,actions={},host=null,lastAt=performance.now(),currentAction=null;
+  var transparentAtlases={};
 
   function normalizeClass(v){
     var s=String(v||'').trim(),l=s.toLowerCase();
@@ -30,13 +31,8 @@
     return'';
   }
 
-  function toast(text,col){
-    try{if(typeof showPickup==='function')showPickup(text,col||'#91ffc1')}catch(_){}
-  }
-
-  function playerAvailable(){
-    try{return typeof P!=='undefined'&&P&&typeof cam!=='undefined'&&cam&&typeof cv!=='undefined'&&cv&&typeof cameraZoom==='function'}catch(_){return false}
-  }
+  function toast(text,col){try{if(typeof showPickup==='function')showPickup(text,col||'#91ffc1')}catch(_){} }
+  function playerAvailable(){try{return typeof P!=='undefined'&&P&&typeof cam!=='undefined'&&cam&&typeof cv!=='undefined'&&cv&&typeof cameraZoom==='function'}catch(_){return false}}
 
   function faceDir(){
     try{
@@ -64,7 +60,7 @@
     if(!next||next===currentAction)return;
     try{
       next.enabled=true;next.reset();next.play();
-      if(currentAction)currentAction.crossFadeTo(next,.12,false);
+      if(currentAction)currentAction.crossFadeTo(next,.10,false);
       currentAction=next;state.anim=name;
     }catch(_){}
   }
@@ -73,6 +69,40 @@
     var d=(b-a+Math.PI)%(Math.PI*2)-Math.PI;
     if(d<-Math.PI)d+=Math.PI*2;
     return a+d;
+  }
+
+  function transparentAtlas(a){
+    try{
+      var fw=Math.max(1,Math.round(Number(a&&a.fw)||1));
+      var fh=Math.max(1,Math.round(Number(a&&a.fh)||1));
+      var frames=Math.max(1,Math.min(16,Math.round(Number(a&&a.frames)||1)));
+      var key=fw+'x'+fh+'x'+frames;
+      if(transparentAtlases[key])return transparentAtlases[key];
+      var c=document.createElement('canvas');
+      c.width=fw*frames;c.height=fh*8;
+      try{c.complete=true;c.naturalWidth=c.width;c.naturalHeight=c.height}catch(_){}
+      transparentAtlases[key]=c;
+      return c;
+    }catch(_){return null}
+  }
+
+  function installHide2D(){
+    try{
+      if(typeof playerAnimDef!=='function')return false;
+      if(playerAnimDef.__ppaRanger3DHide2D)return true;
+      var base=playerAnimDef;
+      var fn=function(){
+        var a=base.apply(this,arguments);
+        if(!state.hide2D||!state.ready||!state.enabled||currentClass()!=='archer'||!a||!a.img)return a;
+        var out={};for(var k in a)out[k]=a[k];
+        var blank=transparentAtlas(a);if(blank)out.img=blank;
+        out.__ppaRanger3DHidden=true;
+        return out;
+      };
+      fn.__ppaRanger3DHide2D=1;
+      playerAnimDef=fn;try{window.playerAnimDef=fn}catch(_){}
+      return true;
+    }catch(_){return false}
   }
 
   function placeHost(){
@@ -85,10 +115,10 @@
       var sx=((Number(P.x)||0)-(Number(cam.x)||0))*z;
       var sy=((Number(P.y)||0)-(Number(cam.y)||0))*z;
       var x=rect.left+sx*kx,y=rect.top+sy*ky;
-      var zoomScale=Math.max(.72,Math.min(1.45,z*Math.max(kx,ky)*1.75));
+      var visualScale=Math.max(.60,Math.min(1.15,z*Math.max(kx,ky)*.82));
       host.style.left=x+'px';host.style.top=y+'px';
-      host.style.transform='translate(-50%,-82%) scale('+zoomScale.toFixed(3)+')';
-      return x>rect.left-160&&x<rect.right+160&&y>rect.top-220&&y<rect.bottom+120;
+      host.style.transform='translate(-50%,-100%) scale('+visualScale.toFixed(3)+')';
+      return x>rect.left-220&&x<rect.right+220&&y>rect.top-300&&y<rect.bottom+160;
     }catch(_){return false}
   }
 
@@ -102,22 +132,22 @@
 
       host=document.createElement('div');
       host.id='ppaRanger3DTestLayer';
-      host.style.cssText='position:fixed;width:118px;height:156px;left:-999px;top:-999px;pointer-events:none;z-index:4;transform-origin:50% 82%;overflow:visible;contain:layout style paint;';
+      host.style.cssText='position:fixed;width:180px;height:260px;left:-999px;top:-999px;pointer-events:none;z-index:4;transform-origin:50% 100%;overflow:visible;contain:layout style;';
       document.body.appendChild(host);
 
       renderer=new THREE.WebGLRenderer({alpha:true,antialias:false,powerPreference:'high-performance'});
       renderer.setPixelRatio(1);
-      renderer.setSize(118,156,false);
+      renderer.setSize(180,260,false);
       renderer.setClearColor(0x000000,0);
       renderer.outputColorSpace=THREE.SRGBColorSpace;
-      renderer.domElement.style.width='118px';renderer.domElement.style.height='156px';renderer.domElement.style.display='block';
+      renderer.domElement.style.cssText='width:180px;height:260px;display:block;overflow:visible;';
       host.appendChild(renderer.domElement);
 
       scene=new THREE.Scene();
-      camera=new THREE.PerspectiveCamera(28,118/156,.01,50);
-      camera.position.set(0,1.25,5.25);camera.lookAt(0,1.12,0);
-      scene.add(new THREE.HemisphereLight(0xffffff,0x29314a,2.35));
-      var sun=new THREE.DirectionalLight(0xffffff,2.7);sun.position.set(3,6,5);scene.add(sun);
+      camera=new THREE.PerspectiveCamera(30,180/260,.01,60);
+      camera.position.set(0,3.35,14.0);camera.lookAt(0,3.35,0);
+      scene.add(new THREE.HemisphereLight(0xffffff,0x29314a,2.25));
+      var sun=new THREE.DirectionalLight(0xffffff,2.55);sun.position.set(3,6,5);scene.add(sun);
 
       root=new THREE.Group();scene.add(root);
       var gltf=await new GLTFLoader().loadAsync(state.modelUrl);
@@ -136,7 +166,8 @@
       });
       switchAnim('idle');
       state.ready=true;state.loading=false;
-      toast('RANGER 3D TEST · ON','#91ffc1');
+      installHide2D();
+      toast('RANGER 3D MAIN TEST · ON','#91ffc1');
       requestAnimationFrame(frame);
     }catch(e){
       state.loading=false;state.error=String(e&&e.message||e||'3D load error');
@@ -150,6 +181,7 @@
     state.frames++;
     if(now-state.lastFpsAt>=1000){state.fps=Math.round(state.frames*1000/(now-state.lastFpsAt));state.frames=0;state.lastFpsAt=now}
 
+    installHide2D();
     var isArcher=currentClass()==='archer';
     var visible=isArcher&&state.enabled&&playerAvailable()&&!(P&&P.dead)&&placeHost()&&!document.hidden;
     if(host)host.style.display=visible?'block':'none';
@@ -168,13 +200,15 @@
   }
 
   function boot(){
+    installHide2D();
     if(currentClass()==='archer'&&playerAvailable()){init3D();return}
-    setTimeout(boot,450);
+    setTimeout(boot,400);
   }
 
   window.PPA_RANGER3D={
     enable:function(v){state.enabled=v!==false;if(host)host.style.display=state.enabled?'block':'none';return state.enabled},
     toggle:function(){state.enabled=!state.enabled;if(host)host.style.display=state.enabled?'block':'none';return state.enabled},
+    show2D:function(v){state.hide2D=v===false;return !state.hide2D},
     diag:function(){return Object.assign({},state,{classKey:currentClass(),playerReady:playerAvailable()})}
   };
   window.PPA_RANGER_3D_DIAG=function(){return window.PPA_RANGER3D.diag()};
