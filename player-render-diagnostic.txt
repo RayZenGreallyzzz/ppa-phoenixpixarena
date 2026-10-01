@@ -1,0 +1,205 @@
+
+===== drawPlayer(); #1 @97883437 =====
+false;
+      if(e.flash>0){cx.globalAlpha=.74;cx.filter='brightness(1.8)';}
+      cx.translate(sx,sy+bob-lift);
+      cx.rotate(tilt*(e.face||1));
+      cx.scale((e.face||1)*sxScale,syScale);
+      // Pivot from feet. No source cropping = no chopped heads/arms/weapons.
+      cx.drawImage(e.sprite,-baseW/2,-baseH*.80,baseW,baseH);
+      cx.filter='none';cx.globalAlpha=1;
+      cx.restore();
+    }
+    // Other dungeon monster sprites.
+    else if(e.sprite && e.sprite.complete && e.sprite.naturalWidth>0){
+      // Scavenger slime is exactly about 1/4 of the current player on screen:
+      // 22 world px × 1.18 camera = ~26 px. Other monsters keep their old sizes.
+      const dh=(isScavengerSlime?25:Math.max(54,Math.min(92,e.sz*2.0)))*eliteScale;
+      const widthMul=isScavengerSlime?(e.slimeWidthMul||1):1;
+      const dw=dh*(e.sprite.naturalWidth/e.sprite.naturalHeight)*widthMul;
+      cx.save();
+      cx.imageSmoothingEnabled=false;
+      // Tiny hit flash without replacing the sprite silhouette.
+      if(e.flash>0){
+        cx.globalAlpha=0.72;
+        cx.filter='brightness(1.8)';
+      }
+      if(isScavengerSlime&&e.slimeFlip){
+        cx.translate(sx,0);
+        cx.scale(-1,1);
+        cx.drawImage(e.sprite,-dw/2,sy-dh*0.78+bob,dw,dh);
+      }else{
+        cx.drawImage(e.sprite,sx-dw/2,sy-dh*0.78+bob,dw,dh);
+      }
+      cx.filter='none';
+      cx.globalAlpha=1;
+      cx.restore();
+    }else{
+      // Fallback only if a sprite failed to load.
+      cx.fillStyle=e.flash>0?'#ffffff':e.col;
+      cx.beginPath();cx.arc(sx,sy+bob,e.sz*0.42*eliteScale,0,Math.PI*2);cx.fill();
+    }
+    // HP bar
+    if(e.hp<e.mhp||e.isDungeonElite){
+      const bw=e.sz*(e.isDungeonElite?2.3:1),bh=e.isDungeonElite?7:4;
+      const barY=sy-e.sz*0.65*eliteScale;
+      cx.fillStyle='rgba(0,0,0,0.78)';
+      cx.fillRect(sx-bw/2,barY,bw,bh);
+      cx.fillStyle=e.isDungeonElite?'#b25cff':'#ff3333';
+      cx.fillRect(sx-bw/2,barY,bw*Math.max(0,e.hp/e.mhp),bh);
+      if(e.isDungeonElite){cx.strokeStyle='#f2c45e';cx.lineWidth=1;cx.strokeRect(sx-bw/2,barY,bw,bh)}
+    }
+    // Уровень и имя моба
+    if(e.lvl&&e.type&&e.type.n){
+      cx.textAlign='center';
+      cx.font=e.isDungeonElite?'bold 11px monospace':'bold 9px monospace';
+      const _eliteName=(e.isDungeonElite?'⚠ ЭЛИТА · ':'')+'['+e.lvl+'] '+e.type.n;
+      const _nameY=sy-e.sz*0.75*eliteScale;
+      cx.fillStyle='rgba(0,0,0,0.82)';
+      cx.fillText(_eliteName,sx+1,_nameY+1);
+      cx.fillStyle=e.isDungeonElite?'#ffd76a':'#ffdd88';
+      cx.fillText(_eliteName,sx,_nameY);
+      cx.textAlign='left';
+    }
+  }
+
+  // Crystal projectiles from the world boss.
+  if(P.scene==='worldboss')drawWorldCrystalProjectiles();
+
+  // Boss fireballs
+  for(const f of PR){
+    const fx=f.x-cam.x,fy=f.y-cam.y;
+    const fg=cx.createRadialGradient(fx,fy,0,fx,fy,15);
+    fg.addColorStop(0,'rgba(255,240,180,0.95)');
+    fg.addColorStop(0.4,'rgba(255,140,40,0.75)');
+    fg.addColorStop(1,'rgba(255,60,0,0)');
+    cx.fillStyle=fg;cx.beginPath();cx.arc(fx,fy,15,0,Math.PI*2);cx.fill();
+  }
+
+  // Online players from Realtime Presence (same scene only).
+  drawOnlinePlayers();
+
+  // Equipped visuals.
+  updatePetFollower();
+  drawPetFollower();
+
+  // Wings and cloak stay as equipment/craft items,
+  // but are NOT rendered in the world.
+  // Player is always rendered in the normal world pass.
+  // The old reward-only late-render branch could make the hero invisible
+  // between Titan death and personal-chest pickup on some mobile browsers.
+  drawPlayer();
+
+  // Player projectiles are rendered above world sprites so shots stay readable.
+  try{drawPlayerCannonballs()}catch(_){}
+  try{drawPlayerArrows()}catch(_){}
+
+  // Artifact floats above/beside the character.
+  drawEquippedArtifact();
+
+  // V104 depth for the original Phoenix and all ordinary dungeon/arena mobs.
+  // When the player walks behind their ground shadow, their sprite body is redrawn on top.
+  ppaDrawWorldBodyOccluders();
+
+  // V89 depth sorting for the large clan boss.
+  // If the player's feet are behind the boss, the boss body covers the player.
+  if(P.scene==='clanboss1'){
+    const _depthBoss=clanBossCombatTarget();
+    if(_depthBoss)drawClanBossBodyOccluder(_depthBoss);
+  }
+
+  // World boss depth: player disappears behind the Titan when walking behind its body.
+  if(P.scene==='worldboss'){
+    const _worldDepthBoss=worldCrystalBossEntity();
+    if(_worldDepthBoss)drawWorldCrystalBossOccluder(_worldDepthBoss);
+  }
+
+  // V204: small frameless character name follows the hero in world space.
+  try{drawPlayerNickname()}catch(_){}
+
+  drawMinimap();
+
+  // Return to physical screen coordinates for screen-space effects.
+  cx.restore();
+
+  // Vignette — cached until the canvas size changes.
+  cx.fillStyle=ppaGetVignetteGradient();cx.fillRect(0,0,cv.width,cv.height);
+}
+
+// === DUNGEON MINIMAP ===
+// Pre-rendered walkable mask (1px per mask cell), drawn once
+const mmBase=document.createElement('canvas');
+mmBase.width=DG.gw;mmBase.height=DG.gh;
+(function(){
+  const m=mmBase.getContext('2d');
+  m.fillStyle='#0a0a0a';m.fillRect(0,0,DG.gw,DG.gh);
+  for(let y=0;y<DG.gh;y++)for(let x=0;x<DG.gw;x++){
+    if(DG_WALK[y*DG.gw+x]){m.fillStyle='#6e6e6e';m.fillRect(x,y,1,1)}
+  }
+  // Boss hall marker
+  m.fillStyle='#7a1a0a';
+  m.fillRect(Math.floor(DG_BOSS_IMG[0]/24)-3,Math.floor(DG_BOSS_IMG[1]/24)-3,7,7);
+})();
+let __v218MinimapAt=0;
+function drawMinimap(){
+  const mm=document.getElementById('mmap');
+  if(P.scene!=='dungeon'){
+    __v218MinimapAt=0;
+    if(mm.style.display!=='none')mm.style.display='none';
+    return;
+  }
+  mm.style.display='block';
+  const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  if(now-__v218MinimapAt<320)return;
+  __v218MinimapAt=now;
+  const m=mm.getContext('2d');
+  m.imageSmoothingEnabled=false;
+  m.clearRect(0,0,200,133);
+  m.drawImage(mmBase,0,0,200,133);
+  const sxr=200/SCENES.dungeon.w,syr=133/SCENES.dungeon.h;
+  // Viewport rectangle respects the dungeon camera zoom.
+  const z=cameraZoom(),vw=cv.width/z,vh=cv.height/z;
+  m.strokeStyle='rgba(255,255,255,0.4)';m.lineWidth=1;
+  m.strokeRect(cam.x*sxr,cam.y*syr,vw*sxr,vh*syr);
+  // Mobs + boss
+  for(const e of EN){
+    if(e.isBoss){m.fillStyle='#ff3311';m.fillRect(e.x*sxr-2.5,e.y*syr-2.5,5,5)}
+    else{m.fillStyle='#ffaa33';m.fillRect(e.x*sxr-1.5,e.y*syr-1.5,3,3)}
+  }
+  // Player (blinking)
+  const blink=Math.sin(Date.now()*0.008)>-0.3;
+  if(blink){m.fillStyle='#ffff44';m.fillRect(P.x*sxr-2,P.y*syr-2,4,4)}
+}
+
+function drawNPC(){
+  const t=Date.now()*0.003;
+  const groundDrop=12; // visually seat every NPC on the town floor
+  for(const npc of ((SCENES[P.scene]&&SCENES[P.scene].npcs)||[])){
+    if(npc.hidden)continue;
+    const nx=npc.x-cam.x,ny=npc.y-cam.y;
+    if(nx<-220||ny<-260||nx>cv.width+220||ny>cv.height+220)continue;
+    const gy=ny+groundDrop;
+    const glow=Math.sin(t*3+npc.x*0.001)*0.12+0.88;
+
+    // Dark contact shadow so the NPC base visibly touches the ground.
+    cx.fillStyle='rgba(0,0,0,0.30)';
+    cx.beginPath();cx.ellipse(nx,gy+15,47,13,0,0,Math.PI*2);cx.fill();
+
+    // Small interaction glow directly on the ground.
+    const g=cx.createRadialGradient(nx,gy,0,nx,gy,70);
+    g.addColorStop(0,'rgba(255,190,70,'+(0.18*glow)+')');
+    g.addColorStop(1,'rgba(255,190,70,0)');
+    cx.fillStyle=g;cx.beginPath();cx.ellipse(nx,gy+8,70,28,0,0,Math.PI*2);cx.fill();
+
+    // Actual supplied NPC art, lowered to a common ground baseline.
+    if(npc.img&&npc.img.complete&&npc.img.naturalWidth>0){
+      const dh=npc.id==='dungeon'?126:(npc.id==='fartzone_guide'?90:112);
+      const dw=dh*(npc.img.naturalWidth/npc.img.naturalHeight);
+      cx.imageSmoothingEnabled=false;
+      cx.drawImage(npc.img,nx-dw/2,gy-dh+18,dw,dh);
+    }else if(npc.id==='clan'){
+      // Temporary in-game pixel silhouette until the dedicated Clan Master sprite is approved.
+      cx.save();
+      cx.translate(Math.round(nx),Math.round(gy));
+      cx.imageSmoothingEnabled=false;
+      cx.fillStyle='#151116';cx.fillRect(-2
