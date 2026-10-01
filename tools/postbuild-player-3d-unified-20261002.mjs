@@ -17,6 +17,48 @@ fs.copyFileSync(remoteSrc,remoteDst);
 for(const f of MODELS)fs.copyFileSync(path.join(ROOT,f),path.join(gameDir,f));
 
 let html=fs.readFileSync(htmlPath,'utf8');
+
+// Gameplay animation state must not depend on sprite images. Preserve the exact
+// legacy frames/fps values, but expose them as pure class timing data. Three.js
+// owns visual animation; these values only drive P.anim/P.animFrame state and
+// attack completion timing used by existing gameplay/realtime code.
+const animDefNeedle='function playerAnimDef(name){';
+if((html.split(animDefNeedle).length-1)!==1)throw new Error('Unified 3D build: playerAnimDef definition not unique');
+const gameplayTiming=`const PLAYER_ANIM_TIMING={
+  default:{idle:{frames:6,fps:6},run:{frames:8,fps:10},attack:{frames:7,fps:14}},
+  gnome:{idle:{frames:4,fps:5},run:{frames:4,fps:9},attack:{frames:4,fps:11}},
+  archer:{idle:{frames:4,fps:5},run:{frames:4,fps:10},attack:{frames:4,fps:12}},
+  assassin:{idle:{frames:4,fps:4},run:{frames:4,fps:10},attack:{frames:4,fps:12}},
+  tank:{idle:{frames:4,fps:4},run:{frames:4,fps:9},attack:{frames:4,fps:10}},
+  barbarian:{idle:{frames:4,fps:4},run:{frames:4,fps:10},attack:{frames:4,fps:11}},
+  priest:{idle:{frames:4,fps:4},run:{frames:4,fps:9},attack:{frames:4,fps:10}},
+  mage:{idle:{frames:4,fps:4},run:{frames:4,fps:9},attack:{frames:4,fps:10}},
+  paladin:{idle:{frames:4,fps:4},run:{frames:4,fps:9},attack:{frames:4,fps:10}}
+};
+function playerAnimTiming(name){
+  let k='';
+  try{if(typeof classKeyFromName==='function')k=String(classKeyFromName(P.cls)||'').toLowerCase()}catch(_){}
+  const set=PLAYER_ANIM_TIMING[k]||PLAYER_ANIM_TIMING.default;
+  return set[name]||set.idle;
+}
+`;
+html=html.replace(animDefNeedle,gameplayTiming+animDefNeedle);
+const timingReplacements=[
+  ["P.animFrame=P.animFrame%Math.max(1,playerAnimDef('run').frames);","P.animFrame=P.animFrame%Math.max(1,playerAnimTiming('run').frames);"],
+  ["const a=playerAnimDef('attack');","const a=playerAnimTiming('attack');"],
+  ["const a = playerAnimDef(nextAnim);","const a = playerAnimTiming(nextAnim);"]
+];
+for(const [from,to] of timingReplacements){
+  const n=html.split(from).length-1;
+  if(n!==1)throw new Error('Unified 3D build: expected one gameplay animation timing target, found '+n+' for '+from);
+  html=html.replace(from,to);
+}
+if(!html.includes('const PLAYER_ANIM_TIMING={'))throw new Error('Unified 3D build: gameplay animation timing table missing');
+if(!html.includes("playerAnimTiming('attack')"))throw new Error('Unified 3D build: attack state still depends on sprite animation definition');
+if(html.includes("P.animFrame=P.animFrame%Math.max(1,playerAnimDef('run').frames)"))throw new Error('Unified 3D build: run state still depends on sprite animation definition');
+if(html.includes("const a=playerAnimDef('attack');"))throw new Error('Unified 3D build: attack state still depends on sprite animation definition');
+if(html.includes("const a = playerAnimDef(nextAnim);"))throw new Error('Unified 3D build: idle/run state still depends on sprite animation definition');
+
 const bobNeedle="const bob=P.scene==='fartzone'?0:Math.sin(P.bob)*(isGnome?2.0:3);";
 if((html.split(bobNeedle).length-1)!==1)throw new Error('Unified 3D build: local bob anchor not unique');
 const localCutover=`
@@ -57,4 +99,4 @@ if(!html.includes('worldX:Number(P.x),worldY:Number(P.y)'))throw new Error('Unif
 if(html.includes(oldLocalAnchorSignature))throw new Error('Unified 3D build: legacy local 3D anchor survived');
 if(!html.includes('player-3d-unified-runtime.js?v=20261002u3'))throw new Error('Unified 3D build: runtime tag missing');
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Unified Player3D: canonical world x/y · one renderer/cache · hips/feet pivot · head HUD anchor · no legacy real-player body rendering');
+console.log('Unified Player3D: canonical world x/y · one renderer/cache · gameplay animation timing decoupled from sprites · no legacy real-player body rendering');
