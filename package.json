@@ -1,9 +1,9 @@
 {
   "name":"ppa-phoenixpixarena",
   "private":true,
-  "version":"278.0.3-player3d-cleanup",
+  "version":"278.0.4-player3d-cleanup",
   "scripts":{
-    "build":"node build.mjs && node tools/postbuild-paladin-frame-cleanup-20260928.mjs && node tools/postbuild-clan-siege-native-20260925.mjs && node tools/postbuild-pc-input-20260925.mjs && node tools/postbuild-hide-clan-siege-duplicate-leave-20260925.mjs && node tools/postbuild-clan-boss-cerberus-rewards-v2-20260925.mjs && node tools/postbuild-mimic-sombrero-event-20260925.mjs && node tools/postbuild-stat-chests-20260927.mjs && node tools/postbuild-newbie-chest-20260928.mjs && node tools/postbuild-player-3d-unified-20261002.mjs && node tools/postbuild-player-sprite-preload-cleanup-20261002.mjs",
+    "build":"node build.mjs && node tools/postbuild-paladin-frame-cleanup-20260928.mjs && node tools/postbuild-clan-siege-native-20260925.mjs && node tools/postbuild-pc-input-20260925.mjs && node tools/postbuild-hide-clan-siege-duplicate-leave-20260925.mjs && node tools/postbuild-clan-boss-cerberus-rewards-v2-20260925.mjs && node tools/postbuild-mimic-sombrero-event-20260925.mjs && node tools/postbuild-stat-chests-20260927.mjs && node tools/postbuild-newbie-chest-20260928.mjs && node tools/postbuild-player-3d-unified-20261002.mjs && node tools/postbuild-player-sprite-preload-cleanup-20261002.mjs && node tools/postbuild-player-sprite-asset-cleanup-20261002.mjs",
     "deploy":"npm run build && wrangler deploy"
   },
   "devDependencies":{"wrangler":"^4.0.0","sharp":"^0.34.0"}

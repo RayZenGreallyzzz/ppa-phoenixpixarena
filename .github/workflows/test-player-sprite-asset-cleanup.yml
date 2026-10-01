@@ -1,0 +1,31 @@
+name: Test player sprite asset cleanup
+on:
+  push:
+    branches:
+      - stress-sprites-lazy-20261002
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - run: npm run build
+      - name: Verify real players stay 3D-only and legacy class atlases stay absent
+        run: |
+          grep -q "__PPA_PLAYER3D_UNIFIED" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_ONLINE_STRESS" public/index.html
+          grep -q "function v174AiSpriteCfg" public/index.html
+          for sym in GNOME_IDLE_SRC GNOME_RUN_SRC GNOME_ATTACK_SRC ARCHER_IDLE_SRC ARCHER_RUN_SRC ARCHER_ATTACK_SRC ASSASSIN_IDLE_SRC ASSASSIN_RUN_SRC ASSASSIN_ATTACK_SRC TANK_IDLE_SRC TANK_RUN_SRC TANK_ATTACK_SRC BERSERKER_IDLE_SRC BERSERKER_RUN_SRC BERSERKER_ATTACK_SRC PRIEST_IDLE_SRC PRIEST_RUN_SRC PRIEST_ATTACK_SRC MAGE_IDLE_SRC MAGE_RUN_SRC MAGE_ATTACK_SRC PALADIN_IDLE_SRC PALADIN_RUN_SRC PALADIN_ATTACK_SRC imgGnomeIdle imgGnomeRun imgGnomeAttack imgArcherIdle imgArcherRun imgArcherAttack imgAssassinIdle imgAssassinRun imgAssassinAttack imgTankIdle imgTankRun imgTankAttack imgBerserkerIdle imgBerserkerRun imgBerserkerAttack imgPriestIdle imgPriestRun imgPriestAttack imgMageIdle imgMageRun imgMageAttack imgPaladinIdle imgPaladinRun imgPaladinAttack; do
+            ! grep -q "$sym" public/index.html
+          done
+          grep -q "GNOME_ANIM" public/index.html
+          grep -q "PALADIN_ANIM" public/index.html
+          grep -q "img:null" public/index.html
