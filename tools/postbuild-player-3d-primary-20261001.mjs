@@ -7,29 +7,46 @@ const gameDir=path.join(publicDir,'game');
 const htmlPath=path.join(publicDir,'index.html');
 const runtimeSrc=path.join(ROOT,'gateway','player-3d-runtime.js');
 const runtimeDst=path.join(gameDir,'player-3d-runtime.js');
-const rangerSrc=path.join(ROOT,'Ranger_Mobile_Bow_Z90.glb');
-const rangerDst=path.join(gameDir,'Ranger_Mobile_Bow_Z90.glb');
 
-for(const p of [htmlPath,runtimeSrc,rangerSrc]){
+const MODEL_FILES=[
+  'Tank_Mobile_Shield_Hammer_Final.glb',
+  'Berserker_Final.glb',
+  'Paladin_Final.glb',
+  'Dwarf.glb',
+  'Ranger_Mobile_Bow_Z90.glb',
+  'Mage_Final.glb',
+  'Assassin.glb',
+  'Priest_Final_GitHub.glb'
+];
+
+for(const p of [htmlPath,runtimeSrc,...MODEL_FILES.map(f=>path.join(ROOT,f))]){
   if(!fs.existsSync(p))throw new Error('Primary 3D build: missing '+p);
 }
 fs.mkdirSync(gameDir,{recursive:true});
 fs.copyFileSync(runtimeSrc,runtimeDst);
-fs.copyFileSync(rangerSrc,rangerDst);
+for(const file of MODEL_FILES)fs.copyFileSync(path.join(ROOT,file),path.join(gameDir,file));
 
 let html=fs.readFileSync(htmlPath,'utf8');
 
-// Clean architectural cutover for the local Archer:
-// keep P.x/P.y, collision, movement, camera and combat completely untouched.
-// drawPlayer() publishes the ORIGINAL sprite foot baseline, then exits before
-// any old shadow/dust/sprite/fallback/melee visual can execute.
+// Clean architectural cutover for ALL eight local player classes.
+// Keep P.x/P.y, collision, movement, camera, combat, skills and inventory untouched.
+// drawPlayer() publishes the original feet baseline, then exits before any old
+// shadow/dust/sprite/fallback/melee body paint can execute.
 const bobNeedle="const bob=P.scene==='fartzone'?0:Math.sin(P.bob)*(isGnome?2.0:3);";
 const bobCount=html.split(bobNeedle).length-1;
 if(bobCount!==1)throw new Error('Primary 3D build: expected exactly one local player bob anchor, found '+bobCount);
 html=html.replace(bobNeedle,bobNeedle+`
-  if(isArcher){
+  const primary3DClass=playerUsesGnomeSprites()?'gnome'
+    :playerUsesArcherSprites()?'archer'
+    :playerUsesAssassinSprites()?'assassin'
+    :playerUsesTankSprites()?'tank'
+    :playerUsesBerserkerSprites()?'barbarian'
+    :playerUsesPriestSprites()?'priest'
+    :playerUsesMageSprites()?'mage'
+    :playerUsesPaladinSprites()?'paladin':'';
+  if(primary3DClass){
     window.__PPA3D_LOCAL_ANCHOR={
-      classKey:'archer',
+      classKey:primary3DClass,
       x:sx,
       y:sy+visualBody*0.40,
       visualBody:visualBody,
@@ -41,20 +58,22 @@ html=html.replace(bobNeedle,bobNeedle+`
     return;
   }`);
 
-// The 3D runtime owns the local Archer name. Do not execute the old canvas
-// nickname draw at all for this class.
+// The PRIMARY 3D runtime owns the local player labels for all eight classes.
 const nickNeedle='try{drawPlayerNickname()}catch(_){}';
 const nickCount=html.split(nickNeedle).length-1;
 if(nickCount!==1)throw new Error('Primary 3D build: expected exactly one local nickname draw, found '+nickCount);
-html=html.replace(nickNeedle,"try{if(!playerUsesArcherSprites())drawPlayerNickname()}catch(_){}");
+html=html.replace(
+  nickNeedle,
+  "try{if(!(playerUsesGnomeSprites()||playerUsesArcherSprites()||playerUsesAssassinSprites()||playerUsesTankSprites()||playerUsesBerserkerSprites()||playerUsesPriestSprites()||playerUsesMageSprites()||playerUsesPaladinSprites()))drawPlayerNickname()}catch(_){}"
+);
 
 // Runtime is independent of the legacy sprite system: no playerAnimDef wrappers,
-// no CanvasRenderingContext monkey patches, no transparent replacement atlases.
-const scriptTag='\n<script src="/game/player-3d-runtime.js?v=20261001h"></script>\n';
-if(!html.includes('player-3d-runtime.js?v=20261001h')){
+// no CanvasRenderingContext monkey patches and no transparent replacement atlases.
+const scriptTag='\n<script src="/game/player-3d-runtime.js?v=20261001i"></script>\n';
+if(!html.includes('player-3d-runtime.js?v=20261001i')){
   if(!html.includes('</body>'))throw new Error('Primary 3D build: </body> missing');
   html=html.replace('</body>',scriptTag+'</body>');
 }
 
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Primary 3D V1: Archer legacy draw bypassed before first 2D paint · exact +visualBody*0.40 foot anchor · old nickname draw bypassed · collision/camera untouched');
+console.log('Primary 3D V2: all 8 classes bypass legacy body render · exact feet anchor · old local nickname bypassed · gameplay/collision/camera untouched');
