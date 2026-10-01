@@ -3,39 +3,47 @@ import zlib from 'node:zlib';
 
 const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
 const src=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
-const clean=s=>s.replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g,'data:image/...;base64,[REMOVED]');
-const clip=(p,pre=1400,post=2600)=>clean(src.slice(Math.max(0,p-pre),Math.min(src.length,p+post)));
+const clean=s=>s.replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g,'data:image/...;base64,[REMOVED]').replace(/\s+/g,' ');
+const snip=(p,pre=700,post=1300)=>clean(src.slice(Math.max(0,p-pre),Math.min(src.length,p+post)));
+const positions=(term,max=8)=>{let a=[],p=0;while((p=src.indexOf(term,p))>=0&&a.length<max){a.push(p);p+=term.length;}return a;};
+const rpositions=(re,max=20)=>{let a=[],m;while((m=re.exec(src))&&a.length<max)a.push(m.index);return a;};
 
-function emitTerm(term,max=5){
-  let p=0,n=0;
-  while((p=src.indexOf(term,p))>=0&&n<max){
-    const f=src.slice(Math.max(0,p-2200),Math.min(src.length,p+4200));
-    if(/P\.x|P\.y|cam\.|drawImage|fillText|strokeText|ellipse|cameraZoom|playerAnim/.test(f)){
-      console.log(`\n### TERM ${term} #${++n} POS ${p}\n${clip(p)}`);
-    }
-    p+=term.length;
-  }
+console.log('SOURCE_LEN',src.length);
+
+for(const term of ['playerAnimDef','cameraZoom']){
+  const ps=positions(term,6); console.log(`\n## ${term} POS`,ps.join(','));
+  ps.slice(0,3).forEach((p,i)=>console.log(`### ${term} ${i+1}\n${snip(p)}`));
 }
 
-['playerAnimDef','cameraZoom','P.x-cam.x','P.y-cam.y','P.x - cam.x','P.y - cam.y','cx.drawImage','cx.ellipse','cx.fillText','cx.strokeText'].forEach(t=>emitTerm(t,5));
-
-function emitRegex(label,re,max=6){
-  let m,n=0;
-  while((m=re.exec(src))&&n<max){
-    const f=src.slice(Math.max(0,m.index-2200),Math.min(src.length,m.index+4200));
-    if(/P\.x|P\.y/.test(f)&&/cam\.|cameraZoom/.test(f)) console.log(`\n### ${label} #${++n} POS ${m.index}\n${clip(m.index)}`);
-  }
+function scored(label,re){
+  const ps=rpositions(re,200);
+  const arr=ps.map(p=>{
+    const f=src.slice(Math.max(0,p-2200),Math.min(src.length,p+2800));
+    let s=0;
+    if(/P\.x/.test(f))s+=4;if(/P\.y/.test(f))s+=4;if(/cam\.x/.test(f))s+=3;if(/cam\.y/.test(f))s+=3;
+    if(/playerAnimDef/.test(f))s+=5;if(/fillText|strokeText/.test(f))s+=2;if(/ellipse/.test(f))s+=2;
+    if(/remote|mob|boss/i.test(f))s-=1;
+    return {p,s};
+  }).sort((a,b)=>b.s-a.s||a.p-b.p).slice(0,4);
+  console.log(`\n## ${label}`,arr.map(x=>`${x.p}:${x.s}`).join(','));
+  arr.forEach((x,i)=>console.log(`### ${label} ${i+1} @${x.p} score=${x.s}\n${snip(x.p,900,1800)}`));
 }
-emitRegex('CAMX WRITE',/cam\.x\s*(?:=|\+=|-=)/g,8);
-emitRegex('CAMY WRITE',/cam\.y\s*(?:=|\+=|-=)/g,8);
-emitRegex('DRAWIMAGE NEAR PLAYER',/(?:cx|ctx|c)\.drawImage\s*\(/g,12);
-emitRegex('ELLIPSE NEAR PLAYER',/(?:cx|ctx|c)\.ellipse\s*\(/g,8);
-emitRegex('TEXT NEAR PLAYER',/(?:cx|ctx|c)\.(?:fillText|strokeText)\s*\(/g,12);
 
-// Also print the smallest enclosing function-like regions around the strongest anchors.
-for(const term of ['playerAnimDef','P.x-cam.x','P.x - cam.x']){
-  const p=src.indexOf(term); if(p<0) continue;
-  let a=Math.max(0,src.lastIndexOf('function ',p));
-  let b=src.indexOf('\nfunction ',p+term.length); if(b<0||b-a>16000)b=Math.min(src.length,p+8000);
-  console.log(`\n### FUNCTION WINDOW ${term} POS ${p}\n${clean(src.slice(a,b))}`);
+scored('DRAWIMAGE',/(?:cx|ctx|c)\.drawImage\s*\(/g);
+scored('ELLIPSE',/(?:cx|ctx|c)\.ellipse\s*\(/g);
+scored('TEXT',/(?:cx|ctx|c)\.(?:fillText|strokeText)\s*\(/g);
+
+for(const [label,re] of [['CAMX',/cam\.x\s*(?:=|\+=|-=)/g],['CAMY',/cam\.y\s*(?:=|\+=|-=)/g]]){
+  const ps=rpositions(re,100).map(p=>({p,f:src.slice(Math.max(0,p-1800),Math.min(src.length,p+2400))})).filter(x=>/P\.x|P\.y/.test(x.f)).slice(0,4);
+  console.log(`\n## ${label}`,ps.map(x=>x.p).join(','));
+  ps.forEach((x,i)=>console.log(`### ${label} ${i+1}\n${snip(x.p,900,1600)}`));
 }
+
+// Strongest window around a playerAnimDef call that also contains local P/camera/rendering.
+let best=null;
+for(const p of positions('playerAnimDef',30)){
+  const a=Math.max(0,p-5000),b=Math.min(src.length,p+7000),f=src.slice(a,b);
+  let s=(/P\.x/.test(f)?5:0)+(/P\.y/.test(f)?5:0)+(/cam\.x/.test(f)?4:0)+(/cam\.y/.test(f)?4:0)+(/drawImage/.test(f)?5:0)+(/fillText|strokeText/.test(f)?3:0)+(/ellipse/.test(f)?2:0);
+  if(!best||s>best.s)best={p,s,a,b};
+}
+if(best){console.log(`\n## BEST_PLAYER_WINDOW @${best.p} score=${best.s}\n${clean(src.slice(Math.max(0,best.p-1800),Math.min(src.length,best.p+4200)))}`)}
