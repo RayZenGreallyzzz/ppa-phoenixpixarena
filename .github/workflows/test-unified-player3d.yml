@@ -2,7 +2,10 @@ name: Test unified Player3D
 on:
   push:
     branches:
-      - player-3d-unified-20261002
+      - player-3d-unified-v2-20261002
+  pull_request:
+    branches:
+      - main
 permissions:
   contents: read
 jobs:
