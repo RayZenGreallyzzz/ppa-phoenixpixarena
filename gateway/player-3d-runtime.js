@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_PRIMARY_3D_V3)return;
-  window.__PPA_PRIMARY_3D_V3=true;
+  if(window.__PPA_PRIMARY_3D_V4)return;
+  window.__PPA_PRIMARY_3D_V4=true;
 
   const CLASS_CONFIG={
     tank:{model:'/game/Tank_Mobile_Shield_Hammer_Final.glb?v=20261001m',targetHeight:2.34,visualScale:.88,yawOffset:0},
@@ -15,12 +15,13 @@
   };
   const ENABLED_CLASSES=new Set(Object.keys(CLASS_CONFIG));
   const PX_PER_UNIT=34;
+  const OVERSCAN_PX=128;
 
   let THREE=null,GLTFLoader=null,renderer=null,scene=null,camera=null,host=null,nameEl=null,clanEl=null;
   let modelRoot=null,model=null,mixer=null,actions={},currentAction=null,loadedClass='';
   let lastAt=performance.now(),lastPX=null,lastPY=null,movingUntil=0,lastMotionYaw=0,hasMotionYaw=false;
   let cameraYaw=0,lastRectW=0,lastRectH=0,loadToken=0;
-  const state={ready:false,loading:false,error:'',anim:'idle',fps:0,frames:0,lastFpsAt:performance.now(),classKey:'',yawDeg:0,clips:[],missingAnims:[],bodyHeight:0,modelScale:0};
+  const state={ready:false,loading:false,error:'',anim:'idle',fps:0,frames:0,lastFpsAt:performance.now(),classKey:'',yawDeg:0,clips:[],missingAnims:[],bodyHeight:0,modelScale:0,facingSource:'legacy',targetId:null};
 
   function normalizeClass(v){
     const s=String(v||'').trim(),l=s.toLowerCase();
@@ -82,6 +83,36 @@
       return now<movingUntil;
     }catch(_){return false}
   }
+  function attackFacingActive(){
+    try{
+      return !!P.attacking||Number(P.runAttackT)>0||Number(P.shootT)>0||String(P.anim||'').toLowerCase().includes('attack');
+    }catch(_){return false}
+  }
+  function attackFacingYaw(){
+    if(!attackFacingActive())return null;
+    try{
+      const cfg=configFor(loadedClass||currentClass());
+      const px=Number(P.x),py=Number(P.y);
+      if(P.tid!=null&&typeof EN!=='undefined'&&Array.isArray(EN)){
+        const t=EN.find(e=>e&&e.id==P.tid);
+        let valid=!!t;
+        try{if(valid&&typeof targetIsValid==='function')valid=!!targetIsValid(t)}catch(_){}
+        if(valid){
+          const dx=Number(t.x)-px,dy=Number(t.y)-py;
+          if(Number.isFinite(dx)&&Number.isFinite(dy)&&Math.hypot(dx,dy)>.01){
+            state.targetId=t.id;
+            return cameraYaw+Math.atan2(dx,dy)+(Number(cfg.yawOffset)||0);
+          }
+        }
+      }
+      const a=Number(P.meleeAng);
+      if(Number.isFinite(a)){
+        state.targetId=P.tid==null?null:P.tid;
+        return cameraYaw+Math.atan2(Math.cos(a),Math.sin(a))+(Number(cfg.yawOffset)||0);
+      }
+    }catch(_){}
+    return null;
+  }
   function desiredAnim(moving){try{const a=String(P&&P.anim||'').toLowerCase();if(a.includes('attack'))return'attack'}catch(_){}return moving?'run':'idle'}
   function switchAnim(name){
     const next=actions[name]||actions.idle;if(!next)return;
@@ -140,27 +171,31 @@
     if(!renderer||!camera||typeof cv==='undefined'||!cv)return null;
     const r=cv.getBoundingClientRect();if(!(r.width>2&&r.height>2))return null;
     host.style.left=r.left+'px';host.style.top=r.top+'px';host.style.width=r.width+'px';host.style.height=r.height+'px';
+    const renderW=r.width+OVERSCAN_PX*2,renderH=r.height+OVERSCAN_PX*2;
     if(Math.abs(lastRectW-r.width)>.5||Math.abs(lastRectH-r.height)>.5){
-      lastRectW=r.width;lastRectH=r.height;renderer.setSize(Math.max(2,Math.round(r.width)),Math.max(2,Math.round(r.height)),false);
-      renderer.domElement.style.width=r.width+'px';renderer.domElement.style.height=r.height+'px';
-      const frustumH=r.height/PX_PER_UNIT,aspect=r.width/r.height;camera.left=-frustumH*aspect/2;camera.right=frustumH*aspect/2;camera.top=frustumH/2;camera.bottom=-frustumH/2;camera.updateProjectionMatrix();
+      lastRectW=r.width;lastRectH=r.height;
+      renderer.setSize(Math.max(2,Math.round(renderW)),Math.max(2,Math.round(renderH)),false);
+      renderer.domElement.style.left=(-OVERSCAN_PX)+'px';renderer.domElement.style.top=(-OVERSCAN_PX)+'px';
+      renderer.domElement.style.width=renderW+'px';renderer.domElement.style.height=renderH+'px';
+      const frustumH=renderH/PX_PER_UNIT,aspect=renderW/renderH;camera.left=-frustumH*aspect/2;camera.right=frustumH*aspect/2;camera.top=frustumH/2;camera.bottom=-frustumH/2;camera.updateProjectionMatrix();
     }
-    return r;
+    return {rect:r,renderW,renderH,offset:OVERSCAN_PX};
   }
-  function anchorToGround(anchor,rect){
-    if(!THREE||!camera||!modelRoot||!anchor||!rect)return false;
-    const z=Math.max(.1,Number(anchor.zoom)||1),kx=rect.width/Math.max(1,Number(cv.width)||rect.width),ky=rect.height/Math.max(1,Number(cv.height)||rect.height);
-    const px=Number(anchor.x)*z*kx,py=Number(anchor.y)*z*ky;if(!Number.isFinite(px)||!Number.isFinite(py))return false;
-    const ndc=new THREE.Vector2(px/rect.width*2-1,1-py/rect.height*2),ray=new THREE.Raycaster();ray.setFromCamera(ndc,camera);
+  function anchorToGround(anchor,view){
+    if(!THREE||!camera||!modelRoot||!anchor||!view)return false;
+    const rect=view.rect,z=Math.max(.1,Number(anchor.zoom)||1),kx=rect.width/Math.max(1,Number(cv.width)||rect.width),ky=rect.height/Math.max(1,Number(cv.height)||rect.height);
+    const px=view.offset+Number(anchor.x)*z*kx,py=view.offset+Number(anchor.y)*z*ky;if(!Number.isFinite(px)||!Number.isFinite(py))return false;
+    const ndc=new THREE.Vector2(px/view.renderW*2-1,1-py/view.renderH*2),ray=new THREE.Raycaster();ray.setFromCamera(ndc,camera);
     const hit=new THREE.Vector3();if(!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),0),hit))return false;
     modelRoot.position.copy(hit);const cfg=configFor(loadedClass||'archer');modelRoot.scale.setScalar((Number(cfg.visualScale)||1)*z);return true;
   }
-  function updateLabels(rect){
-    if(!nameEl||!clanEl||!modelRoot||!camera||!THREE||!rect)return;
+  function updateLabels(view){
+    if(!nameEl||!clanEl||!modelRoot||!camera||!THREE||!view)return;
     try{
       const cfg=configFor(loadedClass||'archer'),z=Math.max(.1,Number((window.__PPA3D_LOCAL_ANCHOR||{}).zoom)||1);
       const h=(Number(cfg.targetHeight)||2.34)*(Number(cfg.visualScale)||1)*z+.42;
-      const p=new THREE.Vector3(modelRoot.position.x,h,modelRoot.position.z).project(camera),x=(p.x*.5+.5)*rect.width,y=(-p.y*.5+.5)*rect.height;
+      const p=new THREE.Vector3(modelRoot.position.x,h,modelRoot.position.z).project(camera);
+      const x=(p.x*.5+.5)*view.renderW-view.offset,y=(-p.y*.5+.5)*view.renderH-view.offset;
       nameEl.textContent=currentName();nameEl.style.left=x+'px';nameEl.style.top=(y-8)+'px';nameEl.style.display='block';
       const clan=currentClanName();if(clan){clanEl.textContent='['+clan.slice(0,18)+']';clanEl.style.left=x+'px';clanEl.style.top=(y-21)+'px';clanEl.style.display='block'}else clanEl.style.display='none';
     }catch(_){nameEl.style.display='none';clanEl.style.display='none'}
@@ -196,10 +231,17 @@
     requestAnimationFrame(frame);if(!playerReady())return;const cls=currentClass();if(!ENABLED_CLASSES.has(cls)){if(host)host.style.display='none';return}
     if(!state.ready||loadedClass!==cls){if(!state.loading||state.classKey!==cls)loadClass(cls);if(host)host.style.display='none';return}
     const anchor=window.__PPA3D_LOCAL_ANCHOR;if(!anchor||anchor.classKey!==cls||String(anchor.scene)!==String(P.scene)||P.dead||document.hidden){if(host)host.style.display='none';return}
-    const rect=resizeToGameCanvas();if(!rect||!anchorToGround(anchor,rect)){if(host)host.style.display='none';return}host.style.display='block';
+    const view=resizeToGameCanvas();if(!view||!anchorToGround(anchor,view)){if(host)host.style.display='none';return}host.style.display='block';
     const dt=Math.max(0,Math.min(.05,(now-lastAt)/1000));lastAt=now;const moving=sampleMotion(now);switchAnim(desiredAnim(moving));try{if(mixer)mixer.update(dt)}catch(_){}
-    try{const target=hasMotionYaw?lastMotionYaw:legacyYaw(),desired=shortestAngle(modelRoot.rotation.y,target);modelRoot.rotation.y+=(desired-modelRoot.rotation.y)*Math.min(1,dt*12);state.yawDeg=Math.round(modelRoot.rotation.y*180/Math.PI)}catch(_){}
-    updateLabels(rect);try{renderer.render(scene,camera)}catch(_){}state.frames++;if(now-state.lastFpsAt>=1000){state.fps=Math.round(state.frames*1000/(now-state.lastFpsAt));state.frames=0;state.lastFpsAt=now}
+    try{
+      const aimYaw=attackFacingYaw();
+      const hasAim=Number.isFinite(aimYaw);
+      const target=hasAim?aimYaw:(hasMotionYaw?lastMotionYaw:legacyYaw());
+      state.facingSource=hasAim?'attack-target':(hasMotionYaw?'motion':'legacy');if(!hasAim)state.targetId=null;
+      const desired=shortestAngle(modelRoot.rotation.y,target),turnSpeed=hasAim?22:12;
+      modelRoot.rotation.y+=(desired-modelRoot.rotation.y)*Math.min(1,dt*turnSpeed);state.yawDeg=Math.round(modelRoot.rotation.y*180/Math.PI);
+    }catch(_){}
+    updateLabels(view);try{renderer.render(scene,camera)}catch(_){}state.frames++;if(now-state.lastFpsAt>=1000){state.fps=Math.round(state.frames*1000/(now-state.lastFpsAt));state.frames=0;state.lastFpsAt=now}
   }
 
   window.PPA_PRIMARY3D={diag:()=>Object.assign({},state,{anchor:window.__PPA3D_LOCAL_ANCHOR||null,loadedClass,config:CLASS_CONFIG[loadedClass]||null}),enabledClasses:Array.from(ENABLED_CLASSES)};
