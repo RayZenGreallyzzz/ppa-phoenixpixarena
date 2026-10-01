@@ -1,6 +1,1403 @@
 
-===== drawPlayer(); #1 @97883437 =====
-false;
+===== DRAW PLAYER FUNCTION @98223107 =====
+{
+    var c=(typeof CLAN_LOCAL_STATE!=='undefined'&&CLAN_LOCAL_STATE&&CLAN_LOCAL_STATE.clan)
+      ?String(CLAN_LOCAL_STATE.clan.name||'').trim():'';
+    return c;
+  }catch(_){return ''}
+}
+function drawPlayerNickname(){
+  var name=ppaPlayerNickname();
+  if(!name)return;
+  var clan=ppaPlayerClanName();
+  var sx=P.x-cam.x;
+  var y=ppaPlayerVisualTopScreenY()-9;
+
+  cx.save();
+  cx.textAlign='center';
+  cx.textBaseline='bottom';
+  cx.lineJoin='round';
+
+  if(clan){
+    var clanText='['+clan.slice(0,18)+']';
+    cx.font='700 8px Georgia, "Times New Roman", serif';
+    cx.lineWidth=2.4;
+    cx.strokeStyle='rgba(8,12,20,.94)';
+    cx.shadowColor='rgba(0,0,0,.78)';
+    cx.shadowBlur=3;
+    cx.strokeText(clanText,sx,y-12);
+    cx.shadowBlur=0;
+    cx.fillStyle='#a9cfff';
+    cx.fillText(clanText,sx,y-12);
+  }
+
+  cx.font='600 10px Georgia, "Times New Roman", serif';
+  cx.lineWidth=2.6;
+  cx.strokeStyle='rgba(18,8,5,.92)';
+  cx.shadowColor='rgba(0,0,0,.72)';
+  cx.shadowBlur=3;
+  cx.strokeText(name.slice(0,18),sx,y);
+  cx.shadowBlur=0;
+  cx.fillStyle='#f2d39a';
+  cx.fillText(name.slice(0,18),sx,y);
+  cx.restore();
+}
+// ==========================================================================
+
+function drawPlayer(){
+  const sx=P.x-cam.x,sy=P.y-cam.y;
+  const siegeVisualScale=P.scene==='clansiege'?CLAN_SIEGE_PLAYER_VISUAL_SCALE:1;
+
+  // V277: only the player's 8 classes are drawn 10 px smaller.
+  // No collision, camera, NPC, mob, AI or combat values are changed.
+  const PLAYER_CLASS_EXTRA_REDUCTION_PX=10;
+  const playerClassDrawHeight=(baseHeight)=>{
+    const sc=Math.max(.01,Number(siegeVisualScale)||1);
+    return Math.max(8,phoneCharacterDrawHeight(baseHeight,siegeVisualScale)-PLAYER_CLASS_EXTRA_REDUCTION_PX/sc);
+  };
+  const playerClassBodySize=(baseSize)=>{
+    const sc=Math.max(.01,Number(siegeVisualScale)||1);
+    return Math.max(8,phoneCharacterBodySize(baseSize,siegeVisualScale)-PLAYER_CLASS_EXTRA_REDUCTION_PX/sc);
+  };
+  const isGnome=playerUsesGnomeSprites();
+  const isArcher=playerUsesArcherSprites();
+  const isAssassinCustom=playerUsesAssassinSprites()&&!!ASSASSIN_ANIM[P.anim];
+  const isTank=playerUsesTankSprites()&&!!TANK_ANIM[P.anim];
+  const isBerserker=playerUsesBerserkerSprites()&&!!BERSERKER_ANIM[P.anim];
+  const isPriest=playerUsesPriestSprites()&&!!PRIEST_ANIM[P.anim];
+  const isMage=playerUsesMageSprites()&&!!MAGE_ANIM[P.anim];
+  const isPaladin=playerUsesPaladinSprites()&&!!PALADIN_ANIM[P.anim];
+  const isCustomDirectional=isGnome||isArcher||isAssassinCustom||isTank||isBerserker||isPriest||isMage||isPaladin;
+  const phoneBodyBase=playerClassBodySize(P.sz);
+  const visualBody=(isGnome?phoneBodyBase*0.72:phoneBodyBase)*siegeVisualScale;
+  const bob=P.scene==='fartzone'?0:Math.sin(P.bob)*(isGnome?2.0:3);
+
+  // Shadow follows the visible character size.
+  // Fart Zone: exact feet-to-ground anchor, no visual hovering.
+  const playerShadowY=P.scene==='fartzone'?sy+visualBody*0.40:sy+visualBody*0.45;
+  cx.fillStyle='rgba(0,0,0,0.4)';
+  cx.beginPath();cx.ellipse(sx,playerShadowY,visualBody*0.38,visualBody*0.14,0,0,Math.PI*2);cx.fill();
+
+  // Dust when running
+  if((Math.abs(P.vx)>0.5||Math.abs(P.vy)>0.5)&&Math.random()<0.25)
+    PT.push({x:P.x+(Math.random()-.5)*(isGnome?6:12)*siegeVisualScale,y:P.y+visualBody*0.35,
+      vx:-P.vx*0.4+(Math.random()-.5),vy:-P.vy*0.2+(Math.random()-.5)*0.5,
+      life:10,ml:10,sz:(isGnome?1.5:2)*siegeVisualScale,col:'rgba(120,100,70,0.4)'});
+
+  cx.save();
+  cx.translate(sx,sy+bob);
+  if(P.scene==='clansiege')cx.scale(CLAN_SIEGE_PLAYER_VISUAL_SCALE,CLAN_SIEGE_PLAYER_VISUAL_SCALE);
+
+  // Legacy lean/recoil is disabled for the dwarf because his approved
+  // 4-frame attack already contains the physical movement.
+  if(!isCustomDirectional){
+    let lean=0;
+    if(P.shootT>0)lean=P.face>0?0.12:-0.12;
+    const rc=P.recoil*6*(P.face>0?-1:1);
+    cx.translate(rc,0);
+    cx.rotate(lean);
+  }
+
+  const cur=playerAnimDef(P.anim);
+  const canonicalDir=isCustomDirectional?playerDir8():0;
+  const dirRow=isGnome
+    ? GNOME_SOURCE_ROW[canonicalDir]
+    : (isArcher
+        ? ARCHER_SOURCE_ROW[canonicalDir]
+        : (isAssassinCustom
+            ? (P.anim==='run'
+                ? ASSASSIN_RUN_SOURCE_ROW[canonicalDir]
+                : ASSASSIN_4DIR_ROW[canonicalDir])
+            : (isTank
+                ? TANK_4DIR_ROW[canonicalDir]
+                : (isBerserker
+                    ? BERSERKER_4DIR_ROW[canonicalDir]
+                    : (isPriest
+                        ? PRIEST_4DIR_ROW[canonicalDir]
+                        : (isMage
+                            ? MAGE_4DIR_ROW[canonicalDir]
+                            : (isPaladin
+                                ? PALADIN_4DIR_ROW[canonicalDir]
+                                : (cur.rows ? getDirRow() : 0))))))));
+  const useFlip=isGnome
+    ? GNOME_FLIP_BY_DIR[canonicalDir]
+    : (isArcher
+        ? ARCHER_FLIP_BY_DIR[canonicalDir]
+        : ((isAssassinCustom||isTank||isBerserker||isPriest||isMage||isPaladin) ? false : (dirRow===2 && P.face>0)));
+  const frameIndex=((P.animFrame%cur.frames)+cur.frames)%cur.frames;
+
+  if(cur.img.complete && cur.img.naturalWidth > 0){
+    const fh_row=cur.fh;
+    const fw_frame=cur.fw;
+    const footY=P.sz*0.40;
+    const srcY=dirRow*fh_row;
+
+    let dh,dw,dx,dy;
+    if(isGnome){
+      // Approved dwarf size stays unchanged.
+      dh=playerClassDrawHeight(P.sz*GNOME_DRAW_SCALE,siegeVisualScale);
+      dw=dh;
+      dx=Math.round(-dw/2);
+      dy=Math.round(visualBody*0.40-(113/128)*dh);
+    }else if(isArcher){
+      dh=playerClassDrawHeight(P.sz*ARCHER_DRAW_SCALE,siegeVisualScale);
+      dw=dh;
+      dx=Math.round(-dw/2);
+      dy=Math.round(visualBody*0.40-(184/224)*dh);
+    }else if(isAssassinCustom){
+      const assScale=(P.anim==='idle')
+        ? ASSASSIN_IDLE_DRAW_SCALE
+        : (P.anim==='attack' ? ASSASSIN_ATTACK_DRAW_SCALE : ASSASSIN_RUN_DRAW_SCALE);
+      dh=playerClassDrawHeight(P.sz*assScale,siegeVisualScale);
+      dw=dh;
+      dx=Math.round(-dw/2);
+      dy=Math.round(visualBody*0.40-(156/192)*dh);
+    }else if(isTank){
+      dh=playerClassDrawHeight(P.sz*TANK_DRAW_SCALE,siegeVisualScale);
+      dw=dh;
+      dx=Math.round(-dw/2);
+      dy=Math.round(visualBody*0.40-(232/256)*dh);
+    }else if(isBerserker){
+      dh=playerClassDrawHeight(P.sz*BERSERKER_DRAW_SCALE,siegeVisualScale);
+      dw=dh;
+      dx=Math.round(-dw/2);
+      dy=Math.round(visualBody*0.40-(
+
+===== DRAW PLAYER NICKNAME FUNCTION @98222096 =====
+(P.anim==='attack'?ASSASSIN_ATTACK_DRAW_SCALE:ASSASSIN_RUN_DRAW_SCALE);
+    dh=phoneCharacterDrawHeight(P.sz*sc,_sv);dy=P.sz*.40-(156/192)*dh;
+  }else if(playerUsesTankSprites()&&TANK_ANIM[P.anim]){
+    dh=phoneCharacterDrawHeight(P.sz*TANK_DRAW_SCALE,_sv);dy=P.sz*.40-(232/256)*dh;
+  }else if(playerUsesBerserkerSprites()&&BERSERKER_ANIM[P.anim]){
+    dh=phoneCharacterDrawHeight(P.sz*BERSERKER_DRAW_SCALE,_sv);dy=P.sz*.40-(232/256)*dh;
+  }else if(playerUsesPriestSprites()&&PRIEST_ANIM[P.anim]){
+    dh=phoneCharacterDrawHeight(P.sz*PRIEST_DRAW_SCALE,_sv);dy=P.sz*.40-(236/256)*dh;
+  }else if(playerUsesMageSprites()&&MAGE_ANIM[P.anim]){
+    dh=phoneCharacterDrawHeight(P.sz*MAGE_DRAW_SCALE,_sv);dy=P.sz*.40-(236/256)*dh;
+  }else if(playerUsesPaladinSprites()&&PALADIN_ANIM[P.anim]){
+    dh=phoneCharacterDrawHeight(P.sz*PALADIN_DRAW_SCALE,_sv);dy=P.sz*.40-(234/256)*dh;
+  }else{
+    dh=phoneCharacterDrawHeight(P.sz*1.4,_sv);dy=P.sz*.40-dh;
+  }
+  return sy+(bob+dy)*_sv;
+}
+function ppaPlayerClanName(){
+  try{
+    var c=(typeof CLAN_LOCAL_STATE!=='undefined'&&CLAN_LOCAL_STATE&&CLAN_LOCAL_STATE.clan)
+      ?String(CLAN_LOCAL_STATE.clan.name||'').trim():'';
+    return c;
+  }catch(_){return ''}
+}
+function drawPlayerNickname(){
+  var name=ppaPlayerNickname();
+  if(!name)return;
+  var clan=ppaPlayerClanName();
+  var sx=P.x-cam.x;
+  var y=ppaPlayerVisualTopScreenY()-9;
+
+  cx.save();
+  cx.textAlign='center';
+  cx.textBaseline='bottom';
+  cx.lineJoin='round';
+
+  if(clan){
+    var clanText='['+clan.slice(0,18)+']';
+    cx.font='700 8px Georgia, "Times New Roman", serif';
+    cx.lineWidth=2.4;
+    cx.strokeStyle='rgba(8,12,20,.94)';
+    cx.shadowColor='rgba(0,0,0,.78)';
+    cx.shadowBlur=3;
+    cx.strokeText(clanText,sx,y-12);
+    cx.shadowBlur=0;
+    cx.fillStyle='#a9cfff';
+    cx.fillText(clanText,sx,y-12);
+  }
+
+  cx.font='600 10px Georgia, "Times New Roman", serif';
+  cx.lineWidth=2.6;
+  cx.strokeStyle='rgba(18,8,5,.92)';
+  cx.shadowColor='rgba(0,0,0,.72)';
+  cx.shadowBlur=3;
+  cx.strokeText(name.slice(0,18),sx,y);
+  cx.shadowBlur=0;
+  cx.fillStyle='#f2d39a';
+  cx.fillText(name.slice(0,18),sx,y);
+  cx.restore();
+}
+// ==========================================================================
+
+function drawPlayer(){
+  const sx=P.x-cam.x,sy=P.y-cam.y;
+  const siegeVisualScale=P.scene==='clansiege'?CLAN_SIEGE_PLAYER_VISUAL_SCALE:1;
+
+  // V277: only the player's 8 classes are drawn 10 px smaller.
+  // No collision, camera, NPC, mob, AI or combat values are changed.
+  const PLAYER_CLASS_EXTRA_REDUCTION_PX=10;
+  const playerClassDrawHeight=(baseHeight)=>{
+    const sc=Math.max(.01,Number(siegeVisualScale)||1);
+    return Math.max(8,phoneCharacterDrawHeight(baseHeight,siegeVisualScale)-PLAYER_CLASS_EXTRA_REDUCTION_PX/sc);
+  };
+  const playerClassBodySize=(baseSize)=>{
+    const sc=Math.max(.01,Number(siegeVisualScale)||1);
+    return Math.max(8,phoneCharacterBodySize(baseSize,siegeVisualScale)-PLAYER_CLASS_EXTRA_REDUCTION_PX/sc);
+  };
+  const isGnome=playerUsesGnomeSprites();
+  const isArcher=playerUsesArcherSprites();
+  const isAssassinCustom=playerUsesAssassinSprites()&&!!ASSASSIN_ANIM[P.anim];
+  const isTank=playerUsesTankSprites()&&!!TANK_ANIM[P.anim];
+  const isBerserker=playerUsesBerserkerSprites()&&!!BERSERKER_ANIM[P.anim];
+  const isPriest=playerUsesPriestSprites()&&!!PRIEST_ANIM[P.anim];
+  const isMage=playerUsesMageSprites()&&!!MAGE_ANIM[P.anim];
+  const isPaladin=playerUsesPaladinSprites()&&!!PALADIN_ANIM[P.anim];
+  const isCustomDirectional=isGnome||isArcher||isAssassinCustom||isTank||isBerserker||isPriest||isMage||isPaladin;
+  const phoneBodyBase=playerClassBodySize(P.sz);
+  const visualBody=(isGnome?phoneBodyBase*0.72:phoneBodyBase)*siegeVisualScale;
+  const bob=P.scene==='fartzone'?0:Math.sin(P.bob)*(isGnome?2.0:3);
+
+  // Shadow follows the visible character size.
+  // Fart Zone: exact feet-to-ground anchor, no visual hovering.
+  const playerShadowY=P.scene==='fartzone'?sy+visualBody*0.40:sy+visualBody*0.45;
+  cx.fillStyle='rgba(0,0,0,0.4)';
+  cx.beginPath();cx.ellipse(sx,playerShadowY,visualBody*0.38,visualBody*0.14,0,0,Math.PI*2);cx.fill();
+
+  // Dust when running
+  if((Math.abs(P.vx)>0.5||Math.abs(P.vy)>0.5)&&Math.random()<0.25)
+    PT.push({x:P.x+(Math.random()-.5)*(isGnome?6:12)*siegeVisualScale,y:P.y+visualBody*0.35,
+      vx:-P.vx*0.4+(Math.random()-.5),vy:-P.vy*0.2+(Math.random()-.5)*0.5,
+      life:10,ml:10,sz:(isGnome?1.5:2)*siegeVisualScale,col:'rgba(120,100,70,0.4)'});
+
+  cx.save();
+  cx.translate(sx,sy+bob);
+  if(P.scene==='clansiege')cx.scale(CLAN_SIEGE_PLAYER_VISUAL_SCALE,CLAN_SIEGE_PLAYER_VISUAL_SCALE);
+
+  // Legacy lean/recoil is disabled for the dwarf because his approved
+  // 4-frame attack already contains the physical movement.
+  if(!isCustomDirectional){
+    let lean=0;
+    if(P.shootT>0)lean=P.face>0?0.12:-0.12;
+    const rc=P.recoil*6*(P.face>0?-1:1);
+    cx.translate(rc,0);
+    cx.rotate(lean);
+  }
+
+  const cur=playerAnimDef(P.anim);
+  const canonicalDir=isCustomDirectional?playerDir8():0;
+  const dirRow=isGnome
+    ? GNOME_SOURCE_ROW[canonicalDir]
+    : (isArcher
+        ? ARCHER_SOURCE_ROW[canonicalDir]
+        : (isAssassinCustom
+            ? (P.anim==='run'
+                ? ASSASSIN_RUN_SOURCE_ROW[canonicalDir]
+                : ASSASSIN_4DIR_ROW[canonicalDir])
+            : (isTank
+                ? TANK_4DIR_ROW[canonicalDir]
+                : (isBerserker
+                    ? BERSERKER_4DIR_ROW[canonicalDir]
+                    : (isPriest
+                        ? PRIEST_4DIR_ROW[canonicalDir]
+                        : (isMage
+                            ? MAGE_4DIR_ROW[canonicalDir]
+                            : (isPaladin
+                                ? PALADIN_4DIR_ROW[canonicalDir]
+                                : (cur.rows ? getDirRow() : 0))))))));
+  const useFlip=isGnome
+    ? GNOME_FLIP_BY_DIR[canonicalDir]
+    : (isArcher
+        ? ARCHER_FLIP_BY_DIR[canonicalDir]
+        : ((isAssassinCustom||isTank||isBerserker||isPriest||isMage||isPaladin) ? false : (dirRow===2 && P.face>0)));
+  const frameIndex=((P.animFrame%cur.frames)+cur.frames)%cur.frames;
+
+  if(cur.img.complete && cur.img.naturalWidth > 0){
+    const fh_row=cur.fh;
+    const fw_frame=cur.fw;
+    const footY=P.sz*0.40;
+    const srcY=dirRow*fh_row;
+
+    let dh,dw,dx,dy;
+    if(isGnome){
+      // Approved dwarf size stays unchanged.
+      dh=playerClassDrawHeight(P.sz*GNOME_DRAW_SCALE,sie
+
+===== PLAYER ANIM DEF FUNCTION @34358254 =====
+==========================================================
+
+function playerUsesGnomeSprites(){
+  return typeof classKeyFromName==='function' && classKeyFromName(P.cls)==='gnome';
+}
+function playerUsesArcherSprites(){
+  return typeof classKeyFromName==='function' && classKeyFromName(P.cls)==='archer';
+}
+function playerUsesAssassinSprites(){
+  return typeof classKeyFromName==='function' && classKeyFromName(P.cls)==='assassin';
+}
+function playerUsesTankSprites(){
+  return typeof classKeyFromName==='function' && classKeyFromName(P.cls)==='tank';
+}
+function playerUsesBerserkerSprites(){
+  return typeof classKeyFromName==='function' && classKeyFromName(P.cls)==='barbarian';
+}
+function playerUsesPriestSprites(){
+  return typeof classKeyFromName==='function' && classKeyFromName(P.cls)==='priest';
+}
+function playerUsesMageSprites(){
+  return typeof classKeyFromName==='function' && classKeyFromName(P.cls)==='mage';
+}
+function playerUsesPaladinSprites(){
+  return typeof classKeyFromName==='function' && classKeyFromName(P.cls)==='paladin';
+}
+function playerUsesEightDirSprites(){
+  return playerUsesGnomeSprites()||playerUsesArcherSprites()||
+    (playerUsesAssassinSprites()&&P.anim==='run');
+}
+function playerAnimDef(name){
+  if(playerUsesGnomeSprites() && GNOME_ANIM[name]){
+    const a=GNOME_ANIM[name];
+    if(a.img&&a.img.complete&&a.img.naturalWidth>0)return a;
+    return GNOME_ANIM.idle;
+  }
+  if(playerUsesArcherSprites() && ARCHER_ANIM[name]){
+    const a=ARCHER_ANIM[name];
+    if(a.img&&a.img.complete&&a.img.naturalWidth>0)return a;
+    return ARCHER_ANIM.idle;
+  }
+  if(playerUsesAssassinSprites() && ASSASSIN_ANIM[name]){
+    const a=ASSASSIN_ANIM[name];
+    if(a.img&&a.img.complete&&a.img.naturalWidth>0)return a;
+    return ASSASSIN_ANIM.idle;
+  }
+  if(playerUsesTankSprites() && TANK_ANIM[name]){
+    const a=TANK_ANIM[name];
+    if(a.img&&a.img.complete&&a.img.naturalWidth>0)return a;
+    return TANK_ANIM.idle;
+  }
+  if(playerUsesBerserkerSprites() && BERSERKER_ANIM[name]){
+    const a=BERSERKER_ANIM[name];
+    if(a.img&&a.img.complete&&a.img.naturalWidth>0)return a;
+    return BERSERKER_ANIM.idle;
+  }
+  if(playerUsesPriestSprites() && PRIEST_ANIM[name]){
+    const a=PRIEST_ANIM[name];
+    if(a.img&&a.img.complete&&a.img.naturalWidth>0)return a;
+    return PRIEST_ANIM.idle;
+  }
+  if(playerUsesMageSprites() && MAGE_ANIM[name]){
+    const a=MAGE_ANIM[name];
+    if(a.img&&a.img.complete&&a.img.naturalWidth>0)return a;
+    return MAGE_ANIM.idle;
+  }
+  if(playerUsesPaladinSprites() && PALADIN_ANIM[name]){
+    const a=PALADIN_ANIM[name];
+    if(a.img&&a.img.complete&&a.img.naturalWidth>0)return a;
+    return PALADIN_ANIM.idle;
+  }
+  return ANIM[name]||ANIM.idle;
+}
+// Canonical direction index: 0=N,1=NE,2=E,3=SE,4=S,5=SW,6=W,7=NW.
+function dir8Canonical(dx,dy){
+  if(Math.hypot(dx,dy)<0.001)return Number.isFinite(P.dir8)?P.dir8:4;
+  let a=Math.atan2(dy,dx);
+  let n=(a+Math.PI/2)%(Math.PI*2);
+  if(n<0)n+=Math.PI*2;
+  return Math.round(n/(Math.PI/4))%8;
+}
+function playerDir8(){
+  // Run-and-attack: movement continues in joystick direction, but the
+  // character visually turns toward the shot/target for the attack moment.
+  const aimingNow=(P.attacking||P.runAttackT>0||P.shootT>0);
+  if(aimingNow && Number.isFinite(P.meleeAng)){
+    P.dir8=dir8Canonical(Math.cos(P.meleeAng),Math.sin(P.meleeAng));
+    return P.dir8;
+  }
+  if(Math.hypot(P.vx,P.vy)>0.15){
+    P.dir8=dir8Canonical(P.vx,P.vy);
+  }
+  if(!Number.isFinite(P.dir8))P.dir8=4;
+  return P.dir8;
+}
+// V127: use one approved side and mirror it for the opposite side.
+// This avoids the generated E/W duplicates fighting the joystick direction.
+// canonical direction: N,NE,E,SE,S,SW,W,NW
+const GNOME_SOURCE_ROW=[0,1,2,3,4,3,2,1];
+const GNOME_FLIP_BY_DIR=[false,false,true,false,false,true,false,true];
+
+// True 50% of the padded cell looked like a dot on the phone.
+// This keeps the dwarf visibly smaller than the assassin (~70–75% visually).
+const GNOME_DRAW_SCALE=1.1570;
+// ========================================================================
+
+// === CLASS SKILLS (active abilities on s1-s4 + passives) ===
+// a = active (cd sec, mp cost, effect key), p = passive (chance %, effect)
+const CLASS_SKILLS={
+  tank:{name:'СТРАЖ',active:[
+    {id:'shield_guard',n:'Щит стража',ic:'\ud83d\udee1\ufe0f',d:'Защита +40% на 8 сек',cd:30,mp:6,fx:'buff_def',v:0.4,dur:8},
+    {id:'taunt',n:'Провокация',ic:'\ud83d\udde3\ufe0f',d:'Цель атакует стража 5 сек',cd:20,mp:4,fx:'taunt',dur:5},
+    {id:'shield_bash',n:'Удар щитом',ic:'\ud83d\udca5',d:'120% урона + оглушение 2 сек',cd:25,mp:5,fx:'nuke',v:1.2,stun:2,melee:true},
+    {id:'stone_wall',n:'Каменная стена',ic:'\ud83e\uddf1',d:'Входящий урон -60% на 6 сек',cd:45,mp:8,fx:'buff_dr',v:0.6,dur:6}
+  ],passive:[
+    {n:'Тяжелая броня',d:'Физическая защита +15%',ch:80},
+    {n:'Стойкость',d:'Сопротивление оглушению +20%',ch:75},
+    {n:'Щит за щитом',d:'При блоке восстанавливает 5% HP',ch:35},
+    {n:'Железная воля',d:'При HP < 20% защита +30%',ch:70},
+    {n:'Опытный танк',d:'Генерация угрозы +25%',ch:80}
+  ]},
+  barbarian:{name:'ВАРВАР',active:[
+    {id:'rage',n:'Ярость',ic:'\ud83d\ude21',d:'АТК +40%, DEF -20% на 10 сек',cd:25,mp:5,fx:'buff_atk',v:0.4,dur:10},
+    {id:'deathblow',n:'Смертельный удар',ic:'\u2694\ufe0f',d:'220% урона, +20% крита',cd:15,mp:4,fx:'nuke',v:2.2,crit:0.2,melee:true},
+    {id:'berserk',n:'Берсерк',ic:'\ud83e\ude93',d:'АТК +60%, скорость +30%, HP -2%/сек',cd:40,mp:8,fx:'berserk',v:0.6,spd:0.3,dur:8},
+    {id:'destroyer',n:'Разрушитель',ic:'\ud83d\udca2',d:'Игнорирует 40% защиты цели',cd:20,mp:5,fx:'nuke',v:1.6,pen:0.4,melee:true}
+  ],passive:[
+    {n:'Кровавая жажда',d:'Восстанавливает 10% HP за крит. удар',ch:75},
+    {n:'Ярость берсерка',d:'Чем меньше HP, тем выше АТК (до +30%)',ch:70},
+    {n:'Шрам',d:'При получении крита — АТК +20% на 5 сек',ch:40},
+    {n:'Безрассудство',d:'Критический урон +25%',ch:80},
+    {n:'Поток крови',d:'Убийство дает +20% HP и +10% скорости',ch:65}
+  ]},
+  paladin:{name:'ПАЛАДИН',active:[
+    {id:'light_blade',n:'Светлый клинок',ic:'\u2694\ufe0f',d:'150% урона + лечение 50 HP',cd:20,mp:5,fx:'nuke',v:1.5,heal:50,melee:true},
+    {id:'divine_shield',n:'Божественный щит',ic:'\ud83d\udee1\ufe0f',d:'Защита +30% на 10 сек',cd:35,mp:6,fx:'buff_def',v:0.3,dur:10},
+    {id:'heal',n:'Лечение',ic:'\u2728',d:'Восстанавливает 60 HP',cd:15,mp:6,fx:'heal',v:60},
+    {id:'holy_smite',
+
+===== CAM DECL @97862973 =====
+scene==='pvp1'||P.scene==='pvpteam';
+      const teamPreview=P.scene==='pvpteam'&&!PVP_MATCH.active;
+      if(inPvp&&!teamPreview){
+        pvpCd.style.display='block';
+        const scoreHead=PVP_MATCH.active
+          ?'<div style="font-size:11px;color:#f0c371;margin-bottom:3px">РАУНД '+PVP_MATCH.round+' / '+PVP_MATCH.maxRounds+' · '+pvpMatchScoreText()+'</div>'
+          :'';
+        if(pvpRoundBannerUntil>Date.now()){
+          pvpCd.innerHTML=scoreHead+'<div style="font-size:22px;color:#ffd27a">'+pvpRoundBannerText+'</div>';
+        }else if(!pvpCombatEnabled&&pvpWarmupUntil>0){
+          const sec=Math.max(1,Math.ceil((pvpWarmupUntil-Date.now())/1000));
+          pvpCd.innerHTML=scoreHead+'<div style="font-size:10px;color:#c8bca8;margin-bottom:3px">МОЖНО ЗАНИМАТЬ ПОЗИЦИЮ · УРОН ОТКЛЮЧЁН</div>'+sec;
+        }else if(pvpFightBannerUntil>Date.now()){
+          pvpCd.innerHTML=scoreHead+'<div style="font-size:28px;color:#ff765d">БОЙ!</div>';
+        }else{
+          pvpCd.innerHTML=scoreHead+'<div style="font-size:11px;color:#ff9d78">PvP ВКЛЮЧЁН</div>';
+        }
+      }else{
+        pvpCd.style.display='none';
+      }
+    }
+
+  
+}
+
+// Spawning handled by wave system
+}
+
+// Render
+const cam={x:0,y:0};
+let __ppaVignetteGradient=null,__ppaVignetteKey='';
+function ppaGetVignetteGradient(){
+  const key=cv.width+'x'+cv.height;
+  if(!__ppaVignetteGradient||__ppaVignetteKey!==key){
+    __ppaVignetteKey=key;
+    const g=cx.createRadialGradient(cv.width/2,cv.height/2,cv.height/3,cv.width/2,cv.height/2,cv.height);
+    g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.65)');
+    __ppaVignetteGradient=g;
+  }
+  return __ppaVignetteGradient;
+}
+// Camera zoom is scene-specific. Dungeon is brought a little closer while
+// the town and arena keep their existing framing.
+const CAMERA_ZOOM={safe:1,arena:1,dungeon:1.18,clanboss1:1.05,clansiege:1.38};
+function cameraZoom(){return CAMERA_ZOOM[P.scene]||1}
+
+function render(){
+  const scCam=SCENES[P.scene];
+  const mw=scCam.w||WORLD,mh=scCam.h||WORLD;
+  const zoom=cameraZoom();
+  const viewW=cv.width/zoom,viewH=cv.height/zoom;
+  cam.x=P.x-viewW/2;cam.y=P.y-viewH/2;
+  // Clamp camera to the map — no empty space beyond the edges
+  cam.x=mw<=viewW?(mw-viewW)/2:Math.max(0,Math.min(cam.x,mw-viewW));
+  cam.y=mh<=viewH?(mh-viewH)/2:Math.max(0,Math.min(cam.y,mh-viewH));
+
+  // Clear/fill the physical screen first, then scale only the world.
+  cx.setTransform(1,0,0,1,0,0);
+  cx.fillStyle=P.scene==='safe'?'#3a3528':'#1a1a1a';
+  cx.fillRect(0,0,cv.width,cv.height);
+  cx.save();
+  cx.scale(zoom,zoom);
+
+  // Base fill: tiles for safe zone (no black void), dark for arena/dungeon
+  if(P.scene==='safe'){
+    const ts=96;
+    for(let y=0;y<viewH;y+=ts){
+      for(let x=0;x<viewW;x+=ts){
+        const wx=x+cam.x,wy=y+cam.y;
+        cx.fillStyle=((Math.floor(wx/ts)+Math.floor(wy/ts))%2===0)?'#3a3528':'#423d30';
+        cx.fillRect(x,y,ts,ts);
+      }
+    }
+  }else{
+    cx.fillStyle='#1a1a1a';cx.fillRect(0,0,viewW,viewH);
+  }
+
+  // Background image — each scene is a single self-contained 1024x1024 map,
+  // drawn exactly once at its world position. No tiling/repeating, so the two
+  // locations never visually overlap or duplicate.
+  const sc2=SCENES[P.scene];
+  const bg=sc2.bg;
+  if(bg.complete&&bg.naturalWidth>0){
+    cx.drawImage(bg,-cam.x,-cam.y,sc2.w||WORLD,sc2.h||WORLD);
+    if(P.scene==='clanboss1'&&CLAN_BOSS_SHOW_MASK&&imgClanBoss1Mask.complete&&imgClanBoss1Mask.naturalWidth>0){
+      cx.save();cx.globalAlpha=.72;
+      cx.drawImage(imgClanBoss1Mask,-cam.x,-cam.y,CLAN_BOSS_WORLD,CLAN_BOSS_WORLD);
+      cx.restore();
+    }
+  }else{
+    cx.fillStyle=P.scene==='safe'?'#1a1510':'#1a0a0a';
+    cx.fillRect(0,0,cv.width,cv.height);
+  }
+
+  // Darken background slightly for readability
+  cx.fillStyle='rgba(0,0,0,0.16)';
+  cx.fillRect(0,0,viewW,viewH);
+
+  // Town fence stays town-only. NPCs may exist in other peaceful scenes too.
+  if(P.scene==='safe')drawFence();
+  if(P.scene==='fartzone')drawFartZoneMines();
+  if(SCENES[P.scene]&&SCENES[P.scene].npcs)drawNPC();
+  if(P.scene==='clansiege')drawClanSiegeWorld();
+  // V187: dungeon exit is a physical portal in the respawn room.
+  if(sc2.portal)drawPortal();
+
+  // Target marker (red circle)
+  if(P.tid!=null){
+    const t=EN.find(e=>e.id==P.tid);
+    if(t&&targetIsValid(t)&&!(P.scene==='clanboss1'&&t.isClanBoss)){
+      const tx=t.x-cam.x,ty=t.y-cam.y;
+      const pulse=Math.sin(Date.now()*0.007)*0.15+0.85;
+      // Semi-transparent red fill
+      const targetR=(t.type&&t.type.slimeScavenger)?15:t.sz*1.3;
+      cx.fillStyle='rgba(255,0,0,0.18)';
+      cx.beginPath();cx.arc(tx,ty,targetR,0,Math.PI*2);cx.fill();
+      // Red ring
+      cx.strokeStyle='rgba(255,50,50,0.7)';cx.lineWidth=3;
+      cx.beginPath();cx.arc(tx,ty,targetR*pulse,0,Math.PI*2);cx.stroke();
+      // Rotating dots
+      const ra=Date.now()*0.003;
+      for(let i=0;i<4;i++){
+        const a=ra+i*Math.PI/2;
+        cx.fillStyle='rgba(255,90,90,0.85)';
+        cx.beginPath();cx.arc(tx+Math.cos(a)*t.sz*1.5,ty+Math.sin(a)*t.sz*1.5,3,0,Math.PI*2);cx.fill();
+      }
+      // Target line from player
+      cx.strokeStyle='rgba(255,50,50,0.2)';cx.lineWidth=1;
+      cx.setLineDash([5,5]);
+      cx.beginPath();cx.moveTo(P.x-cam.x,P.y-cam.y);cx.lineTo(tx,ty);cx.stroke();
+      cx.setLineDash([]);
+    }
+  }
+
+  // Particles (under entities)
+  for(const p of PT){
+    const px=p.x-cam.x,py=p.y-cam.y;
+    if(px<-40||py<-40||px>viewW+40||py>viewH+40)continue;
+    const a=p.life/p.ml,sz=Math.max(1,p.sz*a);
+    cx.globalAlpha=a;cx.fillStyle=p.col;
+    cx.fillRect(Math.round(px-sz*.5),Math.round(py-sz*.5),Math.ceil(sz),Math.ceil(sz));
+  }
+  cx.globalAlpha=1;
+
+  // V106 corpses + death traces stay under living entities and have no collision.
+  ppaDrawDeathRemnants();
+
+  // Personal world-boss chests.
+  drawWorldBossPersonalChests();
+
+  // Loot on the floor
+  for(const l of LOOT){
+    const lx=l.x-cam.x,ly=l.y-cam.y+Math.sin(l.bob)*3;
+    if(lx<-50||ly<-50||lx>viewW+50||ly>viewH+50)continue;
+    cx.fillStyle='rgba(0,0,0,0.4)';cx.beginPath();cx.ellipse(lx,ly+10,10,4,0,0,Math.PI*2);cx.fill();
+    if(l.kind==='gold'){
+      const g=cx.createRadialGradient(lx,ly,0,lx,ly,16);
+      g.addColorStop(0,'rgba(255,220,90,0.55)');g.addColorStop(1,'rgba(255,180,0,0)');
+      cx.fillStyle=g;cx.beginPath();cx.arc(lx,ly,16,0,Math.PI*2);cx.fill();
+      cx.font='16px monospace';cx.textAlig
+
+===== CAM WRITE 1 @97863880 =====
+am={x:0,y:0};
+let __ppaVignetteGradient=null,__ppaVignetteKey='';
+function ppaGetVignetteGradient(){
+  const key=cv.width+'x'+cv.height;
+  if(!__ppaVignetteGradient||__ppaVignetteKey!==key){
+    __ppaVignetteKey=key;
+    const g=cx.createRadialGradient(cv.width/2,cv.height/2,cv.height/3,cv.width/2,cv.height/2,cv.height);
+    g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.65)');
+    __ppaVignetteGradient=g;
+  }
+  return __ppaVignetteGradient;
+}
+// Camera zoom is scene-specific. Dungeon is brought a little closer while
+// the town and arena keep their existing framing.
+const CAMERA_ZOOM={safe:1,arena:1,dungeon:1.18,clanboss1:1.05,clansiege:1.38};
+function cameraZoom(){return CAMERA_ZOOM[P.scene]||1}
+
+function render(){
+  const scCam=SCENES[P.scene];
+  const mw=scCam.w||WORLD,mh=scCam.h||WORLD;
+  const zoom=cameraZoom();
+  const viewW=cv.width/zoom,viewH=cv.height/zoom;
+  cam.x=P.x-viewW/2;cam.y=P.y-viewH/2;
+  // Clamp camera to the map — no empty space beyond the edges
+  cam.x=mw<=viewW?(mw-viewW)/2:Math.max(0,Math.min(cam.x,mw-viewW));
+  cam.y=mh<=viewH?(mh-viewH)/2:Math.max(0,Math.min(cam.y,mh-viewH));
+
+  // Clear/fill the physical screen first, then scale only the world.
+  cx.setTransform(1,0,0,1,0,0);
+  cx.fillStyle=P.scene==='safe'?'#3a3528':'#1a1a1a';
+  cx.fillRect(0,0,cv.width,cv.height);
+  cx.save();
+  cx.scale(zoom,zoom);
+
+  // Base fill: tiles for safe zone (no black void), dark for arena/dungeon
+  if(P.scene==='safe'){
+    const ts=96;
+    for(let y=0;y<viewH;y+=ts){
+      for(let x=0;x<viewW;x+=ts){
+        const wx=x+cam.x,wy=y+cam.y;
+        cx.fillStyle=((Math.floor(wx/ts)+Math.floor(wy/ts))%2===0)?'#3a3528':'#423d30';
+        cx.fillRect(x,y,ts,ts);
+      }
+    }
+  }else{
+    cx.fillStyle='#1a1a1a';cx.fillRect(0,0,viewW,viewH);
+  }
+
+  // Background image — each scene is a single self-contained 1024x1024 map,
+  // drawn exactly once at its world position. No tiling/repeating, so the two
+  // locations never visually overlap or duplicate.
+  const sc2=SCENES[P.scene];
+  const bg=sc2.bg;
+  if(bg.complete&&bg.naturalWidth>0){
+    cx.drawImage(bg,-cam.x,-cam.y,sc2.w||WORLD,sc2.h||WORLD);
+    if(P.scene==='clanboss1'&&CLAN_BOSS_SHOW_MASK&&imgClanBoss1Mask.complete&&imgClanBoss1Mask.naturalWidth>0){
+      cx.save();cx.globalAlpha=.72;
+      cx.drawImage(imgClanBoss1Mask,-cam.x,-cam.y,CLAN_BOSS_WORLD,CLAN_BOSS_WORLD);
+      cx.restore();
+    }
+  }else{
+    cx.fillStyle=P.scene==='safe'?'#1a1510':'#1a0a0a';
+    cx.fillRect(0,0,cv.width,cv.height);
+  }
+
+  // Darken background slightly for readability
+  cx.fillStyle='rgba(0,0,0,0.16)';
+  cx.fillRect(0,0,viewW,viewH);
+
+  // Town fence stays town-only. NPCs may exist in other peaceful scenes too.
+  if(P.scene==='safe')drawFence();
+  if(P.scene==='fartzone')drawFartZoneMines();
+  if(SCENES[P.scene]&&SCENES[P.scene].npcs)drawNPC();
+  if(P.scene==='clansiege')drawClanSiegeWorld();
+  // V187: dungeon exit is a physical portal in the respawn room.
+  if(sc2.portal)drawPortal();
+
+  // Target marker (red circle)
+  if(P.tid!=null){
+    const t=EN.find(e=>e.id==P.tid);
+    if(t&&targetI
+
+===== CAM WRITE 2 @97863982 =====
+ const key=cv.width+'x'+cv.height;
+  if(!__ppaVignetteGradient||__ppaVignetteKey!==key){
+    __ppaVignetteKey=key;
+    const g=cx.createRadialGradient(cv.width/2,cv.height/2,cv.height/3,cv.width/2,cv.height/2,cv.height);
+    g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.65)');
+    __ppaVignetteGradient=g;
+  }
+  return __ppaVignetteGradient;
+}
+// Camera zoom is scene-specific. Dungeon is brought a little closer while
+// the town and arena keep their existing framing.
+const CAMERA_ZOOM={safe:1,arena:1,dungeon:1.18,clanboss1:1.05,clansiege:1.38};
+function cameraZoom(){return CAMERA_ZOOM[P.scene]||1}
+
+function render(){
+  const scCam=SCENES[P.scene];
+  const mw=scCam.w||WORLD,mh=scCam.h||WORLD;
+  const zoom=cameraZoom();
+  const viewW=cv.width/zoom,viewH=cv.height/zoom;
+  cam.x=P.x-viewW/2;cam.y=P.y-viewH/2;
+  // Clamp camera to the map — no empty space beyond the edges
+  cam.x=mw<=viewW?(mw-viewW)/2:Math.max(0,Math.min(cam.x,mw-viewW));
+  cam.y=mh<=viewH?(mh-viewH)/2:Math.max(0,Math.min(cam.y,mh-viewH));
+
+  // Clear/fill the physical screen first, then scale only the world.
+  cx.setTransform(1,0,0,1,0,0);
+  cx.fillStyle=P.scene==='safe'?'#3a3528':'#1a1a1a';
+  cx.fillRect(0,0,cv.width,cv.height);
+  cx.save();
+  cx.scale(zoom,zoom);
+
+  // Base fill: tiles for safe zone (no black void), dark for arena/dungeon
+  if(P.scene==='safe'){
+    const ts=96;
+    for(let y=0;y<viewH;y+=ts){
+      for(let x=0;x<viewW;x+=ts){
+        const wx=x+cam.x,wy=y+cam.y;
+        cx.fillStyle=((Math.floor(wx/ts)+Math.floor(wy/ts))%2===0)?'#3a3528':'#423d30';
+        cx.fillRect(x,y,ts,ts);
+      }
+    }
+  }else{
+    cx.fillStyle='#1a1a1a';cx.fillRect(0,0,viewW,viewH);
+  }
+
+  // Background image — each scene is a single self-contained 1024x1024 map,
+  // drawn exactly once at its world position. No tiling/repeating, so the two
+  // locations never visually overlap or duplicate.
+  const sc2=SCENES[P.scene];
+  const bg=sc2.bg;
+  if(bg.complete&&bg.naturalWidth>0){
+    cx.drawImage(bg,-cam.x,-cam.y,sc2.w||WORLD,sc2.h||WORLD);
+    if(P.scene==='clanboss1'&&CLAN_BOSS_SHOW_MASK&&imgClanBoss1Mask.complete&&imgClanBoss1Mask.naturalWidth>0){
+      cx.save();cx.globalAlpha=.72;
+      cx.drawImage(imgClanBoss1Mask,-cam.x,-cam.y,CLAN_BOSS_WORLD,CLAN_BOSS_WORLD);
+      cx.restore();
+    }
+  }else{
+    cx.fillStyle=P.scene==='safe'?'#1a1510':'#1a0a0a';
+    cx.fillRect(0,0,cv.width,cv.height);
+  }
+
+  // Darken background slightly for readability
+  cx.fillStyle='rgba(0,0,0,0.16)';
+  cx.fillRect(0,0,viewW,viewH);
+
+  // Town fence stays town-only. NPCs may exist in other peaceful scenes too.
+  if(P.scene==='safe')drawFence();
+  if(P.scene==='fartzone')drawFartZoneMines();
+  if(SCENES[P.scene]&&SCENES[P.scene].npcs)drawNPC();
+  if(P.scene==='clansiege')drawClanSiegeWorld();
+  // V187: dungeon exit is a physical portal in the respawn room.
+  if(sc2.portal)drawPortal();
+
+  // Target marker (red circle)
+  if(P.tid!=null){
+    const t=EN.find(e=>e.id==P.tid);
+    if(t&&targetIsValid(t)&&!(P.scene==='clanboss1'&&t.isClanBoss)){
+      const tx=t.x-cam.x,ty=t.y-cam.y;
+      const
+
+===== CAM WRITE 3 @97863898 =====
+__ppaVignetteGradient=null,__ppaVignetteKey='';
+function ppaGetVignetteGradient(){
+  const key=cv.width+'x'+cv.height;
+  if(!__ppaVignetteGradient||__ppaVignetteKey!==key){
+    __ppaVignetteKey=key;
+    const g=cx.createRadialGradient(cv.width/2,cv.height/2,cv.height/3,cv.width/2,cv.height/2,cv.height);
+    g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.65)');
+    __ppaVignetteGradient=g;
+  }
+  return __ppaVignetteGradient;
+}
+// Camera zoom is scene-specific. Dungeon is brought a little closer while
+// the town and arena keep their existing framing.
+const CAMERA_ZOOM={safe:1,arena:1,dungeon:1.18,clanboss1:1.05,clansiege:1.38};
+function cameraZoom(){return CAMERA_ZOOM[P.scene]||1}
+
+function render(){
+  const scCam=SCENES[P.scene];
+  const mw=scCam.w||WORLD,mh=scCam.h||WORLD;
+  const zoom=cameraZoom();
+  const viewW=cv.width/zoom,viewH=cv.height/zoom;
+  cam.x=P.x-viewW/2;cam.y=P.y-viewH/2;
+  // Clamp camera to the map — no empty space beyond the edges
+  cam.x=mw<=viewW?(mw-viewW)/2:Math.max(0,Math.min(cam.x,mw-viewW));
+  cam.y=mh<=viewH?(mh-viewH)/2:Math.max(0,Math.min(cam.y,mh-viewH));
+
+  // Clear/fill the physical screen first, then scale only the world.
+  cx.setTransform(1,0,0,1,0,0);
+  cx.fillStyle=P.scene==='safe'?'#3a3528':'#1a1a1a';
+  cx.fillRect(0,0,cv.width,cv.height);
+  cx.save();
+  cx.scale(zoom,zoom);
+
+  // Base fill: tiles for safe zone (no black void), dark for arena/dungeon
+  if(P.scene==='safe'){
+    const ts=96;
+    for(let y=0;y<viewH;y+=ts){
+      for(let x=0;x<viewW;x+=ts){
+        const wx=x+cam.x,wy=y+cam.y;
+        cx.fillStyle=((Math.floor(wx/ts)+Math.floor(wy/ts))%2===0)?'#3a3528':'#423d30';
+        cx.fillRect(x,y,ts,ts);
+      }
+    }
+  }else{
+    cx.fillStyle='#1a1a1a';cx.fillRect(0,0,viewW,viewH);
+  }
+
+  // Background image — each scene is a single self-contained 1024x1024 map,
+  // drawn exactly once at its world position. No tiling/repeating, so the two
+  // locations never visually overlap or duplicate.
+  const sc2=SCENES[P.scene];
+  const bg=sc2.bg;
+  if(bg.complete&&bg.naturalWidth>0){
+    cx.drawImage(bg,-cam.x,-cam.y,sc2.w||WORLD,sc2.h||WORLD);
+    if(P.scene==='clanboss1'&&CLAN_BOSS_SHOW_MASK&&imgClanBoss1Mask.complete&&imgClanBoss1Mask.naturalWidth>0){
+      cx.save();cx.globalAlpha=.72;
+      cx.drawImage(imgClanBoss1Mask,-cam.x,-cam.y,CLAN_BOSS_WORLD,CLAN_BOSS_WORLD);
+      cx.restore();
+    }
+  }else{
+    cx.fillStyle=P.scene==='safe'?'#1a1510':'#1a0a0a';
+    cx.fillRect(0,0,cv.width,cv.height);
+  }
+
+  // Darken background slightly for readability
+  cx.fillStyle='rgba(0,0,0,0.16)';
+  cx.fillRect(0,0,viewW,viewH);
+
+  // Town fence stays town-only. NPCs may exist in other peaceful scenes too.
+  if(P.scene==='safe')drawFence();
+  if(P.scene==='fartzone')drawFartZoneMines();
+  if(SCENES[P.scene]&&SCENES[P.scene].npcs)drawNPC();
+  if(P.scene==='clansiege')drawClanSiegeWorld();
+  // V187: dungeon exit is a physical portal in the respawn room.
+  if(sc2.portal)drawPortal();
+
+  // Target marker (red circle)
+  if(P.tid!=null){
+    const t=EN.find(e=>e.id==P.tid);
+    if(t&&targetIsValid(t)&&!(P.sce
+
+===== CAM WRITE 4 @97864051 =====
+VignetteKey!==key){
+    __ppaVignetteKey=key;
+    const g=cx.createRadialGradient(cv.width/2,cv.height/2,cv.height/3,cv.width/2,cv.height/2,cv.height);
+    g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.65)');
+    __ppaVignetteGradient=g;
+  }
+  return __ppaVignetteGradient;
+}
+// Camera zoom is scene-specific. Dungeon is brought a little closer while
+// the town and arena keep their existing framing.
+const CAMERA_ZOOM={safe:1,arena:1,dungeon:1.18,clanboss1:1.05,clansiege:1.38};
+function cameraZoom(){return CAMERA_ZOOM[P.scene]||1}
+
+function render(){
+  const scCam=SCENES[P.scene];
+  const mw=scCam.w||WORLD,mh=scCam.h||WORLD;
+  const zoom=cameraZoom();
+  const viewW=cv.width/zoom,viewH=cv.height/zoom;
+  cam.x=P.x-viewW/2;cam.y=P.y-viewH/2;
+  // Clamp camera to the map — no empty space beyond the edges
+  cam.x=mw<=viewW?(mw-viewW)/2:Math.max(0,Math.min(cam.x,mw-viewW));
+  cam.y=mh<=viewH?(mh-viewH)/2:Math.max(0,Math.min(cam.y,mh-viewH));
+
+  // Clear/fill the physical screen first, then scale only the world.
+  cx.setTransform(1,0,0,1,0,0);
+  cx.fillStyle=P.scene==='safe'?'#3a3528':'#1a1a1a';
+  cx.fillRect(0,0,cv.width,cv.height);
+  cx.save();
+  cx.scale(zoom,zoom);
+
+  // Base fill: tiles for safe zone (no black void), dark for arena/dungeon
+  if(P.scene==='safe'){
+    const ts=96;
+    for(let y=0;y<viewH;y+=ts){
+      for(let x=0;x<viewW;x+=ts){
+        const wx=x+cam.x,wy=y+cam.y;
+        cx.fillStyle=((Math.floor(wx/ts)+Math.floor(wy/ts))%2===0)?'#3a3528':'#423d30';
+        cx.fillRect(x,y,ts,ts);
+      }
+    }
+  }else{
+    cx.fillStyle='#1a1a1a';cx.fillRect(0,0,viewW,viewH);
+  }
+
+  // Background image — each scene is a single self-contained 1024x1024 map,
+  // drawn exactly once at its world position. No tiling/repeating, so the two
+  // locations never visually overlap or duplicate.
+  const sc2=SCENES[P.scene];
+  const bg=sc2.bg;
+  if(bg.complete&&bg.naturalWidth>0){
+    cx.drawImage(bg,-cam.x,-cam.y,sc2.w||WORLD,sc2.h||WORLD);
+    if(P.scene==='clanboss1'&&CLAN_BOSS_SHOW_MASK&&imgClanBoss1Mask.complete&&imgClanBoss1Mask.naturalWidth>0){
+      cx.save();cx.globalAlpha=.72;
+      cx.drawImage(imgClanBoss1Mask,-cam.x,-cam.y,CLAN_BOSS_WORLD,CLAN_BOSS_WORLD);
+      cx.restore();
+    }
+  }else{
+    cx.fillStyle=P.scene==='safe'?'#1a1510':'#1a0a0a';
+    cx.fillRect(0,0,cv.width,cv.height);
+  }
+
+  // Darken background slightly for readability
+  cx.fillStyle='rgba(0,0,0,0.16)';
+  cx.fillRect(0,0,viewW,viewH);
+
+  // Town fence stays town-only. NPCs may exist in other peaceful scenes too.
+  if(P.scene==='safe')drawFence();
+  if(P.scene==='fartzone')drawFartZoneMines();
+  if(SCENES[P.scene]&&SCENES[P.scene].npcs)drawNPC();
+  if(P.scene==='clansiege')drawClanSiegeWorld();
+  // V187: dungeon exit is a physical portal in the respawn room.
+  if(sc2.portal)drawPortal();
+
+  // Target marker (red circle)
+  if(P.tid!=null){
+    const t=EN.find(e=>e.id==P.tid);
+    if(t&&targetIsValid(t)&&!(P.scene==='clanboss1'&&t.isClanBoss)){
+      const tx=t.x-cam.x,ty=t.y-cam.y;
+      const pulse=Math.sin(Date.now()*0.007)*0.15+0.85;
+      // Semi-transparen
+
+===== WORLD TO SCREEN const px=P.x-cam.x @97826944 =====
+,dw,dh);
+    cx.filter='none';
+  }else{
+    cx.fillStyle='#9d63db';cx.beginPath();cx.arc(sx,sy-10,aiVisualSize*.35,0,Math.PI*2);cx.fill();
+  }
+  cx.globalAlpha=1;
+  if(_aiHidden&&now>(e.aiSmokeLabelUntil||0)){
+    cx.globalAlpha=.22;cx.strokeStyle='#8d8d9a';cx.setLineDash([4,5]);
+    cx.beginPath();cx.ellipse(sx,sy+e.sz*.35,e.sz*.48,e.sz*.18,0,0,Math.PI*2);cx.stroke();
+    cx.setLineDash([]);cx.restore();return;
+  }
+  const bw=Math.max(78,e.sz*1.25),by=sy-e.sz*.86;
+  cx.fillStyle='rgba(0,0,0,.72)';cx.fillRect(sx-bw/2,by,bw,5);
+  cx.fillStyle='#d04fff';cx.fillRect(sx-bw/2,by,bw*Math.max(0,e.hp/e.mhp),5);
+  cx.font='bold 10px monospace';cx.textAlign='center';cx.fillStyle='#e7c8ff';
+  cx.fillText('ИИ · '+c.name+' · '+['','I','II','III'][e.aiRank],sx,by-6);
+
+  // Compact skill indicator: small "skill button" + its real name.
+  if(now<(e.aiSkillBadgeUntil||0)&&e.aiCastName){
+    const idx=Number.isInteger(e.aiSkillIndex)?e.aiSkillIndex:-1;
+    const tag=idx>=0?String(idx+1):'A';
+    const txt=e.aiCastName==='Обычная атака'?'АТАКА':e.aiCastName;
+    const tw=Math.min(150,Math.max(64,cx.measureText(txt).width+35));
+    const bx=sx-tw/2,yy=by-31;
+    cx.fillStyle='rgba(8,8,10,.86)';cx.fillRect(bx,yy,tw,18);
+    cx.strokeStyle=idx>=0?'rgba(255,197,88,.95)':'rgba(215,215,215,.75)';
+    cx.lineWidth=1;cx.strokeRect(bx+.5,yy+.5,tw-1,17);
+    cx.fillStyle=idx>=0?'#8b4f18':'#454545';cx.fillRect(bx+3,yy+3,13,12);
+    cx.fillStyle='#fff2c9';cx.font='bold 8px monospace';cx.fillText(tag,bx+9.5,yy+12);
+    cx.fillStyle='#ffd783';cx.font='bold 8px monospace';
+    cx.fillText(txt.slice(0,22),bx+19+(tw-22)/2,yy+12);
+  }
+
+  // Tiny, cheap hit stroke: ranged attacks visibly connect to the target;
+  // melee attacks produce a short slash at the player's feet.
+  if(now<(e.aiHitFxUntil||0)){
+    const px=P.x-cam.x,py=P.y-cam.y;
+    const alpha=Math.max(0,Math.min(1,((e.aiHitFxUntil||0)-now)/170));
+    cx.save();cx.globalAlpha=alpha;
+    cx.strokeStyle=e.aiHitFxType==='magic'?'#b98cff':'#ffbd62';
+    cx.lineWidth=e.aiHitFxCrit?3:2;
+    if(c.range>150){
+      cx.beginPath();cx.moveTo(sx,sy-e.sz*.12);cx.lineTo(px,py-e.sz*.18);cx.stroke();
+    }else{
+      cx.beginPath();cx.moveTo(px-13,py-18);cx.lineTo(px+14,py+2);
+      cx.moveTo(px+11,py-19);cx.lineTo(px-9,py+3);cx.stroke();
+    }
+    cx.restore();
+  }
+
+  cx.textAlign='left';cx.restore();
+}
+// ========================================================================
+
+let __ppaHudNextAt=0;
+function update(){
+  PPAOnlineTick();
+  ppaCleanupDeathRemnants();
+  updateConsumableHud(false);
+  updatePremiumRegen();
+  if(P.dead)return;
+  v174AiTickPlayerDebuffs();
+
+  const _smartMove=updateSmartAttackInput();
+  // V139: Smart Attack only supplies movement when joystick is neutral.
+  // Any live joystick input keeps full manual movement while target lock stays active.
+  const _moveX=_smartMove?_smartMove.x:jX;
+  const _moveY=_smartMove?_smartMove.y:jY;
+
+  // V174: class-AI crowd control is numeric only (no particle FX).
+  const _aiMoveMul=Date.now()<(P.aiRootUntil||0)?0:(Date.now()<(P.aiSlowUntil||0)?Math.max(.30,Number(P.aiSlowMul)||.55):1);
+  P.vx=_moveX*P.sp*shopSpeedMul()*_aiMoveMul;
+  P.vy=_moveY*P.sp*shopSpeedMul()*_aiMoveMul;
+  let nx=P.x+P.vx, ny=P.y+P.vy;
+
+  // Keep in bounds (per scene)
+  const sc=SCENES[P.scene];
+  nx=Math.max(sc.bounds.minX,Math.min(sc.bounds.maxX,nx));
+  ny=Math.max(sc.bounds.minY,Math.min(sc.bounds.maxY,ny));
+
+  if(P.scene==='arena'){
+    // Stay on the circular arena floor — no wandering into the black void
+    const c=sc.center,rad=460;
+    const dx=nx-c.x,dy=ny-c.y,dist=Math.hypot(dx,dy);
+    if(dist>rad){nx=c.x+dx/dist*rad;ny=c.y+dy/dist*rad}
+  }else if(P.scene==='pvp1'||P.scene==='pvpteam'){
+    const mv=pvpSlide(P.scene,P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);nx=mv.x;ny=mv.y;
+  }else if(P.scene==='dungeon'){
+    // Dungeon walls — slide along corridors, never clip through
+    const mv=dgSlide(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='clansiege'){
+    const mv=clanSiegeSlide(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='clanboss1'){
+    const mv=clanBossMoveWithBodyCollision(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='worldboss'){
+    const mv=worldBossMoveWithCrystalCollision(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='fartzone'){
+    // Exact user-drawn meadow boundary: outside = solid collision.
+    // Do not alter town/building hitboxes or other scenes.
+    if(!pointInPolygonFartZone(nx,ny)){
+      nx=P.x;ny=P.y;
+    }
+  }else{
+    // Solid buildings — can't walk through walls or across rooftops
+    const resolved=resolveCollision(nx,ny);
+    nx=resolved.x;ny=resolved.y;
+  }
+  // V104: keep the player's visible foot shadow outside Phoenix/mob shadows.
+  // The map/wall collision above remains authoritative; this only adds body blocking.
+  if(P.scene==='dungeon'||P.scene==='arena'){
+    const _bodyMv=ppaMoveWithWorldBodyCollision(P.x,P.y,nx-P.x,ny-P.y,P.sz*.24);
+    nx=_bodyMv.x;ny=_bodyMv.y;
+  }
+  P.x=nx;P.y=ny;
+  if(P.scene==='clansiege')clanSiegeUpdateCapture();
+
+  // Portal collision
+  if(P.portalCD>0)P.portalCD--;
+  if(P.portalCD<=0&&!transitioning&&sc.portal){
+    const p=sc.portal;
+    if(Math.hypot(P.x-p.x,P.y-p.y)<p.r+2
+
+===== WORLD TO SCREEN P.x-cam.x @97826953 =====
+    cx.filter='none';
+  }else{
+    cx.fillStyle='#9d63db';cx.beginPath();cx.arc(sx,sy-10,aiVisualSize*.35,0,Math.PI*2);cx.fill();
+  }
+  cx.globalAlpha=1;
+  if(_aiHidden&&now>(e.aiSmokeLabelUntil||0)){
+    cx.globalAlpha=.22;cx.strokeStyle='#8d8d9a';cx.setLineDash([4,5]);
+    cx.beginPath();cx.ellipse(sx,sy+e.sz*.35,e.sz*.48,e.sz*.18,0,0,Math.PI*2);cx.stroke();
+    cx.setLineDash([]);cx.restore();return;
+  }
+  const bw=Math.max(78,e.sz*1.25),by=sy-e.sz*.86;
+  cx.fillStyle='rgba(0,0,0,.72)';cx.fillRect(sx-bw/2,by,bw,5);
+  cx.fillStyle='#d04fff';cx.fillRect(sx-bw/2,by,bw*Math.max(0,e.hp/e.mhp),5);
+  cx.font='bold 10px monospace';cx.textAlign='center';cx.fillStyle='#e7c8ff';
+  cx.fillText('ИИ · '+c.name+' · '+['','I','II','III'][e.aiRank],sx,by-6);
+
+  // Compact skill indicator: small "skill button" + its real name.
+  if(now<(e.aiSkillBadgeUntil||0)&&e.aiCastName){
+    const idx=Number.isInteger(e.aiSkillIndex)?e.aiSkillIndex:-1;
+    const tag=idx>=0?String(idx+1):'A';
+    const txt=e.aiCastName==='Обычная атака'?'АТАКА':e.aiCastName;
+    const tw=Math.min(150,Math.max(64,cx.measureText(txt).width+35));
+    const bx=sx-tw/2,yy=by-31;
+    cx.fillStyle='rgba(8,8,10,.86)';cx.fillRect(bx,yy,tw,18);
+    cx.strokeStyle=idx>=0?'rgba(255,197,88,.95)':'rgba(215,215,215,.75)';
+    cx.lineWidth=1;cx.strokeRect(bx+.5,yy+.5,tw-1,17);
+    cx.fillStyle=idx>=0?'#8b4f18':'#454545';cx.fillRect(bx+3,yy+3,13,12);
+    cx.fillStyle='#fff2c9';cx.font='bold 8px monospace';cx.fillText(tag,bx+9.5,yy+12);
+    cx.fillStyle='#ffd783';cx.font='bold 8px monospace';
+    cx.fillText(txt.slice(0,22),bx+19+(tw-22)/2,yy+12);
+  }
+
+  // Tiny, cheap hit stroke: ranged attacks visibly connect to the target;
+  // melee attacks produce a short slash at the player's feet.
+  if(now<(e.aiHitFxUntil||0)){
+    const px=P.x-cam.x,py=P.y-cam.y;
+    const alpha=Math.max(0,Math.min(1,((e.aiHitFxUntil||0)-now)/170));
+    cx.save();cx.globalAlpha=alpha;
+    cx.strokeStyle=e.aiHitFxType==='magic'?'#b98cff':'#ffbd62';
+    cx.lineWidth=e.aiHitFxCrit?3:2;
+    if(c.range>150){
+      cx.beginPath();cx.moveTo(sx,sy-e.sz*.12);cx.lineTo(px,py-e.sz*.18);cx.stroke();
+    }else{
+      cx.beginPath();cx.moveTo(px-13,py-18);cx.lineTo(px+14,py+2);
+      cx.moveTo(px+11,py-19);cx.lineTo(px-9,py+3);cx.stroke();
+    }
+    cx.restore();
+  }
+
+  cx.textAlign='left';cx.restore();
+}
+// ========================================================================
+
+let __ppaHudNextAt=0;
+function update(){
+  PPAOnlineTick();
+  ppaCleanupDeathRemnants();
+  updateConsumableHud(false);
+  updatePremiumRegen();
+  if(P.dead)return;
+  v174AiTickPlayerDebuffs();
+
+  const _smartMove=updateSmartAttackInput();
+  // V139: Smart Attack only supplies movement when joystick is neutral.
+  // Any live joystick input keeps full manual movement while target lock stays active.
+  const _moveX=_smartMove?_smartMove.x:jX;
+  const _moveY=_smartMove?_smartMove.y:jY;
+
+  // V174: class-AI crowd control is numeric only (no particle FX).
+  const _aiMoveMul=Date.now()<(P.aiRootUntil||0)?0:(Date.now()<(P.aiSlowUntil||0)?Math.max(.30,Number(P.aiSlowMul)||.55):1);
+  P.vx=_moveX*P.sp*shopSpeedMul()*_aiMoveMul;
+  P.vy=_moveY*P.sp*shopSpeedMul()*_aiMoveMul;
+  let nx=P.x+P.vx, ny=P.y+P.vy;
+
+  // Keep in bounds (per scene)
+  const sc=SCENES[P.scene];
+  nx=Math.max(sc.bounds.minX,Math.min(sc.bounds.maxX,nx));
+  ny=Math.max(sc.bounds.minY,Math.min(sc.bounds.maxY,ny));
+
+  if(P.scene==='arena'){
+    // Stay on the circular arena floor — no wandering into the black void
+    const c=sc.center,rad=460;
+    const dx=nx-c.x,dy=ny-c.y,dist=Math.hypot(dx,dy);
+    if(dist>rad){nx=c.x+dx/dist*rad;ny=c.y+dy/dist*rad}
+  }else if(P.scene==='pvp1'||P.scene==='pvpteam'){
+    const mv=pvpSlide(P.scene,P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);nx=mv.x;ny=mv.y;
+  }else if(P.scene==='dungeon'){
+    // Dungeon walls — slide along corridors, never clip through
+    const mv=dgSlide(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='clansiege'){
+    const mv=clanSiegeSlide(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='clanboss1'){
+    const mv=clanBossMoveWithBodyCollision(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='worldboss'){
+    const mv=worldBossMoveWithCrystalCollision(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='fartzone'){
+    // Exact user-drawn meadow boundary: outside = solid collision.
+    // Do not alter town/building hitboxes or other scenes.
+    if(!pointInPolygonFartZone(nx,ny)){
+      nx=P.x;ny=P.y;
+    }
+  }else{
+    // Solid buildings — can't walk through walls or across rooftops
+    const resolved=resolveCollision(nx,ny);
+    nx=resolved.x;ny=resolved.y;
+  }
+  // V104: keep the player's visible foot shadow outside Phoenix/mob shadows.
+  // The map/wall collision above remains authoritative; this only adds body blocking.
+  if(P.scene==='dungeon'||P.scene==='arena'){
+    const _bodyMv=ppaMoveWithWorldBodyCollision(P.x,P.y,nx-P.x,ny-P.y,P.sz*.24);
+    nx=_bodyMv.x;ny=_bodyMv.y;
+  }
+  P.x=nx;P.y=ny;
+  if(P.scene==='clansiege')clanSiegeUpdateCapture();
+
+  // Portal collision
+  if(P.portalCD>0)P.portalCD--;
+  if(P.portalCD<=0&&!transitioning&&sc.portal){
+    const p=sc.portal;
+    if(Math.hypot(P.x-p.x,P.y-p.y)<p.r+20){
+     
+
+===== WORLD TO SCREEN P.y-cam.y @97826966 =====
+='none';
+  }else{
+    cx.fillStyle='#9d63db';cx.beginPath();cx.arc(sx,sy-10,aiVisualSize*.35,0,Math.PI*2);cx.fill();
+  }
+  cx.globalAlpha=1;
+  if(_aiHidden&&now>(e.aiSmokeLabelUntil||0)){
+    cx.globalAlpha=.22;cx.strokeStyle='#8d8d9a';cx.setLineDash([4,5]);
+    cx.beginPath();cx.ellipse(sx,sy+e.sz*.35,e.sz*.48,e.sz*.18,0,0,Math.PI*2);cx.stroke();
+    cx.setLineDash([]);cx.restore();return;
+  }
+  const bw=Math.max(78,e.sz*1.25),by=sy-e.sz*.86;
+  cx.fillStyle='rgba(0,0,0,.72)';cx.fillRect(sx-bw/2,by,bw,5);
+  cx.fillStyle='#d04fff';cx.fillRect(sx-bw/2,by,bw*Math.max(0,e.hp/e.mhp),5);
+  cx.font='bold 10px monospace';cx.textAlign='center';cx.fillStyle='#e7c8ff';
+  cx.fillText('ИИ · '+c.name+' · '+['','I','II','III'][e.aiRank],sx,by-6);
+
+  // Compact skill indicator: small "skill button" + its real name.
+  if(now<(e.aiSkillBadgeUntil||0)&&e.aiCastName){
+    const idx=Number.isInteger(e.aiSkillIndex)?e.aiSkillIndex:-1;
+    const tag=idx>=0?String(idx+1):'A';
+    const txt=e.aiCastName==='Обычная атака'?'АТАКА':e.aiCastName;
+    const tw=Math.min(150,Math.max(64,cx.measureText(txt).width+35));
+    const bx=sx-tw/2,yy=by-31;
+    cx.fillStyle='rgba(8,8,10,.86)';cx.fillRect(bx,yy,tw,18);
+    cx.strokeStyle=idx>=0?'rgba(255,197,88,.95)':'rgba(215,215,215,.75)';
+    cx.lineWidth=1;cx.strokeRect(bx+.5,yy+.5,tw-1,17);
+    cx.fillStyle=idx>=0?'#8b4f18':'#454545';cx.fillRect(bx+3,yy+3,13,12);
+    cx.fillStyle='#fff2c9';cx.font='bold 8px monospace';cx.fillText(tag,bx+9.5,yy+12);
+    cx.fillStyle='#ffd783';cx.font='bold 8px monospace';
+    cx.fillText(txt.slice(0,22),bx+19+(tw-22)/2,yy+12);
+  }
+
+  // Tiny, cheap hit stroke: ranged attacks visibly connect to the target;
+  // melee attacks produce a short slash at the player's feet.
+  if(now<(e.aiHitFxUntil||0)){
+    const px=P.x-cam.x,py=P.y-cam.y;
+    const alpha=Math.max(0,Math.min(1,((e.aiHitFxUntil||0)-now)/170));
+    cx.save();cx.globalAlpha=alpha;
+    cx.strokeStyle=e.aiHitFxType==='magic'?'#b98cff':'#ffbd62';
+    cx.lineWidth=e.aiHitFxCrit?3:2;
+    if(c.range>150){
+      cx.beginPath();cx.moveTo(sx,sy-e.sz*.12);cx.lineTo(px,py-e.sz*.18);cx.stroke();
+    }else{
+      cx.beginPath();cx.moveTo(px-13,py-18);cx.lineTo(px+14,py+2);
+      cx.moveTo(px+11,py-19);cx.lineTo(px-9,py+3);cx.stroke();
+    }
+    cx.restore();
+  }
+
+  cx.textAlign='left';cx.restore();
+}
+// ========================================================================
+
+let __ppaHudNextAt=0;
+function update(){
+  PPAOnlineTick();
+  ppaCleanupDeathRemnants();
+  updateConsumableHud(false);
+  updatePremiumRegen();
+  if(P.dead)return;
+  v174AiTickPlayerDebuffs();
+
+  const _smartMove=updateSmartAttackInput();
+  // V139: Smart Attack only supplies movement when joystick is neutral.
+  // Any live joystick input keeps full manual movement while target lock stays active.
+  const _moveX=_smartMove?_smartMove.x:jX;
+  const _moveY=_smartMove?_smartMove.y:jY;
+
+  // V174: class-AI crowd control is numeric only (no particle FX).
+  const _aiMoveMul=Date.now()<(P.aiRootUntil||0)?0:(Date.now()<(P.aiSlowUntil||0)?Math.max(.30,Number(P.aiSlowMul)||.55):1);
+  P.vx=_moveX*P.sp*shopSpeedMul()*_aiMoveMul;
+  P.vy=_moveY*P.sp*shopSpeedMul()*_aiMoveMul;
+  let nx=P.x+P.vx, ny=P.y+P.vy;
+
+  // Keep in bounds (per scene)
+  const sc=SCENES[P.scene];
+  nx=Math.max(sc.bounds.minX,Math.min(sc.bounds.maxX,nx));
+  ny=Math.max(sc.bounds.minY,Math.min(sc.bounds.maxY,ny));
+
+  if(P.scene==='arena'){
+    // Stay on the circular arena floor — no wandering into the black void
+    const c=sc.center,rad=460;
+    const dx=nx-c.x,dy=ny-c.y,dist=Math.hypot(dx,dy);
+    if(dist>rad){nx=c.x+dx/dist*rad;ny=c.y+dy/dist*rad}
+  }else if(P.scene==='pvp1'||P.scene==='pvpteam'){
+    const mv=pvpSlide(P.scene,P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);nx=mv.x;ny=mv.y;
+  }else if(P.scene==='dungeon'){
+    // Dungeon walls — slide along corridors, never clip through
+    const mv=dgSlide(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='clansiege'){
+    const mv=clanSiegeSlide(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='clanboss1'){
+    const mv=clanBossMoveWithBodyCollision(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='worldboss'){
+    const mv=worldBossMoveWithCrystalCollision(P.x,P.y,nx-P.x,ny-P.y,P.sz*0.24);
+    nx=mv.x;ny=mv.y;
+  }else if(P.scene==='fartzone'){
+    // Exact user-drawn meadow boundary: outside = solid collision.
+    // Do not alter town/building hitboxes or other scenes.
+    if(!pointInPolygonFartZone(nx,ny)){
+      nx=P.x;ny=P.y;
+    }
+  }else{
+    // Solid buildings — can't walk through walls or across rooftops
+    const resolved=resolveCollision(nx,ny);
+    nx=resolved.x;ny=resolved.y;
+  }
+  // V104: keep the player's visible foot shadow outside Phoenix/mob shadows.
+  // The map/wall collision above remains authoritative; this only adds body blocking.
+  if(P.scene==='dungeon'||P.scene==='arena'){
+    const _bodyMv=ppaMoveWithWorldBodyCollision(P.x,P.y,nx-P.x,ny-P.y,P.sz*.24);
+    nx=_bodyMv.x;ny=_bodyMv.y;
+  }
+  P.x=nx;P.y=ny;
+  if(P.scene==='clansiege')clanSiegeUpdateCapture();
+
+  // Portal collision
+  if(P.portalCD>0)P.portalCD--;
+  if(P.portalCD<=0&&!transitioning&&sc.portal){
+    const p=sc.portal;
+    if(Math.hypot(P.x-p.x,P.y-p.y)<p.r+20){
+      changeScene(
+
+===== MAIN WORLD PASS @97883437 =====
+3,sh*0.28),0,0,Math.PI*2);
+    }
+    else cx.ellipse(sx,sy+e.sz*0.5,e.sz*0.45*eliteScale,e.sz*0.18*eliteScale,0,0,Math.PI*2);
+    cx.fill();
+
+    // Animated cave spider: 4 walking frames, 4 directions.
+    if(isCaveSpider && CAVE_SPIDER_ATLAS.complete && CAVE_SPIDER_ATLAS.naturalWidth>0){
+      const sf=e.spiderMoving
+        ? ((Math.floor((Date.now()+(e.spiderPhase||0)*55)/125))%4)
+        : 0;
+      const sr=(e.spiderDir===undefined?1:e.spiderDir);
+      const dh=42*eliteScale; // elite is visual-only ×2
+      const dw=72*eliteScale;
+      cx.save();
+      cx.imageSmoothingEnabled=false;
+      if(e.flash>0){
+        cx.globalAlpha=0.72;
+        cx.filter='brightness(1.8)';
+      }
+      cx.drawImage(
+        CAVE_SPIDER_ATLAS,
+        sf*CAVE_SPIDER_FW,sr*CAVE_SPIDER_FH,CAVE_SPIDER_FW,CAVE_SPIDER_FH,
+        sx-dw/2,sy-dh*0.72+bob,dw,dh
+      );
+      cx.filter='none';
+      cx.globalAlpha=1;
+      cx.restore();
+    }
+    // Approved animated mob sheets: 4 directions × 4 movement frames.
+    else if(isApprovedAnimated && e.animPack.img.complete && e.animPack.img.naturalWidth>0){
+      const af=e.animMoving
+        ? ((Math.floor((Date.now()+(e.animPhase||0)*43)/e.animPack.ms))%4)
+        : 0;
+      const ar=(e.animDir===undefined?1:e.animDir);
+      const dh=e.animPack.h*eliteScale;
+      const dw=dh*(MOB_ANIM_FW/MOB_ANIM_FH);
+      cx.save();
+      cx.imageSmoothingEnabled=false;
+      if(e.flash>0){
+        cx.globalAlpha=0.72;
+        cx.filter='brightness(1.8)';
+      }
+      cx.drawImage(
+        e.animPack.img,
+        af*MOB_ANIM_FW,ar*MOB_ANIM_FH,MOB_ANIM_FW,MOB_ANIM_FH,
+        sx-dw/2,sy-dh*0.78+bob,dw,dh
+      );
+      cx.filter='none';
+      cx.globalAlpha=1;
+      cx.restore();
+    }
+    // Fart Zone guards: always draw the COMPLETE 128×128 source image.
+    // A small foot-pivot step animation prevents static sprites from "floating".
+    else if(e.isFartGuard && e.sprite && e.sprite.complete && e.sprite.naturalWidth>0){
+      const baseH=Math.max(88,Math.min(112,e.sz*2.55))*eliteScale;
+      const baseW=baseH*(e.sprite.naturalWidth/e.sprite.naturalHeight);
+      const moving=!!e.fartMoving;
+      const phase=(Date.now()/105)+(e.fartWalkPhase||0);
+      const step=moving?Math.sin(phase):0;
+      const lift=moving?Math.abs(Math.sin(phase))*2.2:0;
+      const tilt=moving?step*0.035:0;
+      const sxScale=moving?(1+Math.abs(step)*0.018):1;
+      const syScale=moving?(1-Math.abs(step)*0.025):1;
+
+      cx.save();
+      cx.imageSmoothingEnabled=false;
       if(e.flash>0){cx.globalAlpha=.74;cx.filter='brightness(1.8)';}
       cx.translate(sx,sy+bob-lift);
       cx.rotate(tilt*(e.face||1));
@@ -183,23 +1580,4 @@ function drawNPC(){
 
     // Dark contact shadow so the NPC base visibly touches the ground.
     cx.fillStyle='rgba(0,0,0,0.30)';
-    cx.beginPath();cx.ellipse(nx,gy+15,47,13,0,0,Math.PI*2);cx.fill();
-
-    // Small interaction glow directly on the ground.
-    const g=cx.createRadialGradient(nx,gy,0,nx,gy,70);
-    g.addColorStop(0,'rgba(255,190,70,'+(0.18*glow)+')');
-    g.addColorStop(1,'rgba(255,190,70,0)');
-    cx.fillStyle=g;cx.beginPath();cx.ellipse(nx,gy+8,70,28,0,0,Math.PI*2);cx.fill();
-
-    // Actual supplied NPC art, lowered to a common ground baseline.
-    if(npc.img&&npc.img.complete&&npc.img.naturalWidth>0){
-      const dh=npc.id==='dungeon'?126:(npc.id==='fartzone_guide'?90:112);
-      const dw=dh*(npc.img.naturalWidth/npc.img.naturalHeight);
-      cx.imageSmoothingEnabled=false;
-      cx.drawImage(npc.img,nx-dw/2,gy-dh+18,dw,dh);
-    }else if(npc.id==='clan'){
-      // Temporary in-game pixel silhouette until the dedicated Clan Master sprite is approved.
-      cx.save();
-      cx.translate(Math.round(nx),Math.round(gy));
-      cx.imageSmoothingEnabled=false;
-      cx.fillStyle='#151116';cx.fillRect(-2
+ 
