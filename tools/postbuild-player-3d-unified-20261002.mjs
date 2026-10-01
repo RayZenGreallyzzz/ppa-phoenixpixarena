@@ -66,7 +66,13 @@ if(html.includes("const a = playerAnimDef(nextAnim);"))throw new Error('Unified 
 // existence/name of a sprite renderer. Preserve the exact existing actions and
 // conditions while replacing only their class predicates.
 const gameplayClassReplacements=[
-  ["if(playerUsesGnomeSprites()){ try{gnomeFireCannonball()}catch(_){PLAYER_CANNONBALLS.length=0} }else if(playerUsesArcherSprites()){ try{archerFireArrow()}catch(_){PLAYER_ARROWS.length=0} }else{ melee(); }",
+  [`if(playerUsesGnomeSprites()){
+      try{gnomeFireCannonball()}catch(_){PLAYER_CANNONBALLS.length=0}
+    }else if(playerUsesArcherSprites()){
+      try{archerFireArrow()}catch(_){PLAYER_ARROWS.length=0}
+    }else{
+      melee();
+    }`,
    "if(playerIsClass('gnome')){ try{gnomeFireCannonball()}catch(_){PLAYER_CANNONBALLS.length=0} }else if(playerIsClass('archer')){ try{archerFireArrow()}catch(_){PLAYER_ARROWS.length=0} }else{ melee(); }"],
   ["if(movingNow && P.attackMode!=='melee' && !playerUsesArcherSprites() && !playerUsesPriestSprites() && !playerUsesMageSprites()){",
    "if(movingNow && P.attackMode!=='melee' && !playerIsClass('archer') && !playerIsClass('priest') && !playerIsClass('mage')){"],
