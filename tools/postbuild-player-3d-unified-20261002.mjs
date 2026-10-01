@@ -18,10 +18,45 @@ for(const f of MODELS)fs.copyFileSync(path.join(ROOT,f),path.join(gameDir,f));
 
 let html=fs.readFileSync(htmlPath,'utf8');
 
-// Gameplay animation state must not depend on sprite images. Preserve the exact
-// legacy frames/fps values, but expose them as pure class timing data. Three.js
-// owns visual animation; these values only drive P.anim/P.animFrame state and
-// attack completion timing used by existing gameplay/realtime code.
+function functionRange(src,signature){
+  const start=src.indexOf(signature);
+  if(start<0)throw new Error('Unified 3D build: function signature missing: '+signature);
+  if(src.indexOf(signature,start+signature.length)>=0)throw new Error('Unified 3D build: function signature not unique: '+signature);
+  const open=src.indexOf('{',start+signature.length-1);
+  if(open<0)throw new Error('Unified 3D build: opening brace missing: '+signature);
+  let depth=0,state='code',quote='',escaped=false;
+  for(let i=open;i<src.length;i++){
+    const ch=src[i],next=src[i+1]||'';
+    if(state==='line'){if(ch==='\n')state='code';continue}
+    if(state==='block'){if(ch==='*'&&next==='/'){state='code';i++}continue}
+    if(state==='string'){
+      if(escaped){escaped=false;continue}
+      if(ch==='\\'){escaped=true;continue}
+      if(ch===quote){state='code';quote=''}
+      continue;
+    }
+    if(state==='template'){
+      if(escaped){escaped=false;continue}
+      if(ch==='\\'){escaped=true;continue}
+      if(ch==='`'){state='code'}
+      continue;
+    }
+    if(ch==='/'&&next==='/'){state='line';i++;continue}
+    if(ch==='/'&&next==='*'){state='block';i++;continue}
+    if(ch==='\''||ch==='"'){state='string';quote=ch;continue}
+    if(ch==='`'){state='template';continue}
+    if(ch==='{'){depth++;continue}
+    if(ch==='}'){
+      depth--;
+      if(depth===0)return [start,i+1];
+      if(depth<0)break;
+    }
+  }
+  throw new Error('Unified 3D build: closing brace missing: '+signature);
+}
+function replaceFunction(src,signature,replacement){const [a,b]=functionRange(src,signature);return src.slice(0,a)+replacement+src.slice(b)}
+function removeFunction(src,signature){const [a,b]=functionRange(src,signature);return src.slice(0,a)+src.slice(b)}
+
 const animDefNeedle='function playerAnimDef(name){';
 if((html.split(animDefNeedle).length-1)!==1)throw new Error('Unified 3D build: playerAnimDef definition not unique');
 const gameplayTiming=`const PLAYER_ANIM_TIMING={
@@ -36,7 +71,20 @@ const gameplayTiming=`const PLAYER_ANIM_TIMING={
   paladin:{idle:{frames:4,fps:4},run:{frames:4,fps:9},attack:{frames:4,fps:10}}
 };
 function playerClassKey(){
-  try{return typeof classKeyFromName==='function'?String(classKeyFromName(P.cls)||'').toLowerCase():''}catch(_){return''}
+  const raw=(P&&(P.classKey||P.cls||P.className||(P._saved&&P._saved.cls)))||'';
+  const text=String(raw||'').trim(),lower=text.toLowerCase();
+  let k='';
+  try{if(typeof classKeyFromName==='function')k=String(classKeyFromName(text)||'').toLowerCase()}catch(_){}
+  if(['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'].includes(k))return k;
+  if(lower==='tank'||lower.includes('страж'))return'tank';
+  if(lower==='barbarian'||lower.includes('бер')||lower.includes('barb'))return'barbarian';
+  if(lower==='paladin'||lower.includes('пал'))return'paladin';
+  if(lower==='gnome'||lower.includes('гном')||lower.includes('cannon'))return'gnome';
+  if(lower==='archer'||lower.includes('луч'))return'archer';
+  if(lower==='mage'||lower.includes('маг'))return'mage';
+  if(lower==='assassin'||lower.includes('асс'))return'assassin';
+  if(lower==='priest'||lower.includes('жр'))return'priest';
+  return'';
 }
 function playerIsClass(key){return playerClassKey()===key}
 function playerAnimTiming(name){
@@ -58,13 +106,7 @@ for(const [from,to] of timingReplacements){
 }
 if(!html.includes('const PLAYER_ANIM_TIMING={'))throw new Error('Unified 3D build: gameplay animation timing table missing');
 if(!html.includes("playerAnimTiming('attack')"))throw new Error('Unified 3D build: attack state still depends on sprite animation definition');
-if(html.includes("P.animFrame=P.animFrame%Math.max(1,playerAnimDef('run').frames)"))throw new Error('Unified 3D build: run state still depends on sprite animation definition');
-if(html.includes("const a=playerAnimDef('attack');"))throw new Error('Unified 3D build: attack state still depends on sprite animation definition');
-if(html.includes("const a = playerAnimDef(nextAnim);"))throw new Error('Unified 3D build: idle/run state still depends on sprite animation definition');
 
-// Class gameplay behavior must depend on the semantic class key, never on the
-// existence/name of a sprite renderer. Preserve the exact existing actions and
-// conditions while replacing only their class predicates.
 const gameplayClassReplacements=[
   [`if(playerUsesGnomeSprites()){
       try{gnomeFireCannonball()}catch(_){PLAYER_CANNONBALLS.length=0}
@@ -84,48 +126,41 @@ for(const [from,to] of gameplayClassReplacements){
   if(n!==1)throw new Error('Unified 3D build: expected one gameplay class predicate target, found '+n+' for '+from);
   html=html.replace(from,to);
 }
-if(!html.includes("if(playerIsClass('gnome')){ try{gnomeFireCannonball()}"))throw new Error('Unified 3D build: gnome gameplay class route missing');
-if(!html.includes("else if(playerIsClass('archer')){ try{archerFireArrow()}"))throw new Error('Unified 3D build: archer gameplay class route missing');
-for(const [from] of gameplayClassReplacements){if(html.includes(from))throw new Error('Unified 3D build: sprite-named gameplay predicate survived');}
+for(const [from] of gameplayClassReplacements){if(html.includes(from))throw new Error('Unified 3D build: sprite-named gameplay predicate survived')}
 
-const bobNeedle="const bob=P.scene==='fartzone'?0:Math.sin(P.bob)*(isGnome?2.0:3);";
-if((html.split(bobNeedle).length-1)!==1)throw new Error('Unified 3D build: local bob anchor not unique');
-const localCutover=`
-  const __ppa3DRaw=(P&&(P.classKey||P.cls||P.className||(P._saved&&P._saved.cls)))||'';
-  const __ppa3DText=String(__ppa3DRaw||'').trim();
-  const __ppa3DLower=__ppa3DText.toLowerCase();
-  let primary3DClass='';
-  try{if(typeof classKeyFromName==='function')primary3DClass=String(classKeyFromName(__ppa3DText)||'').toLowerCase()}catch(_){}
-  if(!['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'].includes(primary3DClass)){
-    if(__ppa3DLower==='tank'||__ppa3DLower.includes('страж'))primary3DClass='tank';
-    else if(__ppa3DLower==='barbarian'||__ppa3DLower.includes('бер')||__ppa3DLower.includes('barb'))primary3DClass='barbarian';
-    else if(__ppa3DLower==='paladin'||__ppa3DLower.includes('пал'))primary3DClass='paladin';
-    else if(__ppa3DLower==='gnome'||__ppa3DLower.includes('гном')||__ppa3DLower.includes('cannon'))primary3DClass='gnome';
-    else if(__ppa3DLower==='archer'||__ppa3DLower.includes('луч'))primary3DClass='archer';
-    else if(__ppa3DLower==='mage'||__ppa3DLower.includes('маг'))primary3DClass='mage';
-    else if(__ppa3DLower==='assassin'||__ppa3DLower.includes('асс'))primary3DClass='assassin';
-    else if(__ppa3DLower==='priest'||__ppa3DLower.includes('жр'))primary3DClass='priest';
-  }
+html=removeFunction(html,'function playerAnimDef(name){');
+
+const local3DFunction=`function drawPlayer(){
+  /* PPA_PLAYER3D_LOCAL_ONLY_20261002 */
+  const primary3DClass=playerClassKey();
   window.__PPA3D_LOCAL_CLASS=primary3DClass;
-  if(primary3DClass){
-    const __ppa3DLocal={classKey:primary3DClass,worldX:Number(P.x),worldY:Number(P.y),scene:P.scene};
-    window.__PPA3D_LOCAL_PENDING=__ppa3DLocal;
-    try{if(window.PPA_PLAYER3D&&typeof window.PPA_PLAYER3D.local==='function')window.PPA_PLAYER3D.local(__ppa3DLocal)}catch(_){}
-    return;
-  }`;
-const oldLocalAnchorSignature='__ppa3DLocal={classKey:primary3DClass,x:sx';
-html=html.replace(bobNeedle,bobNeedle+localCutover);
+  if(!primary3DClass)return;
+  const __ppa3DLocal={classKey:primary3DClass,worldX:Number(P.x),worldY:Number(P.y),scene:P.scene};
+  window.__PPA3D_LOCAL_PENDING=__ppa3DLocal;
+  try{if(window.PPA_PLAYER3D&&typeof window.PPA_PLAYER3D.local==='function')window.PPA_PLAYER3D.local(__ppa3DLocal)}catch(_){}
+}`;
+html=replaceFunction(html,'function drawPlayer(){',local3DFunction);
+
+// Validate only after both legacy functions are gone: the last historical
+// playerAnimDef call lived inside the old drawPlayer body.
+if(html.includes('playerAnimDef('))throw new Error('Unified 3D build: legacy playerAnimDef reference survived final local-render removal');
+const [drawA,drawB]=functionRange(html,'function drawPlayer(){');
+const drawBody=html.slice(drawA,drawB);
+for(const forbidden of ['playerUses','drawImage','visualBody','phoneCharacter','ANIM[P.anim]','cx.ellipse','PT.push']){
+  if(drawBody.includes(forbidden))throw new Error('Unified 3D build: legacy local render token survived drawPlayer replacement: '+forbidden);
+}
+if(!drawBody.includes('PPA_PLAYER3D_LOCAL_ONLY_20261002'))throw new Error('Unified 3D build: canonical local 3D drawPlayer missing');
+
 const nickNeedle='try{drawPlayerNickname()}catch(_){}';
 if((html.split(nickNeedle).length-1)!==1)throw new Error('Unified 3D build: local nickname draw not unique');
 html=html.replace(nickNeedle,"try{if(!window.__PPA3D_LOCAL_CLASS)drawPlayerNickname()}catch(_){}");
 html=html.replace(/\n?<script src="\/game\/player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
 html=html.replace(/\n?<script src="\/game\/remote-player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
-const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261002u3"></script>\n';
-if(!html.includes('player-3d-unified-runtime.js?v=20261002u3')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
-html=html.replace(/remote-sprite-renderer\.js\?v=[^"']+/g,'remote-sprite-renderer.js?v=20261002u3');
+const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261002u4"></script>\n';
+if(!html.includes('player-3d-unified-runtime.js?v=20261002u4')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
+html=html.replace(/remote-sprite-renderer\.js\?v=[^"']+/g,'remote-sprite-renderer.js?v=20261002u4');
 if(!html.includes('window.__PPA3D_LOCAL_PENDING=__ppa3DLocal'))throw new Error('Unified 3D build: local registration missing');
 if(!html.includes('worldX:Number(P.x),worldY:Number(P.y)'))throw new Error('Unified 3D build: local world-space anchor missing');
-if(html.includes(oldLocalAnchorSignature))throw new Error('Unified 3D build: legacy local 3D anchor survived');
-if(!html.includes('player-3d-unified-runtime.js?v=20261002u3'))throw new Error('Unified 3D build: runtime tag missing');
+if(!html.includes('player-3d-unified-runtime.js?v=20261002u4'))throw new Error('Unified 3D build: runtime tag missing');
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Unified Player3D: canonical world x/y · one renderer/cache · gameplay timing/class behavior decoupled from sprites · no legacy real-player body rendering');
+console.log('Unified Player3D V4: real local drawPlayer is 3D-only · legacy playerAnimDef removed · gameplay timing/class behavior sprite-independent');
