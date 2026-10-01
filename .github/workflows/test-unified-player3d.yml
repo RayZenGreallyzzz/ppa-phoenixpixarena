@@ -4,6 +4,7 @@ on:
     branches:
       - player-3d-unified-v2-20261002
       - player-gameplay-anim-decouple-20261002
+      - player-class-gameplay-decouple-20261002
   pull_request:
     branches:
       - main
@@ -32,8 +33,9 @@ jobs:
       - run: grep -q "targetBody=Math.max(30,Number(r.sz)||30)" gateway/remote-sprite-renderer.js
       - run: grep -q "worldX:Number(P.x),worldY:Number(P.y)" tools/postbuild-player-3d-unified-20261002.mjs
       - run: grep -q "const PLAYER_ANIM_TIMING=" tools/postbuild-player-3d-unified-20261002.mjs
+      - run: grep -q "function playerClassKey()" tools/postbuild-player-3d-unified-20261002.mjs
       - run: npm run build
-      - name: Verify unified renderer and gameplay animation decoupling
+      - name: Verify unified renderer and gameplay decoupling
         run: |
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
           grep -q "unified-v2-world" public/game/player-3d-unified-runtime.js
@@ -46,14 +48,26 @@ jobs:
           grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
           ! grep -q "__ppa3DLocal={classKey:primary3DClass,x:sx" public/index.html
           grep -q "const PLAYER_ANIM_TIMING=" public/index.html
+          grep -q "function playerClassKey()" public/index.html
           grep -q "playerAnimTiming('attack')" public/index.html
+          grep -q "if(playerIsClass('gnome')){ try{gnomeFireCannonball()}" public/index.html
+          grep -q "else if(playerIsClass('archer')){ try{archerFireArrow()}" public/index.html
           ! grep -q "P.animFrame=P.animFrame%Math.max(1,playerAnimDef('run').frames)" public/index.html
           ! grep -q "const a=playerAnimDef('attack');" public/index.html
           ! grep -q "const a = playerAnimDef(nextAnim);" public/index.html
+          ! grep -q "if(playerUsesGnomeSprites()){ try{gnomeFireCannonball()}" public/index.html
+          ! grep -q "else if(playerUsesArcherSprites()){ try{archerFireArrow()}" public/index.html
+          ! grep -q "movingNow && P.attackMode!=='melee' && !playerUsesArcherSprites()" public/index.html
+          ! grep -q "movingForAnim&&P.attackMode!=='melee'&&!playerUsesArcherSprites()" public/index.html
           node - <<'NODE'
           const fs=require('fs');
           const html=fs.readFileSync('public/index.html','utf8');
-          const count=(html.match(/playerAnimDef\(/g)||[]).length;
-          if(count!==2)throw new Error('Expected playerAnimDef only in legacy definition+dead draw path, found '+count);
-          console.log('verified: gameplay state machine no longer depends on sprite animation definitions');
+          const animDef=(html.match(/playerAnimDef\(/g)||[]).length;
+          if(animDef!==2)throw new Error('Expected playerAnimDef only in legacy definition+dead draw path, found '+animDef);
+          const expected={playerUsesGnomeSprites:6,playerUsesArcherSprites:5,playerUsesPriestSprites:4,playerUsesMageSprites:4};
+          for(const [name,n] of Object.entries(expected)){
+            const count=(html.match(new RegExp(name+'\\(', 'g'))||[]).length;
+            if(count!==n)throw new Error(name+' expected only legacy visual references '+n+', found '+count);
+          }
+          console.log('verified: gameplay timing and class behavior no longer depend on sprite helpers');
           NODE
