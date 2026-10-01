@@ -6,14 +6,14 @@ const publicDir=path.join(ROOT,'public');
 const gameDir=path.join(publicDir,'game');
 const htmlPath=path.join(publicDir,'index.html');
 const runtimeSrc=path.join(ROOT,'gateway','player-3d-unified-runtime.js');
-const adapterSrc=path.join(ROOT,'gateway','remote-player-3d-adapter.js');
+const remoteSrc=path.join(ROOT,'gateway','remote-sprite-renderer.js');
 const runtimeDst=path.join(gameDir,'player-3d-unified-runtime.js');
-const adapterDst=path.join(gameDir,'remote-sprite-renderer.js');
+const remoteDst=path.join(gameDir,'remote-sprite-renderer.js');
 const MODELS=['Tank_Mobile_Shield_Hammer_Final.glb','Berserker_Final.glb','Paladin_Final.glb','Dwarf.glb','Ranger_Mobile_Bow_Z90.glb','Mage_Final.glb','Assassin.glb','Priest_Final_GitHub.glb'];
-for(const p of [htmlPath,runtimeSrc,adapterSrc,...MODELS.map(f=>path.join(ROOT,f))])if(!fs.existsSync(p))throw new Error('Unified 3D build: missing '+p);
+for(const p of [htmlPath,runtimeSrc,remoteSrc,...MODELS.map(f=>path.join(ROOT,f))])if(!fs.existsSync(p))throw new Error('Unified 3D build: missing '+p);
 fs.mkdirSync(gameDir,{recursive:true});
 fs.copyFileSync(runtimeSrc,runtimeDst);
-fs.copyFileSync(adapterSrc,adapterDst);
+fs.copyFileSync(remoteSrc,remoteDst);
 for(const f of MODELS)fs.copyFileSync(path.join(ROOT,f),path.join(gameDir,f));
 
 let html=fs.readFileSync(htmlPath,'utf8');
@@ -48,10 +48,10 @@ if((html.split(nickNeedle).length-1)!==1)throw new Error('Unified 3D build: loca
 html=html.replace(nickNeedle,"try{if(!window.__PPA3D_LOCAL_CLASS)drawPlayerNickname()}catch(_){}");
 html=html.replace(/\n?<script src="\/game\/player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
 html=html.replace(/\n?<script src="\/game\/remote-player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
-const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261002u1"></script>\n';
-if(!html.includes('player-3d-unified-runtime.js?v=20261002u1')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
-html=html.replace(/remote-sprite-renderer\.js\?v=[^"']+/g,'remote-sprite-renderer.js?v=20261002u1');
+const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261002u2"></script>\n';
+if(!html.includes('player-3d-unified-runtime.js?v=20261002u2')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
+html=html.replace(/remote-sprite-renderer\.js\?v=[^"']+/g,'remote-sprite-renderer.js?v=20261002u2');
 if(!html.includes('window.__PPA3D_LOCAL_PENDING=__ppa3DLocal'))throw new Error('Unified 3D build: local registration missing');
-if(!html.includes('player-3d-unified-runtime.js?v=20261002u1'))throw new Error('Unified 3D build: runtime tag missing');
+if(!html.includes('player-3d-unified-runtime.js?v=20261002u2'))throw new Error('Unified 3D build: runtime tag missing');
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Unified Player3D: one renderer/cache · hips/feet pivot · head HUD anchor · no legacy real-player body rendering');
+console.log('Unified Player3D: one renderer/cache · canonical remote adapter · hips/feet pivot · head HUD anchor · no legacy real-player body rendering');
