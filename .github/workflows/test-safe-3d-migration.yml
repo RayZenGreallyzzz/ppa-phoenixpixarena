@@ -1,0 +1,23 @@
+name: Test safe 3D migration
+on:
+  push:
+    branches:
+      - safe-3d-decouple-20261001
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - run: node --check gateway/remote-player-3d-runtime.js
+      - run: node --check tools/postbuild-player-3d-decouple-20261001.mjs
+      - run: node --check tools/postbuild-remote-player-3d-20261001.mjs
+      - run: npm run build
