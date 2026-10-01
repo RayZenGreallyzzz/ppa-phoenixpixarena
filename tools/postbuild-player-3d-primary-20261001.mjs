@@ -69,11 +69,11 @@ html=html.replace(
 
 // No per-class postbuild scale multipliers. Runtime normalizes every GLB by body-only
 // skinned-mesh bounds; attached weapons never participate in character height.
-const scriptTag='\n<script src="/game/player-3d-runtime.js?v=20261001m"></script>\n';
-if(!html.includes('player-3d-runtime.js?v=20261001m')){
+const scriptTag='\n<script src="/game/player-3d-runtime.js?v=20261001n"></script>\n';
+if(!html.includes('player-3d-runtime.js?v=20261001n')){
   if(!html.includes('</body>'))throw new Error('Primary 3D build: </body> missing');
   html=html.replace('</body>',scriptTag+'</body>');
 }
 
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Primary 3D V3: 8 classes · body-only normalization · no manual class scale multipliers · legacy local sprite paint bypassed');
+console.log('Primary 3D V4: 8 classes · attack-target facing · 128px WebGL overscan · legacy local sprite paint bypassed');
