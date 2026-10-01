@@ -43,3 +43,9 @@ jobs:
           ! grep -q "remote-player-3d-runtime.js?v=" public/index.html
           grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
           ! grep -q "__ppa3DLocal={classKey:primary3DClass,x:sx" public/index.html
+      - name: Locate remote targeting metric consumers
+        run: |
+          echo '=== __ppaHitBody ==='
+          grep -R -n -C 2 "__ppaHitBody" public gateway 2>/dev/null || true
+          echo '=== __ppaClientRadius ==='
+          grep -R -n -C 2 "__ppaClientRadius" public gateway 2>/dev/null || true
