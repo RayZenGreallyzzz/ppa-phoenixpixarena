@@ -20,10 +20,11 @@ fs.copyFileSync(modelSrc,modelDst);
 let html=fs.readFileSync(htmlPath,'utf8');
 const marker='ranger-3d-test.js?v=20261001a';
 if(!html.includes(marker)){
-  const tag='\n<script src="/game/ranger-3d-test.js?v=20261001a"></script>\n';
+  const calibration='<style id="ppaRanger3DCalibration">#ppaRanger3DTestLayer{transform:translate(-50%,-42%) scale(.38)!important;transform-origin:50% 50%!important}</style>\n';
+  const tag='\n'+calibration+'<script src="/game/ranger-3d-test.js?v=20261001a"></script>\n';
   if(!html.includes('</body>'))throw new Error('Ranger 3D test: </body> not found');
   html=html.replace('</body>',tag+'</body>');
   fs.writeFileSync(htmlPath,html,'utf8');
 }
 
-console.log('Ranger 3D test enabled: local archer only · /game/Ranger_Mobile_Bow_Z90.glb');
+console.log('Ranger 3D test enabled: local archer only · calibrated x0.38 · /game/Ranger_Mobile_Bow_Z90.glb');
