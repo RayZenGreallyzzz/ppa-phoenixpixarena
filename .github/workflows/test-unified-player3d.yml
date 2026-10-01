@@ -25,26 +25,21 @@ jobs:
       - run: test ! -e gateway/remote-player-3d-runtime.js
       - run: test ! -e gateway/remote-player-3d-runtime-v2.js
       - run: test ! -e gateway/remote-sprite-renderer-3d-bridge.js
-      - run: '! grep -q "v174AiSpriteCfg\|drawImage" gateway/remote-sprite-renderer.js'
+      - run: '! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" gateway/remote-sprite-renderer.js'
       - run: '! grep -q "y:sy+body" gateway/remote-sprite-renderer.js'
       - run: grep -q "worldX:Number(r.x),worldY:Number(r.y)" gateway/remote-sprite-renderer.js
+      - run: grep -q "targetBody=Math.max(30,Number(r.sz)||30)" gateway/remote-sprite-renderer.js
       - run: grep -q "worldX:Number(P.x),worldY:Number(P.y)" tools/postbuild-player-3d-unified-20261002.mjs
       - run: npm run build
       - name: Verify unified renderer owns all real players
         run: |
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
           grep -q "unified-v2-world" public/game/player-3d-unified-runtime.js
-          grep -q "__PPA_REMOTE3D_ADAPTER_V1" public/game/remote-sprite-renderer.js
-          ! grep -q "v174AiSpriteCfg\|drawImage" public/game/remote-sprite-renderer.js
+          grep -q "__PPA_REMOTE3D_ADAPTER_V2" public/game/remote-sprite-renderer.js
+          ! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" public/game/remote-sprite-renderer.js
           grep -q "player-3d-unified-runtime.js?v=20261002u3" public/index.html
           grep -q "remote-sprite-renderer.js?v=20261002u3" public/index.html
           ! grep -q "player-3d-runtime.js?v=" public/index.html
           ! grep -q "remote-player-3d-runtime.js?v=" public/index.html
           grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
           ! grep -q "__ppa3DLocal={classKey:primary3DClass,x:sx" public/index.html
-      - name: Locate remote targeting metric consumers
-        run: |
-          echo '=== __ppaHitBody ==='
-          grep -R -n -C 2 "__ppaHitBody" public gateway 2>/dev/null || true
-          echo '=== __ppaClientRadius ==='
-          grep -R -n -C 2 "__ppaClientRadius" public gateway 2>/dev/null || true
