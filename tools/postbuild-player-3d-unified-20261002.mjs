@@ -42,6 +42,7 @@ const localCutover=`
     try{if(window.PPA_PLAYER3D&&typeof window.PPA_PLAYER3D.local==='function')window.PPA_PLAYER3D.local(__ppa3DLocal)}catch(_){}
     return;
   }`;
+const oldLocalAnchorSignature='__ppa3DLocal={classKey:primary3DClass,x:sx';
 html=html.replace(bobNeedle,bobNeedle+localCutover);
 const nickNeedle='try{drawPlayerNickname()}catch(_){}';
 if((html.split(nickNeedle).length-1)!==1)throw new Error('Unified 3D build: local nickname draw not unique');
@@ -53,7 +54,7 @@ if(!html.includes('player-3d-unified-runtime.js?v=20261002u3')){if(!html.include
 html=html.replace(/remote-sprite-renderer\.js\?v=[^"']+/g,'remote-sprite-renderer.js?v=20261002u3');
 if(!html.includes('window.__PPA3D_LOCAL_PENDING=__ppa3DLocal'))throw new Error('Unified 3D build: local registration missing');
 if(!html.includes('worldX:Number(P.x),worldY:Number(P.y)'))throw new Error('Unified 3D build: local world-space anchor missing');
-if(html.includes('sy+visualBody*0.40'))throw new Error('Unified 3D build: legacy local sprite offset survived');
+if(html.includes(oldLocalAnchorSignature))throw new Error('Unified 3D build: legacy local 3D anchor survived');
 if(!html.includes('player-3d-unified-runtime.js?v=20261002u3'))throw new Error('Unified 3D build: runtime tag missing');
 fs.writeFileSync(htmlPath,html,'utf8');
 console.log('Unified Player3D: canonical world x/y · one renderer/cache · hips/feet pivot · head HUD anchor · no legacy real-player body rendering');
