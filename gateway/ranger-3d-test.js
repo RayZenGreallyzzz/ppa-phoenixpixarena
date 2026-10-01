@@ -1,13 +1,13 @@
 (function(){
   'use strict';
-  if(window.__PPA_RANGER_3D_TEST_V3)return;
-  window.__PPA_RANGER_3D_TEST_V3=true;
+  if(window.__PPA_RANGER_3D_TEST_V4)return;
+  window.__PPA_RANGER_3D_TEST_V4=true;
 
-  var VIEW_W=220,VIEW_H=300;
-  var state={enabled:true,ready:false,loading:false,error:'',anim:'',face:null,fps:0,frames:0,lastFpsAt:performance.now(),modelUrl:'/game/Ranger_Mobile_Bow_Z90.glb?v=20261001c',hide2D:true,moveSpeed:0,moveDir:4};
+  var VIEW_W=240,VIEW_H=360;
+  var state={enabled:true,ready:false,loading:false,error:'',anim:'',face:null,yawDeg:0,fps:0,frames:0,lastFpsAt:performance.now(),modelUrl:'/game/Ranger_Mobile_Bow_Z90.glb?v=20261001d',hide2D:true,moveSpeed:0,moveDir:4};
   var THREE=null,GLTFLoader=null,renderer=null,scene=null,camera=null,root=null,mixer=null,actions={},host=null,lastAt=performance.now(),currentAction=null;
   var transparentAtlases={};
-  var lastPX=null,lastPY=null,lastMoveSampleAt=0,movingUntil=0,lastMotionDir=4,footX=VIEW_W/2,footY=VIEW_H*.86;
+  var lastPX=null,lastPY=null,lastMoveSampleAt=0,movingUntil=0,lastMotionYaw=0,hasMotionYaw=false,footX=VIEW_W/2,footY=VIEW_H*.84;
 
   function normalizeClass(v){
     var s=String(v||'').trim(),l=s.toLowerCase();
@@ -34,30 +34,45 @@
   function toast(text,col){try{if(typeof showPickup==='function')showPickup(text,col||'#91ffc1')}catch(_){} }
   function playerAvailable(){try{return typeof P!=='undefined'&&P&&typeof cam!=='undefined'&&cam&&typeof cv!=='undefined'&&cv&&typeof cameraZoom==='function'}catch(_){return false}}
 
-  function legacyFaceDir(){
-    try{
-      var f=Number(P&&P.face);
-      if(Number.isFinite(f)&&f>=0&&f<=7)return Math.round(f);
-      if(f===8)return 0;
-      if(f===-1)return 6;
-      if(f===1)return 2;
-    }catch(_){}
-    return lastMotionDir;
+  function shortestAngle(a,b){
+    var d=(b-a+Math.PI)%(Math.PI*2)-Math.PI;
+    if(d<-Math.PI)d+=Math.PI*2;
+    return a+d;
   }
-  function vectorDir(dx,dy){
-    var a=Math.atan2(dx,-dy);
-    return (Math.round(a/(Math.PI/4))+8)%8;
+  function legacyFaceYaw(){
+    try{
+      var f=Number(P&&P.face),dir=4;
+      if(Number.isFinite(f)&&f>=0&&f<=7)dir=Math.round(f);
+      else if(f===8)dir=0;
+      else if(f===-1)dir=6;
+      else if(f===1)dir=2;
+      return (dir-4)*(Math.PI/4);
+    }catch(_){return 0}
+  }
+  function yawFromVector(dx,dy){
+    // Default model forward is screen-down. Use the real analog movement angle,
+    // never round to one of eight sprite directions.
+    return Math.atan2(dx,-dy)-Math.PI;
+  }
+  function dirForDiag(yaw){
+    return ((Math.round((yaw+Math.PI)/(Math.PI/4))+4)%8+8)%8;
   }
   function sampleMotion(now){
     try{
       var x=Number(P&&P.x)||0,y=Number(P&&P.y)||0;
-      if(lastPX===null||lastPY===null){lastPX=x;lastPY=y;lastMoveSampleAt=now;return false}
+      if(lastPX===null||lastPY===null){
+        lastPX=x;lastPY=y;lastMoveSampleAt=now;
+        lastMotionYaw=legacyFaceYaw();hasMotionYaw=true;
+        return false;
+      }
       var dt=Math.max(1,now-lastMoveSampleAt),dx=x-lastPX,dy=y-lastPY,d=Math.hypot(dx,dy);
       lastPX=x;lastPY=y;lastMoveSampleAt=now;
       if(d>.015&&d<100){
-        movingUntil=now+140;
-        lastMotionDir=vectorDir(dx,dy);
-        state.moveDir=lastMotionDir;
+        movingUntil=now+150;
+        var raw=yawFromVector(dx,dy);
+        lastMotionYaw=hasMotionYaw?shortestAngle(lastMotionYaw,raw):raw;
+        hasMotionYaw=true;
+        state.moveDir=dirForDiag(lastMotionYaw);
         state.moveSpeed=d/(dt/1000);
       }else if(now>movingUntil){
         state.moveSpeed=0;
@@ -65,7 +80,7 @@
       return now<movingUntil;
     }catch(_){return false}
   }
-  function desiredAnim(now,moving){
+  function desiredAnim(moving){
     try{
       var a=String(P&&P.anim||'').toLowerCase();
       if(a.indexOf('attack')>=0)return'attack';
@@ -81,11 +96,6 @@
       if(currentAction)currentAction.crossFadeTo(next,.10,false);
       currentAction=next;state.anim=name;
     }catch(_){}
-  }
-  function shortestAngle(a,b){
-    var d=(b-a+Math.PI)%(Math.PI*2)-Math.PI;
-    if(d<-Math.PI)d+=Math.PI*2;
-    return a+d;
   }
 
   function transparentAtlas(a){
@@ -135,14 +145,14 @@
       var sx=((Number(P.x)||0)-(Number(cam.x)||0))*z;
       var sy=((Number(P.y)||0)-(Number(cam.y)||0))*z;
       var x=rect.left+sx*kx,y=rect.top+sy*ky;
-      var visualScale=Math.max(.30,Math.min(.72,.40*z*Math.max(kx,ky)));
+      var visualScale=Math.max(.32,Math.min(.78,.44*z*Math.max(kx,ky)));
       host.style.left=x+'px';host.style.top=y+'px';
       var el=renderer.domElement;
       el.style.left=(-footX*visualScale)+'px';
       el.style.top=(-footY*visualScale)+'px';
       el.style.width=(VIEW_W*visualScale)+'px';
       el.style.height=(VIEW_H*visualScale)+'px';
-      return x>rect.left-180&&x<rect.right+180&&y>rect.top-220&&y<rect.bottom+140;
+      return x>rect.left-200&&x<rect.right+200&&y>rect.top-280&&y<rect.bottom+160;
     }catch(_){return false}
   }
 
@@ -158,14 +168,19 @@
 
       renderer=new THREE.WebGLRenderer({alpha:true,antialias:false,powerPreference:'high-performance'});
       renderer.setPixelRatio(1);renderer.setSize(VIEW_W,VIEW_H,false);renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;
-      renderer.domElement.style.cssText='position:absolute;display:block;pointer-events:none;max-width:none;max-height:none;';host.appendChild(renderer.domElement);
+      renderer.toneMapping=THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure=1.18;
+      renderer.domElement.style.cssText='position:absolute;display:block;pointer-events:none;max-width:none;max-height:none;filter:saturate(1.28) contrast(1.06) brightness(1.04);';
+      host.appendChild(renderer.domElement);
 
       scene=new THREE.Scene();
-      var halfH=1.72,halfW=halfH*(VIEW_W/VIEW_H);
-      camera=new THREE.OrthographicCamera(-halfW,halfW,halfH,-halfH,.01,40);
-      camera.position.set(0,2.85,7.2);camera.lookAt(0,1.12,0);camera.updateProjectionMatrix();
-      scene.add(new THREE.HemisphereLight(0xffffff,0x29314a,2.45));
-      var sun=new THREE.DirectionalLight(0xffffff,2.65);sun.position.set(3.5,6.5,5.5);scene.add(sun);
+      var halfH=2.25,halfW=halfH*(VIEW_W/VIEW_H);
+      camera=new THREE.OrthographicCamera(-halfW,halfW,halfH,-halfH,.01,50);
+      camera.position.set(0,3.55,8.2);camera.lookAt(0,1.12,0);camera.updateProjectionMatrix();
+
+      scene.add(new THREE.HemisphereLight(0xfff7ea,0x263451,1.55));
+      var sun=new THREE.DirectionalLight(0xfff0cf,3.10);sun.position.set(3.8,7.0,5.8);scene.add(sun);
+      var fill=new THREE.DirectionalLight(0x9ec8ff,.78);fill.position.set(-4.0,3.0,3.0);scene.add(fill);
 
       root=new THREE.Group();scene.add(root);
       var gltf=await new GLTFLoader().loadAsync(state.modelUrl);
@@ -180,8 +195,9 @@
         else if(n.indexOf('run')>=0&&!actions.run)actions.run=mixer.clipAction(clip);
         else if(n.indexOf('attack')>=0&&!actions.attack)actions.attack=mixer.clipAction(clip);
       });
+      lastMotionYaw=legacyFaceYaw();hasMotionYaw=true;root.rotation.y=lastMotionYaw;
       switchAnim('idle');updateFootProjection();
-      state.ready=true;state.loading=false;installHide2D();toast('RANGER 3D DIR/CAMERA TEST · ON','#91ffc1');requestAnimationFrame(frame);
+      state.ready=true;state.loading=false;installHide2D();toast('RANGER 3D 360/COLOR TEST · ON','#91ffc1');requestAnimationFrame(frame);
     }catch(e){
       state.loading=false;state.error=String(e&&e.message||e||'3D load error');console.warn('[PPA Ranger 3D]',e);toast('RANGER 3D · LOAD ERROR','#ff7b7b');
     }
@@ -197,15 +213,14 @@
     var visible=isArcher&&state.enabled&&playerAvailable()&&!(P&&P.dead)&&placeHost()&&!document.hidden;
     if(host)host.style.display=visible?'block':'none';
     if(visible){
-      switchAnim(desiredAnim(now,moving));
+      switchAnim(desiredAnim(moving));
       try{if(mixer)mixer.update(dt)}catch(_){}
       try{
-        var dir=moving?lastMotionDir:lastMotionDir;
-        if(lastPX===null)dir=legacyFaceDir();
-        state.face=dir;
-        var target=(dir-4)*(Math.PI/4);
+        var target=hasMotionYaw?lastMotionYaw:legacyFaceYaw();
         var desired=shortestAngle(root.rotation.y,target);
-        root.rotation.y+=(desired-root.rotation.y)*Math.min(1,dt*16);
+        root.rotation.y+=(desired-root.rotation.y)*Math.min(1,dt*12);
+        state.yawDeg=Math.round(root.rotation.y*180/Math.PI);
+        state.face=state.moveDir;
       }catch(_){}
       try{renderer.render(scene,camera)}catch(_){}
     }
@@ -217,7 +232,7 @@
     enable:function(v){state.enabled=v!==false;if(host)host.style.display=state.enabled?'block':'none';return state.enabled},
     toggle:function(){state.enabled=!state.enabled;if(host)host.style.display=state.enabled?'block':'none';return state.enabled},
     show2D:function(v){state.hide2D=v===false;return !state.hide2D},
-    diag:function(){return Object.assign({},state,{classKey:currentClass(),playerReady:playerAvailable(),movingUntil:movingUntil,lastPX:lastPX,lastPY:lastPY,footX:footX,footY:footY})}
+    diag:function(){return Object.assign({},state,{classKey:currentClass(),playerReady:playerAvailable(),movingUntil:movingUntil,lastPX:lastPX,lastPY:lastPY,footX:footX,footY:footY,lastMotionYaw:lastMotionYaw})}
   };
   window.PPA_RANGER_3D_DIAG=function(){return window.PPA_RANGER3D.diag()};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
