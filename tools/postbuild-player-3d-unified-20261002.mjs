@@ -37,7 +37,7 @@ const localCutover=`
   }
   window.__PPA3D_LOCAL_CLASS=primary3DClass;
   if(primary3DClass){
-    const __ppa3DLocal={classKey:primary3DClass,x:sx,y:sy+visualBody*0.40,zoom:cameraZoom(),body:visualBody,scene:P.scene,worldX:P.x,worldY:P.y};
+    const __ppa3DLocal={classKey:primary3DClass,worldX:Number(P.x),worldY:Number(P.y),scene:P.scene};
     window.__PPA3D_LOCAL_PENDING=__ppa3DLocal;
     try{if(window.PPA_PLAYER3D&&typeof window.PPA_PLAYER3D.local==='function')window.PPA_PLAYER3D.local(__ppa3DLocal)}catch(_){}
     return;
@@ -48,10 +48,12 @@ if((html.split(nickNeedle).length-1)!==1)throw new Error('Unified 3D build: loca
 html=html.replace(nickNeedle,"try{if(!window.__PPA3D_LOCAL_CLASS)drawPlayerNickname()}catch(_){}");
 html=html.replace(/\n?<script src="\/game\/player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
 html=html.replace(/\n?<script src="\/game\/remote-player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
-const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261002u2"></script>\n';
-if(!html.includes('player-3d-unified-runtime.js?v=20261002u2')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
-html=html.replace(/remote-sprite-renderer\.js\?v=[^"']+/g,'remote-sprite-renderer.js?v=20261002u2');
+const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261002u3"></script>\n';
+if(!html.includes('player-3d-unified-runtime.js?v=20261002u3')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
+html=html.replace(/remote-sprite-renderer\.js\?v=[^"']+/g,'remote-sprite-renderer.js?v=20261002u3');
 if(!html.includes('window.__PPA3D_LOCAL_PENDING=__ppa3DLocal'))throw new Error('Unified 3D build: local registration missing');
-if(!html.includes('player-3d-unified-runtime.js?v=20261002u2'))throw new Error('Unified 3D build: runtime tag missing');
+if(!html.includes('worldX:Number(P.x),worldY:Number(P.y)'))throw new Error('Unified 3D build: local world-space anchor missing');
+if(html.includes('sy+visualBody*0.40'))throw new Error('Unified 3D build: legacy local sprite offset survived');
+if(!html.includes('player-3d-unified-runtime.js?v=20261002u3'))throw new Error('Unified 3D build: runtime tag missing');
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Unified Player3D: one renderer/cache · canonical remote adapter · hips/feet pivot · head HUD anchor · no legacy real-player body rendering');
+console.log('Unified Player3D: canonical world x/y · one renderer/cache · hips/feet pivot · head HUD anchor · no legacy real-player body rendering');
