@@ -1,19 +1,26 @@
 (function(){
   'use strict';
-  if(window.__PPA_PRIMARY_3D_V1)return;
-  window.__PPA_PRIMARY_3D_V1=true;
+  if(window.__PPA_PRIMARY_3D_V2)return;
+  window.__PPA_PRIMARY_3D_V2=true;
 
-  const ENABLED_CLASSES=new Set(['archer']);
-  const MODELS={archer:'/game/Ranger_Mobile_Bow_Z90.glb?v=20261001h'};
-  const VISUAL_SCALE={archer:.88};
-  const MODEL_HEIGHT=2.34;
+  const CLASS_CONFIG={
+    tank:{model:'/game/Tank_Mobile_Shield_Hammer_Final.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0},
+    barbarian:{model:'/game/Berserker_Final.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0},
+    paladin:{model:'/game/Paladin_Final.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0},
+    gnome:{model:'/game/Dwarf.glb?v=20261001i',targetHeight:1.68,visualScale:.88,yawOffset:0},
+    archer:{model:'/game/Ranger_Mobile_Bow_Z90.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0},
+    mage:{model:'/game/Mage_Final.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0},
+    assassin:{model:'/game/Assassin.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0},
+    priest:{model:'/game/Priest_Final_GitHub.glb?v=20261001i',targetHeight:2.34,visualScale:.88,yawOffset:0}
+  };
+  const ENABLED_CLASSES=new Set(Object.keys(CLASS_CONFIG));
   const PX_PER_UNIT=34;
 
-  let THREE=null,GLTFLoader=null,renderer=null,scene=null,camera=null,host=null,nameEl=null;
+  let THREE=null,GLTFLoader=null,renderer=null,scene=null,camera=null,host=null,nameEl=null,clanEl=null;
   let modelRoot=null,model=null,mixer=null,actions={},currentAction=null,loadedClass='';
   let lastAt=performance.now(),lastPX=null,lastPY=null,movingUntil=0,lastMotionYaw=0,hasMotionYaw=false;
-  let cameraYaw=0,lastRectW=0,lastRectH=0;
-  const state={ready:false,loading:false,error:'',anim:'idle',fps:0,frames:0,lastFpsAt:performance.now(),classKey:'',yawDeg:0};
+  let cameraYaw=0,lastRectW=0,lastRectH=0,loadToken=0;
+  const state={ready:false,loading:false,error:'',anim:'idle',fps:0,frames:0,lastFpsAt:performance.now(),classKey:'',yawDeg:0,clips:[],missingAnims:[]};
 
   function normalizeClass(v){
     const s=String(v||'').trim(),l=s.toLowerCase();
@@ -46,6 +53,13 @@
     for(const v of vals){const s=String(v||'').trim();if(s)return s}
     return'Игрок';
   }
+  function currentClanName(){
+    try{
+      const c=(typeof CLAN_LOCAL_STATE!=='undefined'&&CLAN_LOCAL_STATE&&CLAN_LOCAL_STATE.clan)
+        ?String(CLAN_LOCAL_STATE.clan.name||'').trim():'';
+      return c;
+    }catch(_){return''}
+  }
   function playerReady(){
     try{return typeof P!=='undefined'&&P&&typeof cv!=='undefined'&&cv&&typeof cameraZoom==='function'}catch(_){return false}
   }
@@ -55,11 +69,13 @@
     if(d<-Math.PI)d+=Math.PI*2;
     return a+d;
   }
+  function configFor(cls){return CLASS_CONFIG[cls]||CLASS_CONFIG.archer}
   function legacyYaw(){
     try{
       let f=Number(P&&P.face),dir=4;
       if(Number.isFinite(f)&&f>=0&&f<=7)dir=Math.round(f);else if(f===8)dir=0;else if(f===-1)dir=6;else if(f===1)dir=2;
-      return cameraYaw+(4-dir)*(Math.PI/4);
+      const cfg=configFor(loadedClass||currentClass());
+      return cameraYaw+(4-dir)*(Math.PI/4)+(Number(cfg.yawOffset)||0);
     }catch(_){return cameraYaw}
   }
   function sampleMotion(now){
@@ -70,7 +86,8 @@
       lastPX=x;lastPY=y;
       if(d>.015&&d<100){
         movingUntil=now+150;
-        const raw=cameraYaw+Math.atan2(dx,dy);
+        const cfg=configFor(loadedClass||currentClass());
+        const raw=cameraYaw+Math.atan2(dx,dy)+(Number(cfg.yawOffset)||0);
         lastMotionYaw=hasMotionYaw?shortestAngle(lastMotionYaw,raw):raw;
         hasMotionYaw=true;
       }
@@ -83,12 +100,20 @@
   }
   function switchAnim(name){
     const next=actions[name]||actions.idle;
-    if(!next||next===currentAction)return;
+    if(!next)return;
+    if(next===currentAction){state.anim=name;return}
     try{
       next.enabled=true;next.reset();next.play();
       if(currentAction)currentAction.crossFadeTo(next,.10,false);
       currentAction=next;state.anim=name;
     }catch(_){}
+  }
+  function findClip(clips,words){
+    for(const word of words){
+      const hit=clips.find(c=>String(c&&c.name||'').toLowerCase().includes(word));
+      if(hit)return hit;
+    }
+    return null;
   }
 
   function ensureHost(){
@@ -97,6 +122,10 @@
     host.id='ppaPrimary3DLayer';
     host.style.cssText='position:fixed;left:0;top:0;width:1px;height:1px;pointer-events:none;overflow:visible;z-index:4;contain:layout style;';
     document.body.appendChild(host);
+    clanEl=document.createElement('div');
+    clanEl.id='ppaPrimary3DClan';
+    clanEl.style.cssText='position:absolute;transform:translate(-50%,-100%);white-space:nowrap;font:700 8px Georgia,serif;color:#a9cfff;text-shadow:-1px -1px 0 rgba(8,12,20,.94),1px -1px 0 rgba(8,12,20,.94),-1px 1px 0 rgba(8,12,20,.94),1px 1px 0 rgba(8,12,20,.94);pointer-events:none;z-index:2;';
+    host.appendChild(clanEl);
     nameEl=document.createElement('div');
     nameEl.id='ppaPrimary3DName';
     nameEl.style.cssText='position:absolute;transform:translate(-50%,-100%);white-space:nowrap;font:600 11px Georgia,serif;color:#f2d39a;text-shadow:-1px -1px 0 rgba(18,8,5,.92),1px -1px 0 rgba(18,8,5,.92),-1px 1px 0 rgba(18,8,5,.92),1px 1px 0 rgba(18,8,5,.92);pointer-events:none;z-index:2;';
@@ -127,27 +156,30 @@
     const hit=new THREE.Vector3();
     if(!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),0),hit))return false;
     modelRoot.position.copy(hit);
-    const cls=loadedClass||'archer';
-    const s=(VISUAL_SCALE[cls]||1)*z;
-    modelRoot.scale.setScalar(s);
+    const cfg=configFor(loadedClass||'archer');
+    modelRoot.scale.setScalar((Number(cfg.visualScale)||1)*z);
     return true;
   }
-  function updateName(rect){
-    if(!nameEl||!modelRoot||!camera||!THREE||!rect)return;
+  function updateLabels(rect){
+    if(!nameEl||!clanEl||!modelRoot||!camera||!THREE||!rect)return;
     try{
-      const cls=loadedClass||'archer',z=Math.max(.1,Number((window.__PPA3D_LOCAL_ANCHOR||{}).zoom)||1);
-      const h=(MODEL_HEIGHT*(VISUAL_SCALE[cls]||1)*z)+.30;
+      const cfg=configFor(loadedClass||'archer');
+      const z=Math.max(.1,Number((window.__PPA3D_LOCAL_ANCHOR||{}).zoom)||1);
+      const h=(Number(cfg.targetHeight)||2.34)*(Number(cfg.visualScale)||1)*z+.30;
       const p=new THREE.Vector3(modelRoot.position.x,h,modelRoot.position.z).project(camera);
-      nameEl.textContent=currentName();
-      nameEl.style.left=((p.x*.5+.5)*rect.width)+'px';
-      nameEl.style.top=((-p.y*.5+.5)*rect.height-8)+'px';
-      nameEl.style.display='block';
-    }catch(_){nameEl.style.display='none'}
+      const x=(p.x*.5+.5)*rect.width,y=(-p.y*.5+.5)*rect.height;
+      nameEl.textContent=currentName();nameEl.style.left=x+'px';nameEl.style.top=(y-8)+'px';nameEl.style.display='block';
+      const clan=currentClanName();
+      if(clan){clanEl.textContent='['+clan.slice(0,18)+']';clanEl.style.left=x+'px';clanEl.style.top=(y-21)+'px';clanEl.style.display='block'}
+      else clanEl.style.display='none';
+    }catch(_){nameEl.style.display='none';clanEl.style.display='none'}
   }
 
   async function loadClass(cls){
-    if(state.loading||loadedClass===cls&&state.ready||!MODELS[cls])return;
-    state.loading=true;state.error='';
+    const cfg=CLASS_CONFIG[cls];
+    if(!cfg||loadedClass===cls&&state.ready)return;
+    const token=++loadToken;
+    state.loading=true;state.ready=false;state.error='';state.classKey=cls;state.clips=[];state.missingAnims=[];
     try{
       if(!THREE){
         THREE=await import('https://esm.sh/three@0.180.0');
@@ -157,7 +189,7 @@
         renderer.setPixelRatio(1);renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;
         renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.18;
         renderer.domElement.style.cssText='position:absolute;left:0;top:0;display:block;pointer-events:none;filter:saturate(1.28) contrast(1.06) brightness(1.04);';
-        host.insertBefore(renderer.domElement,nameEl);
+        host.insertBefore(renderer.domElement,clanEl);
         scene=new THREE.Scene();
         camera=new THREE.OrthographicCamera(-10,10,10,-10,.01,100);
         camera.position.set(5.0,7.4,9.0);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);
@@ -166,22 +198,30 @@
         const sun=new THREE.DirectionalLight(0xfff0cf,3.10);sun.position.set(4.5,8.0,5.5);scene.add(sun);
         const fill=new THREE.DirectionalLight(0x9ec8ff,.82);fill.position.set(-4.0,3.5,2.5);scene.add(fill);
       }
+      const gltf=await new GLTFLoader().loadAsync(cfg.model);
+      if(token!==loadToken)return;
       if(modelRoot){scene.remove(modelRoot);modelRoot=null;model=null;mixer=null;actions={};currentAction=null}
-      const gltf=await new GLTFLoader().loadAsync(MODELS[cls]);
       modelRoot=new THREE.Group();scene.add(modelRoot);model=gltf.scene;modelRoot.add(model);
       const box=new THREE.Box3().setFromObject(model),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
-      const sc=MODEL_HEIGHT/Math.max(.001,size.y);model.scale.setScalar(sc);model.position.set(-center.x*sc,-box.min.y*sc,-center.z*sc);
+      const targetHeight=Number(cfg.targetHeight)||2.34;
+      const sc=targetHeight/Math.max(.001,size.y);model.scale.setScalar(sc);model.position.set(-center.x*sc,-box.min.y*sc,-center.z*sc);
       mixer=new THREE.AnimationMixer(model);
-      for(const clip of (gltf.animations||[])){
-        const n=String(clip.name||'').toLowerCase();
-        if(n.includes('idle')&&!actions.idle)actions.idle=mixer.clipAction(clip);
-        else if(n.includes('run')&&!actions.run)actions.run=mixer.clipAction(clip);
-        else if(n.includes('attack')&&!actions.attack)actions.attack=mixer.clipAction(clip);
-      }
-      loadedClass=cls;state.classKey=cls;state.ready=true;state.loading=false;
+      const clips=gltf.animations||[];
+      state.clips=clips.map(c=>String(c&&c.name||''));
+      const idle=findClip(clips,['idle','stand','breath'])||clips[0]||null;
+      const run=findClip(clips,['run','jog','walk']);
+      const attack=findClip(clips,['attack','shoot','slash','cast','swing','fire','hit']);
+      if(idle)actions.idle=mixer.clipAction(idle);
+      if(run)actions.run=mixer.clipAction(run);else state.missingAnims.push('run');
+      if(attack)actions.attack=mixer.clipAction(attack);else state.missingAnims.push('attack');
+      if(!idle)state.missingAnims.push('idle');
+      loadedClass=cls;state.ready=true;state.loading=false;
       lastPX=lastPY=null;hasMotionYaw=false;lastMotionYaw=legacyYaw();modelRoot.rotation.y=lastMotionYaw;
-      switchAnim('idle');toast('RANGER · PRIMARY 3D ON','#91ffc1');
-    }catch(e){state.loading=false;state.error=String(e&&e.message||e||'3D load error');console.warn('[PPA primary 3D]',e);toast('PRIMARY 3D · LOAD ERROR','#ff7b7b')}
+      switchAnim('idle');toast(String(cls).toUpperCase()+' · PRIMARY 3D ON','#91ffc1');
+    }catch(e){
+      if(token!==loadToken)return;
+      state.loading=false;state.ready=false;state.error=String(e&&e.message||e||'3D load error');console.warn('[PPA primary 3D]',cls,e);toast(String(cls).toUpperCase()+' · 3D LOAD ERROR','#ff7b7b')
+    }
   }
 
   function frame(now){
@@ -189,7 +229,7 @@
     if(!playerReady())return;
     const cls=currentClass();
     if(!ENABLED_CLASSES.has(cls)){if(host)host.style.display='none';return}
-    if(!state.ready||loadedClass!==cls){loadClass(cls);if(host)host.style.display='none';return}
+    if(!state.ready||loadedClass!==cls){if(!state.loading||state.classKey!==cls)loadClass(cls);if(host)host.style.display='none';return}
     const anchor=window.__PPA3D_LOCAL_ANCHOR;
     if(!anchor||anchor.classKey!==cls||String(anchor.scene)!==String(P.scene)||P.dead||document.hidden){if(host)host.style.display='none';return}
     const rect=resizeToGameCanvas();if(!rect||!anchorToGround(anchor,rect)){if(host)host.style.display='none';return}
@@ -201,11 +241,14 @@
       const target=hasMotionYaw?lastMotionYaw:legacyYaw(),desired=shortestAngle(modelRoot.rotation.y,target);
       modelRoot.rotation.y+=(desired-modelRoot.rotation.y)*Math.min(1,dt*12);state.yawDeg=Math.round(modelRoot.rotation.y*180/Math.PI);
     }catch(_){}
-    updateName(rect);
+    updateLabels(rect);
     try{renderer.render(scene,camera)}catch(_){}
     state.frames++;if(now-state.lastFpsAt>=1000){state.fps=Math.round(state.frames*1000/(now-state.lastFpsAt));state.frames=0;state.lastFpsAt=now}
   }
 
-  window.PPA_PRIMARY3D={diag:()=>Object.assign({},state,{anchor:window.__PPA3D_LOCAL_ANCHOR||null}),enabledClasses:Array.from(ENABLED_CLASSES)};
+  window.PPA_PRIMARY3D={
+    diag:()=>Object.assign({},state,{anchor:window.__PPA3D_LOCAL_ANCHOR||null,loadedClass,config:CLASS_CONFIG[loadedClass]||null}),
+    enabledClasses:Array.from(ENABLED_CLASSES)
+  };
   requestAnimationFrame(frame);
 })();
