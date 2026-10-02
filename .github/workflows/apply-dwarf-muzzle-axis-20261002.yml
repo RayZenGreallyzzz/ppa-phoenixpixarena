@@ -1,0 +1,38 @@
+name: Apply dwarf muzzle axis 20261002
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Apply dwarf muzzle axis patch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply targeted patch
+        run: node tools/patch-dwarf-muzzle-axis-20261002.mjs
+      - name: Syntax checks
+        run: |
+          node --check gateway/player-3d-unified-runtime.js
+          node --check tools/postbuild-player-3d-unified-20261002.mjs
+          node --check build.mjs
+      - name: Install build dependencies without lockfile
+        run: npm install --no-audit --no-fund --ignore-scripts --package-lock=false
+      - name: Full production build
+        run: npm run build
+      - name: Remove one-shot patch files
+        run: |
+          rm -f tools/patch-dwarf-muzzle-axis-20261002.mjs
+          rm -f .github/workflows/apply-dwarf-muzzle-axis-20261002.yml
+      - name: Save verified patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Derive dwarf muzzle from cannon geometry axis"
+          git push
