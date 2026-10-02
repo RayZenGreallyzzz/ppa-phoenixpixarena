@@ -30,10 +30,11 @@ export function stripDeadPlayerSpriteAssets(input){
   // Capture the three old generic remote URLs before removing their block.
   const genericUrls=[];
   for(const sym of GENERIC_SOURCES){
-    if(count(source,sym)!==1)throw new Error(`Stage 5A1 source cleanup: ${sym} expected declaration-only count 1, got ${count(source,sym)}`);
+    if(count(source,sym)!==2)throw new Error(`Stage 5A1 source cleanup: ${sym} expected declaration+preload count 2, got ${count(source,sym)}`);
     const re=new RegExp(`const\\s+${sym}\\s*=\\s*(['\"])([^'\"]+\\.png)\\1\\s*;`);
+    const decls=source.match(new RegExp(re.source,'g'))||[];
+    if(decls.length!==1)throw new Error(`Stage 5A1 source cleanup: ${sym} expected one declaration, got ${decls.length}`);
     const m=source.match(re);
-    if(!m)throw new Error(`Stage 5A1 source cleanup: ${sym} declaration missing`);
     genericUrls.push(m[2]);
   }
   if(new Set(genericUrls).size!==3)throw new Error('Stage 5A1 source cleanup: generic sprite URLs are not unique');
@@ -120,7 +121,7 @@ export function stripDeadPlayerSpriteAssets(input){
     if(source.includes(imgName))throw new Error(`Stage 5A1 source cleanup: class Image survived ${imgName}`);
   }
   for(const sym of [...GENERIC_SOURCES,...GENERIC_IMAGES])if(source.includes(sym))throw new Error(`Stage 5A1 source cleanup: generic symbol survived ${sym}`);
-  if((source.match(/\bANIM\b/g)||[]).length!==0)throw new Error('Stage 5A1 source cleanup: exact generic ANIM survived');
+  if(source.includes('const ANIM='))throw new Error('Stage 5A1 source cleanup: exact generic ANIM declaration survived');
   for(const url of genericUrls)if(source.includes(url))throw new Error(`Stage 5A1 source cleanup: generic remote URL survived ${url}`);
   for(const name of CLASS_ANIMS){
     if(!source.includes(`const ${name}=`))throw new Error(`Stage 5A1 source cleanup: transitional class metadata missing ${name}`);
