@@ -13,4 +13,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - run: npm install
+      - run: npm run build
       - run: node tools/audit-pvp-realtime-20261002.mjs
