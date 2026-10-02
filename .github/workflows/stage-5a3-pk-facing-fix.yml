@@ -1,0 +1,72 @@
+name: Stage 5A3 PK and facing source fix
+on:
+  push:
+    branches: [stage-5a3-pk-facing-fix-20261002]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[stage5a3-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage-5a3-pk-facing-fix-20261002
+      - name: Apply source fixes
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          function replaceOne(file,from,to,label){
+            let s=fs.readFileSync(file,'utf8');
+            const n=s.split(from).length-1;
+            if(n!==1)throw new Error(label+': expected exactly one target, got '+n);
+            s=s.replace(from,to);
+            fs.writeFileSync(file,s,'utf8');
+          }
+
+          replaceOne(
+            'gateway/player-3d-unified-runtime.js',
+            "      if(now<e.movingUntil&&e.hasMotionYaw)return e.lastMotionYaw;\n      let f=Number(P&&P.face),dir=4;",
+            "      if(e.hasMotionYaw)return e.lastMotionYaw;\n      let f=Number(P&&P.face),dir=4;",
+            'local idle facing'
+          );
+          replaceOne(
+            'gateway/player-3d-unified-runtime.js',
+            "    if(now<e.movingUntil&&e.hasMotionYaw)return e.lastMotionYaw;\n    const f=Number(r.face);let dir=2;",
+            "    if(e.hasMotionYaw)return e.lastMotionYaw;\n    const f=Number(r.face);let dir=2;",
+            'remote idle facing'
+          );
+
+          replaceOne(
+            'gateway/realtime-client.js',
+            "var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),dead=(P.dead||h<=0)?1:0,f=Number(P.face)||1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm(),c=selfClass();",
+            "var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),dead=(P.dead||h<=0)?1:0,_face=Number(P.face),f=Number.isFinite(_face)?_face:1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm(),c=selfClass();",
+            'realtime face zero'
+          );
+
+          replaceOne(
+            'gateway/realtime-client.js',
+            "  function pkChooseBasicKind(){\n    var mob=pkNearestMob(),pl=pkNearestPlayerInfo();\n    if(!pl){RT.pkTargetId='';return'mob'}\n    if(!mob){\n      RT.pkTargetId=String(pl.target&&(pl.target.id||pl.target.i||pl.target.__ppaPid)||'');\n      return'player';\n    }\n    if(pl.distance<mob.distance){\n      RT.pkTargetId=String(pl.target&&(pl.target.id||pl.target.i||pl.target.__ppaPid)||'');\n      return'player';\n    }\n    RT.pkTargetId='';\n    return'mob';\n  }",
+            "  function pkChooseBasicKind(){\n    var pl=pkNearestPlayerInfo();\n    if(pl){\n      RT.pkTargetId=String(pl.target&&(pl.target.id||pl.target.i||pl.target.__ppaPid)||'');\n      return'player';\n    }\n    RT.pkTargetId='';\n    return'mob';\n  }",
+            'PK player priority'
+          );
+
+          replaceOne(
+            'gateway/realtime-client.js',
+            "      sendRoom(true);sendMove(true);return;",
+            "      sendRoom(true);sendMove(true);try{send({type:'player-pk-toggle',enabled:pkActive()})}catch(_){};return;",
+            'PK reconnect state sync'
+          );
+
+          console.log('Stage 5A3: PK player priority + reconnect state sync + persistent 3D facing applied');
+          NODE
+      - name: Commit source fixes
+        shell: bash
+        run: |
+          git config user.name "RayZenGreallyzzz"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gateway/player-3d-unified-runtime.js gateway/realtime-client.js
+          git diff --cached --check
+          git commit -m "Stage 5A3 fix PK targeting and 3D idle facing [stage5a3-applied]"
+          git push origin HEAD:stage-5a3-pk-facing-fix-20261002
