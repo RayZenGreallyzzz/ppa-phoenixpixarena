@@ -30,6 +30,8 @@ jobs:
       - run: test ! -e gateway/remote-player-3d-runtime-v2.js
       - run: test ! -e gateway/remote-sprite-renderer-3d-bridge.js
       - run: test ! -e gateway/remote-sprite-renderer.js
+      - run: test ! -e tools/postbuild-paladin-frame-cleanup-20260928.mjs
+      - run: '! grep -q "postbuild-paladin-frame-cleanup-20260928.mjs" package.json'
       - run: '! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" gateway/remote-player-3d-dispatch.js'
       - run: grep -q "worldX:Number(r.x),worldY:Number(r.y)" gateway/remote-player-3d-dispatch.js
       - run: grep -q "targetBody=Math.max(30,Number(r.sz)||30)" gateway/remote-player-3d-dispatch.js
@@ -87,5 +89,5 @@ jobs:
           if(marker<0||marker>a+1200)throw new Error('drawPlayer is not canonical 3D-only');
           const windowText=html.slice(a,a+1200);
           for(const bad of ['drawImage','playerUses','visualBody','phoneCharacter','cx.ellipse','PT.push'])if(windowText.includes(bad))throw new Error('legacy local renderer token near drawPlayer: '+bad);
-          console.log('verified: Player3D dispatch is canonical; stress-bot path intact; mob/boss runtimes preserved');
+          console.log('verified: Player3D dispatch is canonical; obsolete Paladin sprite postbuild absent; stress-bot path intact; mob/boss runtimes preserved');
           NODE
