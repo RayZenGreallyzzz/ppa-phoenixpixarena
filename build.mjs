@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import sharp from 'sharp';
+import {stripDeadPlayerSpriteAssets} from './tools/player-source-cleanup-20261002.mjs';
 
 const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
@@ -785,10 +786,13 @@ for (const [srcName, outName] of fartGuardSources) {
 
 const extByMime = { png: 'png', webp: 'webp', jpeg: 'jpg' };
 const seen = new Map();
+const playerSourceCleanup=stripDeadPlayerSpriteAssets(source);
+const sourceForBuild=playerSourceCleanup.source;
+console.log(`[PPA BUILD] Stage 5A1 pre-externalize player cleanup: ${playerSourceCleanup.stats.classAssetsRemoved} embedded class atlases + ${playerSourceCleanup.stats.preloadsRemoved} preload rows + ${playerSourceCleanup.stats.genericSourcesRemoved} generic sprite sources removed`);
 const dataUri = /data:image\/(png|webp|jpeg);base64,([A-Za-z0-9+/=]+)/g;
 let count = 0;
 
-let output = source.replace(dataUri, (full, mime, b64) => {
+let output = sourceForBuild.replace(dataUri, (full, mime, b64) => {
   if (seen.has(full)) return seen.get(full);
   const bytes = Buffer.from(b64, 'base64');
   const hash = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 16);

@@ -1,0 +1,65 @@
+name: Test player source cleanup
+on:
+  push:
+    branches:
+      - stage-5a1-player-source-assets-20261002
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - run: node --check tools/player-source-cleanup-20261002.mjs
+      - run: node --check tools/test-player-source-cleanup-20261002.mjs
+      - run: node --check tools/postbuild-player-3d-unified-20261002.mjs
+      - run: node --check tools/postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs
+      - name: Verify canonical packed-source transform
+        run: node tools/test-player-source-cleanup-20261002.mjs
+      - name: Verify obsolete postbuild cleanup layers are gone
+        run: |
+          test ! -e tools/postbuild-player-sprite-preload-cleanup-20261002.mjs
+          test ! -e tools/postbuild-player-sprite-asset-cleanup-20261002.mjs
+          test ! -e tools/postbuild-player-generic-sprite-cleanup-20261002.mjs
+          ! grep -q "postbuild-player-sprite-preload-cleanup-20261002.mjs" package.json
+          ! grep -q "postbuild-player-sprite-asset-cleanup-20261002.mjs" package.json
+          ! grep -q "postbuild-player-generic-sprite-cleanup-20261002.mjs" package.json
+          grep -q "postbuild-player-3d-unified-20261002.mjs" package.json
+          grep -q "postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs" package.json
+      - name: Build final production output
+        run: npm run build | tee /tmp/ppa-stage5a1-build.log
+      - name: Verify source cleanup and final Player3D output
+        run: |
+          grep -q "Stage 5A1 pre-externalize player cleanup: 24 embedded class atlases + 27 preload rows + 3 generic sprite sources removed" /tmp/ppa-stage5a1-build.log
+          grep -q "PPA build complete: 650 unique embedded images externalized." /tmp/ppa-stage5a1-build.log
+          grep -q "PPA_PLAYER_SPRITE_SOURCE_CLEANUP_20261002" public/index.html
+          grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
+          grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
+          grep -q "worldX:Number(r.x),worldY:Number(r.y)" public/game/remote-player-3d-dispatch.js
+          grep -q "const PLAYER_ANIM_TIMING=" public/index.html
+          grep -q "const V174_AI_CLASS=" public/index.html
+          grep -q "function v174SpawnAiTrainingFighter" public/index.html
+          grep -q "PPA_AI_TRAINING_ACTIVE" public/index.html
+          grep -q "function v174DrawAiTrainingFighter(e,sx,sy){" public/index.html
+          grep -q "isAiFighter:true" public/index.html
+          grep -q "PPA_ONLINE_STRESS" public/index.html
+          grep -q "name:'Safe Zone Map'" public/index.html
+          grep -q "name:'Arena Map'" public/index.html
+          test -e public/game/dungeon-mob-events.js
+          test -e public/game/dungeon60-dragon.js
+          test -e public/game/boss-drop-boost.js
+          test -e public/game/clan-boss-loot.js
+          for sym in GNOME_IDLE_SRC GNOME_RUN_SRC GNOME_ATTACK_SRC ARCHER_IDLE_SRC ARCHER_RUN_SRC ARCHER_ATTACK_SRC ASSASSIN_IDLE_SRC ASSASSIN_RUN_SRC ASSASSIN_ATTACK_SRC TANK_IDLE_SRC TANK_RUN_SRC TANK_ATTACK_SRC BERSERKER_IDLE_SRC BERSERKER_RUN_SRC BERSERKER_ATTACK_SRC PRIEST_IDLE_SRC PRIEST_RUN_SRC PRIEST_ATTACK_SRC MAGE_IDLE_SRC MAGE_RUN_SRC MAGE_ATTACK_SRC PALADIN_IDLE_SRC PALADIN_RUN_SRC PALADIN_ATTACK_SRC imgGnomeIdle imgGnomeRun imgGnomeAttack imgArcherIdle imgArcherRun imgArcherAttack imgAssassinIdle imgAssassinRun imgAssassinAttack imgTankIdle imgTankRun imgTankAttack imgBerserkerIdle imgBerserkerRun imgBerserkerAttack imgPriestIdle imgPriestRun imgPriestAttack imgMageIdle imgMageRun imgMageAttack imgPaladinIdle imgPaladinRun imgPaladinAttack SPR_IDLE SPR_RUN SPR_ATK imgIdle imgRun imgAtk v174AiSpriteCfg v174AiDirIndex GNOME_ANIM ARCHER_ANIM ASSASSIN_ANIM TANK_ANIM BERSERKER_ANIM PRIEST_ANIM MAGE_ANIM PALADIN_ANIM; do
+            ! grep -q "$sym" public/index.html
+          done
+          ! grep -q "const ANIM=" public/index.html
+          ! grep -q "ecbdb2510_idle_sheet.png\|f034c5a60_run_sheet.png\|fcac44e48_attack_sheet_v2.png" public/index.html
+          ! grep -q "playerAnimDef(" public/index.html
+          echo "verified: dead player sprites are removed before externalize; Player3D/gameplay/debug/mob-boss systems preserved"
