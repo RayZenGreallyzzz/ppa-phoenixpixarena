@@ -1,0 +1,24 @@
+name: Print gnome projectile source 20261002
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+jobs:
+  print:
+    if: contains(github.event.head_commit.message, 'Run gnome projectile source printer')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/print-gnome-projectile-source-20261002.mjs > gnome-projectile-diagnostic.txt
+      - name: Save diagnostic into repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "4189826+github-actions[bot]@users.noreply.github.com"
+          git add gnome-projectile-diagnostic.txt
+          git commit -m "Save gnome projectile diagnostic" || exit 0
+          git push
