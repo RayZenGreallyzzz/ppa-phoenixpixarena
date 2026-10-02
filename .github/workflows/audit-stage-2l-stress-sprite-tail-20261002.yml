@@ -1,0 +1,18 @@
+name: Audit Stage 2L stress sprite tail
+on:
+  push:
+    branches:
+      - stage-2l-stress-debug-sprite-tail-20261002
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - run: npm run build
+      - run: node tools/audit-stage-2l-stress-sprite-tail-20261002.mjs
