@@ -68,6 +68,11 @@ for(const deadTag of ['remote-sprite-renderer.js','player-3d-runtime.js?v=','rem
   if(html.includes(deadTag))fail('obsolete player runtime tag survived final build: '+deadTag);
 }
 if(!runtime.includes('__PPA_PLAYER3D_UNIFIED_V2'))fail('unified Player3D runtime marker missing');
+if(!runtime.includes('PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003'))fail('runtime-owned local Player3D marker missing');
+if(!runtime.includes('syncLocalFromGame(now);'))fail('runtime does not synchronize local player from canonical P');
+if(runtime.includes("e.kind==='local'?500:1800"))fail('local Player3D still depends on 500ms draw-call TTL');
+if(!runtime.includes('threeInitPromise'))fail('Player3D Three.js initialization is not serialized');
+if(runtime.includes('__PPA3D_LOCAL_PENDING'))fail('legacy pending local registration survived runtime');
 if(!remote.includes('__PPA_REMOTE_PLAYER3D_DISPATCH_V1'))fail('remote Player3D dispatch marker missing');
 if(/\bdrawImage\s*\(/.test(remote))fail('remote real-player dispatch contains Canvas drawImage path');
 
@@ -114,7 +119,7 @@ if(drawStart>=0){
   else{
     const body=html.slice(r[0],r[1]);
     if(!body.includes(canonicalMarker))fail('drawPlayer() is not the canonical Player3D compatibility owner');
-    for(const bad of ['drawImage','fillRect','ellipse(','arc(','ANIM[','visualBody','phoneCharacter','playerUses']){
+    for(const bad of ['drawImage','fillRect','ellipse(','arc(','ANIM[','visualBody','phoneCharacter','playerUses','__PPA3D_LOCAL_PENDING','worldX','worldY','PPA_PLAYER3D.local']){
       if(body.includes(bad))fail('canonical drawPlayer() contains Canvas/legacy body token: '+bad);
     }
   }

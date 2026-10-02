@@ -20,6 +20,7 @@
 
   let THREE=null,GLTFLoader=null,SkeletonUtils=null;
   let renderer=null,scene=null,camera=null,host=null,hud=null,hx=null;
+  let threeInitPromise=null,threeRetryAt=0,threeRetryCount=0;
   let cameraYaw=0,lastW=0,lastH=0,lastFrameAt=performance.now(),frames=0,lastFpsAt=performance.now(),fps=0;
   // Stage 4A: shared per-frame/per-projection scratch state. These objects are
   // reused for every player so the render loop does not create temporary Three.js
@@ -27,6 +28,10 @@
   const viewState={w:0,h:0};
   const mapState={ready:false,left:0,top:0,right:0,bottom:0,z:1,kx:1,ky:1};
   const groundResult={hit:null,z:1};
+  // PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003
+  // Canonical local-player anchor. Canvas no longer owns the GLB lifecycle.
+  const localAnchor={classKey:'',worldX:0,worldY:0,scene:null};
+  let localStateMissingSince=0;
   let scratchNdc=null,scratchRay=null,scratchGround=null,scratchPlane=null,scratchProject=null,scratchHead=null,scratchMuzzleWorld=null,scratchMuzzleProject=null;
 
   function normalizeClass(v){
@@ -207,51 +212,78 @@
   }
 
   async function ensureThree(){
-    if(THREE)return;
-    THREE=await import('https://esm.sh/three@0.180.0');
-    const lm=await import('https://esm.sh/three@0.180.0/examples/jsm/loaders/GLTFLoader.js');
-    GLTFLoader=lm.GLTFLoader;
-    SkeletonUtils=await import('https://esm.sh/three@0.180.0/examples/jsm/utils/SkeletonUtils.js');
-    scratchNdc=new THREE.Vector2();
-    scratchRay=new THREE.Raycaster();
-    scratchGround=new THREE.Vector3();
-    scratchPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
-    scratchProject=new THREE.Vector3();
-    scratchHead=new THREE.Vector3();
-    scratchMuzzleWorld=new THREE.Vector3();
-    scratchMuzzleProject=new THREE.Vector3();
-    groundResult.hit=scratchGround;
+    if(THREE&&GLTFLoader&&SkeletonUtils&&renderer&&scene&&camera)return true;
+    if(threeInitPromise)return threeInitPromise;
+    if(performance.now()<threeRetryAt)throw new Error('Player3D renderer init backoff');
 
-    host=document.createElement('div');
-    host.id='ppaPlayer3DSystem';
-    host.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:4;overflow:hidden;';
-    document.body.appendChild(host);
+    threeInitPromise=(async()=>{
+      const ThreeModule=await import('https://esm.sh/three@0.180.0');
+      const loaderModule=await import('https://esm.sh/three@0.180.0/examples/jsm/loaders/GLTFLoader.js');
+      const skeletonModule=await import('https://esm.sh/three@0.180.0/examples/jsm/utils/SkeletonUtils.js');
+      THREE=ThreeModule;
+      GLTFLoader=loaderModule.GLTFLoader;
+      SkeletonUtils=skeletonModule;
 
-    renderer=new THREE.WebGLRenderer({alpha:true,antialias:false,powerPreference:'high-performance'});
-    renderer.setPixelRatio(1);
-    renderer.setClearColor(0x000000,0);
-    renderer.outputColorSpace=THREE.SRGBColorSpace;
-    renderer.toneMapping=THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure=1.18;
-    renderer.domElement.style.cssText='position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;filter:saturate(1.28) contrast(1.06) brightness(1.04);';
-    host.appendChild(renderer.domElement);
+      scratchNdc=new THREE.Vector2();
+      scratchRay=new THREE.Raycaster();
+      scratchGround=new THREE.Vector3();
+      scratchPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+      scratchProject=new THREE.Vector3();
+      scratchHead=new THREE.Vector3();
+      scratchMuzzleWorld=new THREE.Vector3();
+      scratchMuzzleProject=new THREE.Vector3();
+      groundResult.hit=scratchGround;
 
-    hud=document.createElement('canvas');
-    hud.id='ppaPlayer3DHud';
-    hud.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
-    host.appendChild(hud);
-    hx=hud.getContext('2d');
+      const stale=document.getElementById('ppaPlayer3DSystem');
+      if(stale)stale.remove();
+      host=document.createElement('div');
+      host.id='ppaPlayer3DSystem';
+      host.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:4;overflow:hidden;';
+      document.body.appendChild(host);
 
-    scene=new THREE.Scene();
-    camera=new THREE.OrthographicCamera(-10,10,10,-10,.01,100);
-    camera.position.set(5.0,7.4,9.0);
-    camera.lookAt(0,0,0);
-    camera.updateMatrixWorld(true);
-    cameraYaw=Math.atan2(camera.position.x,camera.position.z);
+      renderer=new THREE.WebGLRenderer({alpha:true,antialias:false,powerPreference:'high-performance'});
+      renderer.setPixelRatio(1);
+      renderer.setClearColor(0x000000,0);
+      renderer.outputColorSpace=THREE.SRGBColorSpace;
+      renderer.toneMapping=THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure=1.18;
+      renderer.domElement.style.cssText='position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;filter:saturate(1.28) contrast(1.06) brightness(1.04);';
+      host.appendChild(renderer.domElement);
 
-    scene.add(new THREE.HemisphereLight(0xfff7ea,0x263451,1.55));
-    const sun=new THREE.DirectionalLight(0xfff0cf,3.10);sun.position.set(4.5,8.0,5.5);scene.add(sun);
-    const fill=new THREE.DirectionalLight(0x9ec8ff,.82);fill.position.set(-4.0,3.5,2.5);scene.add(fill);
+      hud=document.createElement('canvas');
+      hud.id='ppaPlayer3DHud';
+      hud.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
+      host.appendChild(hud);
+      hx=hud.getContext('2d');
+      if(!hx)throw new Error('Player3D HUD 2D context unavailable');
+
+      scene=new THREE.Scene();
+      camera=new THREE.OrthographicCamera(-10,10,10,-10,.01,100);
+      camera.position.set(5.0,7.4,9.0);
+      camera.lookAt(0,0,0);
+      camera.updateMatrixWorld(true);
+      cameraYaw=Math.atan2(camera.position.x,camera.position.z);
+
+      scene.add(new THREE.HemisphereLight(0xfff7ea,0x263451,1.55));
+      const sun=new THREE.DirectionalLight(0xfff0cf,3.10);sun.position.set(4.5,8.0,5.5);scene.add(sun);
+      const fill=new THREE.DirectionalLight(0x9ec8ff,.82);fill.position.set(-4.0,3.5,2.5);scene.add(fill);
+      threeRetryAt=0;threeRetryCount=0;
+      return true;
+    })();
+
+    try{return await threeInitPromise}
+    catch(err){
+      try{if(renderer&&typeof renderer.dispose==='function')renderer.dispose()}catch(_){}
+      try{if(host&&host.remove)host.remove()}catch(_){}
+      THREE=null;GLTFLoader=null;SkeletonUtils=null;
+      renderer=null;scene=null;camera=null;host=null;hud=null;hx=null;
+      scratchNdc=null;scratchRay=null;scratchGround=null;scratchPlane=null;scratchProject=null;scratchHead=null;scratchMuzzleWorld=null;scratchMuzzleProject=null;
+      groundResult.hit=null;
+      threeInitPromise=null;
+      threeRetryCount=Math.min(6,threeRetryCount+1);
+      threeRetryAt=performance.now()+Math.min(10000,500*Math.pow(2,threeRetryCount-1));
+      throw err;
+    }
   }
   function resize(){
     if(!renderer||!camera||!hud)return null;
@@ -362,7 +394,8 @@
     }catch(_){}
   }
   async function ensureInstance(e){
-    if(e.root||e.loading)return;
+    const now=performance.now();
+    if(!e||!e.alive||e.root||e.loading||now<Number(e.retryAt||0))return;
     e.loading=true;e.error='';
     try{
       const a=await loadAsset(e.cls);
@@ -383,9 +416,13 @@
       if(a.run)e.actions.run=e.mixer.clipAction(a.run);
       if(a.attack)e.actions.attack=e.mixer.clipAction(a.attack);
       e.cfg=a.cfg;e.pivotBone=a.pivotBone||'';
+      e.retryAt=0;e.retryCount=0;
       switchAnim(e,'idle');
-    }catch(err){e.error=String(err&&err.message||err)}
-    finally{e.loading=false}
+    }catch(err){
+      e.error=String(err&&err.message||err);
+      e.retryCount=Math.min(6,Number(e.retryCount||0)+1);
+      e.retryAt=performance.now()+Math.min(10000,500*Math.pow(2,e.retryCount-1));
+    }finally{e.loading=false}
   }
   function removeEntry(id,e){
     if(e)e.alive=false;
@@ -398,7 +435,7 @@
     let e=instances.get(id);
     if(!e||e.cls!==cls){
       if(e)removeEntry(id,e);
-      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,root:null,model:null,head:null,muzzle:null,mixer:null,actions:null,current:null,anim:'idle',cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:''};
+      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,retryAt:0,retryCount:0,root:null,model:null,head:null,muzzle:null,mixer:null,actions:null,current:null,anim:'idle',cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:''};
       instances.set(id,e);ensureInstance(e);
     }
     e.kind=kind;e.data=data;e.anchor=anchor;e.seenAt=performance.now();e.alive=true;
@@ -408,6 +445,27 @@
     const cls=normalizeClass(a&&a.classKey)||localClass();
     if(!cls||!a||!Number.isFinite(Number(a.worldX))||!Number.isFinite(Number(a.worldY)))return false;
     return upsert('local','local',cls,null,a);
+  }
+  function syncLocalFromGame(now){
+    try{
+      if(typeof P==='undefined'||!P)throw new Error('local state unavailable');
+      const cls=localClass(),x=Number(P.x),y=Number(P.y);
+      if(!cls||!Number.isFinite(x)||!Number.isFinite(y))throw new Error('local state incomplete');
+      localStateMissingSince=0;
+      localAnchor.classKey=cls;
+      localAnchor.worldX=x;
+      localAnchor.worldY=y;
+      localAnchor.scene=P.scene;
+      upsert('local','local',cls,null,localAnchor);
+      return true;
+    }catch(_){
+      if(!localStateMissingSince)localStateMissingSince=now;
+      if(now-localStateMissingSince>1500){
+        const e=instances.get('local');
+        if(e)removeEntry('local',e);
+      }
+      return false;
+    }
   }
   function registerRemote(r,a){
     if(!r||isStressBot(r))return false;
@@ -534,7 +592,11 @@
 
   function frame(now){
     requestAnimationFrame(frame);
-    if(!THREE||!renderer||!scene||!camera)return;
+    if(!THREE||!renderer||!scene||!camera){
+      if(now>=threeRetryAt&&!threeInitPromise)ensureThree().catch(()=>{});
+      return;
+    }
+    syncLocalFromGame(now);
     const view=resize();if(!view)return;
     prepareWorldMap();
     const wallNow=Date.now();
@@ -542,9 +604,11 @@
     hx.clearRect(0,0,view.w,view.h);
 
     for(const [id,e] of instances){
-      const ttl=e.kind==='local'?500:1800;
-      if(now-e.seenAt>ttl||!e.alive){removeEntry(id,e);continue}
-      if(!e.root||!e.anchor)continue;
+      if(!e.alive||(e.kind==='remote'&&now-e.seenAt>1800)){removeEntry(id,e);continue}
+      if(!e.root||!e.anchor){
+        if(!e.loading&&now>=Number(e.retryAt||0))ensureInstance(e);
+        continue;
+      }
 
       const mapped=worldToGround(e.anchor.worldX,e.anchor.worldY,view);
       if(!mapped){e.root.visible=false;continue}
@@ -572,12 +636,12 @@
   }
 
   window.PPA_PLAYER3D={
-    version:'unified-v2-world',
+    version:'unified-v3-runtime-owned-local',
     local:registerLocal,
     remote:registerRemote,
     muzzle:muzzlePoint,
     diag:()=>({
-      version:'unified-v2-world',fps,
+      version:'unified-v3-runtime-owned-local',fps,
       instances:Array.from(instances.values()).map(e=>({
         id:e.id,kind:e.kind,cls:e.cls,ready:!!e.root,loading:!!e.loading,error:e.error||'',
         pivotBone:e.pivotBone||'',headBone:e.head&&e.head.name||'',muzzle:e.muzzle&&e.muzzle.name||'',
@@ -586,7 +650,6 @@
       loadedClasses:Array.from(assets.keys())
     })
   };
-  if(window.__PPA3D_LOCAL_PENDING)try{registerLocal(window.__PPA3D_LOCAL_PENDING)}catch(_){}
   ensureThree().catch(e=>console.warn('PPA unified 3D init',e));
   requestAnimationFrame(frame);
 })();

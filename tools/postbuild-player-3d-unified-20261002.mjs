@@ -139,12 +139,8 @@ html=removeFunction(html,'function playerAnimDef(name){');
 
 const local3DFunction=`function drawPlayer(){
   /* PPA_PLAYER3D_LOCAL_ONLY_20261002 */
-  const primary3DClass=playerClassKey();
-  window.__PPA3D_LOCAL_CLASS=primary3DClass;
-  if(!primary3DClass)return;
-  const __ppa3DLocal={classKey:primary3DClass,worldX:Number(P.x),worldY:Number(P.y),scene:P.scene};
-  window.__PPA3D_LOCAL_PENDING=__ppa3DLocal;
-  try{if(window.PPA_PLAYER3D&&typeof window.PPA_PLAYER3D.local==='function')window.PPA_PLAYER3D.local(__ppa3DLocal)}catch(_){}
+  /* PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003 */
+  // Compatibility hook only. The unified WebGL runtime reads canonical P itself.
 }`;
 html=replaceFunction(html,'function drawPlayer(){',local3DFunction);
 
@@ -217,11 +213,13 @@ for(const dead of [
 
 html=html.replace(/\n?<script src="\/game\/player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
 html=html.replace(/\n?<script src="\/game\/remote-player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
-const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261002u7"></script>\n';
-if(!html.includes('player-3d-unified-runtime.js?v=20261002u7')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
+const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261003u9"></script>\n';
+if(!html.includes('player-3d-unified-runtime.js?v=20261003u9')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
 html=html.replace(/remote-player-3d-dispatch\.js\?v=[^"']+/g,'remote-player-3d-dispatch.js?v=20261002u5');
-if(!html.includes('window.__PPA3D_LOCAL_PENDING=__ppa3DLocal'))throw new Error('Unified 3D build: local registration missing');
-if(!html.includes('worldX:Number(P.x),worldY:Number(P.y)'))throw new Error('Unified 3D build: local world-space anchor missing');
-if(!html.includes('player-3d-unified-runtime.js?v=20261002u7'))throw new Error('Unified 3D build: runtime tag missing');
+if(!drawBody.includes('PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003'))throw new Error('Unified 3D build: runtime-owned local marker missing from drawPlayer compatibility hook');
+for(const forbidden of ['__PPA3D_LOCAL_PENDING','worldX:Number(P.x)','worldY:Number(P.y)','PPA_PLAYER3D.local(']){
+  if(drawBody.includes(forbidden))throw new Error('Unified 3D build: drawPlayer still owns local Player3D lifecycle: '+forbidden);
+}
+if(!html.includes('player-3d-unified-runtime.js?v=20261003u9'))throw new Error('Unified 3D build: runtime tag missing');
 fs.writeFileSync(htmlPath,html,'utf8');
 console.log('Unified Player3D V4: local/remote real players are 3D-only · legacy local sprite renderer/HUD/direction helpers removed · Stage 5A2 AI/stress cleanup verified');

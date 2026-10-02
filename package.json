@@ -1,10 +1,13 @@
 {
-  "name":"ppa-phoenixpixarena",
-  "private":true,
-  "version":"278.0.6-player3d-cleanup",
-  "scripts":{
-    "build":"node build.mjs && node tools/postbuild-clan-siege-native-20260925.mjs && node tools/postbuild-pc-input-20260925.mjs && node tools/postbuild-hide-clan-siege-duplicate-leave-20260925.mjs && node tools/postbuild-clan-boss-cerberus-rewards-v2-20260925.mjs && node tools/postbuild-mimic-sombrero-event-20260925.mjs && node tools/postbuild-stat-chests-20260927.mjs && node tools/postbuild-newbie-chest-20260928.mjs && node tools/postbuild-player-3d-unified-20261002.mjs",
-    "deploy":"npm run build && wrangler deploy"
+  "name": "ppa-phoenixpixarena",
+  "private": true,
+  "version": "278.0.8-player3d-runtime-owner",
+  "scripts": {
+    "build": "node build.mjs && node tools/postbuild-clan-siege-native-20260925.mjs && node tools/postbuild-pc-input-20260925.mjs && node tools/postbuild-hide-clan-siege-duplicate-leave-20260925.mjs && node tools/postbuild-clan-boss-cerberus-rewards-v2-20260925.mjs && node tools/postbuild-mimic-sombrero-event-20260925.mjs && node tools/postbuild-stat-chests-20260927.mjs && node tools/postbuild-newbie-chest-20260928.mjs && node tools/postbuild-player-3d-unified-20261002.mjs",
+    "deploy": "npm run build && wrangler deploy"
   },
-  "devDependencies":{"wrangler":"^4.0.0","sharp":"^0.34.0"}
+  "devDependencies": {
+    "wrangler": "^4.0.0",
+    "sharp": "^0.34.0"
+  }
 }
