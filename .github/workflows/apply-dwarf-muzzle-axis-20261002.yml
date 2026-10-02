@@ -1,4 +1,4 @@
-name: Apply dwarf muzzle axis 20261002
+name: Diagnose dwarf muzzle axis 20261002
 on:
   push:
     branches:
@@ -6,8 +6,8 @@ on:
 permissions:
   contents: write
 jobs:
-  patch:
-    if: contains(github.event.head_commit.message, 'Apply dwarf muzzle axis patch')
+  diagnose:
+    if: contains(github.event.head_commit.message, 'Diagnose dwarf muzzle axis build')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,16 +23,19 @@ jobs:
           node --check build.mjs
       - name: Install build dependencies without lockfile
         run: npm install --no-audit --no-fund --ignore-scripts --package-lock=false
-      - name: Full production build
-        run: npm run build
-      - name: Remove one-shot patch files
+      - name: Capture production build output
+        shell: bash
         run: |
-          rm -f tools/patch-dwarf-muzzle-axis-20261002.mjs
-          rm -f .github/workflows/apply-dwarf-muzzle-axis-20261002.yml
-      - name: Save verified patch
+          set +e
+          npm run build > dwarf-muzzle-build.log 2>&1
+          code=$?
+          echo "BUILD_EXIT_CODE=$code" >> dwarf-muzzle-build.log
+          exit 0
+      - name: Save diagnostic only
         run: |
+          git checkout -- gateway/player-3d-unified-runtime.js tools/postbuild-player-3d-unified-20261002.mjs build.mjs
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Derive dwarf muzzle from cannon geometry axis"
+          git add dwarf-muzzle-build.log
+          git commit -m "Save dwarf muzzle build diagnostic"
           git push
