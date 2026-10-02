@@ -46,7 +46,7 @@ once(
 for(const forbidden of [
   "new THREE.Vector2(px/view.w*2-1,1-py/view.h*2)",
   "ray=new THREE.Raycaster()",
-  "new THREE.Plane(new THREE.Vector3(0,1,0),0)",
+  "ray.ray.intersectPlane(new THREE.Plane",
   "const p=new THREE.Vector3();e.head.getWorldPosition(p)",
   "const p=new THREE.Vector3(e.root.position.x",
   "e.hud={feetX:feet.x"
@@ -54,8 +54,8 @@ for(const forbidden of [
 
 for(const required of [
   'const viewState={w:0,h:0};','const mapState={ready:false','scratchRay=new THREE.Raycaster();',
-  'groundResult.z=z;return groundResult;','if(e.hiddenState===hidden)return;',
-  "projectIntoHud(e.root.position,view,h,'feetX','feetY');",'prepareWorldMap();'
+  'scratchPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);','groundResult.z=z;return groundResult;',
+  'if(e.hiddenState===hidden)return;',"projectIntoHud(e.root.position,view,h,'feetX','feetY');",'prepareWorldMap();'
 ])if(!s.includes(required))throw new Error('Stage 4A required optimization missing: '+required);
 
 fs.writeFileSync(p,s,'utf8');
