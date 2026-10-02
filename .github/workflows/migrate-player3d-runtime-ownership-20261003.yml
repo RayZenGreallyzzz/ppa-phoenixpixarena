@@ -49,7 +49,7 @@ jobs:
         run: |
           git config user.name "RayZenGreallyzzz"
           git config user.email "genry.undeniable@gmail.com"
-          git add gateway/player-3d-unified-runtime.js tools/postbuild-player-3d-unified-20261002.mjs tools/audit-player-render-ownership-20261003.mjs .github/workflows/test-unified-player3d.yml .github/workflows/test-player-source-cleanup.yml .github/workflows/test-player3d-performance.yml package.json tools/postbuild-player-3d-local-lifecycle-20261003.mjs
+          git add gateway/player-3d-unified-runtime.js tools/postbuild-player-3d-unified-20261002.mjs tools/audit-player-render-ownership-20261003.mjs package.json tools/postbuild-player-3d-local-lifecycle-20261003.mjs
           if git diff --cached --quiet; then
             echo "No migration changes to commit"
             exit 1
