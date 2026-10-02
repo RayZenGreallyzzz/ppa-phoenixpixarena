@@ -1,0 +1,16 @@
+name: Audit Stage 5 player source cleanup
+on:
+  push:
+    branches:
+      - stage-5-player-source-cleanup-audit-20261002
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/audit-stage-5-player-source-cleanup-20261002.mjs
