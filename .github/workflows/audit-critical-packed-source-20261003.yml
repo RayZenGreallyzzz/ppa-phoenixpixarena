@@ -1,0 +1,26 @@
+name: Audit critical packed source
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/audit-critical-packed-source-20261003.mjs
+      - .github/workflows/audit-critical-packed-source-20261003.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate diagnostic
+        run: node --check tools/audit-critical-packed-source-20261003.mjs
+      - name: Print critical packed-source contexts
+        run: node tools/audit-critical-packed-source-20261003.mjs
+      - name: Resolve dependency tree and print audit
+        run: |
+          npm install
+          npm audit --json || true
