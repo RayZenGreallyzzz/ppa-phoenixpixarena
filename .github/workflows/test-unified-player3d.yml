@@ -23,7 +23,6 @@ jobs:
       - run: node --check gateway/remote-player-3d-dispatch.js
       - run: node --check tools/player-source-cleanup-20261002.mjs
       - run: node --check tools/postbuild-player-3d-unified-20261002.mjs
-      - run: node --check tools/postbuild-player-3d-local-lifecycle-20261003.mjs
       - name: Verify obsolete player render and cleanup layers are absent
         run: |
           test ! -e gateway/remote-player-3d-adapter.js
@@ -42,7 +41,6 @@ jobs:
           ! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" gateway/remote-player-3d-dispatch.js
           grep -q "PPA_PLAYER3D_LOCAL_ONLY_20261002" tools/postbuild-player-3d-unified-20261002.mjs
           grep -q "PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002" tools/postbuild-player-3d-unified-20261002.mjs
-          grep -q "PPA_PLAYER3D_LOCAL_LIFECYCLE_20261003" tools/postbuild-player-3d-local-lifecycle-20261003.mjs
           grep -q "const PLAYER_ANIM_TIMING=" tools/postbuild-player-3d-unified-20261002.mjs
           grep -q "PPA_AI_TRAINING_SPRITE_SOURCE_CLEANUP_20261002" tools/postbuild-player-3d-unified-20261002.mjs
           test -e gateway/dungeon-mob-events.js
@@ -54,10 +52,8 @@ jobs:
         run: |
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
           grep -q "unified-v2-world" public/game/player-3d-unified-runtime.js
-          grep -q "PPA_PLAYER3D_LOCAL_LIFECYCLE_20261003" public/game/player-3d-unified-runtime.js
-          grep -q "syncLocalFromGame();" public/game/player-3d-unified-runtime.js
           grep -q "__PPA_REMOTE_PLAYER3D_DISPATCH_V1" public/game/remote-player-3d-dispatch.js
-          grep -q "player-3d-unified-runtime.js?v=20261003u8" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261002u7" public/index.html
           grep -q "remote-player-3d-dispatch.js?v=20261002u5" public/index.html
           grep -q "PPA_PLAYER3D_LOCAL_ONLY_20261002" public/index.html
           grep -q "PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002" public/index.html
@@ -88,5 +84,5 @@ jobs:
           const body=html.slice(a,a+1200);
           if(!body.includes('PPA_PLAYER3D_LOCAL_ONLY_20261002'))throw new Error('drawPlayer is not Player3D-only');
           for(const bad of ['drawImage','playerUses','visualBody','phoneCharacter','cx.ellipse','PT.push'])if(body.includes(bad))throw new Error('legacy local renderer token near drawPlayer: '+bad);
-          console.log('verified: unified Player3D owns real players; local lifecycle is scene-independent; Stage 5A2 AI primitive path and mob/boss systems preserved');
+          console.log('verified: unified Player3D owns real players; Stage 5A2 AI primitive path and mob/boss systems preserved');
           NODE
