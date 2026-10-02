@@ -32,10 +32,11 @@ jobs:
           test ! -e tools/postbuild-player-sprite-asset-cleanup-20261002.mjs
           test ! -e tools/postbuild-player-generic-sprite-cleanup-20261002.mjs
           test ! -e tools/postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs
+          test ! -e tools/postbuild-player-3d-local-lifecycle-20261003.mjs
           test ! -e tools/fix-stage-5a2-early-metadata-guards.mjs
           test ! -e .github/workflows/fix-stage-5a2-early-metadata-guards.yml
           test ! -e .github/workflows/test-stage-5a2-source-transform-temp.yml
-          ! grep -q "postbuild-player-sprite-preload-cleanup-20261002.mjs\|postbuild-player-sprite-asset-cleanup-20261002.mjs\|postbuild-player-generic-sprite-cleanup-20261002.mjs\|postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs" package.json
+          ! grep -q "postbuild-player-sprite-preload-cleanup-20261002.mjs\|postbuild-player-sprite-asset-cleanup-20261002.mjs\|postbuild-player-generic-sprite-cleanup-20261002.mjs\|postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs\|postbuild-player-3d-local-lifecycle-20261003.mjs" package.json
           grep -q "postbuild-player-3d-unified-20261002.mjs" package.json
       - name: Build final production output
         run: npm run build | tee /tmp/ppa-stage5a2-build.log
@@ -47,7 +48,14 @@ jobs:
           grep -q "PPA_PLAYER_SPRITE_SOURCE_CLEANUP_20261002" public/index.html
           grep -q "PPA_AI_TRAINING_SPRITE_SOURCE_CLEANUP_20261002" public/index.html
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
-          grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
+          grep -q "unified-v3-runtime-owned-local" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "syncLocalFromGame(now);" public/game/player-3d-unified-runtime.js
+          grep -q "threeInitPromise" public/game/player-3d-unified-runtime.js
+          ! grep -q "e.kind==='local'?500:1800" public/game/player-3d-unified-runtime.js
+          ! grep -q "__PPA3D_LOCAL_PENDING" public/game/player-3d-unified-runtime.js
+          ! grep -q "__PPA3D_LOCAL_PENDING" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261003u9" public/index.html
           grep -q "worldX:Number(r.x),worldY:Number(r.y)" public/game/remote-player-3d-dispatch.js
           grep -q "const PLAYER_ANIM_TIMING=" public/index.html
           grep -q "const V174_AI_CLASS=" public/index.html
@@ -68,4 +76,4 @@ jobs:
           done
           ! grep -q "const ANIM=" public/index.html
           ! grep -q "playerAnimDef(" public/index.html
-          echo "verified: Stage 5A2 source cleanup is canonical; Player3D/gameplay/AI Training/online stress/mob-boss systems preserved"
+          echo "verified: packed 2D player art is removed from production; Player3D runtime owns the local player"
