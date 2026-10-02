@@ -2,6 +2,7 @@ name: Test player source cleanup
 on:
   push:
     branches:
+      - main
       - stage-5a1-player-source-assets-20261002
       - stage-5a2-ai-sprite-source-cleanup-20261002
       - stage-5a2-recovery-audit-20261002
@@ -22,6 +23,7 @@ jobs:
       - run: node --check tools/player-source-cleanup-20261002.mjs
       - run: node --check tools/test-player-source-cleanup-20261002.mjs
       - run: node --check tools/postbuild-player-3d-unified-20261002.mjs
+      - run: node --check tools/audit-player-render-ownership-20261003.mjs
       - name: Verify canonical packed-source transform
         run: node tools/test-player-source-cleanup-20261002.mjs
       - name: Verify obsolete cleanup layers are gone
@@ -37,6 +39,8 @@ jobs:
           grep -q "postbuild-player-3d-unified-20261002.mjs" package.json
       - name: Build final production output
         run: npm run build | tee /tmp/ppa-stage5a2-build.log
+      - name: Audit final player render ownership
+        run: node tools/audit-player-render-ownership-20261003.mjs
       - name: Verify Stage 5A2 source cleanup and final Player3D output
         run: |
           grep -q "PPA build complete: 650 unique embedded images externalized." /tmp/ppa-stage5a2-build.log
