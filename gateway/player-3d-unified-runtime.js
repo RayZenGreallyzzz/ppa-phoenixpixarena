@@ -335,7 +335,8 @@
           if(Number.isFinite(dx)&&Number.isFinite(dy)&&Math.hypot(dx,dy)>.01)return cameraYaw+Math.atan2(dx,dy)+(Number(cfg.yawOffset)||0);
         }
       }
-      if(now<e.movingUntil&&e.hasMotionYaw)return e.lastMotionYaw;
+      // Idle owns the last real movement yaw. Legacy P.face is only a startup/attack fallback.
+      if(e.hasMotionYaw&&!attack)return e.lastMotionYaw;
       let f=Number(P&&P.face),dir=4;
       if(Number.isFinite(f)&&f>=0&&f<=7)dir=Math.round(f);else if(f===8)dir=0;else if(f===-1)dir=6;else if(f===1)dir=2;
       return cameraYaw+(4-dir)*(Math.PI/4)+(Number(cfg.yawOffset)||0);
@@ -355,7 +356,9 @@
         e.hasMotionYaw=true;
       }
     }
-    if(now<e.movingUntil&&e.hasMotionYaw)return e.lastMotionYaw;
+    // Preserve the last real movement yaw while idle; attack still follows network face.
+    const remoteAttack=String(r.anim||'').toLowerCase()==='attack';
+    if(e.hasMotionYaw&&!remoteAttack)return e.lastMotionYaw;
     const f=Number(r.face);let dir=2;
     if(f===-1)dir=6;else if(f===1)dir=2;else if(Number.isFinite(f)&&f>=0&&f<=7)dir=Math.round(f);else if(f===8)dir=0;
     return cameraYaw+(4-dir)*(Math.PI/4)+(Number(cfg.yawOffset)||0);
