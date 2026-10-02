@@ -18,7 +18,7 @@ jobs:
           node-version: '24'
       - run: npm install
       - run: node --check gateway/player-3d-unified-runtime.js
-      - name: Verify Stage 4A, 4B, idle-yaw and muzzle source invariants
+      - name: Verify Stage 4A, 4B, idle-yaw, muzzle and ownership source invariants
         run: |
           grep -q "const viewState={w:0,h:0};" gateway/player-3d-unified-runtime.js
           grep -q "const mapState={ready:false" gateway/player-3d-unified-runtime.js
@@ -36,6 +36,12 @@ jobs:
           grep -q "if(e.hasMotionYaw&&!remoteAttack)return e.lastMotionYaw;" gateway/player-3d-unified-runtime.js
           grep -q "return now<e.movingUntil?'run':'idle';" gateway/player-3d-unified-runtime.js
           grep -q "if(e.root)e.root.updateWorldMatrix(true,true);" gateway/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "syncLocalFromGame(now);" gateway/player-3d-unified-runtime.js
+          grep -q "threeInitPromise" gateway/player-3d-unified-runtime.js
+          grep -q "retryAt:0,retryCount:0" gateway/player-3d-unified-runtime.js
+          ! grep -q "e.kind==='local'?500:1800" gateway/player-3d-unified-runtime.js
+          ! grep -q "__PPA3D_LOCAL_PENDING" gateway/player-3d-unified-runtime.js
           ! grep -q "new THREE.Vector2(px/view.w" gateway/player-3d-unified-runtime.js
           ! grep -q "ray.ray.intersectPlane(new THREE.Plane" gateway/player-3d-unified-runtime.js
           ! grep -q "const p=new THREE.Vector3();e.head.getWorldPosition(p)" gateway/player-3d-unified-runtime.js
@@ -49,7 +55,7 @@ jobs:
           if(frame.includes('updateWorldMatrix(true,true)'))throw new Error('full-tree update leaked into Player3D frame loop');
           const n=(src.match(/if\(e\.root\)e\.root\.updateWorldMatrix\(true,true\);/g)||[]).length;
           if(n!==1)throw new Error('expected exactly one on-demand muzzle matrix update, found '+n);
-          console.log('verified: full-tree matrix update is muzzle-only, never per-frame');
+          console.log('verified: full-tree matrix update is muzzle-only, never per-frame; local lifecycle is runtime-owned');
           NODE
       - name: Guard gameplay and mob boss source systems
         run: |
@@ -71,8 +77,14 @@ jobs:
           grep -q "if(e.hasMotionYaw&&!attack)return e.lastMotionYaw;" public/game/player-3d-unified-runtime.js
           grep -q "if(e.hasMotionYaw&&!remoteAttack)return e.lastMotionYaw;" public/game/player-3d-unified-runtime.js
           grep -q "if(e.root)e.root.updateWorldMatrix(true,true);" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "syncLocalFromGame(now);" public/game/player-3d-unified-runtime.js
+          grep -q "threeInitPromise" public/game/player-3d-unified-runtime.js
+          ! grep -q "e.kind==='local'?500:1800" public/game/player-3d-unified-runtime.js
+          ! grep -q "__PPA3D_LOCAL_PENDING" public/game/player-3d-unified-runtime.js
           ! grep -q "new THREE.Vector2(px/view.w" public/game/player-3d-unified-runtime.js
-          grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261003u9" public/index.html
+          ! grep -q "__PPA3D_LOCAL_PENDING" public/index.html
           grep -q "worldX:Number(r.x),worldY:Number(r.y)" public/game/remote-player-3d-dispatch.js
           test -e public/game/dungeon-mob-events.js
           test -e public/game/dungeon60-dragon.js
