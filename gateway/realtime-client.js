@@ -1249,9 +1249,17 @@ window.PPA_CLAN_BOSS_SELF_PID=function(){return String(RT.selfPid||'')};
       d=d||{};
       var kind=String(d.kind||'');
       if(['gnome-cannon','archer-arrow','melee'].indexOf(kind)<0)return false;
+      var fxX=Number(d.x)||0,fxY=Number(d.y)||0;
+      // PPA_GNOME_FX_3D_MUZZLE_20261002
+      if(kind==='gnome-cannon'){
+        try{
+          var muzzle=window.PPA_PLAYER3D&&typeof window.PPA_PLAYER3D.muzzle==='function'?window.PPA_PLAYER3D.muzzle('local'):null;
+          if(muzzle&&Number.isFinite(Number(muzzle.x))&&Number.isFinite(Number(muzzle.y))){fxX=Number(muzzle.x);fxY=Number(muzzle.y)}
+        }catch(_){}
+      }
       return send({
         type:'player-combat-fx',kind:kind,
-        x:Number(d.x)||0,y:Number(d.y)||0,tx:Number(d.tx)||0,ty:Number(d.ty)||0,
+        x:fxX,y:fxY,tx:Number(d.tx)||0,ty:Number(d.ty)||0,
         ang:Number.isFinite(Number(d.ang))?Number(d.ang):0,
         animMs:Math.max(240,Math.min(700,Math.round(Number(d.animMs)||480)))
       });

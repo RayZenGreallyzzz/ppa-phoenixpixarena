@@ -27,7 +27,7 @@
   const viewState={w:0,h:0};
   const mapState={ready:false,left:0,top:0,right:0,bottom:0,z:1,kx:1,ky:1};
   const groundResult={hit:null,z:1};
-  let scratchNdc=null,scratchRay=null,scratchGround=null,scratchPlane=null,scratchProject=null,scratchHead=null;
+  let scratchNdc=null,scratchRay=null,scratchGround=null,scratchPlane=null,scratchProject=null,scratchHead=null,scratchMuzzleWorld=null,scratchMuzzleProject=null;
 
   function normalizeClass(v){
     const s=String(v||'').trim(),l=s.toLowerCase();
@@ -88,6 +88,51 @@
     }else if(cls==='gnome')setNodePose(byName('DwarfCannon'),{pos:[.04,.42,.04],rot:[-560,-10,40],scale:.70});
     else if(cls==='priest')setNodePose(byName('SunspireScepter'),{pos:[.01,.12,.02],rot:[-95,20,85],scale:.60});
   }
+  // PPA_DWARF_MUZZLE_FROM_MODEL_20261002
+  // Build one marker from the cannon's own geometry. We take the longest local
+  // axis of DwarfCannon and select the end farther from LeftHand; this gives the
+  // barrel end without any game-world pixel offset guesses.
+  function attachDwarfMuzzle(root){
+    try{
+      const cannon=root&&root.getObjectByName&&root.getObjectByName('DwarfCannon');
+      if(!cannon||cannon.getObjectByName('PPA_DwarfMuzzle'))return cannon&&cannon.getObjectByName('PPA_DwarfMuzzle');
+      const hand=(root.getObjectByName&&root.getObjectByName('LeftHand'))||cannon.parent||cannon;
+      root.updateWorldMatrix(true,true);
+      cannon.updateWorldMatrix(true,true);
+
+      const inv=new THREE.Matrix4().copy(cannon.matrixWorld).invert();
+      const localBox=new THREE.Box3().makeEmpty();
+      const v=new THREE.Vector3();
+      cannon.traverse(o=>{
+        const attr=o&&o.geometry&&o.geometry.attributes&&o.geometry.attributes.position;
+        if(!attr||!Number.isFinite(attr.count)||attr.count<=0)return;
+        const step=Math.max(1,Math.floor(attr.count/16000));
+        for(let i=0;i<attr.count;i+=step){
+          v.fromBufferAttribute(attr,i);
+          try{if(o.isSkinnedMesh&&typeof o.applyBoneTransform==='function')o.applyBoneTransform(i,v)}catch(_){}
+          v.applyMatrix4(o.matrixWorld).applyMatrix4(inv);
+          localBox.expandByPoint(v);
+        }
+      });
+      if(localBox.isEmpty())return null;
+
+      const handLocal=new THREE.Vector3();
+      hand.getWorldPosition(handLocal);handLocal.applyMatrix4(inv);
+      const size=localBox.getSize(new THREE.Vector3());
+      const pos=localBox.getCenter(new THREE.Vector3());
+      const axis=(size.x>=size.y&&size.x>=size.z)?'x':(size.y>=size.z?'y':'z');
+      pos[axis]=Math.abs(localBox.max[axis]-handLocal[axis])>=Math.abs(localBox.min[axis]-handLocal[axis])
+        ?localBox.max[axis]:localBox.min[axis];
+
+      const marker=new THREE.Object3D();
+      marker.name='PPA_DwarfMuzzle';
+      marker.userData.ppaMuzzleFromModel=true;
+      marker.position.copy(pos);
+      cannon.add(marker);
+      marker.updateWorldMatrix(true,false);
+      return marker;
+    }catch(e){console.warn('PPA dwarf muzzle marker',e);return null}
+  }
   function bodyBounds(root){
     root.updateWorldMatrix(true,true);
     const box=new THREE.Box3();let found=false;
@@ -144,6 +189,8 @@
     scratchPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
     scratchProject=new THREE.Vector3();
     scratchHead=new THREE.Vector3();
+    scratchMuzzleWorld=new THREE.Vector3();
+    scratchMuzzleProject=new THREE.Vector3();
     groundResult.hit=scratchGround;
 
     host=document.createElement('div');
@@ -219,6 +266,33 @@
     h[yKey]=(-scratchProject.y*.5+.5)*view.h;
   }
 
+  function nodeGamePoint(node){
+    try{
+      if(!node||!camera||!scratchMuzzleWorld||!scratchMuzzleProject)return null;
+      const view=resize();if(!view||!prepareWorldMap())return null;
+      node.getWorldPosition(scratchMuzzleWorld);
+      scratchMuzzleProject.copy(scratchMuzzleWorld).project(camera);
+      const px=(scratchMuzzleProject.x*.5+.5)*view.w;
+      const py=(-scratchMuzzleProject.y*.5+.5)*view.h;
+      const z=Math.max(.1,Number(mapState.z)||1);
+      const dx=z*Number(mapState.kx||0),dy=z*Number(mapState.ky||0);
+      if(!Number.isFinite(px)||!Number.isFinite(py)||!Number.isFinite(dx)||!Number.isFinite(dy)||Math.abs(dx)<1e-7||Math.abs(dy)<1e-7)return null;
+      const x=Number(cam.x||0)+(px-mapState.left)/dx;
+      const y=Number(cam.y||0)+(py-mapState.top)/dy;
+      if(!Number.isFinite(x)||!Number.isFinite(y))return null;
+      return{x:x,y:y,screenX:px,screenY:py};
+    }catch(_){return null}
+  }
+  function muzzlePoint(id){
+    try{
+      const raw=String(id||'local');
+      const e=instances.get(raw)||instances.get('remote:'+raw);
+      if(!e||e.cls!=='gnome'||!e.muzzle)return null;
+      if(e.root)e.root.updateWorldMatrix(true,true);
+      return nodeGamePoint(e.muzzle);
+    }catch(_){return null}
+  }
+
   async function loadAsset(cls){
     if(assets.has(cls))return assets.get(cls);
     const promise=(async()=>{
@@ -226,6 +300,7 @@
       const cfg=CLASS_CONFIG[cls],gltf=await new GLTFLoader().loadAsync(cfg.model);
       applyApprovedWeaponPose(cls,gltf.scene);
       gltf.scene.updateWorldMatrix(true,true);
+      if(cls==='gnome')attachDwarfMuzzle(gltf.scene);
 
       const box=bodyBounds(gltf.scene),size=box.getSize(new THREE.Vector3());
       const hips=findBone(gltf.scene,'hips'),hipsPos=new THREE.Vector3();
@@ -273,6 +348,7 @@
       });
       e.root=new THREE.Group();e.model=clone;e.root.add(clone);scene.add(e.root);
       e.head=findBone(clone,'head');
+      e.muzzle=clone.getObjectByName('PPA_DwarfMuzzle')||null;
       e.mixer=new THREE.AnimationMixer(clone);e.actions={};
       if(a.idle)e.actions.idle=e.mixer.clipAction(a.idle);
       if(a.run)e.actions.run=e.mixer.clipAction(a.run);
@@ -293,7 +369,7 @@
     let e=instances.get(id);
     if(!e||e.cls!==cls){
       if(e)removeEntry(id,e);
-      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,root:null,model:null,head:null,mixer:null,actions:null,current:null,anim:'idle',cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:''};
+      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,root:null,model:null,head:null,muzzle:null,mixer:null,actions:null,current:null,anim:'idle',cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:''};
       instances.set(id,e);ensureInstance(e);
     }
     e.kind=kind;e.data=data;e.anchor=anchor;e.seenAt=performance.now();e.alive=true;
@@ -470,11 +546,12 @@
     version:'unified-v2-world',
     local:registerLocal,
     remote:registerRemote,
+    muzzle:muzzlePoint,
     diag:()=>({
       version:'unified-v2-world',fps,
       instances:Array.from(instances.values()).map(e=>({
         id:e.id,kind:e.kind,cls:e.cls,ready:!!e.root,loading:!!e.loading,error:e.error||'',
-        pivotBone:e.pivotBone||'',headBone:e.head&&e.head.name||'',
+        pivotBone:e.pivotBone||'',headBone:e.head&&e.head.name||'',muzzle:e.muzzle&&e.muzzle.name||'',
         worldX:e.anchor&&e.anchor.worldX,worldY:e.anchor&&e.anchor.worldY,anim:e.anim
       })),
       loadedClasses:Array.from(assets.keys())
