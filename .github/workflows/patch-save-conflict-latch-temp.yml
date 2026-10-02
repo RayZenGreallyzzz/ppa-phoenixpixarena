@@ -29,4 +29,4 @@ jobs:
           git add gateway/ppa-bridge.js
           git diff --cached --quiet && exit 0
           git commit -m "Apply save conflict latch"
-          git push origin HEAD:fix-player3d-idle-yaw-20261002 || true
+          git push origin HEAD:fix-save-conflict-latch-20261002
