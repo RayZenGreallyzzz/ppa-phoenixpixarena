@@ -21,6 +21,13 @@
   let THREE=null,GLTFLoader=null,SkeletonUtils=null;
   let renderer=null,scene=null,camera=null,host=null,hud=null,hx=null;
   let cameraYaw=0,lastW=0,lastH=0,lastFrameAt=performance.now(),frames=0,lastFpsAt=performance.now(),fps=0;
+  // Stage 4A: shared per-frame/per-projection scratch state. These objects are
+  // reused for every player so the render loop does not create temporary Three.js
+  // objects or re-read canvas layout once per visible character.
+  const viewState={w:0,h:0};
+  const mapState={ready:false,left:0,top:0,right:0,bottom:0,z:1,kx:1,ky:1};
+  const groundResult={hit:null,z:1};
+  let scratchNdc=null,scratchRay=null,scratchGround=null,scratchPlane=null,scratchProject=null,scratchHead=null;
 
   function normalizeClass(v){
     const s=String(v||'').trim(),l=s.toLowerCase();
@@ -131,6 +138,13 @@
     const lm=await import('https://esm.sh/three@0.180.0/examples/jsm/loaders/GLTFLoader.js');
     GLTFLoader=lm.GLTFLoader;
     SkeletonUtils=await import('https://esm.sh/three@0.180.0/examples/jsm/utils/SkeletonUtils.js');
+    scratchNdc=new THREE.Vector2();
+    scratchRay=new THREE.Raycaster();
+    scratchGround=new THREE.Vector3();
+    scratchPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+    scratchProject=new THREE.Vector3();
+    scratchHead=new THREE.Vector3();
+    groundResult.hit=scratchGround;
 
     host=document.createElement('div');
     host.id='ppaPlayer3DSystem';
@@ -175,27 +189,34 @@
       camera.left=-fh*a/2;camera.right=fh*a/2;camera.top=fh/2;camera.bottom=-fh/2;
       camera.updateProjectionMatrix();
     }
-    return{w,h};
+    viewState.w=w;viewState.h=h;return viewState;
+  }
+  function prepareWorldMap(){
+    try{
+      if(typeof cv==='undefined'||!cv||typeof cam==='undefined'||!cam){mapState.ready=false;return false}
+      const rect=cv.getBoundingClientRect(),z=Math.max(.1,Number(typeof cameraZoom==='function'?cameraZoom():1)||1);
+      mapState.left=rect.left;mapState.top=rect.top;mapState.right=rect.right;mapState.bottom=rect.bottom;
+      mapState.z=z;mapState.kx=rect.width/Math.max(1,cv.width);mapState.ky=rect.height/Math.max(1,cv.height);
+      mapState.ready=true;return true;
+    }catch(_){mapState.ready=false;return false}
   }
   function worldToGround(wx,wy,view){
     try{
-      if(typeof cv==='undefined'||!cv||typeof cam==='undefined'||!cam)return null;
-      const rect=cv.getBoundingClientRect(),z=Math.max(.1,Number(typeof cameraZoom==='function'?cameraZoom():1)||1);
-      const sx=Number(wx)-Number(cam.x||0),sy=Number(wy)-Number(cam.y||0);
-      const kx=rect.width/Math.max(1,cv.width),ky=rect.height/Math.max(1,cv.height);
-      const px=rect.left+sx*z*kx,py=rect.top+sy*z*ky;
+      if(!mapState.ready||!scratchNdc||!scratchRay||!scratchGround||!scratchPlane)return null;
+      const sx=Number(wx)-Number(cam.x||0),sy=Number(wy)-Number(cam.y||0),z=mapState.z;
+      const px=mapState.left+sx*z*mapState.kx,py=mapState.top+sy*z*mapState.ky;
       if(!Number.isFinite(px)||!Number.isFinite(py))return null;
-      if(px<rect.left-160||px>rect.right+160||py<rect.top-200||py>rect.bottom+200)return null;
-      const ndc=new THREE.Vector2(px/view.w*2-1,1-py/view.h*2),ray=new THREE.Raycaster();
-      ray.setFromCamera(ndc,camera);
-      const hit=new THREE.Vector3();
-      if(!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),0),hit))return null;
-      return{hit,z};
+      if(px<mapState.left-160||px>mapState.right+160||py<mapState.top-200||py>mapState.bottom+200)return null;
+      scratchNdc.set(px/view.w*2-1,1-py/view.h*2);
+      scratchRay.setFromCamera(scratchNdc,camera);
+      if(!scratchRay.ray.intersectPlane(scratchPlane,scratchGround))return null;
+      groundResult.z=z;return groundResult;
     }catch(_){return null}
   }
-  function projectWorld(v,view){
-    const p=v.clone().project(camera);
-    return{x:(p.x*.5+.5)*view.w,y:(-p.y*.5+.5)*view.h};
+  function projectIntoHud(v,view,h,xKey,yKey){
+    scratchProject.copy(v).project(camera);
+    h[xKey]=(scratchProject.x*.5+.5)*view.w;
+    h[yKey]=(-scratchProject.y*.5+.5)*view.h;
   }
 
   async function loadAsset(cls){
@@ -272,7 +293,7 @@
     let e=instances.get(id);
     if(!e||e.cls!==cls){
       if(e)removeEntry(id,e);
-      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,root:null,model:null,head:null,mixer:null,actions:null,current:null,anim:'idle',cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:null,pivotBone:''};
+      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,root:null,model:null,head:null,mixer:null,actions:null,current:null,anim:'idle',cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:''};
       instances.set(id,e);ensureInstance(e);
     }
     e.kind=kind;e.data=data;e.anchor=anchor;e.seenAt=performance.now();e.alive=true;
@@ -354,6 +375,8 @@
   function applyHidden(e){
     if(!e.model)return;
     const hidden=e.kind==='remote'&&Number(e.data&&e.data.hiddenUntil)>Date.now();
+    if(e.hiddenState===hidden)return;
+    e.hiddenState=hidden;
     e.model.traverse(o=>{
       if(!o||!o.material)return;
       const mats=Array.isArray(o.material)?o.material:[o.material];
@@ -369,18 +392,15 @@
   }
   function updateHudAnchor(e,view,z){
     try{
-      const feet=projectWorld(e.root.position,view);
-      let hp=null;
-      if(e.head){
-        const p=new THREE.Vector3();e.head.getWorldPosition(p);hp=projectWorld(p,view);
-      }
-      if(!hp){
+      const h=e.hud||(e.hud={feetX:0,feetY:0,headX:0,headY:0});
+      projectIntoHud(e.root.position,view,h,'feetX','feetY');
+      if(e.head)e.head.getWorldPosition(scratchHead);
+      else{
         const cfg=e.cfg||CLASS_CONFIG[e.cls];
-        const p=new THREE.Vector3(e.root.position.x,e.root.position.y+(Number(cfg.targetHeight)||2.34)*(Number(cfg.visualScale)||1)*z,e.root.position.z);
-        hp=projectWorld(p,view);
+        scratchHead.set(e.root.position.x,e.root.position.y+(Number(cfg.targetHeight)||2.34)*(Number(cfg.visualScale)||1)*z,e.root.position.z);
       }
-      e.hud={feetX:feet.x,feetY:feet.y,headX:hp.x,headY:hp.y};
-      return e.hud;
+      projectIntoHud(scratchHead,view,h,'headX','headY');
+      return h;
     }catch(_){return null}
   }
   function textStrokeFill(text,x,y,font,fill){
@@ -408,6 +428,7 @@
     requestAnimationFrame(frame);
     if(!THREE||!renderer||!scene||!camera)return;
     const view=resize();if(!view)return;
+    prepareWorldMap();
     const dt=Math.max(0,Math.min(.05,(now-lastFrameAt)/1000));lastFrameAt=now;
     hx.clearRect(0,0,view.w,view.h);
 
