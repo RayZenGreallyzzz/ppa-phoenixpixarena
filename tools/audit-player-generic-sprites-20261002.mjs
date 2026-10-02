@@ -32,6 +32,18 @@ for(const sym of SYMBOLS){
   for(const h of hits.slice(0,12)) console.log(`  ${h.file}: ${h.ctx}`);
 }
 
+let animTotal=0;
+for(const file of files){
+  const text=fs.readFileSync(file,'utf8');
+  const re=/\bANIM\b/g;
+  let m;
+  while((m=re.exec(text))){
+    animTotal++;
+    console.log(`EXACT ANIM ${file}:`,text.slice(Math.max(0,m.index-320),Math.min(text.length,m.index+720)).replace(/\s+/g,' '));
+  }
+}
+console.log(`EXACT ANIM COUNT ${animTotal}`);
+
 const html=fs.readFileSync('public/index.html','utf8');
 for(const sym of ['SPR_IDLE','SPR_RUN','SPR_ATK']){
   const patterns=[
