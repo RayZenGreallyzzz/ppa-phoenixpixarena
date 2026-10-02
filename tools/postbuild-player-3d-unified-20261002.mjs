@@ -162,8 +162,7 @@ for(const sig of [
 ])html=removeFunction(html,sig);
 
 // These helpers existed only for local sprite selection/direction. Gameplay was
-// already moved to playerClassKey/playerIsClass, and stress bots use their own
-// v174AiDirIndex/v174AiSpriteCfg path, so remove the dead local sprite layer.
+// already moved to playerClassKey/playerIsClass, so remove the dead local sprite layer.
 for(const sig of [
   'function playerUsesGnomeSprites(){',
   'function playerUsesArcherSprites(){',
@@ -187,8 +186,27 @@ for(const dead of [
   if(html.includes(dead))throw new Error('Unified 3D build: dead local sprite/HUD symbol survived: '+dead);
 }
 if(!html.includes('PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002'))throw new Error('Unified 3D build: Player3D HUD ownership marker missing');
-if(!html.includes('function v174AiSpriteCfg(e){'))throw new Error('Unified 3D build: stress-bot sprite route was damaged');
-if(!html.includes('GNOME_ANIM[a]')||!html.includes('PALADIN_ANIM[a]'))throw new Error('Unified 3D build: stress-bot class atlas route was damaged');
+
+// Stage 5A2 owns AI Training sprite cleanup before this postbuild runs. Preserve
+// the live AI/stress systems, but require their obsolete sprite route to stay gone.
+for(const keep of [
+  'const V174_AI_CLASS=',
+  'function v174SpawnAiTrainingFighter',
+  'PPA_AI_TRAINING_ACTIVE',
+  'function v174DrawAiTrainingFighter(e,sx,sy){',
+  'isAiFighter:true',
+  'PPA_ONLINE_STRESS',
+  'PPA_AI_TRAINING_SPRITE_SOURCE_CLEANUP_20261002'
+]){
+  if(!html.includes(keep))throw new Error('Unified 3D build: Stage 5A2 live AI/stress feature missing: '+keep);
+}
+for(const dead of [
+  'function v174AiSpriteCfg(e){','function v174AiDirIndex(e){',
+  'const GNOME_ANIM=','const ARCHER_ANIM=','const ASSASSIN_ANIM=','const TANK_ANIM=',
+  'const BERSERKER_ANIM=','const PRIEST_ANIM=','const MAGE_ANIM=','const PALADIN_ANIM='
+]){
+  if(html.includes(dead))throw new Error('Unified 3D build: Stage 5A2 obsolete AI sprite route survived: '+dead);
+}
 
 html=html.replace(/\n?<script src="\/game\/player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
 html=html.replace(/\n?<script src="\/game\/remote-player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
@@ -199,4 +217,4 @@ if(!html.includes('window.__PPA3D_LOCAL_PENDING=__ppa3DLocal'))throw new Error('
 if(!html.includes('worldX:Number(P.x),worldY:Number(P.y)'))throw new Error('Unified 3D build: local world-space anchor missing');
 if(!html.includes('player-3d-unified-runtime.js?v=20261002u4'))throw new Error('Unified 3D build: runtime tag missing');
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Unified Player3D V4: local/remote real players are 3D-only · legacy local sprite renderer/HUD/direction helpers removed · stress bot sprites isolated');
+console.log('Unified Player3D V4: local/remote real players are 3D-only · legacy local sprite renderer/HUD/direction helpers removed · Stage 5A2 AI/stress cleanup verified');
