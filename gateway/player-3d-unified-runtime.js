@@ -27,7 +27,8 @@
   const viewState={w:0,h:0};
   const mapState={ready:false,left:0,top:0,right:0,bottom:0,z:1,kx:1,ky:1};
   const groundResult={hit:null,z:1};
-  let scratchNdc=null,scratchRay=null,scratchGround=null,scratchPlane=null,scratchProject=null,scratchHead=null;
+  let scratchNdc=null,scratchRay=null,scratchGround=null,scratchPlane=null,scratchProject=null,scratchHead=null,scratchMuzzleA=null,scratchMuzzleB=null;
+  const muzzleResult={x:0,y:0,node:'DwarfCannon'};
 
   function normalizeClass(v){
     const s=String(v||'').trim(),l=s.toLowerCase();
@@ -144,6 +145,8 @@
     scratchPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
     scratchProject=new THREE.Vector3();
     scratchHead=new THREE.Vector3();
+    scratchMuzzleA=new THREE.Vector3();
+    scratchMuzzleB=new THREE.Vector3();
     groundResult.hit=scratchGround;
 
     host=document.createElement('div');
@@ -219,6 +222,38 @@
     h[yKey]=(-scratchProject.y*.5+.5)*view.h;
   }
 
+  function localMuzzle(tx,ty){
+    try{
+      if(!THREE||!camera||!scratchMuzzleA||!scratchMuzzleB)return null;
+      const e=instances.get('local');
+      if(!e||e.cls!=='gnome'||!e.model)return null;
+      const cannon=e.model.getObjectByName('DwarfCannon');
+      if(!cannon||!cannon.geometry)return null;
+      if(!cannon.geometry.boundingBox)cannon.geometry.computeBoundingBox();
+      const b=cannon.geometry.boundingBox;if(!b)return null;
+      const sx=b.max.x-b.min.x,sy=b.max.y-b.min.y,sz=b.max.z-b.min.z;
+      const cx=(b.min.x+b.max.x)*.5,cy=(b.min.y+b.max.y)*.5,cz=(b.min.z+b.max.z)*.5;
+      if(sx>=sy&&sx>=sz){scratchMuzzleA.set(b.min.x,cy,cz);scratchMuzzleB.set(b.max.x,cy,cz)}
+      else if(sy>=sx&&sy>=sz){scratchMuzzleA.set(cx,b.min.y,cz);scratchMuzzleB.set(cx,b.max.y,cz)}
+      else{scratchMuzzleA.set(cx,cy,b.min.z);scratchMuzzleB.set(cx,cy,b.max.z)}
+      cannon.updateWorldMatrix(true,false);
+      cannon.localToWorld(scratchMuzzleA);cannon.localToWorld(scratchMuzzleB);
+      const view=resize();if(!view||!prepareWorldMap()||!mapState.ready)return null;
+      scratchProject.copy(scratchMuzzleA).project(camera);
+      const apx=(scratchProject.x*.5+.5)*view.w,apy=(-scratchProject.y*.5+.5)*view.h;
+      scratchProject.copy(scratchMuzzleB).project(camera);
+      const bpx=(scratchProject.x*.5+.5)*view.w,bpy=(-scratchProject.y*.5+.5)*view.h;
+      const denX=mapState.z*mapState.kx,denY=mapState.z*mapState.ky;
+      if(!Number.isFinite(denX)||!Number.isFinite(denY)||Math.abs(denX)<1e-6||Math.abs(denY)<1e-6)return null;
+      const ax=Number(cam.x||0)+(apx-mapState.left)/denX,ay=Number(cam.y||0)+(apy-mapState.top)/denY;
+      const bx=Number(cam.x||0)+(bpx-mapState.left)/denX,by=Number(cam.y||0)+(bpy-mapState.top)/denY;
+      if(![ax,ay,bx,by].every(Number.isFinite))return null;
+      const mx=(ax+bx)*.5,my=(ay+by)*.5,dx=Number(tx)-mx,dy=Number(ty)-my;
+      const da=(ax-mx)*dx+(ay-my)*dy,db=(bx-mx)*dx+(by-my)*dy;
+      if(db>=da){muzzleResult.x=bx;muzzleResult.y=by}else{muzzleResult.x=ax;muzzleResult.y=ay}
+      return muzzleResult;
+    }catch(_){return null}
+  }
   async function loadAsset(cls){
     if(assets.has(cls))return assets.get(cls);
     const promise=(async()=>{
@@ -470,6 +505,7 @@
     version:'unified-v2-world',
     local:registerLocal,
     remote:registerRemote,
+    localMuzzle:localMuzzle,
     diag:()=>({
       version:'unified-v2-world',fps,
       instances:Array.from(instances.values()).map(e=>({

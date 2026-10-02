@@ -132,6 +132,24 @@
   function status(text,col){try{if(typeof ppaOnlineSetStatus==='function'){ppaOnlineSetStatus(text,col);fixOnlineBadge()}}catch(_){}}
   function refreshBadge(){if(RT.ws&&RT.ws.readyState===WebSocket.OPEN)status(badgeText(),'#9fffc1')}
   function send(o){try{if(RT.ws&&RT.ws.readyState===WebSocket.OPEN){RT.ws.send(JSON.stringify(o));return true}}catch(_){}return false}
+  function combatFxOrigin(kind,sx,sy,tx,ty){
+    var o={x:Number(sx)||0,y:Number(sy)||0};
+    if(kind==='gnome-cannon'){
+      try{
+        var api=window.PPA_PLAYER3D;
+        var m=api&&typeof api.localMuzzle==='function'?api.localMuzzle(tx,ty):null;
+        if(m&&Number.isFinite(Number(m.x))&&Number.isFinite(Number(m.y))){o.x=Number(m.x);o.y=Number(m.y)}
+      }catch(_){}
+    }
+    return o;
+  }
+  function emitCombatFx(kind,sx,sy,tx,ty,animMs){
+    var o=combatFxOrigin(kind,sx,sy,tx,ty);
+    var dx=(Number(tx)||0)-o.x,dy=(Number(ty)||0)-o.y;
+    var d={kind:kind,x:o.x,y:o.y,tx:Number(tx)||0,ty:Number(ty)||0,ang:Math.atan2(dy,dx),animMs:animMs||420};
+    try{if(kind==='gnome-cannon'&&window.PPA_LOCAL_COMBAT_FX)window.PPA_LOCAL_COMBAT_FX(d)}catch(_){}
+    try{if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX(d)}catch(_){}
+  }
 
   function clanBossEntity(){
     try{
@@ -1040,7 +1058,7 @@
       try{
         var cls=String(selfClass()||'').toLowerCase();
         var kind=cls==='gnome'?'gnome-cannon':(cls==='archer'?'archer-arrow':'melee');
-        if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX({kind:kind,x:sx,y:sy,tx:rp.x,ty:rp.y,ang:Math.atan2(rp.y-sy,rp.x-sx),animMs:420});
+        emitCombatFx(kind,sx,sy,rp.x,rp.y,420);
       }catch(_){}
       if(Number(P.smokeUntil)>now){P.smokeUntil=0;P.smokeDodgeBonus=0;try{send({type:'player-stealth',duration:0})}catch(_){}}
       return true;
@@ -1116,7 +1134,7 @@
         var cls='';
         try{cls=String(typeof classBaseKey==='function'?classBaseKey():'').toLowerCase()}catch(_){}
         var kind=cls==='gnome'?'gnome-cannon':(cls==='archer'?'archer-arrow':'melee');
-        if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX({kind:kind,x:sx,y:sy,tx:rp.x,ty:rp.y,ang:Math.atan2(rp.y-sy,rp.x-sx),animMs:420});
+        emitCombatFx(kind,sx,sy,rp.x,rp.y,420);
       }catch(_){}
       if(Number(P.smokeUntil)>now){
         P.smokeUntil=0;P.smokeDodgeBonus=0;
