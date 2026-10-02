@@ -5,6 +5,7 @@ on:
     branches: [fix-gnome-cannon-projectiles-20261002]
     paths:
       - 'tools/apply-gnome-cannon-runtime-fix-20261002.mjs'
+      - 'tools/remove-obsolete-gnome-build-fx-20261002.mjs'
       - 'tools/source-gnome-cannon-fix-20261002.mjs'
       - '.github/workflows/apply-gnome-cannon-projectiles-20261002.yml'
 
@@ -23,7 +24,9 @@ jobs:
         with:
           node-version: '24'
       - name: Apply guarded runtime/source integration
-        run: node tools/apply-gnome-cannon-runtime-fix-20261002.mjs
+        run: |
+          node tools/apply-gnome-cannon-runtime-fix-20261002.mjs
+          node tools/remove-obsolete-gnome-build-fx-20261002.mjs
       - name: Syntax-check modified runtimes
         run: |
           node --check gateway/player-3d-unified-runtime.js
@@ -43,6 +46,7 @@ jobs:
           const p3=fs.readFileSync('public/game/player-3d-unified-runtime.js','utf8');
           const fx=fs.readFileSync('public/game/remote-combat-fx.js','utf8');
           const rt=fs.readFileSync('public/game/realtime-client.js','utf8');
+          const build=fs.readFileSync('build.mjs','utf8');
           const need=(ok,msg)=>{if(!ok)throw new Error(msg)};
           need(html.includes('function basicAttackDamage(target,critMul)'),'missing final basicAttackDamage');
           need(html.includes("typeof api.localMuzzle==='function'"),'missing final PvE Player3D muzzle bridge');
@@ -52,6 +56,8 @@ jobs:
           need(fx.includes('window.PPA_LOCAL_COMBAT_FX=function(d)'),'missing local projectile FX API');
           need(rt.includes('function emitCombatFx(kind,sx,sy,tx,ty,animMs)'),'missing shared realtime FX emitter');
           need((rt.match(/emitCombatFx\(kind,sx,sy,rp\.x,rp\.y,420\);/g)||[]).length===2,'PK/Arena FX not unified');
+          need(!build.includes("'gnome realtime cannon visual'"),'obsolete build gnome FX hook survived');
+          need(build.includes("'archer realtime arrow visual'"),'archer build FX hook was damaged');
           for(const f of ['dungeon-mob-events.js','dungeon60-dragon.js','boss-drop-boost.js','clan-boss-loot.js'])need(fs.existsSync('public/game/'+f),'mob/boss guard missing '+f);
           console.log('Final cannon path + mob/boss guards: OK');
           NODE
