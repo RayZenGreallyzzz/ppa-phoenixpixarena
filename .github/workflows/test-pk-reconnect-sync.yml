@@ -1,0 +1,31 @@
+name: Test PK reconnect sync
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+      - fix-pk-reconnect-sync-20261002
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - run: node --check gateway/realtime-client.js
+      - run: node tools/test-pk-reconnect-sync.mjs gateway/realtime-client.js
+      - run: npm run build
+      - run: node tools/test-pk-reconnect-sync.mjs public/game/realtime-client.js
+      - name: Guard unrelated gameplay runtimes
+        run: |
+          test -e public/game/dungeon-mob-events.js
+          test -e public/game/dungeon60-dragon.js
+          test -e public/game/boss-drop-boost.js
+          test -e public/game/clan-boss-loot.js
+          test -e public/game/player-3d-unified-runtime.js
