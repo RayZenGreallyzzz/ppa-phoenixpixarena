@@ -32,8 +32,8 @@ replaceExact(build,"if (remoteSprite.includes('forcedAttack') || remoteSprite.in
 replaceExact(build,"if (!mobilePerf.includes('__PPA_MOBILE_SPRITE_PERF_V2') ||\n      !mobilePerf.includes('imageCache') ||\n      !remoteSprite.includes('canvasHitMetrics(now)') ||","if (!remotePlayer3dDispatch.includes('canvasHitMetrics(now)') ||");
 replaceExact(build,"  ['gateway/mobile-sprite-performance.js','mobile-sprite-performance.js','Mobile sprite performance helper missing'],\n",'');
 replaceExact(build,"  ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],","  ['gateway/remote-player-3d-dispatch.js','remote-player-3d-dispatch.js','Remote Player3D dispatch missing'],");
-replaceExact(build,"<script src=\"${js('mobile-sprite-performance.js')}\"></script>\\\n",'');
-replaceExact(build,"<script src=\"${js('remote-sprite-renderer.js')}\"></script>\\\n","<script src=\"${js('remote-player-3d-dispatch.js')}\"></script>\\\n");
+replaceExact(build,"<script src=\"${js('mobile-sprite-performance.js')}\"></script>",'');
+replaceExact(build,"<script src=\"${js('remote-sprite-renderer.js')}\"></script>","<script src=\"${js('remote-player-3d-dispatch.js')}\"></script>");
 replaceExact(build,"console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');\n",'');
 replaceExact(build,"console.log('Remote player sprites: /game/remote-sprite-renderer.js');","console.log('Remote Player3D dispatch: /game/remote-player-3d-dispatch.js');");
 
