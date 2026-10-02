@@ -6,9 +6,9 @@ const publicDir=path.join(ROOT,'public');
 const gameDir=path.join(publicDir,'game');
 const htmlPath=path.join(publicDir,'index.html');
 const runtimeSrc=path.join(ROOT,'gateway','player-3d-unified-runtime.js');
-const remoteSrc=path.join(ROOT,'gateway','remote-sprite-renderer.js');
+const remoteSrc=path.join(ROOT,'gateway','remote-player-3d-dispatch.js');
 const runtimeDst=path.join(gameDir,'player-3d-unified-runtime.js');
-const remoteDst=path.join(gameDir,'remote-sprite-renderer.js');
+const remoteDst=path.join(gameDir,'remote-player-3d-dispatch.js');
 const MODELS=['Tank_Mobile_Shield_Hammer_Final.glb','Berserker_Final.glb','Paladin_Final.glb','Dwarf.glb','Ranger_Mobile_Bow_Z90.glb','Mage_Final.glb','Assassin.glb','Priest_Final_GitHub.glb'];
 for(const p of [htmlPath,runtimeSrc,remoteSrc,...MODELS.map(f=>path.join(ROOT,f))])if(!fs.existsSync(p))throw new Error('Unified 3D build: missing '+p);
 fs.mkdirSync(gameDir,{recursive:true});
@@ -194,7 +194,7 @@ html=html.replace(/\n?<script src="\/game\/player-3d-runtime\.js\?v=[^"]+"><\/sc
 html=html.replace(/\n?<script src="\/game\/remote-player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
 const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261002u4"></script>\n';
 if(!html.includes('player-3d-unified-runtime.js?v=20261002u4')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
-html=html.replace(/remote-sprite-renderer\.js\?v=[^"']+/g,'remote-sprite-renderer.js?v=20261002u4');
+html=html.replace(/remote-player-3d-dispatch\.js\?v=[^"']+/g,'remote-player-3d-dispatch.js?v=20261002u5');
 if(!html.includes('window.__PPA3D_LOCAL_PENDING=__ppa3DLocal'))throw new Error('Unified 3D build: local registration missing');
 if(!html.includes('worldX:Number(P.x),worldY:Number(P.y)'))throw new Error('Unified 3D build: local world-space anchor missing');
 if(!html.includes('player-3d-unified-runtime.js?v=20261002u4'))throw new Error('Unified 3D build: runtime tag missing');
