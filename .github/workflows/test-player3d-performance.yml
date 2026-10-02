@@ -15,7 +15,7 @@ jobs:
           node-version: '24'
       - run: npm install
       - run: node --check gateway/player-3d-unified-runtime.js
-      - name: Verify Stage 4A source invariants
+      - name: Verify Stage 4A and 4B source invariants
         run: |
           grep -q "const viewState={w:0,h:0};" gateway/player-3d-unified-runtime.js
           grep -q "const mapState={ready:false" gateway/player-3d-unified-runtime.js
@@ -25,6 +25,11 @@ jobs:
           grep -q "if(e.hiddenState===hidden)return;" gateway/player-3d-unified-runtime.js
           grep -q "prepareWorldMap();" gateway/player-3d-unified-runtime.js
           grep -q "projectIntoHud(e.root.position,view,h,'feetX','feetY');" gateway/player-3d-unified-runtime.js
+          grep -q "const wallNow=Date.now();" gateway/player-3d-unified-runtime.js
+          grep -q "applyHidden(e,wallNow);" gateway/player-3d-unified-runtime.js
+          grep -q "drawHud(e,wallNow);" gateway/player-3d-unified-runtime.js
+          grep -q "if(e.head)e.head.getWorldPosition(scratchHead);" gateway/player-3d-unified-runtime.js
+          ! grep -q "e.root.updateWorldMatrix(true,true);" gateway/player-3d-unified-runtime.js
           ! grep -q "new THREE.Vector2(px/view.w" gateway/player-3d-unified-runtime.js
           ! grep -q "ray.ray.intersectPlane(new THREE.Plane" gateway/player-3d-unified-runtime.js
           ! grep -q "const p=new THREE.Vector3();e.head.getWorldPosition(p)" gateway/player-3d-unified-runtime.js
@@ -42,6 +47,10 @@ jobs:
           grep -q "const mapState={ready:false" public/game/player-3d-unified-runtime.js
           grep -q "if(e.hiddenState===hidden)return;" public/game/player-3d-unified-runtime.js
           grep -q "prepareWorldMap();" public/game/player-3d-unified-runtime.js
+          grep -q "const wallNow=Date.now();" public/game/player-3d-unified-runtime.js
+          grep -q "applyHidden(e,wallNow);" public/game/player-3d-unified-runtime.js
+          grep -q "drawHud(e,wallNow);" public/game/player-3d-unified-runtime.js
+          ! grep -q "e.root.updateWorldMatrix(true,true);" public/game/player-3d-unified-runtime.js
           ! grep -q "new THREE.Vector2(px/view.w" public/game/player-3d-unified-runtime.js
           grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
           grep -q "worldX:Number(r.x),worldY:Number(r.y)" public/game/remote-player-3d-dispatch.js
