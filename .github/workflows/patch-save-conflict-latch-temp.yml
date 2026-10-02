@@ -1,0 +1,32 @@
+name: Patch save conflict latch temp
+on:
+  push:
+    branches:
+      - fix-save-conflict-latch-20261002
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Apply save conflict latch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/patch-save-conflict-latch-temp.mjs
+      - run: node --check gateway/ppa-bridge.js
+      - name: Verify shape
+        run: |
+          grep -F "cloudSaveLoaded=false;" gateway/ppa-bridge.js
+          grep -F "saveConflictKey" gateway/ppa-bridge.js
+          grep -F "Do not advance knownSaveVersion here" gateway/ppa-bridge.js
+          grep -F "cloudSaveLoaded=true;" gateway/ppa-bridge.js
+      - name: Commit runtime only
+        run: |
+          git config user.name "PPA CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add gateway/ppa-bridge.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Apply save conflict latch"
+          git push origin HEAD:fix-player3d-idle-yaw-20261002 || true
