@@ -1,16 +1,15 @@
-name: Verify current production build 20261002
+name: Diagnose clan boss audit 20261002
 on:
   push:
     branches:
       - main
 jobs:
-  verify:
-    if: contains(github.event.head_commit.message, 'Verify restored realtime build')
+  diagnose:
+    if: contains(github.event.head_commit.message, 'Run clan boss audit diagnostic')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm install --no-audit --no-fund --ignore-scripts --package-lock=false
-      - run: npm run build
+      - run: node tools/diagnose-clan-boss-audit-20261002.mjs
