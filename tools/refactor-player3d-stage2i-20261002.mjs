@@ -42,25 +42,9 @@ replaceExact(post,"const remoteSrc=path.join(ROOT,'gateway','remote-sprite-rende
 replaceExact(post,"const remoteDst=path.join(gameDir,'remote-sprite-renderer.js');","const remoteDst=path.join(gameDir,'remote-player-3d-dispatch.js');");
 replaceExact(post,"html=html.replace(/remote-sprite-renderer\\.js\\?v=[^\"']+/g,'remote-sprite-renderer.js?v=20261002u4');","html=html.replace(/remote-player-3d-dispatch\\.js\\?v=[^\"']+/g,'remote-player-3d-dispatch.js?v=20261002u5');");
 
-const unified='.github/workflows/test-unified-player3d.yml';
-let u=fs.readFileSync(unified,'utf8');
-u=u.replaceAll('gateway/remote-sprite-renderer.js','gateway/remote-player-3d-dispatch.js');
-u=u.replaceAll('public/game/remote-sprite-renderer.js','public/game/remote-player-3d-dispatch.js');
-u=u.replaceAll('__PPA_REMOTE3D_ADAPTER_V2','__PPA_REMOTE_PLAYER3D_DISPATCH_V1');
-u=u.replaceAll('remote-sprite-renderer.js?v=20261002u4','remote-player-3d-dispatch.js?v=20261002u5');
-fs.writeFileSync(unified,u,'utf8');
-
-const preload='.github/workflows/test-player-sprite-preload-cleanup.yml';
-let p=fs.readFileSync(preload,'utf8');
-p=p.replace("      - run: node --check gateway/mobile-sprite-performance.js\n",'');
-p=p.replace("      - name: Verify mobile sprite helper is AI-only\n        run: |\n          ! grep -Eq \"playerAnimDef|playerUses[A-Za-z]*Sprites|wrapPlayer\" gateway/mobile-sprite-performance.js\n          grep -q \"v174AiSpriteCfg\" gateway/mobile-sprite-performance.js\n          grep -q \"playerSprites:false\" gateway/mobile-sprite-performance.js\n","      - name: Verify obsolete mobile sprite wrapper is removed\n        run: |\n          test ! -e gateway/mobile-sprite-performance.js\n");
-p=p.replace("          grep -q \"mobile-sprite-performance.js?v=20261002ai3\" public/index.html\n          ! grep -Eq \"playerAnimDef|playerUses[A-Za-z]*Sprites|wrapPlayer\" public/game/mobile-sprite-performance.js\n          grep -q \"v174AiSpriteCfg\" public/game/mobile-sprite-performance.js\n","          ! grep -q \"mobile-sprite-performance.js\" public/index.html\n          test ! -e public/game/mobile-sprite-performance.js\n");
-fs.writeFileSync(preload,p,'utf8');
-
 assertIncludes(build,"remote-player-3d-dispatch.js");
 assertIncludes(post,"remote-player-3d-dispatch.js?v=20261002u5");
-assertIncludes(unified,"__PPA_REMOTE_PLAYER3D_DISPATCH_V1");
-for(const path of [build,post,unified,preload]){
+for(const path of [build,post]){
  const s=fs.readFileSync(path,'utf8');
  if(s.includes('remote-sprite-renderer.js'))throw new Error(`${path}: old remote filename survived`);
 }
