@@ -1,0 +1,45 @@
+name: Refactor Stage 4B Player3D matrix work
+on:
+  push:
+    branches:
+      - stage-4b-player3d-matrix-update-20261002
+permissions:
+  contents: write
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage-4b-player3d-matrix-update-20261002
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply refactor once
+        run: |
+          if grep -q "const wallNow=Date.now();" gateway/player-3d-unified-runtime.js; then
+            echo "Stage 4B already applied"
+          else
+            node tools/refactor-stage-4b-player3d-matrix-20261002.mjs
+          fi
+      - run: node --check gateway/player-3d-unified-runtime.js
+      - name: Verify runtime shape
+        run: |
+          grep -q "const wallNow=Date.now();" gateway/player-3d-unified-runtime.js
+          grep -q "applyHidden(e,wallNow);" gateway/player-3d-unified-runtime.js
+          grep -q "drawHud(e,wallNow);" gateway/player-3d-unified-runtime.js
+          ! grep -q "e.root.updateWorldMatrix(true,true);" gateway/player-3d-unified-runtime.js
+          grep -q "if(e.head)e.head.getWorldPosition(scratchHead);" gateway/player-3d-unified-runtime.js
+          grep -q "renderer.render(scene,camera)" gateway/player-3d-unified-runtime.js
+      - name: Commit runtime refactor if changed
+        run: |
+          if git diff --quiet -- gateway/player-3d-unified-runtime.js; then
+            echo "No runtime changes to commit"
+            exit 0
+          fi
+          test -z "$(git diff --name-only | grep -v '^gateway/player-3d-unified-runtime.js$')"
+          git config user.name "RayZenGreallyzzz"
+          git config user.email "genry.undeniable@gmail.com"
+          git add gateway/player-3d-unified-runtime.js
+          git commit -m "Stage 4B: remove duplicate Player3D matrix work"
+          git push origin HEAD:stage-4b-player3d-matrix-update-20261002
