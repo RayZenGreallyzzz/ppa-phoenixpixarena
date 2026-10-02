@@ -62,16 +62,21 @@ function textFiles(dir,out=[]){
   }
   return out;
 }
-function contexts(text,needle,radius=180){
+function contexts(text,needle,radius=180,limit=8){
   const out=[];
   let p=0;
   while((p=text.indexOf(needle,p))!==-1){
     out.push(text.slice(Math.max(0,p-radius),Math.min(text.length,p+needle.length+radius)).replace(/\s+/g,' '));
     p+=Math.max(1,needle.length);
-    if(out.length>=8)break;
+    if(out.length>=limit)break;
   }
   return out;
 }
+
+const assassinModelCount=count(html,'assassinModel');
+console.log(`Stage 2K assassinModel occurrences after generic block removal: ${assassinModelCount}`);
+for(const hit of contexts(html,'assassinModel',340,16)) console.log(`Stage 2K assassinModel context: ${hit}`);
+
 const texts=textFiles(publicDir);
 const uniqueAssets=[...new Set(genericAssetPaths)];
 if(uniqueAssets.length!==3) throw new Error(`Stage 2K cleanup: expected 3 unique generic player PNGs, got ${uniqueAssets.length}`);
@@ -84,7 +89,7 @@ for(const relRaw of uniqueAssets){
     const needles=[relRaw,rel].filter((v,i,a)=>v&&a.indexOf(v)===i);
     for(const needle of needles){
       if(!t.includes(needle))continue;
-      const hits=contexts(t,needle);
+      const hits=contexts(t,needle,220,8);
       survivingRefs.push({asset:relRaw,file:path.relative(publicDir,p),needle,hits});
       console.log(`Stage 2K surviving reference: asset=${relRaw} file=${path.relative(publicDir,p)} needle=${needle}`);
       for(const hit of hits) console.log(`Stage 2K context: ${hit}`);
