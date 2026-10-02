@@ -7,6 +7,7 @@
   var saveQueue=Promise.resolve();
   var knownSaveVersion=null;
   var saveConflict=null;
+  var saveConflictKey='';
   var cloudSaveLoaded=false;
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
@@ -135,20 +136,30 @@
         return result;
       }catch(err){
         if(err&&err.code==='SAVE_VERSION_CONFLICT'){
+          var conflictCurrent=Number(err.data&&err.data.currentVersion);
+          if(!Number.isFinite(conflictCurrent))conflictCurrent=null;
+          var conflictKey=String(expected)+'>'+String(conflictCurrent==null?'?':conflictCurrent);
           saveConflict={
             at:Date.now(),
             expectedVersion:expected,
-            currentVersion:Number(err.data&&err.data.currentVersion)||null
+            currentVersion:conflictCurrent
           };
+          // Do not advance knownSaveVersion here. The local snapshot that lost the
+          // version race is stale and must never be retried against a newer version.
+          // Close the save gate until a real /api/save/load re-establishes authority.
+          cloudSaveLoaded=false;
           try{
             if(window.PPA_CLOUD){
               window.PPA_CLOUD.saveConflict=saveConflict;
               window.PPA_CLOUD.ready=false;
             }
           }catch(_){}
-          try{
-            if(typeof showPickup==='function')showPickup('СЕЙВ ЗАЩИЩЁН · старые данные НЕ перезаписали облако','#ffb36b');
-          }catch(_){}
+          if(saveConflictKey!==conflictKey){
+            saveConflictKey=conflictKey;
+            try{
+              if(typeof showPickup==='function')showPickup('СЕЙВ ЗАЩИЩЁН · старые данные НЕ перезаписали облако','#ffb36b');
+            }catch(_){}
+          }
         }
         throw err;
       }
@@ -200,7 +211,7 @@
 
     cachedAuth=null;
     knownSaveVersion=null;
-    saveConflict=null;
+    saveConflict=null;saveConflictKey='';
     cloudSaveLoaded=false;
     try{
       if(window.PPA_CLOUD){
@@ -227,6 +238,8 @@
       var r=await call('/api/save/load');
       noteSaveVersion(r&&r.version!=null?r.version:0);
       cloudSaveLoaded=true;
+      saveConflict=null;saveConflictKey='';
+      try{if(window.PPA_CLOUD)window.PPA_CLOUD.saveConflict=null}catch(_){}
       return r;
     },
     ppaSaveGame:async function(state,version){await auth();return queueSave(state,version)},
@@ -236,6 +249,8 @@
       var loaded=await call('/api/save/load');
       noteSaveVersion(loaded&&loaded.version!=null?loaded.version:0);
       cloudSaveLoaded=true;
+      saveConflict=null;saveConflictKey='';
+      try{if(window.PPA_CLOUD)window.PPA_CLOUD.saveConflict=null}catch(_){}
 
       // First registration may add server-owned starter items (newbie chest).
       // Do NOT hot-run the full legacy loadGame() here: it is a startup loader
