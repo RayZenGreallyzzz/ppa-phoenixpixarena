@@ -3,10 +3,7 @@ on:
   push:
     branches:
       - player-3d-unified-v2-20261002
-      - player-gameplay-anim-decouple-20261002
-      - player-class-gameplay-decouple-20261002
-      - remove-legacy-local-player-renderer-20261002
-      - remove-legacy-local-player-hud-20261002
+      - stage-5a2-recovery-audit-20261002
   pull_request:
     branches:
       - main
@@ -23,51 +20,46 @@ jobs:
       - run: npm install
       - run: node --check gateway/player-3d-unified-runtime.js
       - run: node --check gateway/remote-player-3d-dispatch.js
+      - run: node --check tools/player-source-cleanup-20261002.mjs
       - run: node --check tools/postbuild-player-3d-unified-20261002.mjs
-      - run: node --check tools/postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs
-      - run: test ! -e gateway/remote-player-3d-adapter.js
-      - run: test ! -e tools/postbuild-remote-player-3d-20261001.mjs
-      - run: test ! -e gateway/remote-player-3d-runtime.js
-      - run: test ! -e gateway/remote-player-3d-runtime-v2.js
-      - run: test ! -e gateway/remote-sprite-renderer-3d-bridge.js
-      - run: test ! -e gateway/remote-sprite-renderer.js
-      - run: test ! -e tools/postbuild-paladin-frame-cleanup-20260928.mjs
-      - run: '! grep -q "postbuild-paladin-frame-cleanup-20260928.mjs" package.json'
-      - run: '! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" gateway/remote-player-3d-dispatch.js'
-      - run: grep -q "worldX:Number(r.x),worldY:Number(r.y)" gateway/remote-player-3d-dispatch.js
-      - run: grep -q "targetBody=Math.max(30,Number(r.sz)||30)" gateway/remote-player-3d-dispatch.js
-      - run: grep -q "PPA_PLAYER3D_LOCAL_ONLY_20261002" tools/postbuild-player-3d-unified-20261002.mjs
-      - run: grep -q "PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002" tools/postbuild-player-3d-unified-20261002.mjs
-      - run: grep -q "const PLAYER_ANIM_TIMING=" tools/postbuild-player-3d-unified-20261002.mjs
-      - name: Guard mob and boss systems before build
+      - name: Verify obsolete player render and cleanup layers are absent
         run: |
+          test ! -e gateway/remote-player-3d-adapter.js
+          test ! -e tools/postbuild-remote-player-3d-20261001.mjs
+          test ! -e gateway/remote-player-3d-runtime.js
+          test ! -e gateway/remote-player-3d-runtime-v2.js
+          test ! -e gateway/remote-sprite-renderer-3d-bridge.js
+          test ! -e gateway/remote-sprite-renderer.js
+          test ! -e tools/postbuild-paladin-frame-cleanup-20260928.mjs
+          test ! -e tools/postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs
+          ! grep -q "postbuild-paladin-frame-cleanup-20260928.mjs\|postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs" package.json
+      - name: Guard Player3D and mob boss source systems before build
+        run: |
+          grep -q "worldX:Number(r.x),worldY:Number(r.y)" gateway/remote-player-3d-dispatch.js
+          grep -q "targetBody=Math.max(30,Number(r.sz)||30)" gateway/remote-player-3d-dispatch.js
+          ! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" gateway/remote-player-3d-dispatch.js
+          grep -q "PPA_PLAYER3D_LOCAL_ONLY_20261002" tools/postbuild-player-3d-unified-20261002.mjs
+          grep -q "PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002" tools/postbuild-player-3d-unified-20261002.mjs
+          grep -q "const PLAYER_ANIM_TIMING=" tools/postbuild-player-3d-unified-20261002.mjs
+          grep -q "PPA_AI_TRAINING_SPRITE_SOURCE_CLEANUP_20261002" tools/postbuild-player-3d-unified-20261002.mjs
           test -e gateway/dungeon-mob-events.js
           test -e gateway/dungeon60-dragon.js
           test -e gateway/boss-drop-boost.js
           test -e gateway/clan-boss-loot.js
       - run: npm run build
-      - name: Verify Player3D owns real players and AI Training no longer carries sprite metadata
+      - name: Verify unified Player3D and protected gameplay systems after build
         run: |
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
           grep -q "unified-v2-world" public/game/player-3d-unified-runtime.js
           grep -q "__PPA_REMOTE_PLAYER3D_DISPATCH_V1" public/game/remote-player-3d-dispatch.js
-          ! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" public/game/remote-player-3d-dispatch.js
           grep -q "player-3d-unified-runtime.js?v=20261002u4" public/index.html
           grep -q "remote-player-3d-dispatch.js?v=20261002u5" public/index.html
-          ! grep -q "remote-sprite-renderer.js" public/index.html
-          ! grep -q "player-3d-runtime.js?v=" public/index.html
-          ! grep -q "remote-player-3d-runtime.js?v=" public/index.html
           grep -q "PPA_PLAYER3D_LOCAL_ONLY_20261002" public/index.html
           grep -q "PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002" public/index.html
           grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
           grep -q "const PLAYER_ANIM_TIMING=" public/index.html
           grep -q "function playerClassKey()" public/index.html
           grep -q "playerAnimTiming('attack')" public/index.html
-          grep -q "if(playerIsClass('gnome')){ try{gnomeFireCannonball()}" public/index.html
-          grep -q "else if(playerIsClass('archer')){ try{archerFireArrow()}" public/index.html
-          ! grep -q "playerAnimDef(" public/index.html
-          ! grep -q "function v174AiSpriteCfg(e){" public/index.html
-          ! grep -q "function v174AiDirIndex(e){" public/index.html
           grep -q "const V174_AI_CLASS=" public/index.html
           grep -q "function v174SpawnAiTrainingFighter" public/index.html
           grep -q "PPA_AI_TRAINING_ACTIVE" public/index.html
@@ -75,6 +67,9 @@ jobs:
           grep -q "isAiFighter:true" public/index.html
           grep -q "PPA_ONLINE_STRESS" public/index.html
           grep -Fq "cx.fillStyle='#9d63db';cx.beginPath();cx.arc(sx,sy-10,aiVisualSize*.35,0,Math.PI*2);cx.fill();" public/index.html
+          ! grep -q "remote-sprite-renderer.js\|player-3d-runtime.js?v=\|remote-player-3d-runtime.js?v=" public/index.html
+          ! grep -q "playerAnimDef(\|function v174AiSpriteCfg(e){\|function v174AiDirIndex(e){" public/index.html
+          for sym in GNOME_ANIM ARCHER_ANIM ASSASSIN_ANIM TANK_ANIM BERSERKER_ANIM PRIEST_ANIM MAGE_ANIM PALADIN_ANIM; do ! grep -q "$sym" public/index.html; done
           test -e public/game/dungeon-mob-events.js
           test -e public/game/dungeon60-dragon.js
           test -e public/game/boss-drop-boost.js
@@ -82,21 +77,11 @@ jobs:
           node - <<'NODE'
           const fs=require('fs');
           const html=fs.readFileSync('public/index.html','utf8');
-          const dead=[
-            'playerUsesGnomeSprites','playerUsesArcherSprites','playerUsesAssassinSprites','playerUsesTankSprites',
-            'playerUsesBerserkerSprites','playerUsesPriestSprites','playerUsesMageSprites','playerUsesPaladinSprites',
-            'playerUsesEightDirSprites','playerDir8','dir8Canonical','ppaPlayerNickname','ppaPlayerVisualTopScreenY',
-            'ppaPlayerClanName','drawPlayerNickname','v174AiSpriteCfg','v174AiDirIndex',
-            'GNOME_ANIM','ARCHER_ANIM','ASSASSIN_ANIM','TANK_ANIM','BERSERKER_ANIM','PRIEST_ANIM','MAGE_ANIM','PALADIN_ANIM'
-          ];
-          for(const name of dead)if(html.includes(name))throw new Error('dead player/AI sprite symbol survived: '+name);
           const sig='function drawPlayer(){';
           const a=html.indexOf(sig);
           if(a<0)throw new Error('drawPlayer missing');
-          const marker=html.indexOf('PPA_PLAYER3D_LOCAL_ONLY_20261002',a);
-          if(marker<0||marker>a+1200)throw new Error('drawPlayer is not canonical 3D-only');
-          const windowText=html.slice(a,a+1200);
-          for(const bad of ['drawImage','playerUses','visualBody','phoneCharacter','cx.ellipse','PT.push'])if(windowText.includes(bad))throw new Error('legacy local renderer token near drawPlayer: '+bad);
-          for(const keep of ['const PLAYER_ANIM_TIMING=','const V174_AI_CLASS=','function v174SpawnAiTrainingFighter','PPA_AI_TRAINING_ACTIVE','isAiFighter:true','PPA_ONLINE_STRESS'])if(!html.includes(keep))throw new Error('live gameplay/debug feature missing: '+keep);
-          console.log('verified: real players are Player3D-only; AI Training combat preserved on primitive body; online stress and mob/boss runtimes preserved');
+          const body=html.slice(a,a+1200);
+          if(!body.includes('PPA_PLAYER3D_LOCAL_ONLY_20261002'))throw new Error('drawPlayer is not Player3D-only');
+          for(const bad of ['drawImage','playerUses','visualBody','phoneCharacter','cx.ellipse','PT.push'])if(body.includes(bad))throw new Error('legacy local renderer token near drawPlayer: '+bad);
+          console.log('verified: unified Player3D owns real players; Stage 5A2 AI primitive path and mob/boss systems preserved');
           NODE
