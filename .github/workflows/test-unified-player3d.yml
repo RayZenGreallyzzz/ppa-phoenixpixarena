@@ -34,16 +34,23 @@ jobs:
           test ! -e gateway/remote-sprite-renderer.js
           test ! -e tools/postbuild-paladin-frame-cleanup-20260928.mjs
           test ! -e tools/postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs
-          ! grep -q "postbuild-paladin-frame-cleanup-20260928.mjs\|postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs" package.json
+          test ! -e tools/postbuild-player-3d-local-lifecycle-20261003.mjs
+          ! grep -q "postbuild-paladin-frame-cleanup-20260928.mjs\|postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs\|postbuild-player-3d-local-lifecycle-20261003.mjs" package.json
       - name: Guard Player3D and mob boss source systems before build
         run: |
           grep -q "worldX:Number(r.x),worldY:Number(r.y)" gateway/remote-player-3d-dispatch.js
           grep -q "targetBody=Math.max(30,Number(r.sz)||30)" gateway/remote-player-3d-dispatch.js
           ! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" gateway/remote-player-3d-dispatch.js
           grep -q "PPA_PLAYER3D_LOCAL_ONLY_20261002" tools/postbuild-player-3d-unified-20261002.mjs
+          grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" tools/postbuild-player-3d-unified-20261002.mjs
           grep -q "PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002" tools/postbuild-player-3d-unified-20261002.mjs
           grep -q "const PLAYER_ANIM_TIMING=" tools/postbuild-player-3d-unified-20261002.mjs
           grep -q "PPA_AI_TRAINING_SPRITE_SOURCE_CLEANUP_20261002" tools/postbuild-player-3d-unified-20261002.mjs
+          grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "syncLocalFromGame(now);" gateway/player-3d-unified-runtime.js
+          grep -q "threeInitPromise" gateway/player-3d-unified-runtime.js
+          ! grep -q "e.kind==='local'?500:1800" gateway/player-3d-unified-runtime.js
+          ! grep -q "__PPA3D_LOCAL_PENDING" gateway/player-3d-unified-runtime.js
           test -e gateway/dungeon-mob-events.js
           test -e gateway/dungeon60-dragon.js
           test -e gateway/boss-drop-boost.js
@@ -54,13 +61,19 @@ jobs:
       - name: Verify unified Player3D and protected gameplay systems after build
         run: |
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
-          grep -q "unified-v2-world" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v3-runtime-owned-local" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "syncLocalFromGame(now);" public/game/player-3d-unified-runtime.js
+          grep -q "threeInitPromise" public/game/player-3d-unified-runtime.js
+          ! grep -q "e.kind==='local'?500:1800" public/game/player-3d-unified-runtime.js
+          ! grep -q "__PPA3D_LOCAL_PENDING" public/game/player-3d-unified-runtime.js
           grep -q "__PPA_REMOTE_PLAYER3D_DISPATCH_V1" public/game/remote-player-3d-dispatch.js
-          grep -q "player-3d-unified-runtime.js?v=20261002u7" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261003u9" public/index.html
           grep -q "remote-player-3d-dispatch.js?v=20261002u5" public/index.html
           grep -q "PPA_PLAYER3D_LOCAL_ONLY_20261002" public/index.html
+          grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" public/index.html
           grep -q "PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002" public/index.html
-          grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
+          ! grep -q "__PPA3D_LOCAL_PENDING" public/index.html
           grep -q "const PLAYER_ANIM_TIMING=" public/index.html
           grep -q "function playerClassKey()" public/index.html
           grep -q "playerAnimTiming('attack')" public/index.html
@@ -86,6 +99,7 @@ jobs:
           if(a<0)throw new Error('drawPlayer missing');
           const body=html.slice(a,a+1200);
           if(!body.includes('PPA_PLAYER3D_LOCAL_ONLY_20261002'))throw new Error('drawPlayer is not Player3D-only');
-          for(const bad of ['drawImage','playerUses','visualBody','phoneCharacter','cx.ellipse','PT.push'])if(body.includes(bad))throw new Error('legacy local renderer token near drawPlayer: '+bad);
-          console.log('verified: unified Player3D owns real players; Stage 5A2 AI primitive path and mob/boss systems preserved');
+          if(!body.includes('PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003'))throw new Error('drawPlayer compatibility hook lacks runtime ownership marker');
+          for(const bad of ['drawImage','playerUses','visualBody','phoneCharacter','cx.ellipse','PT.push','__PPA3D_LOCAL_PENDING','worldX','worldY','PPA_PLAYER3D.local'])if(body.includes(bad))throw new Error('legacy/local lifecycle token near drawPlayer: '+bad);
+          console.log('verified: unified Player3D runtime owns real local players; Stage 5A2 AI primitive path and mob/boss systems preserved');
           NODE
