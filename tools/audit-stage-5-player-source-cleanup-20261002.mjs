@@ -76,6 +76,14 @@ for(let i=787;i<bl.length;i++){
 for(const [n,l] of afterExternalize)console.log('SOURCE_REF_AFTER_EXTERNALIZE',n,l.slice(0,300));
 console.log('SOURCE_REFS_AFTER_EXTERNALIZE',afterExternalize.length);
 
+const buildLegacyTerms=['SPR_IDLE','GNOME_IDLE_SRC','imgGnomeIdle','GNOME_ANIM','playerAnimDef','playerUsesGnomeSprites','v174AiSpriteCfg','v174AiDirIndex','v174DrawAiTrainingFighter','function drawPlayer(){','const RESOURCES=['];
+for(const term of buildLegacyTerms){
+  const hits=[];
+  for(let i=0;i<bl.length;i++)if(bl[i].includes(term))hits.push([i+1,bl[i].trim()]);
+  console.log('BUILD_LEGACY_TERM',JSON.stringify(term),'hits='+hits.length);
+  for(const [n,l] of hits)console.log('BUILD_LEGACY_HIT',n,l.slice(0,300));
+}
+
 // Show compact source contexts around the key legacy blocks without dumping embedded images.
 const sourceLines=source.split('\n');
 for(const needle of ['const SPR_IDLE=','const GNOME_IDLE_SRC=','const RESOURCES=[','function playerAnimDef(name){','function drawPlayer(){','function v174AiSpriteCfg(e){','function v174DrawAiTrainingFighter(e,sx,sy){']){
