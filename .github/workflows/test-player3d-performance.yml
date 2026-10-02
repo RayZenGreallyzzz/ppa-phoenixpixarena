@@ -15,7 +15,7 @@ jobs:
           node-version: '24'
       - run: npm install
       - run: node --check gateway/player-3d-unified-runtime.js
-      - name: Verify Stage 4A and 4B source invariants
+      - name: Verify Stage 4A, 4B and idle-yaw source invariants
         run: |
           grep -q "const viewState={w:0,h:0};" gateway/player-3d-unified-runtime.js
           grep -q "const mapState={ready:false" gateway/player-3d-unified-runtime.js
@@ -29,6 +29,9 @@ jobs:
           grep -q "applyHidden(e,wallNow);" gateway/player-3d-unified-runtime.js
           grep -q "drawHud(e,wallNow);" gateway/player-3d-unified-runtime.js
           grep -q "if(e.head)e.head.getWorldPosition(scratchHead);" gateway/player-3d-unified-runtime.js
+          grep -q "if(e.hasMotionYaw&&!attack)return e.lastMotionYaw;" gateway/player-3d-unified-runtime.js
+          grep -q "if(e.hasMotionYaw&&!remoteAttack)return e.lastMotionYaw;" gateway/player-3d-unified-runtime.js
+          grep -q "return now<e.movingUntil?'run':'idle';" gateway/player-3d-unified-runtime.js
           ! grep -q "e.root.updateWorldMatrix(true,true);" gateway/player-3d-unified-runtime.js
           ! grep -q "new THREE.Vector2(px/view.w" gateway/player-3d-unified-runtime.js
           ! grep -q "ray.ray.intersectPlane(new THREE.Plane" gateway/player-3d-unified-runtime.js
@@ -50,6 +53,8 @@ jobs:
           grep -q "const wallNow=Date.now();" public/game/player-3d-unified-runtime.js
           grep -q "applyHidden(e,wallNow);" public/game/player-3d-unified-runtime.js
           grep -q "drawHud(e,wallNow);" public/game/player-3d-unified-runtime.js
+          grep -q "if(e.hasMotionYaw&&!attack)return e.lastMotionYaw;" public/game/player-3d-unified-runtime.js
+          grep -q "if(e.hasMotionYaw&&!remoteAttack)return e.lastMotionYaw;" public/game/player-3d-unified-runtime.js
           ! grep -q "e.root.updateWorldMatrix(true,true);" public/game/player-3d-unified-runtime.js
           ! grep -q "new THREE.Vector2(px/view.w" public/game/player-3d-unified-runtime.js
           grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
