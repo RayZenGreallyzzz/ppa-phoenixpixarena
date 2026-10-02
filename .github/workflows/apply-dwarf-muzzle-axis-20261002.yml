@@ -1,41 +1,16 @@
-name: Diagnose dwarf muzzle axis 20261002
+name: Baseline build check 20261002
 on:
   push:
     branches:
       - main
-permissions:
-  contents: write
 jobs:
-  diagnose:
-    if: contains(github.event.head_commit.message, 'Diagnose dwarf muzzle axis build')
+  verify:
+    if: contains(github.event.head_commit.message, 'Run clean baseline build check')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Apply targeted patch
-        run: node tools/patch-dwarf-muzzle-axis-20261002.mjs
-      - name: Syntax checks
-        run: |
-          node --check gateway/player-3d-unified-runtime.js
-          node --check tools/postbuild-player-3d-unified-20261002.mjs
-          node --check build.mjs
-      - name: Install build dependencies without lockfile
-        run: npm install --no-audit --no-fund --ignore-scripts --package-lock=false
-      - name: Capture production build output
-        shell: bash
-        run: |
-          set +e
-          npm run build > dwarf-muzzle-build.log 2>&1
-          code=$?
-          echo "BUILD_EXIT_CODE=$code" >> dwarf-muzzle-build.log
-          exit 0
-      - name: Save diagnostic only
-        run: |
-          git checkout -- gateway/player-3d-unified-runtime.js tools/postbuild-player-3d-unified-20261002.mjs build.mjs
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dwarf-muzzle-build.log
-          git commit -m "Save dwarf muzzle build diagnostic"
-          git push
+      - run: npm install --no-audit --no-fund --ignore-scripts --package-lock=false
+      - run: npm run build
