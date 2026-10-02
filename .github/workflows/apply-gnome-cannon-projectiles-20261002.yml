@@ -1,0 +1,75 @@
+name: Apply gnome cannon projectile refactor
+
+on:
+  push:
+    branches: [fix-gnome-cannon-projectiles-20261002]
+    paths:
+      - 'tools/apply-gnome-cannon-runtime-fix-20261002.mjs'
+      - 'tools/source-gnome-cannon-fix-20261002.mjs'
+      - '.github/workflows/apply-gnome-cannon-projectiles-20261002.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix-gnome-cannon-projectiles-20261002
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply guarded runtime/source integration
+        run: node tools/apply-gnome-cannon-runtime-fix-20261002.mjs
+      - name: Syntax-check modified runtimes
+        run: |
+          node --check gateway/player-3d-unified-runtime.js
+          node --check gateway/remote-combat-fx.js
+          node --check gateway/realtime-client.js
+          node --check build.mjs
+          node --check tools/source-gnome-cannon-fix-20261002.mjs
+      - name: Install dependencies
+        run: npm install
+      - name: Full production build
+        run: npm run build
+      - name: Verify final production cannon path
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('public/index.html','utf8');
+          const p3=fs.readFileSync('public/game/player-3d-unified-runtime.js','utf8');
+          const fx=fs.readFileSync('public/game/remote-combat-fx.js','utf8');
+          const rt=fs.readFileSync('public/game/realtime-client.js','utf8');
+          const need=(ok,msg)=>{if(!ok)throw new Error(msg)};
+          need(html.includes('function basicAttackDamage(target,critMul)'),'missing final basicAttackDamage');
+          need(html.includes("typeof api.localMuzzle==='function'"),'missing final PvE Player3D muzzle bridge');
+          need(html.includes('pendingMin>=Math.max(1,Number(target.hp)||0)'),'missing final lethal reservation');
+          need(p3.includes("getObjectByName('DwarfCannon')"),'missing DwarfCannon muzzle resolver');
+          need(p3.includes('localMuzzle:localMuzzle'),'missing Player3D muzzle export');
+          need(fx.includes('window.PPA_LOCAL_COMBAT_FX=function(d)'),'missing local projectile FX API');
+          need(rt.includes('function emitCombatFx(kind,sx,sy,tx,ty,animMs)'),'missing shared realtime FX emitter');
+          need((rt.match(/emitCombatFx\(kind,sx,sy,rp\.x,rp\.y,420\);/g)||[]).length===2,'PK/Arena FX not unified');
+          for(const f of ['dungeon-mob-events.js','dungeon60-dragon.js','boss-drop-boost.js','clan-boss-loot.js'])need(fs.existsSync('public/game/'+f),'mob/boss guard missing '+f);
+          console.log('Final cannon path + mob/boss guards: OK');
+          NODE
+      - name: Commit only guarded runtime/build changes
+        run: |
+          rm -f package-lock.json
+          allowed='build.mjs gateway/player-3d-unified-runtime.js gateway/remote-combat-fx.js gateway/realtime-client.js'
+          changed="$(git diff --name-only)"
+          echo "$changed"
+          for f in $changed; do
+            case " $allowed " in
+              *" $f "*) ;;
+              *) echo "Unexpected changed file: $f"; exit 1;;
+            esac
+          done
+          test -n "$changed"
+          git config user.name 'PPA Build Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add build.mjs gateway/player-3d-unified-runtime.js gateway/remote-combat-fx.js gateway/realtime-client.js
+          git commit -m 'Fix gnome cannon projectile origin and overkill queue'
+          git push origin HEAD:fix-gnome-cannon-projectiles-20261002
