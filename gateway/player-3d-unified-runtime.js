@@ -372,9 +372,9 @@
     if(a==='attack')return'attack';
     return now<e.movingUntil||a==='run'?'run':'idle';
   }
-  function applyHidden(e){
+  function applyHidden(e,wallNow){
     if(!e.model)return;
-    const hidden=e.kind==='remote'&&Number(e.data&&e.data.hiddenUntil)>Date.now();
+    const hidden=e.kind==='remote'&&Number(e.data&&e.data.hiddenUntil)>wallNow;
     if(e.hiddenState===hidden)return;
     e.hiddenState=hidden;
     e.model.traverse(o=>{
@@ -407,11 +407,11 @@
     hx.font=font;hx.textAlign='center';hx.textBaseline='bottom';hx.lineJoin='round';hx.lineWidth=2.4;
     hx.strokeStyle='rgba(18,8,5,.92)';hx.strokeText(text,x,y);hx.fillStyle=fill;hx.fillText(text,x,y);
   }
-  function drawHud(e){
+  function drawHud(e,wallNow){
     if(!hx||!e.hud)return;
     const h=e.hud,remote=e.kind==='remote',r=e.data||{};
     hx.save();
-    if(remote&&Number(r.hiddenUntil)>Date.now())hx.globalAlpha=.38;
+    if(remote&&Number(r.hiddenUntil)>wallNow)hx.globalAlpha=.38;
     let y=h.headY-6;
     if(remote&&Number(r.mhp)>0){
       const bw=36;hx.fillStyle='rgba(0,0,0,.68)';hx.fillRect(h.headX-bw/2,y-7,bw,4);
@@ -429,6 +429,7 @@
     if(!THREE||!renderer||!scene||!camera)return;
     const view=resize();if(!view)return;
     prepareWorldMap();
+    const wallNow=Date.now();
     const dt=Math.max(0,Math.min(.05,(now-lastFrameAt)/1000));lastFrameAt=now;
     hx.clearRect(0,0,view.w,view.h);
 
@@ -449,10 +450,12 @@
 
       switchAnim(e,desiredAnim(e,now));
       try{if(e.mixer)e.mixer.update(dt)}catch(_){}
-      applyHidden(e);
-      e.root.updateWorldMatrix(true,true);
+      applyHidden(e,wallNow);
+      // Head.getWorldPosition() updates only the required parent chain for HUD.
+      // The renderer updates the full scene graph later during render(), so a
+      // forced full-tree update here was duplicate work for every visible GLB.
       updateHudAnchor(e,view,mapped.z);
-      drawHud(e);
+      drawHud(e,wallNow);
     }
 
     try{renderer.render(scene,camera)}catch(_){}
