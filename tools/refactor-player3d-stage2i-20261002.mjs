@@ -27,7 +27,7 @@ fs.unlinkSync(mobile);
 
 const build='build.mjs';
 replaceExact(build,"const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');","const remotePlayer3dDispatch=fs.readFileSync(path.join(ROOT,'gateway/remote-player-3d-dispatch.js'),'utf8');");
-replaceExact(build,"\nconst mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');",'');
+replaceExact(build,"const mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');\n",'');
 replaceExact(build,"if (remoteSprite.includes('forcedAttack') || remoteSprite.includes('__ppaAttackDir')) {","if (remotePlayer3dDispatch.includes('forcedAttack') || remotePlayer3dDispatch.includes('__ppaAttackDir')) {");
 replaceExact(build,"if (!mobilePerf.includes('__PPA_MOBILE_SPRITE_PERF_V2') ||\n      !mobilePerf.includes('imageCache') ||\n      !remoteSprite.includes('canvasHitMetrics(now)') ||","if (!remotePlayer3dDispatch.includes('canvasHitMetrics(now)') ||");
 replaceExact(build,"  ['gateway/mobile-sprite-performance.js','mobile-sprite-performance.js','Mobile sprite performance helper missing'],\n",'');
@@ -65,4 +65,7 @@ for(const path of [build,post,unified,preload]){
  if(s.includes('remote-sprite-renderer.js'))throw new Error(`${path}: old remote filename survived`);
 }
 if(fs.readFileSync(build,'utf8').includes('mobile-sprite-performance.js'))throw new Error('build.mjs: obsolete mobile helper survived');
-console.log('Stage 2I refactor complete: remote real-player path named as Player3D dispatch; obsolete mobile sprite wrapper removed');
+for(const protectedPath of ['gateway/dungeon-mob-events.js','gateway/dungeon60-dragon.js','gateway/boss-drop-boost.js','gateway/clan-boss-loot.js']){
+  if(!fs.existsSync(protectedPath))throw new Error('Stage 2I touched protected mob/boss path: '+protectedPath);
+}
+console.log('Stage 2I refactor complete: player-only cleanup; mob/boss systems untouched');
