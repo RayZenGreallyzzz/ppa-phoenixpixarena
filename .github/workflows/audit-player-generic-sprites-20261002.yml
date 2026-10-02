@@ -1,0 +1,18 @@
+name: Audit Stage 2H generic player sprites
+on:
+  push:
+    branches:
+      - player-sprite-stage2h-20261002
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - run: npm run build
+      - run: node tools/audit-player-generic-sprites-20261002.mjs
