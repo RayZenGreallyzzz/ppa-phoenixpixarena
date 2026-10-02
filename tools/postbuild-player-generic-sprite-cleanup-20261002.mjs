@@ -59,11 +59,13 @@ if(!html.includes('PPA_ONLINE_STRESS')) throw new Error('Stage 2K cleanup: stres
 const idleUrl=genericAssetPaths[0];
 const legacyBg=`background-image:url(&quot;${idleUrl}&quot;);`;
 if(count(html,legacyBg)!==1) throw new Error(`Stage 2K cleanup: expected one obsolete assassinModel idle background, got ${count(html,legacyBg)}`);
-if(!html.includes('#assassinModel{ display:none;')) throw new Error('Stage 2K cleanup: legacy assassinModel CSS anchor missing');
+const assassinCssRe=/#assassinModel\s*\{\s*display\s*:\s*none\s*;/;
+const assassinCssMatches=html.match(new RegExp(assassinCssRe.source,'g'))||[];
+if(assassinCssMatches.length!==1) throw new Error(`Stage 2K cleanup: expected one legacy assassinModel hidden CSS anchor, got ${assassinCssMatches.length}`);
 if(!html.includes("var old=doc.getElementById('assassinModel');if(old)old.style.display='none'")) throw new Error('Stage 2K cleanup: current portrait runtime no longer proves assassinModel is obsolete');
 if(!html.includes("img.id='ppaClassPortraitV196'")) throw new Error('Stage 2K cleanup: current replacement character portrait missing');
 html=html.replace(legacyBg,'background-image:none;');
-html=html.replace('#assassinModel{ display:none;','#assassinModel{ display:none!important;');
+html=html.replace(assassinCssRe,'#assassinModel{display:none!important;');
 
 fs.writeFileSync(htmlPath,html,'utf8');
 
