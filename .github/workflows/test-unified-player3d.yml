@@ -24,6 +24,7 @@ jobs:
       - run: node --check gateway/player-3d-unified-runtime.js
       - run: node --check gateway/remote-player-3d-dispatch.js
       - run: node --check tools/postbuild-player-3d-unified-20261002.mjs
+      - run: node --check tools/postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs
       - run: test ! -e gateway/remote-player-3d-adapter.js
       - run: test ! -e tools/postbuild-remote-player-3d-20261001.mjs
       - run: test ! -e gateway/remote-player-3d-runtime.js
@@ -45,7 +46,7 @@ jobs:
           test -e gateway/boss-drop-boost.js
           test -e gateway/clan-boss-loot.js
       - run: npm run build
-      - name: Verify Player3D exclusively owns local body and HUD
+      - name: Verify Player3D owns real players and AI Training no longer carries sprite metadata
         run: |
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
           grep -q "unified-v2-world" public/game/player-3d-unified-runtime.js
@@ -65,9 +66,15 @@ jobs:
           grep -q "if(playerIsClass('gnome')){ try{gnomeFireCannonball()}" public/index.html
           grep -q "else if(playerIsClass('archer')){ try{archerFireArrow()}" public/index.html
           ! grep -q "playerAnimDef(" public/index.html
-          grep -q "function v174AiSpriteCfg(e){" public/index.html
-          grep -Fq "GNOME_ANIM[a]" public/index.html
-          grep -Fq "PALADIN_ANIM[a]" public/index.html
+          ! grep -q "function v174AiSpriteCfg(e){" public/index.html
+          ! grep -q "function v174AiDirIndex(e){" public/index.html
+          grep -q "const V174_AI_CLASS=" public/index.html
+          grep -q "function v174SpawnAiTrainingFighter" public/index.html
+          grep -q "PPA_AI_TRAINING_ACTIVE" public/index.html
+          grep -q "function v174DrawAiTrainingFighter(e,sx,sy){" public/index.html
+          grep -q "isAiFighter:true" public/index.html
+          grep -q "PPA_ONLINE_STRESS" public/index.html
+          grep -Fq "cx.fillStyle='#9d63db';cx.beginPath();cx.arc(sx,sy-10,aiVisualSize*.35,0,Math.PI*2);cx.fill();" public/index.html
           test -e public/game/dungeon-mob-events.js
           test -e public/game/dungeon60-dragon.js
           test -e public/game/boss-drop-boost.js
@@ -79,9 +86,10 @@ jobs:
             'playerUsesGnomeSprites','playerUsesArcherSprites','playerUsesAssassinSprites','playerUsesTankSprites',
             'playerUsesBerserkerSprites','playerUsesPriestSprites','playerUsesMageSprites','playerUsesPaladinSprites',
             'playerUsesEightDirSprites','playerDir8','dir8Canonical','ppaPlayerNickname','ppaPlayerVisualTopScreenY',
-            'ppaPlayerClanName','drawPlayerNickname'
+            'ppaPlayerClanName','drawPlayerNickname','v174AiSpriteCfg','v174AiDirIndex',
+            'GNOME_ANIM','ARCHER_ANIM','ASSASSIN_ANIM','TANK_ANIM','BERSERKER_ANIM','PRIEST_ANIM','MAGE_ANIM','PALADIN_ANIM'
           ];
-          for(const name of dead)if(html.includes(name))throw new Error('dead local sprite/HUD symbol survived: '+name);
+          for(const name of dead)if(html.includes(name))throw new Error('dead player/AI sprite symbol survived: '+name);
           const sig='function drawPlayer(){';
           const a=html.indexOf(sig);
           if(a<0)throw new Error('drawPlayer missing');
@@ -89,5 +97,6 @@ jobs:
           if(marker<0||marker>a+1200)throw new Error('drawPlayer is not canonical 3D-only');
           const windowText=html.slice(a,a+1200);
           for(const bad of ['drawImage','playerUses','visualBody','phoneCharacter','cx.ellipse','PT.push'])if(windowText.includes(bad))throw new Error('legacy local renderer token near drawPlayer: '+bad);
-          console.log('verified: Player3D dispatch is canonical; obsolete Paladin sprite postbuild absent; stress-bot path intact; mob/boss runtimes preserved');
+          for(const keep of ['const PLAYER_ANIM_TIMING=','const V174_AI_CLASS=','function v174SpawnAiTrainingFighter','PPA_AI_TRAINING_ACTIVE','isAiFighter:true','PPA_ONLINE_STRESS'])if(!html.includes(keep))throw new Error('live gameplay/debug feature missing: '+keep);
+          console.log('verified: real players are Player3D-only; AI Training combat preserved on primitive body; online stress and mob/boss runtimes preserved');
           NODE
