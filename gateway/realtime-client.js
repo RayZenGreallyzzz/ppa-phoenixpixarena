@@ -453,7 +453,7 @@
     if(wantD&&!(curD&&curD.instance&&curD.base===wantD.base))return;
     var now=Date.now();if(!force&&now-RT.lastMove<220)return;
     try{
-      var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),dead=(P.dead||h<=0)?1:0,f=Number(P.face)||1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm(),c=selfClass();
+      var x=Number(P.x)||0,y=Number(P.y)||0,h=Math.max(0,Math.round(Number(P.hp)||0)),m=Math.max(1,Math.round(Number(P.mhp)||1)),dead=(P.dead||h<=0)?1:0,_face=Number(P.face),f=Number.isFinite(_face)?_face:1,a=String(P.anim||'idle').slice(0,12),l=selfLevel(),b=selfBm(),c=selfClass();
       var atk=Math.max(1,Number(P.atk)||1),df=Math.max(0,Number(P.def)||0),ar=Math.max(60,Number(P.attackRange)||60),cr=Math.max(0,Number(P.crit)||0),cd=Math.max(100,Number(P.critDmg)||180),as=Math.max(.35,Number(P.atkSpd)||1);
       var changed=RT.lastX===null||Math.abs(x-RT.lastX)>.35||Math.abs(y-RT.lastY)>.35||h!==RT.lastHp||m!==RT.lastMhp||dead!==RT.lastDead||f!==RT.lastFace||a!==RT.lastAnim||l!==RT.lastLevel||b!==RT.lastBm||atk!==RT.lastAtk||df!==RT.lastDef||ar!==RT.lastRange||cr!==RT.lastCrit||cd!==RT.lastCritDmg||as!==RT.lastAtkSpd;
       if(!force&&!changed&&now-RT.lastMove<900)return;
@@ -541,7 +541,7 @@
     if(m.type==='hello'){
       RT.selfPid=String(m.pid||RT.selfPid||'');
       try{if(typeof PPA_ONLINE!=='undefined'){PPA_ONLINE.selfId=RT.selfPid||String(PPA_ONLINE.selfId||'');PPA_ONLINE.selfName=String(m.name||selfName())}}catch(_){}
-      sendRoom(true);sendMove(true);return;
+      sendRoom(true);sendMove(true);try{send({type:'player-pk-toggle',enabled:pkActive()})}catch(_){};return;
     }
     if(m.type==='room-assigned'){
       var desired=dungeonInfo(rawRoom()),base=canonicalRoom(m.base||'');
@@ -954,13 +954,8 @@
     }catch(_){return null}
   }
   function pkChooseBasicKind(){
-    var mob=pkNearestMob(),pl=pkNearestPlayerInfo();
-    if(!pl){RT.pkTargetId='';return'mob'}
-    if(!mob){
-      RT.pkTargetId=String(pl.target&&(pl.target.id||pl.target.i||pl.target.__ppaPid)||'');
-      return'player';
-    }
-    if(pl.distance<mob.distance){
+    var pl=pkNearestPlayerInfo();
+    if(pl){
       RT.pkTargetId=String(pl.target&&(pl.target.id||pl.target.i||pl.target.__ppaPid)||'');
       return'player';
     }
