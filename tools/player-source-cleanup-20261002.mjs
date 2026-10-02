@@ -120,10 +120,17 @@ export function stripDeadPlayerSpriteAssets(input){
   // class images were null. Make that primitive body canonical in source and
   // remove its dead sprite selectors/metadata before any postbuild executes.
   for(const keep of ['function playerAnimDef(name){','function drawPlayer(){','const V174_AI_CLASS=','function v174SpawnAiTrainingFighter','PPA_AI_TRAINING_ACTIVE','function v174DrawAiTrainingFighter(e,sx,sy){','isAiFighter:true','PPA_ONLINE_STRESS'])if(!source.includes(keep))throw new Error('Stage 5A2 source cleanup: protected anchor missing '+keep);
-  for(const name of CLASS_ANIMS){if(count(source,name)!==2||!source.slice(source.indexOf(`const ${name}=`),source.indexOf('};',source.indexOf(`const ${name}=`))+2).includes('img:null'))throw new Error('Stage 5A2 source cleanup: class metadata invalid '+name)}
-  for(const name of AI_SIMPLE.slice(0,-2)){if(count(source,name)!==2)throw new Error(`Stage 5A2 source cleanup: ${name} expected declaration+selector use`)}
-  for(const name of AI_SIMPLE.slice(-2)){if(count(source,name)!==1)throw new Error(`Stage 5A2 source cleanup: ${name} expected definition-only`)}
-  if(count(source,'v174AiDirIndex')!==2||count(source,'v174AiSpriteCfg')!==2)throw new Error('Stage 5A2 source cleanup: AI selector counts changed');
+  for(const name of CLASS_ANIMS){
+    const prefix=`const ${name}=`,start=source.indexOf(prefix);
+    if(start<0||source.indexOf(prefix,start+prefix.length)>=0)throw new Error('Stage 5A2 source cleanup: class metadata declaration invalid '+name);
+    const open=source.indexOf('{',start),close=balancedEnd(source,open),block=source.slice(start,close+1);
+    if(!block.includes('img:null'))throw new Error('Stage 5A2 source cleanup: class metadata was not image-neutralized '+name);
+  }
+  for(const name of AI_SIMPLE){
+    const re=new RegExp(`const\\s+${name}\\s*=\\s*[^;]+;`,'g'),hits=source.match(re)||[];
+    if(hits.length!==1)throw new Error(`Stage 5A2 source cleanup: ${name} expected one declaration, got ${hits.length}`);
+  }
+  if(count(source,'function v174AiDirIndex(e){')!==1||count(source,'function v174AiSpriteCfg(e){')!==1)throw new Error('Stage 5A2 source cleanup: AI selector definitions changed');
 
   const drawSig='function v174DrawAiTrainingFighter(e,sx,sy){',drawStart=source.indexOf(drawSig),drawOpen=source.indexOf('{',drawStart),drawEnd=balancedEnd(source,drawOpen);
   let draw=source.slice(drawStart,drawEnd+1);
@@ -148,8 +155,9 @@ export function stripDeadPlayerSpriteAssets(input){
   for(const sym of [...GENERIC_SOURCES,...GENERIC_IMAGES])if(source.includes(sym))throw new Error('Stage 5A2 source cleanup: generic symbol survived '+sym);
   if(source.includes('const ANIM='))throw new Error('Stage 5A2 source cleanup: generic ANIM survived');
   for(const url of genericUrls)if(source.includes(url))throw new Error('Stage 5A2 source cleanup: generic URL survived '+url);
-  const dead=['v174AiSpriteCfg','v174AiDirIndex',...CLASS_ANIMS,...AI_SIMPLE];
-  for(const name of dead)if(source.includes(name))throw new Error('Stage 5A2 source cleanup: AI sprite metadata survived '+name);
+  for(const sig of ['function v174AiSpriteCfg(e){','function v174AiDirIndex(e){'])if(source.includes(sig))throw new Error('Stage 5A2 source cleanup: AI sprite selector definition survived '+sig);
+  for(const name of CLASS_ANIMS)if(source.includes(`const ${name}=`))throw new Error('Stage 5A2 source cleanup: class sprite metadata declaration survived '+name);
+  for(const name of AI_SIMPLE){const re=new RegExp(`const\\s+${name}\\s*=`);if(re.test(source))throw new Error('Stage 5A2 source cleanup: sprite metadata declaration survived '+name);}
   for(const bad of ['a.img','cfg.','cx.drawImage','phoneCharacterDrawHeight'])if(draw.includes(bad))throw new Error('Stage 5A2 source cleanup: AI sprite renderer token survived '+bad);
   for(const keep of ['function playerAnimDef(name){','function drawPlayer(){','const V174_AI_CLASS=','function v174SpawnAiTrainingFighter','PPA_AI_TRAINING_ACTIVE','function v174DrawAiTrainingFighter(e,sx,sy){','isAiFighter:true','PPA_ONLINE_STRESS',AI_PRIMITIVE])if(!source.includes(keep))throw new Error('Stage 5A2 source cleanup: protected feature damaged '+keep);
 
