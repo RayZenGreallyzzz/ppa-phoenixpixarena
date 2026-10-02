@@ -17,7 +17,7 @@ for(const sym of genericSources){
   if(n!==1) throw new Error(`Stage 2K cleanup: ${sym} expected declaration-only count 1, got ${n}`);
   const re=new RegExp(`const\\s+${sym}\\s*=\\s*(['\"])([^'\"]+\\.png)\\1\\s*;`);
   const m=html.match(re);
-  if(!m) throw new Error(`Stage 2K cleanup: ${sym} externalized PNG declaration missing`);
+  if(!m) throw new Error(`Stage 2K cleanup: ${sym} PNG declaration missing`);
   genericAssetPaths.push(m[2]);
 }
 for(const sym of genericImages){
@@ -52,6 +52,19 @@ for(const keep of ['GNOME_ANIM','ARCHER_ANIM','ASSASSIN_ANIM','TANK_ANIM','BERSE
 }
 if(!html.includes('PPA_ONLINE_STRESS')) throw new Error('Stage 2K cleanup: stress tool missing');
 
+// The only surviving generic idle-sheet reference was the obsolete hidden
+// #assassinModel portrait fallback. The current portrait runtime explicitly
+// hides that element and renders #ppaClassPortraitV196 instead. Keep the
+// legacy element inert for compatibility, but permanently detach its sprite.
+const idleUrl=genericAssetPaths[0];
+const legacyBg=`background-image:url(&quot;${idleUrl}&quot;);`;
+if(count(html,legacyBg)!==1) throw new Error(`Stage 2K cleanup: expected one obsolete assassinModel idle background, got ${count(html,legacyBg)}`);
+if(!html.includes('#assassinModel{ display:none;')) throw new Error('Stage 2K cleanup: legacy assassinModel CSS anchor missing');
+if(!html.includes("var old=doc.getElementById('assassinModel');if(old)old.style.display='none'")) throw new Error('Stage 2K cleanup: current portrait runtime no longer proves assassinModel is obsolete');
+if(!html.includes("img.id='ppaClassPortraitV196'")) throw new Error('Stage 2K cleanup: current replacement character portrait missing');
+html=html.replace(legacyBg,'background-image:none;');
+html=html.replace('#assassinModel{ display:none;','#assassinModel{ display:none!important;');
+
 fs.writeFileSync(htmlPath,html,'utf8');
 
 function textFiles(dir,out=[]){
@@ -62,54 +75,34 @@ function textFiles(dir,out=[]){
   }
   return out;
 }
-function contexts(text,needle,radius=180,limit=8){
-  const out=[];
-  let p=0;
-  while((p=text.indexOf(needle,p))!==-1){
-    out.push(text.slice(Math.max(0,p-radius),Math.min(text.length,p+needle.length+radius)).replace(/\s+/g,' '));
-    p+=Math.max(1,needle.length);
-    if(out.length>=limit)break;
-  }
-  return out;
-}
-
-const assassinModelCount=count(html,'assassinModel');
-console.log(`Stage 2K assassinModel occurrences after generic block removal: ${assassinModelCount}`);
-for(const hit of contexts(html,'assassinModel',340,16)) console.log(`Stage 2K assassinModel context: ${hit}`);
-
 const texts=textFiles(publicDir);
 const uniqueAssets=[...new Set(genericAssetPaths)];
-if(uniqueAssets.length!==3) throw new Error(`Stage 2K cleanup: expected 3 unique generic player PNGs, got ${uniqueAssets.length}`);
+if(uniqueAssets.length!==3) throw new Error(`Stage 2K cleanup: expected 3 unique generic player PNG sources, got ${uniqueAssets.length}`);
 
-const survivingRefs=[];
-for(const relRaw of uniqueAssets){
-  const rel=String(relRaw).replace(/^\.\//,'');
+for(const source of uniqueAssets){
   for(const p of texts){
     const t=fs.readFileSync(p,'utf8');
-    const needles=[relRaw,rel].filter((v,i,a)=>v&&a.indexOf(v)===i);
-    for(const needle of needles){
-      if(!t.includes(needle))continue;
-      const hits=contexts(t,needle,220,8);
-      survivingRefs.push({asset:relRaw,file:path.relative(publicDir,p),needle,hits});
-      console.log(`Stage 2K surviving reference: asset=${relRaw} file=${path.relative(publicDir,p)} needle=${needle}`);
-      for(const hit of hits) console.log(`Stage 2K context: ${hit}`);
-    }
+    if(t.includes(source)) throw new Error(`Stage 2K cleanup: generic player PNG source still referenced in ${path.relative(publicDir,p)}: ${source}`);
   }
 }
-if(survivingRefs.length){
-  throw new Error(`Stage 2K cleanup: ${survivingRefs.length} surviving generic player PNG reference location(s) found; refusing physical deletion`);
-}
 
-let deleted=0;
-for(const relRaw of uniqueAssets){
-  const rel=String(relRaw).replace(/^\.\//,'');
+let localDeleted=0;
+let remoteDetached=0;
+for(const source of uniqueAssets){
+  if(/^https?:\/\//i.test(source)){
+    remoteDetached++;
+    console.log(`Stage 2K detached obsolete remote generic player PNG: ${source}`);
+    continue;
+  }
+  const rel=String(source).replace(/^\.\//,'').replace(/^\//,'');
   const abs=path.join(publicDir,rel);
-  if(!fs.existsSync(abs)) throw new Error(`Stage 2K cleanup: expected externalized generic player PNG missing before deletion: ${abs}`);
-  fs.unlinkSync(abs);
-  if(fs.existsSync(abs)) throw new Error(`Stage 2K cleanup: failed to delete generic player PNG: ${abs}`);
-  deleted++;
-  console.log(`Stage 2K removed orphan generic player PNG: ${relRaw}`);
+  if(fs.existsSync(abs)){
+    fs.unlinkSync(abs);
+    if(fs.existsSync(abs)) throw new Error(`Stage 2K cleanup: failed to delete local generic player PNG: ${abs}`);
+    localDeleted++;
+    console.log(`Stage 2K removed orphan local generic player PNG: ${source}`);
+  }
 }
 
-if(deleted!==3) throw new Error(`Stage 2K cleanup: expected to delete 3 generic player PNGs, deleted ${deleted}`);
-console.log('Stage 2K cleanup: generic legacy player SPR_IDLE/RUN/ATK + imgIdle/imgRun/imgAtk + ANIM block removed; 3 orphan generic player PNGs physically deleted; stress/debug metadata preserved');
+if(localDeleted+remoteDetached!==3) throw new Error(`Stage 2K cleanup: expected 3 generic player PNG sources handled, got ${localDeleted+remoteDetached}`);
+console.log(`Stage 2K cleanup: generic SPR_IDLE/RUN/ATK + imgIdle/imgRun/imgAtk + ANIM removed; ${remoteDetached} obsolete remote PNG sources detached, ${localDeleted} local orphan PNGs deleted; assassinModel sprite fallback disabled; stress/debug metadata preserved`);
