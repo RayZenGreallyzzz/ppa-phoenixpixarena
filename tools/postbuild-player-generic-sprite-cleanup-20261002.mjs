@@ -62,18 +62,42 @@ function textFiles(dir,out=[]){
   }
   return out;
 }
+function contexts(text,needle,radius=180){
+  const out=[];
+  let p=0;
+  while((p=text.indexOf(needle,p))!==-1){
+    out.push(text.slice(Math.max(0,p-radius),Math.min(text.length,p+needle.length+radius)).replace(/\s+/g,' '));
+    p+=Math.max(1,needle.length);
+    if(out.length>=8)break;
+  }
+  return out;
+}
 const texts=textFiles(publicDir);
 const uniqueAssets=[...new Set(genericAssetPaths)];
 if(uniqueAssets.length!==3) throw new Error(`Stage 2K cleanup: expected 3 unique generic player PNGs, got ${uniqueAssets.length}`);
 
+const survivingRefs=[];
+for(const relRaw of uniqueAssets){
+  const rel=String(relRaw).replace(/^\.\//,'');
+  for(const p of texts){
+    const t=fs.readFileSync(p,'utf8');
+    const needles=[relRaw,rel].filter((v,i,a)=>v&&a.indexOf(v)===i);
+    for(const needle of needles){
+      if(!t.includes(needle))continue;
+      const hits=contexts(t,needle);
+      survivingRefs.push({asset:relRaw,file:path.relative(publicDir,p),needle,hits});
+      console.log(`Stage 2K surviving reference: asset=${relRaw} file=${path.relative(publicDir,p)} needle=${needle}`);
+      for(const hit of hits) console.log(`Stage 2K context: ${hit}`);
+    }
+  }
+}
+if(survivingRefs.length){
+  throw new Error(`Stage 2K cleanup: ${survivingRefs.length} surviving generic player PNG reference location(s) found; refusing physical deletion`);
+}
+
 let deleted=0;
 for(const relRaw of uniqueAssets){
   const rel=String(relRaw).replace(/^\.\//,'');
-  const stillUsed=texts.some(p=>{
-    const t=fs.readFileSync(p,'utf8');
-    return t.includes(relRaw)||t.includes(rel);
-  });
-  if(stillUsed) throw new Error(`Stage 2K cleanup: generic player PNG still referenced after cleanup: ${relRaw}`);
   const abs=path.join(publicDir,rel);
   if(!fs.existsSync(abs)) throw new Error(`Stage 2K cleanup: expected externalized generic player PNG missing before deletion: ${abs}`);
   fs.unlinkSync(abs);
