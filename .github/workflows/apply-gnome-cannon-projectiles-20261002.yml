@@ -64,6 +64,9 @@ jobs:
       - name: Commit only guarded runtime/build changes
         run: |
           rm -f package-lock.json
+          # Existing build/postbuild tooling may normalize this server source in the
+          # runner worktree. Cannon refactor is client/build-only; never include it.
+          git restore -- src/realtime-stable.js
           allowed='build.mjs gateway/player-3d-unified-runtime.js gateway/remote-combat-fx.js gateway/realtime-client.js'
           changed="$(git diff --name-only)"
           echo "$changed"
