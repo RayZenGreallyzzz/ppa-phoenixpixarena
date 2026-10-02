@@ -1,0 +1,34 @@
+name: Refactor Stage 4A Player3D performance
+on:
+  push:
+    branches:
+      - stage-4a-player3d-scratch-reuse-20261002
+permissions:
+  contents: write
+jobs:
+  refactor:
+    if: github.event.head_commit.message != 'Stage 4A: optimize Player3D per-frame allocations'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage-4a-player3d-scratch-reuse-20261002
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/refactor-stage-4a-player3d-perf-20261002.mjs
+      - run: node --check gateway/player-3d-unified-runtime.js
+      - name: Verify only intended runtime refactor before commit
+        run: |
+          git diff -- gateway/player-3d-unified-runtime.js
+          test -z "$(git diff --name-only | grep -v '^gateway/player-3d-unified-runtime.js$')"
+          grep -q "const viewState={w:0,h:0};" gateway/player-3d-unified-runtime.js
+          grep -q "if(e.hiddenState===hidden)return;" gateway/player-3d-unified-runtime.js
+          ! grep -q "new THREE.Vector2(px/view.w" gateway/player-3d-unified-runtime.js
+      - name: Commit runtime refactor
+        run: |
+          git config user.name "RayZenGreallyzzz"
+          git config user.email "genry.undeniable@gmail.com"
+          git add gateway/player-3d-unified-runtime.js
+          git commit -m "Stage 4A: optimize Player3D per-frame allocations"
+          git push origin HEAD:stage-4a-player3d-scratch-reuse-20261002
