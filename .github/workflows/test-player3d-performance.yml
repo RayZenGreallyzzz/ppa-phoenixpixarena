@@ -1,0 +1,51 @@
+name: Test Player3D performance invariants
+on:
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - run: node --check gateway/player-3d-unified-runtime.js
+      - name: Verify Stage 4A source invariants
+        run: |
+          grep -q "const viewState={w:0,h:0};" gateway/player-3d-unified-runtime.js
+          grep -q "const mapState={ready:false" gateway/player-3d-unified-runtime.js
+          grep -q "scratchRay=new THREE.Raycaster();" gateway/player-3d-unified-runtime.js
+          grep -q "scratchPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);" gateway/player-3d-unified-runtime.js
+          grep -q "groundResult.z=z;return groundResult;" gateway/player-3d-unified-runtime.js
+          grep -q "if(e.hiddenState===hidden)return;" gateway/player-3d-unified-runtime.js
+          grep -q "prepareWorldMap();" gateway/player-3d-unified-runtime.js
+          grep -q "projectIntoHud(e.root.position,view,h,'feetX','feetY');" gateway/player-3d-unified-runtime.js
+          ! grep -q "new THREE.Vector2(px/view.w" gateway/player-3d-unified-runtime.js
+          ! grep -q "ray.ray.intersectPlane(new THREE.Plane" gateway/player-3d-unified-runtime.js
+          ! grep -q "const p=new THREE.Vector3();e.head.getWorldPosition(p)" gateway/player-3d-unified-runtime.js
+      - name: Guard gameplay and mob boss source systems
+        run: |
+          test -e gateway/remote-player-3d-dispatch.js
+          test -e gateway/dungeon-mob-events.js
+          test -e gateway/dungeon60-dragon.js
+          test -e gateway/boss-drop-boost.js
+          test -e gateway/clan-boss-loot.js
+      - run: npm run build
+      - name: Verify optimized runtime survives final build
+        run: |
+          grep -q "const viewState={w:0,h:0};" public/game/player-3d-unified-runtime.js
+          grep -q "const mapState={ready:false" public/game/player-3d-unified-runtime.js
+          grep -q "if(e.hiddenState===hidden)return;" public/game/player-3d-unified-runtime.js
+          grep -q "prepareWorldMap();" public/game/player-3d-unified-runtime.js
+          ! grep -q "new THREE.Vector2(px/view.w" public/game/player-3d-unified-runtime.js
+          grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
+          grep -q "worldX:Number(r.x),worldY:Number(r.y)" public/game/remote-player-3d-dispatch.js
+          test -e public/game/dungeon-mob-events.js
+          test -e public/game/dungeon60-dragon.js
+          test -e public/game/boss-drop-boost.js
+          test -e public/game/clan-boss-loot.js
