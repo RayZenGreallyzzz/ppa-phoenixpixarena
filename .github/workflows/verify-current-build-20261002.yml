@@ -1,0 +1,16 @@
+name: Verify current production build 20261002
+on:
+  push:
+    branches:
+      - main
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, 'Verify restored realtime build')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --no-audit --no-fund --ignore-scripts --package-lock=false
+      - run: npm run build
