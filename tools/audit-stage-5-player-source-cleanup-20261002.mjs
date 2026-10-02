@@ -68,6 +68,13 @@ for(let i=0;i<bl.length;i++){
 }
 for(const [n,l] of interesting.slice(0,140))console.log('BUILD_PIPELINE',n,l.slice(0,240));
 console.log('BUILD_PIPELINE_MATCHES',interesting.length);
+const afterExternalize=[];
+for(let i=787;i<bl.length;i++){
+  const l=bl[i];
+  if(/\bsource\b/.test(l))afterExternalize.push([i+1,l.trim()]);
+}
+for(const [n,l] of afterExternalize)console.log('SOURCE_REF_AFTER_EXTERNALIZE',n,l.slice(0,300));
+console.log('SOURCE_REFS_AFTER_EXTERNALIZE',afterExternalize.length);
 
 // Show compact source contexts around the key legacy blocks without dumping embedded images.
 const sourceLines=source.split('\n');
