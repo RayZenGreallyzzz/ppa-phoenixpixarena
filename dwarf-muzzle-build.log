@@ -1,0 +1,322 @@
+
+> ppa-phoenixpixarena@278.0.6-player3d-cleanup build
+> node build.mjs && node tools/postbuild-clan-siege-native-20260925.mjs && node tools/postbuild-pc-input-20260925.mjs && node tools/postbuild-hide-clan-siege-duplicate-leave-20260925.mjs && node tools/postbuild-clan-boss-cerberus-rewards-v2-20260925.mjs && node tools/postbuild-mimic-sombrero-event-20260925.mjs && node tools/postbuild-stat-chests-20260927.mjs && node tools/postbuild-newbie-chest-20260928.mjs && node tools/postbuild-player-3d-unified-20261002.mjs
+
+PPA build: joining 12 source parts...
+PPA legendary gear: canonical HD-only 256px source enabled for all 8 classes.
+[PPA BUILD] Dungeon mask source: 10040x4887 alpha=true
+[PPA BUILD] Dungeon floor source: 10136x5430
+[PPA BUILD] Dungeon physical rooms: top=31 bottom=30
+[PPA BUILD] Dungeon branch rooms top odd: 3,3,3,3,4,3,3,3,3,3 · bottom even: 3,3,3,3,3,3,3,3,3,3
+[PPA BUILD] Dungeon level fill: 1=3 rooms/27 mobs | 2=3 rooms/39 mobs | 3=3 rooms/22 mobs | 4=3 rooms/26 mobs | 5=3 rooms/36 mobs | 6=3 rooms/39 mobs | 7=3 rooms/44 mobs | 8=3 rooms/40 mobs | 9=4 rooms/44 mobs | 10=3 rooms/26 mobs | 11=3 rooms/40 mobs | 12=3 rooms/39 mobs | 13=3 rooms/42 mobs | 14=3 rooms/36 mobs | 15=3 rooms/26 mobs | 16=3 rooms/36 mobs | 17=3 rooms/42 mobs | 18=3 rooms/41 mobs | 19=3 rooms/41 mobs | 20=3 rooms/37 mobs
+[PPA BUILD] Dungeon room-only mobs: 723 spawns · boss center 1868,508
+[PPA BUILD] Dungeon density: preserved +4/+9, then added +3 small / +9 large; large extras anti-cluster random
+[PPA BUILD] Dungeon edge fix: smooth 2048 collision + 72px outside-only dark masonry band; white outline removed
+[PPA BUILD] Dungeon collision upgraded: 2048x997 · walk 35.6%
+[PPA BUILD] Phoenix clean startup art: baked 68%/old progress removed.
+[PPA BUILD] Mimic Sombrero arena assets: 3/3 ready
+[PPA BUILD] Mimic Sombrero event card + ticket art: ready
+[PPA BUILD] Mimic green strip: 1912x330 alpha=yes cuts=0,408,757,1236,1632,1912
+[PPA BUILD] Mimic blue strip: 2172x724 alpha=yes cuts=0,449,896,1335,1748,2172
+[PPA BUILD] Mimic epic strip: 2172x724 alpha=yes cuts=0,481,932,1359,1768,2172
+[PPA BUILD] Mimic Sombrero gear: 15 approved 512px icons generated from canonical strips.
+[PPA BUILD] Stage 5A1 pre-externalize player cleanup: 24 embedded class atlases + 27 preload rows + 3 generic sprite sources removed
+[PPA BUILD] Dungeon test: strict room mobs ENABLED; dungeon bosses use detected boss-room center
+[PPA BUILD] Phoenix startup: immediate cover + real progress + painted-city gate
+[PPA BUILD] Device-to-Telegram save migration disabled; Telegram cloud identity is authoritative
+[PPA BUILD] Character registration now completes before beginGame
+[PPA BUILD] Auto-entry now requires server nickname + class
+[PPA BUILD] Account delete button added to save/settings section
+[PPA BUILD] dungeon oval AI sleep radius constants: patched
+[PPA BUILD] dungeon oval AI sleep gate: patched
+[PPA BUILD] Dungeon oval active zone: 360 x 620 radii; combat/bosses exempt
+[PPA BUILD] Native Events iframe instances replaced: 1
+[PPA BUILD] Native Events iframe replaced: Игровые / Клановые / Война / Обновления
+[PPA BUILD] native clan siege state cache: patched
+[PPA BUILD] native compact clan siege HUD: patched
+[PPA BUILD] native throttled clan siege HUD update: patched
+[PPA BUILD] native siege HUD reset cache: patched
+[PPA BUILD] native siege leave hides exit: patched
+[PPA BUILD] native siege no per-frame HUD work during crystals: patched
+[PPA BUILD] native castle disappears after capture: patched
+[PPA BUILD] melee fallback range 72: patched
+[PPA BUILD] class authoritative basic melee range: patched
+[PPA BUILD] tank basic range 72: patched
+[PPA BUILD] barbarian basic range 78: patched
+[PPA BUILD] paladin basic range 74: patched
+[PPA BUILD] assassin basic range 64: patched
+[PPA BUILD] basic target edge helper: patched
+[PPA BUILD] basic target edge helper e: patched
+[PPA BUILD] smart attack melee target edge: patched
+[PPA BUILD] melee hit target edge: patched
+[PPA BUILD] clan boss class melee reach: patched
+[PPA BUILD] clan ranking state fields: patched
+[PPA BUILD] clan ranking state sync: patched
+[PPA BUILD] clan join tab label: patched
+[PPA BUILD] clan directory ranking UI: patched
+[PPA BUILD] ton connect parent runtime direct redirect: patched
+[PPA BUILD] gram wallet link opens parent ton picker: patched
+[PPA BUILD] gram wallet parent ton routes: patched
+[PPA BUILD WARN] gram wallet uses live ton chain balance target not found; continuing without this hook
+[PPA BUILD] gram deposit requires active direct ton connect: patched
+[PPA BUILD] player gnome range old value: patched
+[PPA BUILD] player archer range old value: patched
+[PPA BUILD] player mage range old value: patched
+[PPA BUILD] player priest range old value: patched
+[PPA BUILD] pet loot magnet radius: patched
+[PPA BUILD] release dungeon 1-20 open all levels: patched
+[PPA BUILD] release dungeon 1-20 hard scene gate open all levels: patched
+[PPA BUILD] auction keep inventory art: patched
+[PPA BUILD] auction keep own lot art: patched
+[PPA BUILD] auction art hydration helper: patched
+[PPA BUILD] auction hydrate server market art: patched
+[PPA BUILD] gnome realtime cannon visual: patched
+[PPA BUILD] archer realtime arrow visual: patched
+[PPA BUILD] monster core helper runtime: patched
+[PPA BUILD] monster core resource popup price: patched
+[PPA BUILD WARN] shared mob reward target not found; continuing without this hook
+[PPA BUILD] basic shared mob hit: patched
+[PPA BUILD] tank taunt authoritative target: patched
+[PPA BUILD] assassin smoke v189 fixed 3 seconds: patched
+[PPA BUILD] assassin smoke legacy fixed 3 seconds: patched
+[PPA BUILD] assassin smoke legacy realtime sync: patched
+[PPA BUILD] assassin smoke active meta 3 seconds: patched
+[PPA BUILD] assassin old preview 3 seconds: patched
+[PPA BUILD] server authoritative v189 skill damage: patched
+[PPA BUILD] server authoritative root effect: patched
+[PPA BUILD] server authoritative slow effect: patched
+[PPA BUILD] melee shared mob hit: patched
+[PPA BUILD] melee chain lightning shared mob hit: patched
+[PPA BUILD] legacy skill helper shared mob hit: patched
+[PPA BUILD] skill dot shared mob hit: patched
+[PPA BUILD WARN] skill shared mob hit target not found; continuing without this hook
+[PPA BUILD] ranged shared mob hit: patched
+[PPA BUILD] local mob respawn gate: patched
+[PPA BUILD WARN] local dungeon spawn loop gate target not found; continuing without this hook
+[PPA BUILD] spawnMobAtPoint server gate: patched
+[PPA BUILD] dungeon layout test boss spawn gates: patched
+[PPA BUILD WARN] local mob attack gate target not found; continuing without this hook
+[PPA BUILD WARN] mob render facing target not found; continuing
+[PPA BUILD] 41-60 realtime room key: patched
+[PPA BUILD] dungeon teleport actual level labels: patched
+[PPA BUILD] dungeon teleport button actual level labels: patched
+[PPA BUILD] dungeon teleport pickup actual level label: patched
+[PPA BUILD] fart auto return movement input: patched
+[PPA BUILD] fart mining pause on guard respawn: patched
+[PPA BUILD] fart mining button keeps paused state: patched
+[PPA BUILD] auction slots count premium purchases: patched
+[PPA BUILD] auction state uses premium slot credit: patched
+[PPA BUILD] premium subscription counts for auction slots: patched
+[PPA BUILD] premium stat points lifetime entitlement: patched
+[PPA BUILD] stat repair includes premium entitlement: patched
+[PPA BUILD] per-stat character point caps: patched
+[PPA BUILD] stat allocation uses per-stat cap: patched
+[PPA BUILD] refund dodge points above real 60 percent cap: patched
+[PPA BUILD] Character per-stat MAX UI patched: 1
+[PPA BUILD] Premium Popular: phone 6 cards, tablet 8 cards, second page visible
+[PPA BUILD] auto attack unlock from premium bundle 5 gram: patched
+[PPA BUILD] auto attack unlock from premium good 5 gram: patched
+[PPA BUILD] auto attack unlock from any premium subscription: patched
+[PPA BUILD] auto attack unlock from paid class change: patched
+[PPA BUILD] online arena selected skill target: patched
+[PPA BUILD] online arena area target: patched
+[PPA BUILD] online arena exit cleanup: patched
+[PPA BUILD] online arena cancel cleanup: patched
+[PPA BUILD] online arena manual leave cleanup: patched
+[PPA BUILD] remove gray normal gear from levels 11-15: patched
+[PPA BUILD] remove gray mini-boss gear from level 11 onward: patched
+[PPA BUILD] 41-60 legendary weighted slot: patched
+[PPA BUILD] 41-60 approved epic curve helper: patched
+[PPA BUILD] 41-60 epic and 51-60 legendary gear rolls: patched
+[PPA BUILD] elite 1-40 final isolated drop table: patched
+[PPA BUILD] elite 41-60 final isolated branch: patched
+[PPA BUILD] elite inspect 41-60 final table: patched
+[PPA BUILD] elite inspect 1-40 final tables: patched
+[PPA BUILD] final elite loot audit: {"drop1_40":true,"drop41_60":true,"info1_40":true,"info41_60":true}
+[PPA BUILD] 31-40 ordinary mob hp +2000: patched
+[PPA BUILD] 31-40 ordinary mob def +43: patched
+[PPA BUILD] 41-60 mob stats current +8000 hp +120 def: patched
+[PPA BUILD] phoenix local spawn gate: patched
+[PPA BUILD] phoenix local respawn gate: patched
+[PPA BUILD] lord40 server spawn bypass local cooldown: patched
+[PPA BUILD] lord40 local respawn gate: patched
+[PPA BUILD] titan server spawn bypass daily client flag: patched
+[PPA BUILD] titan local interval spawn gate: patched
+[PPA BUILD] phoenix special damage server gate: patched
+[PPA BUILD] lord40 special damage server gate: patched
+[PPA BUILD] titan local AI server gate: patched
+[PPA BUILD] phoenix server fire target guard: patched
+[PPA BUILD] titan server projectile target guard: patched
+[PPA BUILD] dragon60 visual metrics: patched
+[PPA BUILD] dragon60 body-only occlusion repaint: patched
+[PPA BUILD] dragon60 boss update hook: patched
+[PPA BUILD] dragon60 local boss attack gate: patched
+[PPA BUILD] dragon60 exclude legacy phoenix renderer: patched
+[PPA BUILD] dragon60 render hook: patched
+[PPA BUILD] dragon60 phoenix-ai exclusion: patched
+[PPA BUILD] dragon60 death-remnant exclusion: patched
+[PPA BUILD] dragon60 mob info title: patched
+[PPA BUILD] dragon60 death notice: patched
+[PPA BUILD WARN] dragon60 keeper card text target not found; continuing without this hook
+[PPA BUILD WARN] dragon60 dungeon subtitle target not found; continuing without this hook
+[PPA BUILD] dragon60 dungeon hud: patched
+[PPA BUILD] natural hp regen never revives zero hp: patched
+[PPA BUILD] premium hp regen never revives zero hp: patched
+[PPA BUILD] remote projectile render layer: patched
+[PPA BUILD] disable local elite selection in realtime: patched
+[PPA BUILD] book chances fixed by dungeon bracket: patched
+[PPA BUILD] books 1-20 exact active passive and rank I: patched
+[PPA BUILD] books 21-30 exact rank I: patched
+[PPA BUILD] books 31-40 random rank I-II: patched
+[PPA BUILD] books 41-60 progressive I-II-III ranks: patched
+[PPA BUILD] book inspect 1-20 exact chances and rank: patched
+[PPA BUILD] book inspect 21-30 rank I: patched
+[PPA BUILD] book inspect 31-40 rank I-II: patched
+[PPA BUILD] book inspect 41-60 progressive: patched
+[PPA BUILD] elite book ranks obey dungeon bracket: patched
+[PPA BUILD WARN] elite book inspect rank caps target not found; continuing without this hook
+[PPA BUILD] blue resource chance unified 21-60: patched
+[PPA BUILD] blue resource chance 41-60 uses unified curve: patched
+[PPA BUILD] blue resource inspect 41-60: patched
+[PPA BUILD] ordinary fart pickaxe resource bonuses: patched
+[PPA BUILD] fart guard legendary gear chance constant: patched
+[PPA BUILD] fart guard legendary gear drop: patched
+[PPA BUILD] fart pickaxe helpers: patched
+[PPA BUILD] fart slag inventory helpers: patched
+[PPA BUILD] fart auto button pickaxe active check: patched
+[PPA BUILD] fart update mining active checks: patched
+[PPA BUILD] fart update mining positive checks: patched
+[PPA BUILD] fart pickaxe purchase 4h inventory item: patched
+[PPA BUILD] fart pickaxe purchase message 4h: patched
+[PPA BUILD] fart pickaxe guide purchased status: patched
+[PPA BUILD] fart pickaxe guide live status: patched
+[PPA BUILD] fart pickaxe guide button live state: patched
+[PPA BUILD] fart guide top purchase check: patched
+[PPA BUILD] fart guard inspect legendary gear: patched
+[PPA BUILD] fart guard final inspect before elite branch: patched
+[PPA BUILD] exclude fart pickaxe from auction inventory: patched
+[PPA BUILD] remove fart auto mining button: patched
+[PPA BUILD] passive fart mining loop: patched
+[PPA BUILD] fart pickaxe tier durations: patched
+[PPA BUILD] fart pickaxe item supports common and legendary: patched
+[PPA BUILD] fart pickaxe tier helper: patched
+[PPA BUILD] migrate old pickaxe item tier: patched
+[PPA BUILD] common pickaxe grant tier: patched
+[PPA BUILD] tiered fart mining bonuses: patched
+[PPA BUILD] add legendary pickaxe shop button: patched
+[PPA BUILD] hide legacy sell all slag gold button: patched
+[PPA BUILD] fart npc slag info uses bag and ppa: patched
+[PPA BUILD] add slag sale button to fart npc: patched
+[PPA BUILD] slag sale handler at fart npc: patched
+[PPA BUILD] legendary pickaxe purchase handler: patched
+[PPA BUILD] pickaxe shop status both tiers: patched
+[PPA BUILD] fart guard gear chance helper: patched
+[PPA BUILD] fart guard epic chance from active pickaxe: patched
+[PPA BUILD] fart guard legendary chance only with legendary pickaxe: patched
+[PPA BUILD] fart guard inspect follows active pickaxe: patched
+[PPA BUILD] close dynamic fart guard inspect block: patched
+[PPA BUILD] keeper storage hold helper: patched
+[PPA BUILD] keeper storage tap selects only: patched
+[PPA BUILD] auction hold helper: patched
+[PPA BUILD] auction sell tap selects hold inspects: patched
+[PPA BUILD] blacksmith hold helper: patched
+[PPA BUILD] blacksmith sharpening inventory hides crafting resources: patched
+[PPA BUILD] blacksmith legendary rarity option: patched
+[PPA BUILD] blacksmith legendary failure label: patched
+[PPA BUILD] blacksmith Ruri rarity selection: patched
+[PPA BUILD] blacksmith gear tap selects hold inspects: patched
+[PPA BUILD] blacksmith material hold inspects: patched
+[PPA BUILD] blacksmith stone hold inspects: patched
+[PPA BUILD] clan storage hold helper: patched
+[PPA BUILD] clan storage hold inspect instead of tap inspect: patched
+[PPA BUILD] auction market item hold inspect: patched
+[PPA BUILD] auction own lot hold inspect: patched
+[PPA BUILD] blacksmith legendary craft canonical classGearArt source: patched
+[PPA BUILD] mimic set bonuses in canonical item inspect stats: patched
+[PPA BUILD] character Mimic simple-tap gold/drop stat rows: patched
+[PPA BUILD] hold preview start message: patched
+[PPA BUILD] hold preview release message: patched
+[PPA BUILD] disable webview image longpress on item cards: patched
+[PPA BUILD] item inspect hold preview css: patched
+[PPA BUILD] item inspect hold state variable: patched
+[PPA BUILD] item inspect close clears hold mode: patched
+[PPA BUILD] item inspect parent hold lifecycle: patched
+[PPA BUILD] block fart pickaxe direct inventory sale: patched
+[PPA BUILD] pickaxe missing item clears stale timer: patched
+[PPA BUILD] legendary pickaxe can replace common: patched
+[PPA BUILD] legendary purchase replaces old pickaxe cleanly: patched
+[PPA BUILD] legendary upgrade allowed with common pickaxe: patched
+[PPA BUILD] legendary upgrade ignores full bag when replacing common: patched
+[PPA BUILD] pickaxe removal clears bag and all storage: patched
+[PPA BUILD] pickaxe absolute-time normalization: patched
+[PPA BUILD] storage OX chest PNG art: patched
+[PPA BUILD] hide pickaxe from storage deposit inventory: patched
+[PPA BUILD] live pickaxe timer refresh: patched
+[PPA BUILD] fart guide transparent backdrop: patched
+[PPA BUILD] fart guide tap outside closes menu: patched
+[PPA BUILD] fart guard visual metrics: patched
+[PPA BUILD] fart guard body-only repaint hook: patched
+[PPA BUILD] fart guard main render hook: patched
+[PPA BUILD] fart guard visual runtime: patched
+[PPA BUILD] final fart guard drop panel: patched
+[PPA BUILD] monster core drop panel row: patched
+[PPA BUILD] global game image longpress guard css: patched
+[PPA BUILD] global game image longpress guard script: patched
+[PPA BUILD] hard disable native image longpress target: patched
+[PPA BUILD] hard disable image hit testing dynamically: patched
+[PPA BUILD] iframe image longpress guard: patched
+[PPA BUILD] global text selection guard: patched
+[PPA BUILD] blacksmith rune fusion runtime: patched
+[PPA BUILD] rune fusion lexical bridge at runeUiState: patched
+[PPA BUILD] rune fusion lexical bridge on blacksmith state: patched
+[PPA BUILD] exact rune fusion source INV.runes: patched
+[PPA BUILD] blacksmith custom dark sharpening selects: patched
+[PPA BUILD] blacksmith direct rune fusion tab: patched
+[PPA BUILD] character available runes bridge: patched
+[PPA BUILD] exact character rune hold source: patched
+[PPA BUILD] character rune hold info window: patched
+[PPA BUILD] character inventory item art uses canvas: patched
+[PPA BUILD] character inventory hold helper and bag binding: patched
+[PPA BUILD] pickaxe image constants: patched
+[PPA BUILD] pickaxe factory uses real tier image: patched
+[PPA BUILD] existing pickaxe refreshes tier visual: patched
+[PPA BUILD] pickaxe image globals: patched
+[PPA BUILD] slag image global after declaration: patched
+[PPA BUILD] fart inventory iframe fallback images: patched
+[PPA BUILD] character invstate hydrates slag image: patched
+[PPA BUILD] pickaxe npc button images: patched
+[PPA BUILD] remove smith placeholder description: patched
+[PPA BUILD WARN] remove residual inspect-only placeholder target not found; continuing without this hook
+[PPA BUILD] character inventory preserves bag resource kind: patched
+[PPA BUILD] slag resource popup art and metadata: patched
+[PPA BUILD] character inventory tap avoids full bag redraw: patched
+[PPA BUILD] character inventory full render syncs selected index: patched
+[PPA BUILD] ranked grimoire progression helpers: patched
+[PPA BUILD] ranked grimoire upgrade action: patched
+[PPA BUILD] grimoire action carries selected book rank: patched
+[PPA BUILD] skill UI ranked book counts: patched
+[PPA BUILD] skill hud roman V: patched
+[PPA BUILD] skill hud progression rank V: patched
+[PPA BUILD] V189 rank IV-V real effect helper: patched
+[PPA BUILD] V189 passive progression rank V: patched
+[PPA BUILD] V189 active dispatcher progression rank V: patched
+[PPA BUILD] skill long-press progression rank V: patched
+[PPA BUILD] skill long-press IV-V effect description: patched
+[PPA BUILD] skill long-press IV-V cooldown display: patched
+[PPA BUILD] Great Ruri explicit blacksmith sharpenability: patched
+[PPA BUILD] legendary and Great Ruri never burn on sharpening failure: patched
+[PPA BUILD] Great Ruri direct craft state and handler: patched
+[PPA BUILD] Great Ruri state in Events payload: patched
+[PPA BUILD] Great Ruri craft message route: patched
+[PPA BUILD] Great Ruri sharpening profile: patched
+[PPA BUILD] admin event reward premium storage stock: patched
+[PPA BUILD] clan boss reward lexical bridge: patched
+file:///home/runner/work/ppa-phoenixpixarena/ppa-phoenixpixarena/build.mjs:8216
+    throw new Error('Single-path realtime clan boss core is incomplete');
+          ^
+
+Error: Single-path realtime clan boss core is incomplete
+    at file:///home/runner/work/ppa-phoenixpixarena/ppa-phoenixpixarena/build.mjs:8216:11
+
+Node.js v24.21.0
+BUILD_EXIT_CODE=1
