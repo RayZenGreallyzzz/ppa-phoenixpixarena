@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_REMOTE3D_ADAPTER_V2)return;
-  window.__PPA_REMOTE3D_ADAPTER_V2=true;
+  if(window.__PPA_REMOTE_PLAYER3D_DISPATCH_V1)return;
+  window.__PPA_REMOTE_PLAYER3D_DISPATCH_V1=true;
 
   function classKey(v){
     var s=String(v||'').trim(),l=s.toLowerCase();

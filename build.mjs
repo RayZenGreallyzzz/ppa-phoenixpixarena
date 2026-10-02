@@ -8128,10 +8128,9 @@ if(_ppaClanBossTrackCalls<1){
   const bossDropBoost=fs.readFileSync(path.join(ROOT,'gateway/boss-drop-boost.js'),'utf8');
   const clanBossLoot=fs.readFileSync(path.join(ROOT,'gateway/clan-boss-loot.js'),'utf8');
   const clanBossChest=fs.readFileSync(path.join(ROOT,'gateway/clan-boss-chest.js'),'utf8');
-  const remoteSprite=fs.readFileSync(path.join(ROOT,'gateway/remote-sprite-renderer.js'),'utf8');
+  const remotePlayer3dDispatch=fs.readFileSync(path.join(ROOT,'gateway/remote-player-3d-dispatch.js'),'utf8');
   const remoteFx=fs.readFileSync(path.join(ROOT,'gateway/remote-combat-fx.js'),'utf8');
-  const mobilePerf=fs.readFileSync(path.join(ROOT,'gateway/mobile-sprite-performance.js'),'utf8');
-  const remotePet=fs.readFileSync(path.join(ROOT,'gateway/remote-pet-renderer.js'),'utf8');
+    const remotePet=fs.readFileSync(path.join(ROOT,'gateway/remote-pet-renderer.js'),'utf8');
   const ruriEventDrops=fs.readFileSync(path.join(ROOT,'gateway/ruri-event-drops.js'),'utf8');
   const ruriPet=fs.readFileSync(path.join(ROOT,'gateway/ruri-pet-runtime.js'),'utf8');
   const legendaryGearArt=fs.readFileSync(path.join(ROOT,'gateway/legendary-gear-art.js'),'utf8');
@@ -8317,12 +8316,10 @@ if(_ppaClanBossTrackCalls<1){
       !realtimeServer.includes('eliteWindowKey')) {
     throw new Error('Server elite mob bridge is incomplete');
   }
-  if (remoteSprite.includes('forcedAttack') || remoteSprite.includes('__ppaAttackDir')) {
+  if (remotePlayer3dDispatch.includes('forcedAttack') || remotePlayer3dDispatch.includes('__ppaAttackDir')) {
     throw new Error('Remote attack FX is overriding movement facing again');
   }
-  if (!mobilePerf.includes('__PPA_MOBILE_SPRITE_PERF_V2') ||
-      !mobilePerf.includes('imageCache') ||
-      !remoteSprite.includes('canvasHitMetrics(now)') ||
+  if (!remotePlayer3dDispatch.includes('canvasHitMetrics(now)') ||
       !dungeonMobEvents.includes('function requestSmooth()') ||
       !remotePet.includes('installedPacket&&installedDraw')) {
     throw new Error('Mobile FPS recovery patch incomplete');
@@ -8437,8 +8434,7 @@ const filesToPublish = [
   ['gateway/mimic-sombrero-event.js','mimic-sombrero-event.js','Mimic Sombrero event runtime missing'],
   ['gateway/mimic-sombrero-arena.js','mimic-sombrero-arena.js','Mimic Sombrero arena runtime missing'],
   ['gateway/realtime-debug-bridge.js','realtime-debug-bridge.js','Realtime debug bridge missing'],
-  ['gateway/mobile-sprite-performance.js','mobile-sprite-performance.js','Mobile sprite performance helper missing'],
-  ['gateway/remote-sprite-renderer.js','remote-sprite-renderer.js','Remote sprite renderer missing'],
+  ['gateway/remote-player-3d-dispatch.js','remote-player-3d-dispatch.js','Remote Player3D dispatch missing'],
   ['gateway/remote-combat-fx.js','remote-combat-fx.js','Remote combat FX renderer missing'],
   ['gateway/remote-pet-renderer.js','remote-pet-renderer.js','Remote pet renderer missing'],
   ['gateway/ruri-pet-runtime.js','ruri-pet-runtime.js','Great Ruri runtime missing'],
@@ -8465,7 +8461,7 @@ output = output.replace('</body>', `<script src="${js('telegram-safe-ui.js')}"><
 <script src="${js('ruri-event-drops.js')}"></script>
 <script src="${js('mimic-sombrero-event.js')}"></script>
 <script src="${js('mimic-sombrero-arena.js')}"></script>
-<script src="${js('realtime-debug-bridge.js')}"></script>\n<script src="${js('mobile-sprite-performance.js')}"></script>\n<script src="${js('remote-sprite-renderer.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
+<script src="${js('realtime-debug-bridge.js')}"></script>\n\n<script src="${js('remote-player-3d-dispatch.js')}"></script>\n<script src="${js('remote-combat-fx.js')}"></script>\n<script src="${js('remote-pet-renderer.js')}"></script>\n<script src="${js('ruri-pet-runtime.js')}"></script>\n<script src="${js('legendary-gear-art.js')}"></script>\n<script src="${js('class-sync-client.js')}"></script>\n<script src="${js('social-ui.js')}"></script>\n<script src="${js('realtime-identity-sync.js')}"></script>\n</body>`);
 
 fs.writeFileSync(path.join(publicDir, 'index.html'), output, 'utf8');
 console.log(`PPA build complete: ${count} unique embedded images externalized.`);
@@ -8487,8 +8483,7 @@ console.log('Great Ruri event drops: /game/ruri-event-drops.js · monthly days 1
 console.log('Mimic Sombrero event: /game/mimic-sombrero-event.js · monthly days 25-29 · server clock');
 console.log('Mimic Sombrero arena: /game/mimic-sombrero-arena.js · REAL COMBAT V2');
 console.log('Realtime debug bridge: /game/realtime-debug-bridge.js');
-console.log('Mobile sprite performance: /game/mobile-sprite-performance.js');
-console.log('Remote player sprites: /game/remote-sprite-renderer.js');
+console.log('Remote Player3D dispatch: /game/remote-player-3d-dispatch.js');
 console.log('Remote combat FX: /game/remote-combat-fx.js');
 console.log('Remote pet renderer: /game/remote-pet-renderer.js');
 console.log('Great Ruri runtime: /game/ruri-pet-runtime.js');
