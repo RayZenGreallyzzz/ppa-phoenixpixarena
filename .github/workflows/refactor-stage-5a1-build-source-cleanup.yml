@@ -1,0 +1,53 @@
+name: Refactor Stage 5A1 build source cleanup
+on:
+  push:
+    branches:
+      - stage-5a1-player-source-assets-20261002
+permissions:
+  contents: write
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage-5a1-player-source-assets-20261002
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - name: Apply build refactor once
+        run: |
+          if grep -Fq "const sourceForBuild=playerSourceCleanup.source;" build.mjs; then
+            echo "Stage 5A1 build refactor already applied"
+          else
+            node tools/refactor-stage-5a1-build-source-cleanup.mjs
+          fi
+      - run: node --check build.mjs
+      - run: node --check tools/player-source-cleanup-20261002.mjs
+      - name: Build base output before postbuilds
+        run: node build.mjs | tee /tmp/stage5-build.log
+      - name: Verify pre-externalize cleanup really changed build output
+        run: |
+          grep -q "Stage 5A1 pre-externalize player cleanup: 24 embedded class atlases + 27 preload rows + 3 generic sprite sources removed" /tmp/stage5-build.log
+          grep -q "PPA build complete: 650 unique embedded images externalized." /tmp/stage5-build.log
+          grep -q "PPA_PLAYER_SPRITE_SOURCE_CLEANUP_20261002" public/index.html
+          ! grep -q "GNOME_IDLE_SRC\|ARCHER_IDLE_SRC\|ASSASSIN_IDLE_SRC\|TANK_IDLE_SRC\|BERSERKER_IDLE_SRC\|PRIEST_IDLE_SRC\|MAGE_IDLE_SRC\|PALADIN_IDLE_SRC" public/index.html
+          ! grep -q "SPR_IDLE\|SPR_RUN\|SPR_ATK\|imgGnomeIdle\|imgTankIdle\|imgAssassinIdle" public/index.html
+          grep -q "const GNOME_ANIM=" public/index.html
+          grep -q "function v174AiSpriteCfg(e){" public/index.html
+          grep -q "function drawPlayer(){" public/index.html
+          grep -q "PPA_ONLINE_STRESS" public/index.html
+          grep -q "name:'Safe Zone Map'" public/index.html
+      - name: Commit build refactor if changed
+        run: |
+          if git diff --quiet -- build.mjs; then
+            echo "No build.mjs change to commit"
+            exit 0
+          fi
+          test -z "$(git diff --name-only | grep -v '^build.mjs$')"
+          git config user.name "RayZenGreallyzzz"
+          git config user.email "genry.undeniable@gmail.com"
+          git add build.mjs
+          git commit -m "Stage 5A1: clean dead player sprite assets before externalize"
+          git push origin HEAD:stage-5a1-player-source-assets-20261002
