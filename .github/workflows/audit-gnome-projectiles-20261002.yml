@@ -12,3 +12,8 @@ jobs:
         with:
           node-version: '24'
       - run: node tools/audit-gnome-projectiles-20261002.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnome-projectile-audit
+          path: gnome-projectile-audit.txt
+          if-no-files-found: error
