@@ -23,6 +23,7 @@ jobs:
       - run: node --check gateway/remote-player-3d-dispatch.js
       - run: node --check tools/player-source-cleanup-20261002.mjs
       - run: node --check tools/postbuild-player-3d-unified-20261002.mjs
+      - run: node --check tools/audit-player-render-ownership-20261003.mjs
       - name: Verify obsolete player render and cleanup layers are absent
         run: |
           test ! -e gateway/remote-player-3d-adapter.js
@@ -48,6 +49,8 @@ jobs:
           test -e gateway/boss-drop-boost.js
           test -e gateway/clan-boss-loot.js
       - run: npm run build
+      - name: Audit final player render ownership
+        run: node tools/audit-player-render-ownership-20261003.mjs
       - name: Verify unified Player3D and protected gameplay systems after build
         run: |
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
