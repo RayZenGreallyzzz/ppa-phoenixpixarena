@@ -8188,11 +8188,11 @@ if(_ppaClanBossTrackCalls<1){
       !realtimeServer.includes("type:'clan-boss-reward'") ||
       !realtimeServer.includes('clanBossBuildMistressDistribution') ||
       !realtimeServer.includes('clanBossSharedRoll') ||
-      !realtimeServer.includes('.filter(x=>x.damage>=5000)') ||
+      !(realtimeServer.includes("const minDamage=String(st&&st.bossId||'')==='clan_boss_2'?100000:5000") && realtimeServer.includes('.filter(x=>x.damage>=minDamage)')) ||
       !realtimeServer.includes("clanBossSharedRoll(eligible,'blueGear','Синий шмот / оружие')") ||
       !realtimeServer.includes("clanBossSharedRoll(eligible,'premiumStone','Премиум камень заточки')") ||
       !realtimeServer.includes("clanBossSharedRoll(eligible,'grayRune','Серая универсальная руна')") ||
-      !realtimeServer.includes('const chance=1') ||
+      !realtimeServer.includes('clanBossSharedRoll(eligible,kind,label,chance=1)') ||
       !realtimeServer.includes('normalStones:4+Math.floor(Math.random()*4)') ||
       !realtimeServer.includes("m.type === 'clan-boss-chest-open'") ||
       !realtimeServer.includes("m.type === 'clan-boss-chest-complete'") ||
