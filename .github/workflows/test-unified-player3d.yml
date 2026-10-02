@@ -22,28 +22,36 @@ jobs:
           node-version: '24'
       - run: npm install
       - run: node --check gateway/player-3d-unified-runtime.js
-      - run: node --check gateway/remote-sprite-renderer.js
+      - run: node --check gateway/remote-player-3d-dispatch.js
       - run: node --check tools/postbuild-player-3d-unified-20261002.mjs
       - run: test ! -e gateway/remote-player-3d-adapter.js
       - run: test ! -e tools/postbuild-remote-player-3d-20261001.mjs
       - run: test ! -e gateway/remote-player-3d-runtime.js
       - run: test ! -e gateway/remote-player-3d-runtime-v2.js
       - run: test ! -e gateway/remote-sprite-renderer-3d-bridge.js
-      - run: '! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" gateway/remote-sprite-renderer.js'
-      - run: grep -q "worldX:Number(r.x),worldY:Number(r.y)" gateway/remote-sprite-renderer.js
-      - run: grep -q "targetBody=Math.max(30,Number(r.sz)||30)" gateway/remote-sprite-renderer.js
+      - run: test ! -e gateway/remote-sprite-renderer.js
+      - run: '! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" gateway/remote-player-3d-dispatch.js'
+      - run: grep -q "worldX:Number(r.x),worldY:Number(r.y)" gateway/remote-player-3d-dispatch.js
+      - run: grep -q "targetBody=Math.max(30,Number(r.sz)||30)" gateway/remote-player-3d-dispatch.js
       - run: grep -q "PPA_PLAYER3D_LOCAL_ONLY_20261002" tools/postbuild-player-3d-unified-20261002.mjs
       - run: grep -q "PPA_PLAYER3D_HUD_OWNS_LOCAL_LABELS_20261002" tools/postbuild-player-3d-unified-20261002.mjs
       - run: grep -q "const PLAYER_ANIM_TIMING=" tools/postbuild-player-3d-unified-20261002.mjs
+      - name: Guard mob and boss systems before build
+        run: |
+          test -e gateway/dungeon-mob-events.js
+          test -e gateway/dungeon60-dragon.js
+          test -e gateway/boss-drop-boost.js
+          test -e gateway/clan-boss-loot.js
       - run: npm run build
       - name: Verify Player3D exclusively owns local body and HUD
         run: |
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
           grep -q "unified-v2-world" public/game/player-3d-unified-runtime.js
-          grep -q "__PPA_REMOTE3D_ADAPTER_V2" public/game/remote-sprite-renderer.js
-          ! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" public/game/remote-sprite-renderer.js
+          grep -q "__PPA_REMOTE_PLAYER3D_DISPATCH_V1" public/game/remote-player-3d-dispatch.js
+          ! grep -q "v174AiSpriteCfg\|drawImage\|phoneCharacterBodySize" public/game/remote-player-3d-dispatch.js
           grep -q "player-3d-unified-runtime.js?v=20261002u4" public/index.html
-          grep -q "remote-sprite-renderer.js?v=20261002u4" public/index.html
+          grep -q "remote-player-3d-dispatch.js?v=20261002u5" public/index.html
+          ! grep -q "remote-sprite-renderer.js" public/index.html
           ! grep -q "player-3d-runtime.js?v=" public/index.html
           ! grep -q "remote-player-3d-runtime.js?v=" public/index.html
           grep -q "PPA_PLAYER3D_LOCAL_ONLY_20261002" public/index.html
@@ -58,6 +66,10 @@ jobs:
           grep -q "function v174AiSpriteCfg(e){" public/index.html
           grep -Fq "GNOME_ANIM[a]" public/index.html
           grep -Fq "PALADIN_ANIM[a]" public/index.html
+          test -e public/game/dungeon-mob-events.js
+          test -e public/game/dungeon60-dragon.js
+          test -e public/game/boss-drop-boost.js
+          test -e public/game/clan-boss-loot.js
           node - <<'NODE'
           const fs=require('fs');
           const html=fs.readFileSync('public/index.html','utf8');
@@ -75,5 +87,5 @@ jobs:
           if(marker<0||marker>a+1200)throw new Error('drawPlayer is not canonical 3D-only');
           const windowText=html.slice(a,a+1200);
           for(const bad of ['drawImage','playerUses','visualBody','phoneCharacter','cx.ellipse','PT.push'])if(windowText.includes(bad))throw new Error('legacy local renderer token near drawPlayer: '+bad);
-          console.log('verified: real-player local sprite body/HUD/direction layer removed; stress-bot sprite path intact');
+          console.log('verified: Player3D dispatch is canonical; stress-bot path intact; mob/boss runtimes preserved');
           NODE
