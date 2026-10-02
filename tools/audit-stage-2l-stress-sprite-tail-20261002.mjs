@@ -4,8 +4,8 @@ const html=fs.readFileSync('public/index.html','utf8');
 const tokens=[
   'v174AiSpriteCfg','v174DrawAiTrainingFighter','isAiFighter','V174_AI_CLASS','PPA_ONLINE_STRESS',
   'GNOME_ANIM','ARCHER_ANIM','ASSASSIN_ANIM','TANK_ANIM','BERSERKER_ANIM','PRIEST_ANIM','MAGE_ANIM','PALADIN_ANIM',
-  'GNOME_SOURCE_ROW','ARCHER_SOURCE_ROW','ASSASSIN_RUN_SOURCE_ROW','ASSASSIN_4DIR_ROW','TANK_4DIR_ROW','BERSERKER_4DIR_ROW','PRIEST_4DIR_ROW','MAGE_4DIR_ROW','PALADIN_4DIR_ROW',
-  'GNOME_DRAW_SCALE','ARCHER_DRAW_SCALE','ASSASSIN_IDLE_DRAW_SCALE','TANK_DRAW_SCALE','BERSERKER_DRAW_SCALE','PRIEST_DRAW_SCALE','MAGE_DRAW_SCALE','PALADIN_DRAW_SCALE'
+  'GNOME_SOURCE_ROW','GNOME_FLIP_BY_DIR','ARCHER_SOURCE_ROW','ARCHER_FLIP_BY_DIR','ASSASSIN_RUN_SOURCE_ROW','ASSASSIN_4DIR_ROW','TANK_4DIR_ROW','BERSERKER_4DIR_ROW','PRIEST_4DIR_ROW','MAGE_4DIR_ROW','PALADIN_4DIR_ROW',
+  'GNOME_DRAW_SCALE','ARCHER_DRAW_SCALE','ASSASSIN_RUN_DRAW_SCALE','ASSASSIN_IDLE_DRAW_SCALE','ASSASSIN_ATTACK_DRAW_SCALE','TANK_DRAW_SCALE','BERSERKER_DRAW_SCALE','PRIEST_DRAW_SCALE','MAGE_DRAW_SCALE','PALADIN_DRAW_SCALE'
 ];
 function count(needle){return html.split(needle).length-1}
 function contexts(needle,limit=20,radius=420){
@@ -18,12 +18,17 @@ function contexts(needle,limit=20,radius=420){
 }
 for(const t of tokens){
   console.log(`TOKEN ${t}: ${count(t)}`);
-  for(const c of contexts(t,12)) console.log(`CTX ${t}: ${c}`);
+  for(const c of contexts(t,4)) console.log(`CTX ${t}: ${c}`);
 }
 for(const pattern of ['isAiFighter:true','isAiFighter: true','isAiFighter = true','isAiFighter=true']){
   console.log(`CREATE ${pattern}: ${count(pattern)}`);
-  for(const c of contexts(pattern,20,650)) console.log(`CREATECTX ${pattern}: ${c}`);
+  for(const c of contexts(pattern,8,650)) console.log(`CREATECTX ${pattern}: ${c}`);
 }
+const spriteCfgStart=html.indexOf('function v174AiSpriteCfg(e){');
+if(spriteCfgStart<0)throw new Error('v174AiSpriteCfg missing');
+console.log('SPRITE_DRAW_SLICE_BEGIN');
+console.log(html.slice(spriteCfgStart,Math.min(html.length,spriteCfgStart+9000)));
+console.log('SPRITE_DRAW_SLICE_END');
 for(const protectedPath of ['public/game/dungeon-mob-events.js','public/game/dungeon60-dragon.js','public/game/boss-drop-boost.js','public/game/clan-boss-loot.js']){
   if(!fs.existsSync(protectedPath))throw new Error('protected mob/boss runtime missing: '+protectedPath);
   console.log('PROTECTED '+protectedPath+': true');
