@@ -1,0 +1,42 @@
+name: Apply gnome 3D muzzle 20261002
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Apply gnome 3D muzzle patch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply targeted source patch
+        run: node tools/patch-gnome-muzzle-20261002.mjs
+      - name: Syntax checks
+        run: |
+          node --check gateway/player-3d-unified-runtime.js
+          node --check gateway/realtime-client.js
+          node --check tools/postbuild-player-3d-unified-20261002.mjs
+          node --check build.mjs
+      - name: Install build dependency
+        run: npm install --no-audit --no-fund --ignore-scripts
+      - name: Full production build verification
+        run: npm run build
+      - name: Remove temporary diagnostics and patch runner
+        run: |
+          rm -f tools/patch-gnome-muzzle-20261002.mjs
+          rm -f .github/workflows/apply-gnome-3d-muzzle-20261002.yml
+          rm -f tools/print-gnome-projectile-source-20261002.mjs
+          rm -f .github/workflows/print-gnome-projectile-source-20261002.yml
+          rm -f gnome-projectile-diagnostic.txt
+      - name: Save verified patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Use 3D dwarf cannon muzzle for PvE and realtime FX"
+          git push
