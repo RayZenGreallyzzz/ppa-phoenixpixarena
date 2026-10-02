@@ -1,16 +1,47 @@
-name: Baseline build check 20261002
+name: Apply verified dwarf muzzle axis 20261002
 on:
   push:
     branches:
       - main
+permissions:
+  contents: write
 jobs:
-  verify:
-    if: contains(github.event.head_commit.message, 'Run clean baseline build check')
+  apply:
+    if: contains(github.event.head_commit.message, 'Apply verified dwarf muzzle axis patch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm install --no-audit --no-fund --ignore-scripts --package-lock=false
-      - run: npm run build
+      - name: Apply targeted muzzle patch
+        run: node tools/patch-dwarf-muzzle-axis-20261002.mjs
+      - name: Syntax checks
+        run: |
+          node --check gateway/player-3d-unified-runtime.js
+          node --check tools/postbuild-player-3d-unified-20261002.mjs
+          node --check build.mjs
+      - name: Preserve intended source edits
+        run: |
+          cp gateway/player-3d-unified-runtime.js /tmp/player-3d-unified-runtime.js
+          cp tools/postbuild-player-3d-unified-20261002.mjs /tmp/postbuild-player-3d-unified-20261002.mjs
+          cp build.mjs /tmp/build.mjs
+      - name: Install build dependencies without lockfile
+        run: npm install --no-audit --no-fund --ignore-scripts --package-lock=false
+      - name: Full production build verification
+        run: npm run build
+      - name: Restore clean tree and only intended source edits
+        run: |
+          git reset --hard HEAD
+          cp /tmp/player-3d-unified-runtime.js gateway/player-3d-unified-runtime.js
+          cp /tmp/postbuild-player-3d-unified-20261002.mjs tools/postbuild-player-3d-unified-20261002.mjs
+          cp /tmp/build.mjs build.mjs
+          rm -f dwarf-muzzle-build.log
+      - name: Commit only verified muzzle changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gateway/player-3d-unified-runtime.js tools/postbuild-player-3d-unified-20261002.mjs build.mjs
+          git rm --ignore-unmatch tools/patch-dwarf-muzzle-axis-20261002.mjs .github/workflows/apply-dwarf-muzzle-axis-20261002.yml dwarf-muzzle-build.log
+          git commit -m "Derive dwarf muzzle from cannon geometry axis"
+          git push
