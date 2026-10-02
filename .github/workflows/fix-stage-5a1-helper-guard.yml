@@ -17,7 +17,7 @@ jobs:
           node-version: '24'
       - name: Apply fix once
         run: |
-          if grep -q "expected declaration+preload count 2" tools/player-source-cleanup-20261002.mjs; then
+          if grep -Fq "if(count(source,sym)!==2)" tools/player-source-cleanup-20261002.mjs; then
             echo "guard already fixed"
           else
             node tools/fix-stage-5a1-helper-guard.mjs
