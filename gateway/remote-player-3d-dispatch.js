@@ -27,7 +27,9 @@
       if(hitMetrics&&now-hitMetricsAt<120)return hitMetrics;
       var rect=cv.getBoundingClientRect(),z=Math.max(.1,Number(cameraZoom())||1);
       if(!rect||rect.width<2||rect.height<2)return null;
-      hitMetrics={left:rect.left,top:rect.top,z:z,kx:rect.width/Math.max(1,cv.width),ky:rect.height/Math.max(1,cv.height)};
+      if(!hitMetrics)hitMetrics={left:0,top:0,z:1,kx:1,ky:1};
+      hitMetrics.left=rect.left;hitMetrics.top=rect.top;hitMetrics.z=z;
+      hitMetrics.kx=rect.width/Math.max(1,cv.width);hitMetrics.ky=rect.height/Math.max(1,cv.height);
       hitMetricsAt=now;
       return hitMetrics;
     }catch(_){return null}
@@ -35,6 +37,8 @@
 
   // Renderer-only interpolation. Never mutate r.x/r.y or r.lastDrawAt here:
   // those fields belong to realtime/gameplay and are also used by targeting.
+  // PPA_PLAYER3D_REMOTE_SCRATCH_20261003: visual position and anchor objects are
+  // retained on the remote record instead of allocating two objects every draw.
   function visualPosition(r,now){
     var tx=finite(r.tx),ty=finite(r.ty),rx=finite(r.x),ry=finite(r.y);
     if(tx===null)tx=rx;if(ty===null)ty=ry;
@@ -61,7 +65,10 @@
       var alpha=1-Math.exp(-dt/105);
       r.__ppa3DX+=dx*alpha;r.__ppa3DY+=dy*alpha;
     }
-    return{x:Number(r.__ppa3DX),y:Number(r.__ppa3DY)};
+    var out=r.__ppa3DVisualPosition;
+    if(!out)out=r.__ppa3DVisualPosition={x:0,y:0};
+    out.x=Number(r.__ppa3DX);out.y=Number(r.__ppa3DY);
+    return out;
   }
 
   var installed=false;
@@ -97,7 +104,9 @@
         r.__ppaClientAt=now;
       }
 
-      var anchor={classKey:key,worldX:pos.x,worldY:pos.y,nearCount:nearCount,scene:r.scene};
+      var anchor=r.__ppa3DAnchor;
+      if(!anchor)anchor=r.__ppa3DAnchor={classKey:'',worldX:0,worldY:0,nearCount:0,scene:null};
+      anchor.classKey=key;anchor.worldX=pos.x;anchor.worldY=pos.y;anchor.nearCount=nearCount;anchor.scene=r.scene;
       try{if(window.PPA_PLAYER3D&&typeof PPA_PLAYER3D.remote==='function')PPA_PLAYER3D.remote(r,anchor)}catch(_){}
       return true;
     };
