@@ -19,16 +19,14 @@ jobs:
       - run: npm install
       - run: node --check gateway/player-3d-unified-runtime.js
       - run: node --check gateway/remote-player-3d-dispatch.js
-      - name: Verify cached projection, idle-yaw, muzzle and ownership source invariants
+      - name: Verify proven projection, idle-yaw, muzzle and ownership source invariants
         run: |
           grep -q "const viewState={w:0,h:0};" gateway/player-3d-unified-runtime.js
-          grep -q "PPA_PLAYER3D_VIEWPORT_CACHE_20261003" gateway/player-3d-unified-runtime.js
           grep -q "const mapState={ready:false" gateway/player-3d-unified-runtime.js
-          grep -q "const groundBasis={ready:false" gateway/player-3d-unified-runtime.js
           grep -q "scratchRay=new THREE.Raycaster();" gateway/player-3d-unified-runtime.js
           grep -q "scratchPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);" gateway/player-3d-unified-runtime.js
-          grep -q "function prepareGroundBasis(view){" gateway/player-3d-unified-runtime.js
-          grep -q "addScaledVector(groundBasis.stepX,px).addScaledVector(groundBasis.stepY,py)" gateway/player-3d-unified-runtime.js
+          grep -q "scratchRay.setFromCamera(scratchNdc,camera);" gateway/player-3d-unified-runtime.js
+          grep -q "scratchRay.ray.intersectPlane(scratchPlane,scratchGround)" gateway/player-3d-unified-runtime.js
           grep -q "groundResult.z=z;return groundResult;" gateway/player-3d-unified-runtime.js
           grep -q "if(e.hiddenState===hidden)return;" gateway/player-3d-unified-runtime.js
           grep -q "prepareWorldMap();" gateway/player-3d-unified-runtime.js
@@ -51,7 +49,6 @@ jobs:
           ! grep -q "e.kind==='local'?500:1800" gateway/player-3d-unified-runtime.js
           ! grep -q "__PPA3D_LOCAL_PENDING" gateway/player-3d-unified-runtime.js
           ! grep -q "new THREE.Vector2(px/view.w" gateway/player-3d-unified-runtime.js
-          ! grep -q "ray.ray.intersectPlane(new THREE.Plane" gateway/player-3d-unified-runtime.js
           ! grep -q "const p=new THREE.Vector3();e.head.getWorldPosition(p)" gateway/player-3d-unified-runtime.js
           node - <<'NODE'
           const fs=require('fs');
@@ -59,16 +56,15 @@ jobs:
           const a=src.indexOf('function frame(now){');
           const b=src.indexOf('window.PPA_PLAYER3D={',a);
           if(a<0||b<0)throw new Error('Player3D frame range missing');
-          const frame=src.slice(a,b);
-          if(frame.includes('updateWorldMatrix(true,true)'))throw new Error('full-tree update leaked into Player3D frame loop');
+          if(src.slice(a,b).includes('updateWorldMatrix(true,true)'))throw new Error('full-tree update leaked into Player3D frame loop');
           const worldA=src.indexOf('function worldToGround(');
           const worldB=src.indexOf('function projectIntoHud(',worldA);
           if(worldA<0||worldB<0)throw new Error('worldToGround range missing');
           const world=src.slice(worldA,worldB);
-          if(world.includes('setFromCamera')||world.includes('intersectPlane'))throw new Error('per-character Raycaster leaked back into worldToGround');
+          if(!world.includes('setFromCamera')||!world.includes('intersectPlane'))throw new Error('proven Raycaster projection path missing');
           const n=(src.match(/if\(e\.root\)e\.root\.updateWorldMatrix\(true,true\);/g)||[]).length;
           if(n!==1)throw new Error('expected exactly one on-demand muzzle matrix update, found '+n);
-          console.log('verified: cached orthographic projection owns Player3D hot path; full-tree matrix update remains muzzle-only');
+          console.log('verified: proven Player3D projection path restored; allocation and full-tree guards remain active');
           NODE
       - name: Guard gameplay and mob boss source systems
         run: |
@@ -78,14 +74,12 @@ jobs:
           test -e gateway/boss-drop-boost.js
           test -e gateway/clan-boss-loot.js
       - run: npm run build
-      - name: Verify optimized runtime survives final build
+      - name: Verify restored runtime survives final build
         run: |
           grep -q "const viewState={w:0,h:0};" public/game/player-3d-unified-runtime.js
-          grep -q "PPA_PLAYER3D_VIEWPORT_CACHE_20261003" public/game/player-3d-unified-runtime.js
           grep -q "const mapState={ready:false" public/game/player-3d-unified-runtime.js
-          grep -q "const groundBasis={ready:false" public/game/player-3d-unified-runtime.js
-          grep -q "function prepareGroundBasis(view){" public/game/player-3d-unified-runtime.js
-          grep -q "addScaledVector(groundBasis.stepX,px).addScaledVector(groundBasis.stepY,py)" public/game/player-3d-unified-runtime.js
+          grep -q "scratchRay.setFromCamera(scratchNdc,camera);" public/game/player-3d-unified-runtime.js
+          grep -q "scratchRay.ray.intersectPlane(scratchPlane,scratchGround)" public/game/player-3d-unified-runtime.js
           grep -q "if(e.hiddenState===hidden)return;" public/game/player-3d-unified-runtime.js
           grep -q "prepareWorldMap();" public/game/player-3d-unified-runtime.js
           grep -q "const wallNow=Date.now();" public/game/player-3d-unified-runtime.js
@@ -102,8 +96,7 @@ jobs:
           grep -q "__ppa3DAnchor" public/game/remote-player-3d-dispatch.js
           ! grep -q "e.kind==='local'?500:1800" public/game/player-3d-unified-runtime.js
           ! grep -q "__PPA3D_LOCAL_PENDING" public/game/player-3d-unified-runtime.js
-          ! grep -q "new THREE.Vector2(px/view.w" public/game/player-3d-unified-runtime.js
-          grep -q "player-3d-unified-runtime.js?v=20261003u11" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261003u12" public/index.html
           grep -q "remote-player-3d-dispatch.js?v=20261003u7" public/index.html
           ! grep -q "__PPA3D_LOCAL_PENDING" public/index.html
           test -e public/game/dungeon-mob-events.js
@@ -121,5 +114,5 @@ jobs:
           const worldB=src.indexOf('function projectIntoHud(',worldA);
           if(worldA<0||worldB<0)throw new Error('built worldToGround range missing');
           const world=src.slice(worldA,worldB);
-          if(world.includes('setFromCamera')||world.includes('intersectPlane'))throw new Error('built worldToGround contains per-character Raycaster');
+          if(!world.includes('setFromCamera')||!world.includes('intersectPlane'))throw new Error('built proven Raycaster projection path missing');
           NODE
