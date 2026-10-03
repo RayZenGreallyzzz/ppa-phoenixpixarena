@@ -26,19 +26,13 @@
   // reused for every player so the render loop does not create temporary Three.js
   // objects or re-read canvas layout once per visible character.
   const viewState={w:0,h:0};
-  // PPA_PLAYER3D_VIEWPORT_CACHE_20261003
-  // DOM layout is stable for many frames. Keep it cached and only refresh on
-  // viewport/canvas changes or a slow safety refresh, never once per character.
-  const mapState={ready:false,left:0,top:0,right:0,bottom:0,z:1,kx:1,ky:1,canvasW:0,canvasH:0,viewW:0,viewH:0,layoutAt:0};
+  const mapState={ready:false,left:0,top:0,right:0,bottom:0,z:1,kx:1,ky:1};
   const groundResult={hit:null,z:1};
-  // Orthographic screen->ground projection is affine. Build the basis only when
-  // viewport projection changes instead of running Raycaster for every GLB.
-  const groundBasis={ready:false,w:0,h:0,origin:null,stepX:null,stepY:null};
   // PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003
   // Canonical local-player anchor. Canvas no longer owns the GLB lifecycle.
   const localAnchor={classKey:'',worldX:0,worldY:0,scene:null};
-  let localStateMissingSince=0,localSceneToken=null,localClassToken='',localClassCached='';
-  let scratchNdc=null,scratchRay=null,scratchGround=null,scratchPlane=null,scratchProject=null,scratchHead=null,scratchMuzzleWorld=null,scratchMuzzleProject=null,scratchBasisX=null,scratchBasisY=null;
+  let localStateMissingSince=0,localSceneToken=null;
+  let scratchNdc=null,scratchRay=null,scratchGround=null,scratchPlane=null,scratchProject=null,scratchHead=null,scratchMuzzleWorld=null,scratchMuzzleProject=null;
 
   function normalizeClass(v){
     const s=String(v||'').trim(),l=s.toLowerCase();
@@ -60,14 +54,11 @@
     return'';
   }
   function localClass(){
-    let pRaw='',iRaw='';
-    try{if(typeof P!=='undefined'&&P)pRaw=P.classKey||P.cls||P.className||(P._saved&&P._saved.cls)||''}catch(_){}
-    try{if(typeof INV!=='undefined'&&INV)iRaw=INV.classKey||INV.cls||INV.className||''}catch(_){}
-    const token=String(pRaw||'')+'\u0000'+String(iRaw||'');
-    if(token===localClassToken&&localClassCached)return localClassCached;
-    localClassToken=token;
-    localClassCached=normalizeClass(pRaw)||normalizeClass(iRaw)||'';
-    return localClassCached;
+    const vals=[];
+    try{if(typeof P!=='undefined'&&P)vals.push(P.classKey,P.cls,P.className,P._saved&&P._saved.cls)}catch(_){}
+    try{if(typeof INV!=='undefined'&&INV)vals.push(INV.classKey,INV.cls,INV.className)}catch(_){}
+    for(const v of vals){const k=normalizeClass(v);if(k)return k}
+    return'';
   }
   function localName(){
     const vals=[];
@@ -241,11 +232,6 @@
       scratchHead=new THREE.Vector3();
       scratchMuzzleWorld=new THREE.Vector3();
       scratchMuzzleProject=new THREE.Vector3();
-      scratchBasisX=new THREE.Vector3();
-      scratchBasisY=new THREE.Vector3();
-      groundBasis.origin=new THREE.Vector3();
-      groundBasis.stepX=new THREE.Vector3();
-      groundBasis.stepY=new THREE.Vector3();
       groundResult.hit=scratchGround;
 
       const stale=document.getElementById('ppaPlayer3DSystem');
@@ -291,8 +277,7 @@
       try{if(host&&host.remove)host.remove()}catch(_){}
       THREE=null;GLTFLoader=null;SkeletonUtils=null;
       renderer=null;scene=null;camera=null;host=null;hud=null;hx=null;
-      scratchNdc=null;scratchRay=null;scratchGround=null;scratchPlane=null;scratchProject=null;scratchHead=null;scratchMuzzleWorld=null;scratchMuzzleProject=null;scratchBasisX=null;scratchBasisY=null;
-      groundBasis.ready=false;groundBasis.origin=null;groundBasis.stepX=null;groundBasis.stepY=null;
+      scratchNdc=null;scratchRay=null;scratchGround=null;scratchPlane=null;scratchProject=null;scratchHead=null;scratchMuzzleWorld=null;scratchMuzzleProject=null;
       groundResult.hit=null;
       threeInitPromise=null;
       threeRetryCount=Math.min(6,threeRetryCount+1);
@@ -311,55 +296,31 @@
       const fh=h/PX_PER_UNIT,a=w/h;
       camera.left=-fh*a/2;camera.right=fh*a/2;camera.top=fh/2;camera.bottom=-fh/2;
       camera.updateProjectionMatrix();
-      groundBasis.ready=false;
-      mapState.layoutAt=0;
     }
     viewState.w=w;viewState.h=h;return viewState;
   }
   function prepareWorldMap(){
     try{
       if(typeof cv==='undefined'||!cv||!cv.isConnected||typeof cam==='undefined'||!cam){mapState.ready=false;return false}
-      const cw=Number(cv.width),ch=Number(cv.height);
-      if(cw<2||ch<2){mapState.ready=false;return false}
-      const now=performance.now();
-      const needLayout=!mapState.ready||cw!==mapState.canvasW||ch!==mapState.canvasH||viewState.w!==mapState.viewW||viewState.h!==mapState.viewH||now-mapState.layoutAt>=500;
-      if(needLayout){
-        const rect=cv.getBoundingClientRect();
-        if(!rect||rect.width<2||rect.height<2){mapState.ready=false;return false}
-        mapState.left=rect.left;mapState.top=rect.top;mapState.right=rect.right;mapState.bottom=rect.bottom;
-        mapState.kx=rect.width/Math.max(1,cw);mapState.ky=rect.height/Math.max(1,ch);
-        mapState.canvasW=cw;mapState.canvasH=ch;mapState.viewW=viewState.w;mapState.viewH=viewState.h;mapState.layoutAt=now;
-      }
-      mapState.z=Math.max(.1,Number(typeof cameraZoom==='function'?cameraZoom():1)||1);
+      const rect=cv.getBoundingClientRect();
+      if(!rect||rect.width<2||rect.height<2||Number(cv.width)<2||Number(cv.height)<2){mapState.ready=false;return false}
+      const z=Math.max(.1,Number(typeof cameraZoom==='function'?cameraZoom():1)||1);
+      mapState.left=rect.left;mapState.top=rect.top;mapState.right=rect.right;mapState.bottom=rect.bottom;
+      mapState.z=z;mapState.kx=rect.width/Math.max(1,cv.width);mapState.ky=rect.height/Math.max(1,cv.height);
       mapState.ready=Number.isFinite(mapState.kx)&&Number.isFinite(mapState.ky)&&mapState.kx>0&&mapState.ky>0;
       return mapState.ready;
     }catch(_){mapState.ready=false;return false}
   }
-  function rayGroundAt(px,py,view,out){
-    if(!scratchNdc||!scratchRay||!scratchPlane||!out||!view||view.w<2||view.h<2)return false;
-    scratchNdc.set(px/view.w*2-1,1-py/view.h*2);
-    scratchRay.setFromCamera(scratchNdc,camera);
-    return !!scratchRay.ray.intersectPlane(scratchPlane,out);
-  }
-  function prepareGroundBasis(view){
-    if(!groundBasis.origin||!groundBasis.stepX||!groundBasis.stepY||!scratchBasisX||!scratchBasisY)return false;
-    if(groundBasis.ready&&groundBasis.w===view.w&&groundBasis.h===view.h)return true;
-    if(!rayGroundAt(0,0,view,groundBasis.origin)||!rayGroundAt(view.w,0,view,scratchBasisX)||!rayGroundAt(0,view.h,view,scratchBasisY)){
-      groundBasis.ready=false;return false;
-    }
-    groundBasis.stepX.copy(scratchBasisX).sub(groundBasis.origin).multiplyScalar(1/view.w);
-    groundBasis.stepY.copy(scratchBasisY).sub(groundBasis.origin).multiplyScalar(1/view.h);
-    groundBasis.w=view.w;groundBasis.h=view.h;groundBasis.ready=true;
-    return true;
-  }
   function worldToGround(wx,wy,view){
     try{
-      if(!mapState.ready||!scratchGround||!prepareGroundBasis(view))return null;
+      if(!mapState.ready||!scratchNdc||!scratchRay||!scratchGround||!scratchPlane)return null;
       const sx=Number(wx)-Number(cam.x||0),sy=Number(wy)-Number(cam.y||0),z=mapState.z;
       const px=mapState.left+sx*z*mapState.kx,py=mapState.top+sy*z*mapState.ky;
       if(!Number.isFinite(px)||!Number.isFinite(py))return null;
       if(px<mapState.left-160||px>mapState.right+160||py<mapState.top-200||py>mapState.bottom+200)return null;
-      scratchGround.copy(groundBasis.origin).addScaledVector(groundBasis.stepX,px).addScaledVector(groundBasis.stepY,py);
+      scratchNdc.set(px/view.w*2-1,1-py/view.h*2);
+      scratchRay.setFromCamera(scratchNdc,camera);
+      if(!scratchRay.ray.intersectPlane(scratchPlane,scratchGround))return null;
       groundResult.z=z;return groundResult;
     }catch(_){return null}
   }
@@ -508,9 +469,7 @@
       localAnchor.worldX=x;
       localAnchor.worldY=y;
       localAnchor.scene=nextScene;
-      const current=instances.get('local');
-      if(!current||current.cls!==cls)upsert('local','local',cls,null,localAnchor);
-      else{current.anchor=localAnchor;current.seenAt=now;current.alive=true}
+      upsert('local','local',cls,null,localAnchor);
       return true;
     }catch(_){
       if(!localStateMissingSince)localStateMissingSince=now;
