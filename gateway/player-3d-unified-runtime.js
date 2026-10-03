@@ -14,6 +14,7 @@
     priest:{model:'/game/Priest_Final_GitHub.glb?v=20261002u2',targetHeight:2.34,visualScale:.88,yawOffset:0}
   };
   const ENABLED=new Set(Object.keys(CLASS_CONFIG));
+  const MELEE_INPLACE_CLASSES=new Set(['tank','barbarian','paladin','assassin']);
   const instances=new Map(),assets=new Map();
   const PX_PER_UNIT=34;
   const ACCESSORY_RE=/weapon|sword|shield|dagger|cannon|bow|scepter|hammer|cleaver|blade|bulwark/i;
@@ -209,6 +210,30 @@
       try{b.getWorldPosition(tmp);if(tmp.y>bestY){bestY=tmp.y;best=b}}catch(_){}
     }
     return best;
+  }
+  // PPA_PLAYER3D_MELEE_INPLACE_ATTACK_20261003
+  // Melee gameplay owns approach distance. Attack clips are upper-body combat
+  // only: hips/pelvis/legs stay on their canonical rest pose so GLB animation
+  // cannot add a second visual lunge after the character already reached target.
+  function captureMeleeLowerBody(root){
+    const out=[];
+    if(!root)return out;
+    root.traverse(o=>{
+      if(!o||!o.isBone)return;
+      const n=String(o.name||'');
+      if(!/(hips|pelvis|upleg|thigh|leg|calf|shin|knee|foot|toe)/i.test(n))return;
+      out.push({bone:o,pos:o.position.clone(),quat:o.quaternion.clone(),scale:o.scale.clone()});
+    });
+    return out;
+  }
+  function lockMeleeAttackLowerBody(e){
+    if(!e||e.anim!=='attack'||!MELEE_INPLACE_CLASSES.has(e.cls)||!Array.isArray(e.meleeLowerBody))return;
+    for(const r of e.meleeLowerBody){
+      if(!r||!r.bone)continue;
+      r.bone.position.copy(r.pos);
+      r.bone.quaternion.copy(r.quat);
+      r.bone.scale.copy(r.scale);
+    }
   }
 
   async function ensureThree(){
@@ -419,6 +444,7 @@
       if(a.run)e.actions.run=e.mixer.clipAction(a.run);
       if(a.attack)e.actions.attack=e.mixer.clipAction(a.attack);
       e.cfg=a.cfg;e.pivotBone=a.pivotBone||'';
+      e.meleeLowerBody=MELEE_INPLACE_CLASSES.has(e.cls)?captureMeleeLowerBody(clone):[];
       // PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003
       // GLB clips may translate the scene root or hips in local X/Z. Gameplay
       // already owns world movement, so animation root-motion must never move
@@ -446,7 +472,7 @@
     let e=instances.get(id);
     if(!e||e.cls!==cls){
       if(e)removeEntry(id,e);
-      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,retryAt:0,retryCount:0,root:null,model:null,head:null,muzzle:null,mixer:null,actions:null,current:null,anim:'idle',cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:'',rootMotionBone:null,modelBaseX:0,modelBaseZ:0,rootMotionBaseX:0,rootMotionBaseZ:0};
+      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,retryAt:0,retryCount:0,root:null,model:null,head:null,muzzle:null,mixer:null,actions:null,current:null,anim:'idle',cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:'',rootMotionBone:null,modelBaseX:0,modelBaseZ:0,rootMotionBaseX:0,rootMotionBaseZ:0,meleeLowerBody:[]};
       instances.set(id,e);ensureInstance(e);
     }
     e.kind=kind;e.data=data;e.anchor=anchor;e.seenAt=performance.now();e.alive=true;
@@ -669,6 +695,7 @@
       // after sampling so the body cannot orbit/slide away from the game anchor.
       if(e.model){e.model.position.x=e.modelBaseX;e.model.position.z=e.modelBaseZ}
       if(e.rootMotionBone){e.rootMotionBone.position.x=e.rootMotionBaseX;e.rootMotionBone.position.z=e.rootMotionBaseZ}
+      lockMeleeAttackLowerBody(e);
       applyHidden(e,wallNow);
       // Head.getWorldPosition() updates only the required parent chain for HUD.
       // The renderer updates the full scene graph later during render(), so a
@@ -683,12 +710,12 @@
   }
 
   window.PPA_PLAYER3D={
-    version:'unified-v5-rootmotion-locked',
+    version:'unified-v6-melee-inplace',
     local:registerLocal,
     remote:registerRemote,
     muzzle:muzzlePoint,
     diag:()=>({
-      version:'unified-v5-rootmotion-locked',fps,
+      version:'unified-v6-melee-inplace',fps,
       instances:Array.from(instances.values()).map(e=>({
         id:e.id,kind:e.kind,cls:e.cls,ready:!!e.root,loading:!!e.loading,error:e.error||'',
         pivotBone:e.pivotBone||'',headBone:e.head&&e.head.name||'',muzzle:e.muzzle&&e.muzzle.name||'',
