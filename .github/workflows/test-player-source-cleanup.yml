@@ -50,6 +50,10 @@ jobs:
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" public/game/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v5-rootmotion-locked" public/game/player-3d-unified-runtime.js
+          grep -q "e.model.position.x=e.modelBaseX" public/game/player-3d-unified-runtime.js
+          grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" public/game/player-3d-unified-runtime.js
           grep -q "const stableHeight=" public/game/player-3d-unified-runtime.js
           grep -q "const headX=Math.round(Number(h.headX));" public/game/player-3d-unified-runtime.js
           ! grep -q "if(e.head)e.head.getWorldPosition(scratchHead);" public/game/player-3d-unified-runtime.js
@@ -61,7 +65,7 @@ jobs:
           ! grep -q "e.kind==='local'?500:1800" public/game/player-3d-unified-runtime.js
           ! grep -q "__PPA3D_LOCAL_PENDING" public/game/player-3d-unified-runtime.js
           ! grep -q "__PPA3D_LOCAL_PENDING" public/index.html
-          grep -q "player-3d-unified-runtime.js?v=20261003u14" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261003u15" public/index.html
           grep -q "remote-player-3d-dispatch.js?v=20261003u7" public/index.html
           grep -q "PPA_PLAYER3D_REMOTE_SCRATCH_20261003" public/game/remote-player-3d-dispatch.js
           grep -q "__ppa3DVisualPosition" public/game/remote-player-3d-dispatch.js
@@ -85,4 +89,4 @@ jobs:
           done
           ! grep -q "const ANIM=" public/index.html
           ! grep -q "playerAnimDef(" public/index.html
-          echo "verified: packed 2D player art is removed from production; Player3D runtime owns the local player with stable HUD and proven projection"
+          echo "verified: packed 2D player art is removed; Player3D owns local player with stable HUD, root-motion lock and proven projection"
