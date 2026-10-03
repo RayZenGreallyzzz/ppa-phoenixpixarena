@@ -7,14 +7,10 @@ function replaceOne(src,from,to,label){
 }
 
 // 1) Realtime identity refresh must stay on the existing WebSocket.
+// Legacy online teardown is already performed once in boot(); never move it
+// into a hot loop or reconnect path.
 const rtPath='gateway/realtime-client.js';
 let rt=fs.readFileSync(rtPath,'utf8');
-rt=replaceOne(
-  rt,
-  "      RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;\n      RT.lastServerAt=Date.now();",
-  "      RT.connecting=false;RT.retry=0;RT.pingMs=null;RT.pingSent=0;\n      disableLegacyOnline();\n      RT.lastServerAt=Date.now();",
-  'disable legacy once on socket open'
-);
 rt=replaceOne(
   rt,
   "    if(m.type==='hello'){",
@@ -35,6 +31,7 @@ rt=replaceOne(
 );
 if(rt.includes("disableLegacyOnline();sendRoom(false)"))throw new Error('legacy teardown still runs in realtime hot loop');
 if(!rt.includes("PPA_REALTIME_REFRESH_IDENTITY"))throw new Error('identity refresh client API missing');
+if(!rt.includes("function boot(){\n    if(RT.started)return;RT.started=true;disableLegacyOnline();"))throw new Error('legacy teardown is not owned by boot');
 fs.writeFileSync(rtPath,rt,'utf8');
 
 // 2) Identity watcher no longer closes a healthy socket. It merely asks the
