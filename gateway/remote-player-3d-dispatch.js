@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_REMOTE_PLAYER3D_DISPATCH_V1)return;
-  window.__PPA_REMOTE_PLAYER3D_DISPATCH_V1=true;
+  if(window.__PPA_REMOTE_PLAYER3D_DISPATCH_V2)return;
+  window.__PPA_REMOTE_PLAYER3D_DISPATCH_V2=true;
 
   function classKey(v){
     var s=String(v||'').trim(),l=s.toLowerCase();
@@ -18,6 +18,7 @@
     return'';
   }
   function stress(r){return !!(r&&r.__ppaDebugRemote)||/^BOT\s*\d+$/i.test(String(r&&r.name||''))}
+  function finite(v){v=Number(v);return Number.isFinite(v)?v:null}
 
   var hitMetrics=null,hitMetricsAt=0;
   function canvasHitMetrics(now){
@@ -25,10 +26,42 @@
       now=Number(now)||Date.now();
       if(hitMetrics&&now-hitMetricsAt<120)return hitMetrics;
       var rect=cv.getBoundingClientRect(),z=Math.max(.1,Number(cameraZoom())||1);
+      if(!rect||rect.width<2||rect.height<2)return null;
       hitMetrics={left:rect.left,top:rect.top,z:z,kx:rect.width/Math.max(1,cv.width),ky:rect.height/Math.max(1,cv.height)};
       hitMetricsAt=now;
       return hitMetrics;
-    }catch(_){return hitMetrics}
+    }catch(_){return null}
+  }
+
+  // Renderer-only interpolation. Never mutate r.x/r.y or r.lastDrawAt here:
+  // those fields belong to realtime/gameplay and are also used by targeting.
+  function visualPosition(r,now){
+    var tx=finite(r.tx),ty=finite(r.ty),rx=finite(r.x),ry=finite(r.y);
+    if(tx===null)tx=rx;if(ty===null)ty=ry;
+    if(tx===null||ty===null)return null;
+
+    var sceneToken=String(r.scene==null?'':r.scene);
+    if(r.__ppa3DScene!==sceneToken){
+      r.__ppa3DScene=sceneToken;
+      r.__ppa3DX=rx===null?tx:rx;
+      r.__ppa3DY=ry===null?ty:ry;
+      r.__ppa3DLastAt=now;
+    }
+    if(!Number.isFinite(Number(r.__ppa3DX))||!Number.isFinite(Number(r.__ppa3DY))){
+      r.__ppa3DX=rx===null?tx:rx;
+      r.__ppa3DY=ry===null?ty:ry;
+    }
+
+    var dt=Math.max(0,Math.min(100,now-(Number(r.__ppa3DLastAt)||now)));
+    r.__ppa3DLastAt=now;
+    var dx=tx-Number(r.__ppa3DX),dy=ty-Number(r.__ppa3DY);
+    if(Math.hypot(dx,dy)>220){
+      r.__ppa3DX=tx;r.__ppa3DY=ty;
+    }else{
+      var alpha=1-Math.exp(-dt/105);
+      r.__ppa3DX+=dx*alpha;r.__ppa3DY+=dy*alpha;
+    }
+    return{x:Number(r.__ppa3DX),y:Number(r.__ppa3DY)};
   }
 
   var installed=false;
@@ -39,29 +72,32 @@
     var draw=function(r,now,nearCount){
       if(!r||!r.hasPos)return false;
       if(stress(r))return fallback(r,now,nearCount);
-      var key=classKey(r.cls||r.classKey||r.className);
+
+      var freshKey=classKey(r.cls||r.classKey||r.className);
+      if(freshKey)r.__ppa3DClass=freshKey;
+      var key=freshKey||classKey(r.__ppa3DClass);
       if(!key){r.__ppa3DMissingClass=true;return false}
       r.__ppa3DMissingClass=false;
 
-      var dt=Math.max(0,Math.min(100,now-(r.lastDrawAt||now)));r.lastDrawAt=now;
-      var alpha=1-Math.exp(-dt/105);r.x+=(r.tx-r.x)*alpha;r.y+=(r.ty-r.y)*alpha;
-      var sx=r.x-cam.x,sy=r.y-cam.y,z=Math.max(.1,Number(cameraZoom())||1);
-      var vw=cv.width/z,vh=cv.height/z;if(sx<-120||sy<-170||sx>vw+120||sy>vh+170)return false;
+      var pos=visualPosition(r,now);
+      if(!pos)return false;
+      var sx=pos.x-Number(cam.x||0),sy=pos.y-Number(cam.y||0),z=Math.max(.1,Number(cameraZoom())||1);
+      var vw=cv.width/z,vh=cv.height/z;
+      if(sx<-120||sy<-170||sx>vw+120||sy>vh+170)return false;
 
-      // Gameplay target size is independent of GLB/sprite dimensions.
-      // Server-provided r.sz wins; otherwise use the established 30-world-unit fallback.
+      // Gameplay target size remains independent of GLB dimensions. These are
+      // screen-space affordances only; canonical realtime coordinates stay intact.
       var targetBody=Math.max(30,Number(r.sz)||30);
       var m=canvasHitMetrics(now);
       if(m){
         r.__ppaHitX=sx;r.__ppaHitY=sy;r.__ppaHitBody=targetBody;r.__ppaHitAt=now;
         r.__ppaClientX=m.left+sx*m.z*m.kx;r.__ppaClientY=m.top+sy*m.z*m.ky;
         r.__ppaUntargetable=Number(r.hiddenUntil)>Date.now();
-        // Touch affordance only; never feeds collision/combat/model scale.
         r.__ppaClientRadius=r.__ppaUntargetable?0:58;
         r.__ppaClientAt=now;
       }
 
-      var anchor={classKey:key,worldX:Number(r.x),worldY:Number(r.y),nearCount:nearCount};
+      var anchor={classKey:key,worldX:pos.x,worldY:pos.y,nearCount:nearCount,scene:r.scene};
       try{if(window.PPA_PLAYER3D&&typeof PPA_PLAYER3D.remote==='function')PPA_PLAYER3D.remote(r,anchor)}catch(_){}
       return true;
     };
