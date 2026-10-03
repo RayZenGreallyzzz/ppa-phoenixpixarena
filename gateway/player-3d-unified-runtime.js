@@ -572,13 +572,14 @@
   }
   function updateHudAnchor(e,view,z){
     try{
+      // PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003
+      // Labels must not follow an animated head bone: idle/run/attack move the
+      // skeleton every frame and make nickname/clan text visibly shake.
       const h=e.hud||(e.hud={feetX:0,feetY:0,headX:0,headY:0});
       projectIntoHud(e.root.position,view,h,'feetX','feetY');
-      if(e.head)e.head.getWorldPosition(scratchHead);
-      else{
-        const cfg=e.cfg||CLASS_CONFIG[e.cls];
-        scratchHead.set(e.root.position.x,e.root.position.y+(Number(cfg.targetHeight)||2.34)*(Number(cfg.visualScale)||1)*z,e.root.position.z);
-      }
+      const cfg=e.cfg||CLASS_CONFIG[e.cls];
+      const stableHeight=(Number(cfg.targetHeight)||2.34)*(Number(cfg.visualScale)||1)*z;
+      scratchHead.set(e.root.position.x,e.root.position.y+stableHeight,e.root.position.z);
       projectIntoHud(scratchHead,view,h,'headX','headY');
       return h;
     }catch(_){return null}
@@ -592,17 +593,20 @@
     const h=e.hud,remote=e.kind==='remote',r=e.data||{};
     hx.save();
     if(remote&&Number(r.hiddenUntil)>wallNow)hx.globalAlpha=.38;
-    const bodyPx=Math.max(0,Number(h.feetY)-Number(h.headY));
+    const feetY=Math.round(Number(h.feetY));
+    const headX=Math.round(Number(h.headX));
+    const headY=Math.round(Number(h.headY));
+    const bodyPx=Math.max(0,feetY-headY);
     const labelGap=Math.max(14,Math.min(24,bodyPx*.12));
-    let y=h.headY-labelGap;
+    const y=Math.round(headY-labelGap);
     if(remote&&Number(r.mhp)>0){
-      const bw=36;hx.fillStyle='rgba(0,0,0,.68)';hx.fillRect(h.headX-bw/2,y-7,bw,4);
-      hx.fillStyle='#47dd78';hx.fillRect(h.headX-bw/2,y-7,bw*Math.max(0,Math.min(1,(Number(r.hp)||0)/Number(r.mhp))),4);
+      const bw=36;hx.fillStyle='rgba(0,0,0,.68)';hx.fillRect(headX-bw/2,y-7,bw,4);
+      hx.fillStyle='#47dd78';hx.fillRect(headX-bw/2,y-7,bw*Math.max(0,Math.min(1,(Number(r.hp)||0)/Number(r.mhp))),4);
     }
     const name=remote?String(r.name||'Игрок').slice(0,18):localName().slice(0,18);
     const clan=remote?String(r.clanName||'').slice(0,18):localClan().slice(0,18);
-    if(clan)textStrokeFill('['+clan+']',h.headX,y-15,'700 8px Georgia, serif','#a9cfff');
-    textStrokeFill(name,h.headX,y,'600 10px Georgia, serif','#f2d39a');
+    if(clan)textStrokeFill('['+clan+']',headX,y-15,'700 8px Georgia, serif','#a9cfff');
+    textStrokeFill(name,headX,y,'600 10px Georgia, serif','#f2d39a');
     hx.restore();
   }
 
