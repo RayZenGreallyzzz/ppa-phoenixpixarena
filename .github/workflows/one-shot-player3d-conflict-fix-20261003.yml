@@ -17,6 +17,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Install dependencies
+        run: npm install
       - name: Apply repair
         run: node tools/one-shot-player3d-conflict-fix-20261003.mjs
       - name: Validate changed JavaScript
