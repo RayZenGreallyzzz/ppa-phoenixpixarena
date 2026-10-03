@@ -57,7 +57,13 @@ jobs:
           grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" gateway/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" gateway/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" gateway/player-3d-unified-runtime.js
-          grep -q "unified-v6-melee-inplace" gateway/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_MELEE_INPLACE_ATTACK_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "makeMeleeInPlaceAttackClip" gateway/player-3d-unified-runtime.js
+          grep -q "unified-v7-melee-clip-filter" gateway/player-3d-unified-runtime.js
+          ! grep -q "lockMeleeAttackLowerBody" gateway/player-3d-unified-runtime.js
+          ! grep -q "captureMeleeLowerBody" gateway/player-3d-unified-runtime.js
+          ! grep -q "meleeLowerBody" gateway/player-3d-unified-runtime.js
           grep -q "e.model.position.x=e.modelBaseX" gateway/player-3d-unified-runtime.js
           grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" gateway/player-3d-unified-runtime.js
           grep -q "const stableHeight=" gateway/player-3d-unified-runtime.js
@@ -84,7 +90,13 @@ jobs:
           grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" public/game/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" public/game/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" public/game/player-3d-unified-runtime.js
-          grep -q "unified-v6-melee-inplace" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_MELEE_INPLACE_ATTACK_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "makeMeleeInPlaceAttackClip" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v7-melee-clip-filter" public/game/player-3d-unified-runtime.js
+          ! grep -q "lockMeleeAttackLowerBody" public/game/player-3d-unified-runtime.js
+          ! grep -q "captureMeleeLowerBody" public/game/player-3d-unified-runtime.js
+          ! grep -q "meleeLowerBody" public/game/player-3d-unified-runtime.js
           grep -q "e.model.position.x=e.modelBaseX" public/game/player-3d-unified-runtime.js
           grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" public/game/player-3d-unified-runtime.js
           grep -q "const stableHeight=" public/game/player-3d-unified-runtime.js
@@ -104,7 +116,7 @@ jobs:
           grep -q "__ppa3DVisualPosition" public/game/remote-player-3d-dispatch.js
           grep -q "__ppa3DAnchor" public/game/remote-player-3d-dispatch.js
           ! grep -q "r.x+=(r.tx-r.x)" public/game/remote-player-3d-dispatch.js
-          grep -q "player-3d-unified-runtime.js?v=20261003u16" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261003u17" public/index.html
           grep -q "remote-player-3d-dispatch.js?v=20261003u7" public/index.html
           grep -q "PPA_PLAYER3D_LOCAL_ONLY_20261002" public/index.html
           grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" public/index.html
@@ -137,5 +149,9 @@ jobs:
           if(!body.includes('PPA_PLAYER3D_LOCAL_ONLY_20261002'))throw new Error('drawPlayer is not Player3D-only');
           if(!body.includes('PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003'))throw new Error('drawPlayer compatibility hook lacks runtime ownership marker');
           for(const bad of ['drawImage','playerUses','visualBody','phoneCharacter','cx.ellipse','PT.push','__PPA3D_LOCAL_PENDING','worldX','worldY','PPA_PLAYER3D.local'])if(body.includes(bad))throw new Error('legacy/local lifecycle token near drawPlayer: '+bad);
-          console.log('verified: unified Player3D owns real player visuals; root motion is locked; attack facing persists; AI and mob/boss systems preserved');
+          const src=fs.readFileSync('public/game/player-3d-unified-runtime.js','utf8');
+          const f0=src.indexOf('function frame(now){'),f1=src.indexOf('window.PPA_PLAYER3D={',f0);
+          const frame=src.slice(f0,f1);
+          for(const bad of ['lockMeleeAttackLowerBody','captureMeleeLowerBody','meleeLowerBody'])if(frame.includes(bad))throw new Error('melee hot-loop regression: '+bad);
+          console.log('verified: unified Player3D owns real player visuals; melee in-place is prefiltered once; AI and mob/boss systems preserved');
           NODE
