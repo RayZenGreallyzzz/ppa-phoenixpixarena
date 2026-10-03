@@ -31,7 +31,7 @@
   // PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003
   // Canonical local-player anchor. Canvas no longer owns the GLB lifecycle.
   const localAnchor={classKey:'',worldX:0,worldY:0,scene:null};
-  let localStateMissingSince=0,localSceneToken=null;
+  let localSceneToken=null;
   let scratchNdc=null,scratchRay=null,scratchGround=null,scratchPlane=null,scratchProject=null,scratchHead=null,scratchMuzzleWorld=null,scratchMuzzleProject=null;
 
   function normalizeClass(v){
@@ -451,9 +451,11 @@
   }
   function syncLocalFromGame(now){
     try{
-      if(typeof P==='undefined'||!P)throw new Error('local state unavailable');
-      const cls=localClass(),x=Number(P.x),y=Number(P.y);
-      if(!cls||!Number.isFinite(x)||!Number.isFinite(y))throw new Error('local state incomplete');
+      if(typeof P==='undefined'||!P)return false;
+      const x=Number(P.x),y=Number(P.y);
+      if(!Number.isFinite(x)||!Number.isFinite(y))return false;
+      const cls=localClass()||normalizeClass(localAnchor.classKey);
+      if(!cls)return false;
       const nextScene=String(P.scene==null?'':P.scene);
       if(localSceneToken!==null&&localSceneToken!==nextScene){
         const current=instances.get('local');
@@ -464,22 +466,13 @@
         }
       }
       localSceneToken=nextScene;
-      localStateMissingSince=0;
       localAnchor.classKey=cls;
       localAnchor.worldX=x;
       localAnchor.worldY=y;
       localAnchor.scene=nextScene;
       upsert('local','local',cls,null,localAnchor);
       return true;
-    }catch(_){
-      if(!localStateMissingSince)localStateMissingSince=now;
-      if(now-localStateMissingSince>1500){
-        const e=instances.get('local');
-        if(e)removeEntry('local',e);
-        localSceneToken=null;
-      }
-      return false;
-    }
+    }catch(_){return false}
   }
   function registerRemote(r,a){
     if(!r||isStressBot(r))return false;
