@@ -1,0 +1,56 @@
+name: Migrate Player3D melee clip filter
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/migrate-player3d-melee-clip-filter-20261003.mjs
+      - .github/workflows/migrate-player3d-melee-clip-filter-20261003.yml
+permissions:
+  contents: write
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - name: Apply melee clip-filter optimization
+        run: node tools/migrate-player3d-melee-clip-filter-20261003.mjs
+      - name: Verify hot-loop invariants
+        run: |
+          node --check gateway/player-3d-unified-runtime.js
+          ! grep -q "lockMeleeAttackLowerBody" gateway/player-3d-unified-runtime.js
+          ! grep -q "captureMeleeLowerBody" gateway/player-3d-unified-runtime.js
+          ! grep -q "meleeLowerBody" gateway/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "makeMeleeInPlaceAttackClip" gateway/player-3d-unified-runtime.js
+          grep -q "unified-v7-melee-clip-filter" gateway/player-3d-unified-runtime.js
+          grep -q "player-3d-unified-runtime.js?v=20261003u17" tools/postbuild-player-3d-unified-20261002.mjs
+          grep -q "v636-player3d-melee-clipfilter-20261003" build.mjs
+      - name: Production build
+        run: npm run build
+      - name: Audit final player render ownership
+        run: node tools/audit-player-render-ownership-20261003.mjs
+      - name: Verify built runtime
+        run: |
+          ! grep -q "lockMeleeAttackLowerBody" public/game/player-3d-unified-runtime.js
+          ! grep -q "captureMeleeLowerBody" public/game/player-3d-unified-runtime.js
+          ! grep -q "meleeLowerBody" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v7-melee-clip-filter" public/game/player-3d-unified-runtime.js
+          grep -q "player-3d-unified-runtime.js?v=20261003u17" public/index.html
+      - name: Commit canonical changes
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gateway/player-3d-unified-runtime.js tools/postbuild-player-3d-unified-20261002.mjs build.mjs
+          git commit -m "Move melee in-place locking out of Player3D hot loop"
+          git push
