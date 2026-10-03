@@ -1,0 +1,53 @@
+name: Migrate realtime identity in-band
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/migrate-realtime-identity-inband-20261003.mjs'
+      - '.github/workflows/migrate-realtime-identity-inband-20261003.yml'
+permissions:
+  contents: write
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - name: Apply in-band identity migration
+        run: node tools/migrate-realtime-identity-inband-20261003.mjs
+      - name: Syntax checks
+        run: |
+          node --check gateway/realtime-client.js
+          node --check gateway/realtime-identity-sync.js
+          node --check gateway/ppa-bridge.js
+          node --check src/realtime-stable.js
+      - name: Verify identity refresh never tears down realtime
+        run: |
+          grep -q "PPA_REALTIME_IDENTITY_INBAND_20261003" gateway/realtime-client.js
+          grep -q "PPA_REALTIME_IDENTITY_INBAND_20261003" gateway/realtime-identity-sync.js
+          grep -q "PPA_REALTIME_IDENTITY_INBAND_20261003" src/realtime-stable.js
+          grep -q "type:'identity-sync'" gateway/realtime-client.js
+          grep -q "m.type === 'identity-sync'" src/realtime-stable.js
+          ! grep -q "close(4000,'Identity refresh')" gateway/realtime-client.js
+          ! grep -q "PPA_REALTIME_RECONNECT" gateway/realtime-identity-sync.js
+          ! grep -q "PPA_REALTIME_RECONNECT.*nickname" gateway/ppa-bridge.js
+      - name: Production build
+        run: npm run build
+      - name: Verify built realtime identity path
+        run: |
+          grep -q "PPA_REALTIME_IDENTITY_INBAND_20261003" public/game/realtime-client.js
+          grep -q "PPA_REALTIME_IDENTITY_INBAND_20261003" public/game/realtime-identity-sync.js
+          ! grep -q "close(4000,'Identity refresh')" public/game/realtime-client.js
+      - name: Commit canonical source changes only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add gateway/realtime-client.js gateway/realtime-identity-sync.js gateway/ppa-bridge.js src/realtime-stable.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Sync realtime identity without reconnecting'
+          git push origin HEAD:main
