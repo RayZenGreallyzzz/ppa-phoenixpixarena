@@ -4,6 +4,7 @@ import zlib from 'node:zlib';
 const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
 for(const p of parts)if(!fs.existsSync(p))throw new Error('Missing '+p);
 const src=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
+const buildSrc=fs.readFileSync('build.mjs','utf8');
 
 function clean(s){
   return s
@@ -20,6 +21,16 @@ function context(label,needle,max=8,pre=1400,post=2600){
     pos+=needle.length;
   }
   console.log(`COUNT ${label}: ${count(needle)}${count(needle)>max?' (printed first '+max+')':''}`);
+}
+function contextText(text,label,needle,max=8,pre=1400,post=2600){
+  console.log(`\n===== ${label} :: ${needle} =====`);
+  let pos=0,n=0,total=0;
+  while((pos=text.indexOf(needle,pos))>=0){
+    total++;
+    if(n<max){n++;console.log(`\n--- ${label} #${n} @ ${pos} ---\n`+clean(text.slice(Math.max(0,pos-pre),Math.min(text.length,pos+post))))}
+    pos+=Math.max(1,needle.length);
+  }
+  console.log(`COUNT ${label}: ${total}${total>max?' (printed first '+max+')':''}`);
 }
 function regexContexts(label,re,max=12,pre=900,post=1700){
   console.log(`\n===== REGEX ${label} :: ${re} =====`);
@@ -40,6 +51,7 @@ context('SHOOT_TIMER','shootT',12,1200,2200);
 context('ATTACK_SPEED','atkSpd',30,1600,3200);
 context('TARGET_ID','P.tid',20,1200,2200);
 context('AUTO_ATTACK','autoAttack',20,1200,2200);
+context('PLAYER3D_SCRIPT_REF','player-3d-unified-runtime.js',20,2200,4200);
 context('PLAYER3D_RUNTIME','unified-v7-melee-clip-filter',6,3000,7000);
 context('MELEE_CLIP_FILTER','PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003',6,3000,7000);
 context('TIME_SCALE','setEffectiveTimeScale',20,2000,3500);
@@ -52,6 +64,8 @@ context('ATTACK_RU','Атака',20,1100,2200);
 context('COOLDOWN_WORD','cooldown',20,1000,1800);
 context('ATK_CD_CAMEL','atkCD',20,1000,1800);
 context('ATK_CD_LOWER','atkCd',20,1000,1800);
+contextText(buildSrc,'BUILD_PLAYER3D_REF','player-3d-unified-runtime.js',20,2200,4200);
+contextText(buildSrc,'BUILD_PLAYER3D_CACHE','20261003u17',20,1800,3200);
 
 regexContexts('POINTER_BIND',/addEventListener\(\s*['\"](?:pointerdown|pointerup|touchstart|touchend|mousedown|mouseup|click)['\"]/g,30,700,1400);
 regexContexts('ATTACK_IDENT',/\b(?:tryAttack|doAttack|basicAttack|startAttack|performAttack|attackTarget|playerAttack|attackBtn|btnAttack|atkBtn|attackButton)\b/g,40,1000,2400);
@@ -59,6 +73,6 @@ regexContexts('THREE_ACTION_CONTROL',/\.(?:play|reset|stop|fadeIn|fadeOut|crossF
 regexContexts('EARLY_RETURN_ATTACK',/if\s*\([^\n]{0,160}(?:attacking|runAttackT|shootT|atkSpd|cooldown|tid|target)[^\n]{0,160}\)\s*return/g,30,1000,2000);
 
 console.log('\n===== SUMMARY =====');
-for(const needle of ['PPA_MELEE_SMART_APPROACH_20261003','playerBasicRange','P.attacking','runAttackT','shootT','atkSpd','P.tid','autoAttack','unified-v7-melee-clip-filter','PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003','setEffectiveTimeScale','timeScale','AnimationMixer','clipAction','attackAction','Атака','cooldown','atkCD','atkCd']){
+for(const needle of ['PPA_MELEE_SMART_APPROACH_20261003','playerBasicRange','P.attacking','runAttackT','shootT','atkSpd','P.tid','autoAttack','player-3d-unified-runtime.js','unified-v7-melee-clip-filter','PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003','setEffectiveTimeScale','timeScale','AnimationMixer','clipAction','attackAction','Атака','cooldown','atkCD','atkCd']){
   console.log(JSON.stringify({needle,count:count(needle)}));
 }
