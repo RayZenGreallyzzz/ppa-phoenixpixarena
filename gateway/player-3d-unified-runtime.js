@@ -31,7 +31,7 @@
   // PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003
   // Canonical local-player anchor. Canvas no longer owns the GLB lifecycle.
   const localAnchor={classKey:'',worldX:0,worldY:0,scene:null};
-  let localStateMissingSince=0;
+  let localStateMissingSince=0,localSceneToken=null;
   let scratchNdc=null,scratchRay=null,scratchGround=null,scratchPlane=null,scratchProject=null,scratchHead=null,scratchMuzzleWorld=null,scratchMuzzleProject=null;
 
   function normalizeClass(v){
@@ -301,11 +301,14 @@
   }
   function prepareWorldMap(){
     try{
-      if(typeof cv==='undefined'||!cv||typeof cam==='undefined'||!cam){mapState.ready=false;return false}
-      const rect=cv.getBoundingClientRect(),z=Math.max(.1,Number(typeof cameraZoom==='function'?cameraZoom():1)||1);
+      if(typeof cv==='undefined'||!cv||!cv.isConnected||typeof cam==='undefined'||!cam){mapState.ready=false;return false}
+      const rect=cv.getBoundingClientRect();
+      if(!rect||rect.width<2||rect.height<2||Number(cv.width)<2||Number(cv.height)<2){mapState.ready=false;return false}
+      const z=Math.max(.1,Number(typeof cameraZoom==='function'?cameraZoom():1)||1);
       mapState.left=rect.left;mapState.top=rect.top;mapState.right=rect.right;mapState.bottom=rect.bottom;
       mapState.z=z;mapState.kx=rect.width/Math.max(1,cv.width);mapState.ky=rect.height/Math.max(1,cv.height);
-      mapState.ready=true;return true;
+      mapState.ready=Number.isFinite(mapState.kx)&&Number.isFinite(mapState.ky)&&mapState.kx>0&&mapState.ky>0;
+      return mapState.ready;
     }catch(_){mapState.ready=false;return false}
   }
   function worldToGround(wx,wy,view){
@@ -451,11 +454,21 @@
       if(typeof P==='undefined'||!P)throw new Error('local state unavailable');
       const cls=localClass(),x=Number(P.x),y=Number(P.y);
       if(!cls||!Number.isFinite(x)||!Number.isFinite(y))throw new Error('local state incomplete');
+      const nextScene=String(P.scene==null?'':P.scene);
+      if(localSceneToken!==null&&localSceneToken!==nextScene){
+        const current=instances.get('local');
+        if(current){
+          current.lastWX=null;current.lastWY=null;current.movingUntil=0;
+          current.lastMotionYaw=0;current.hasMotionYaw=false;
+          if(current.root)current.root.visible=false;
+        }
+      }
+      localSceneToken=nextScene;
       localStateMissingSince=0;
       localAnchor.classKey=cls;
       localAnchor.worldX=x;
       localAnchor.worldY=y;
-      localAnchor.scene=P.scene;
+      localAnchor.scene=nextScene;
       upsert('local','local',cls,null,localAnchor);
       return true;
     }catch(_){
@@ -463,6 +476,7 @@
       if(now-localStateMissingSince>1500){
         const e=instances.get('local');
         if(e)removeEntry('local',e);
+        localSceneToken=null;
       }
       return false;
     }
@@ -578,7 +592,9 @@
     const h=e.hud,remote=e.kind==='remote',r=e.data||{};
     hx.save();
     if(remote&&Number(r.hiddenUntil)>wallNow)hx.globalAlpha=.38;
-    let y=h.headY-6;
+    const bodyPx=Math.max(0,Number(h.feetY)-Number(h.headY));
+    const labelGap=Math.max(14,Math.min(24,bodyPx*.12));
+    let y=h.headY-labelGap;
     if(remote&&Number(r.mhp)>0){
       const bw=36;hx.fillStyle='rgba(0,0,0,.68)';hx.fillRect(h.headX-bw/2,y-7,bw,4);
       hx.fillStyle='#47dd78';hx.fillRect(h.headX-bw/2,y-7,bw*Math.max(0,Math.min(1,(Number(r.hp)||0)/Number(r.mhp))),4);
@@ -598,10 +614,15 @@
     }
     syncLocalFromGame(now);
     const view=resize();if(!view)return;
-    prepareWorldMap();
+    const mapReady=prepareWorldMap();
     const wallNow=Date.now();
     const dt=Math.max(0,Math.min(.05,(now-lastFrameAt)/1000));lastFrameAt=now;
     hx.clearRect(0,0,view.w,view.h);
+    if(!mapReady){
+      for(const e of instances.values())if(e&&e.root)e.root.visible=false;
+      try{renderer.render(scene,camera)}catch(_){}
+      return;
+    }
 
     for(const [id,e] of instances){
       if(!e.alive||(e.kind==='remote'&&now-e.seenAt>1800)){removeEntry(id,e);continue}
@@ -636,12 +657,12 @@
   }
 
   window.PPA_PLAYER3D={
-    version:'unified-v3-runtime-owned-local',
+    version:'unified-v4-state-isolated',
     local:registerLocal,
     remote:registerRemote,
     muzzle:muzzlePoint,
     diag:()=>({
-      version:'unified-v3-runtime-owned-local',fps,
+      version:'unified-v4-state-isolated',fps,
       instances:Array.from(instances.values()).map(e=>({
         id:e.id,kind:e.kind,cls:e.cls,ready:!!e.root,loading:!!e.loading,error:e.error||'',
         pivotBone:e.pivotBone||'',headBone:e.head&&e.head.name||'',muzzle:e.muzzle&&e.muzzle.name||'',
