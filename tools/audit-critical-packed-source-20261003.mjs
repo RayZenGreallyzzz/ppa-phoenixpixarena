@@ -33,10 +33,18 @@ context('GRAM_STATE','function sendGramWalletState()',10);
 context('DRAGON_KEEPER_TEXT','Хранитель',20);
 context('ELITE_BOOK_INSPECT','Rank',20,900,1600);
 
+// TEMP 20261003: inspect canonical melee approach/stop-distance logic only.
+context('MELEE_FUNCTION','function melee',12,2600,5200);
+context('BASIC_RANGE','playerBasicRange',20,2200,4200);
+context('ATTACK_MODE','attackMode',20,1800,3600);
+context('AUTO_TARGET','findNearBasic',20,1800,3600);
+context('MELEE_ANGLE','meleeAng',20,1800,3600);
+
 console.log('\n===== SUMMARY =====');
 for(const needle of [
   'P.kil','P.xp','applyPlayerVampirism(dmg','e.hp-=dmg','DG_ACTIVE_SPAWNS.length',
-  'e.aggro&&','e.atkCD<=0','e.visDir','function sendGramWalletState()'
+  'e.aggro&&','e.atkCD<=0','e.visDir','function sendGramWalletState()',
+  'function melee','playerBasicRange','attackMode','findNearBasic','meleeAng'
 ]){
   let c=0,p=0;while((p=src.indexOf(needle,p))>=0){c++;p+=needle.length}
   console.log(JSON.stringify({needle,count:c}));
