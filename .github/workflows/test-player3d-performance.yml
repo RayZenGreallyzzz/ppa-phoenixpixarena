@@ -19,7 +19,7 @@ jobs:
       - run: npm install
       - run: node --check gateway/player-3d-unified-runtime.js
       - run: node --check gateway/remote-player-3d-dispatch.js
-      - name: Verify proven projection, stable HUD, root-motion, facing, muzzle and ownership source invariants
+      - name: Verify proven projection, stable HUD, root-motion, facing, melee in-place, muzzle and ownership source invariants
         run: |
           grep -q "const viewState={w:0,h:0};" gateway/player-3d-unified-runtime.js
           grep -q "const mapState={ready:false" gateway/player-3d-unified-runtime.js
@@ -32,7 +32,10 @@ jobs:
           grep -q "prepareWorldMap();" gateway/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" gateway/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" gateway/player-3d-unified-runtime.js
-          grep -q "unified-v5-rootmotion-locked" gateway/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_MELEE_INPLACE_ATTACK_20261003" gateway/player-3d-unified-runtime.js
+          grep -Fq "MELEE_INPLACE_CLASSES=new Set(['tank','barbarian','paladin','assassin'])" gateway/player-3d-unified-runtime.js
+          grep -q "lockMeleeAttackLowerBody(e);" gateway/player-3d-unified-runtime.js
+          grep -q "unified-v6-melee-inplace" gateway/player-3d-unified-runtime.js
           grep -q "e.model.position.x=e.modelBaseX" gateway/player-3d-unified-runtime.js
           grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" gateway/player-3d-unified-runtime.js
           grep -q "const stableHeight=" gateway/player-3d-unified-runtime.js
@@ -68,6 +71,7 @@ jobs:
           const frame=src.slice(a,b);
           if(frame.includes('updateWorldMatrix(true,true)'))throw new Error('full-tree update leaked into Player3D frame loop');
           if(!frame.includes('e.model.position.x=e.modelBaseX')||!frame.includes('e.rootMotionBone.position.x=e.rootMotionBaseX'))throw new Error('horizontal root-motion lock missing from frame loop');
+          if(!frame.includes('lockMeleeAttackLowerBody(e);'))throw new Error('melee lower-body in-place lock missing from frame loop');
           const worldA=src.indexOf('function worldToGround(');
           const worldB=src.indexOf('function projectIntoHud(',worldA);
           if(worldA<0||worldB<0)throw new Error('worldToGround range missing');
@@ -80,7 +84,7 @@ jobs:
           if(!local.includes('e.lastMotionYaw=e.hasMotionYaw?shortestAngle(e.lastMotionYaw,raw):raw;')||!local.includes('if(attack){'))throw new Error('attack yaw is not persisted');
           const n=(src.match(/if\(e\.root\)e\.root\.updateWorldMatrix\(true,true\);/g)||[]).length;
           if(n!==1)throw new Error('expected exactly one on-demand muzzle matrix update, found '+n);
-          console.log('verified: proven projection preserved; horizontal root-motion locked; attack facing persists; allocation/full-tree guards active');
+          console.log('verified: proven projection preserved; root motion locked; four melee classes attack in place; attack facing persists');
           NODE
       - name: Guard gameplay and mob boss source systems
         run: |
@@ -100,7 +104,10 @@ jobs:
           grep -q "prepareWorldMap();" public/game/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" public/game/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" public/game/player-3d-unified-runtime.js
-          grep -q "unified-v5-rootmotion-locked" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_MELEE_INPLACE_ATTACK_20261003" public/game/player-3d-unified-runtime.js
+          grep -Fq "MELEE_INPLACE_CLASSES=new Set(['tank','barbarian','paladin','assassin'])" public/game/player-3d-unified-runtime.js
+          grep -q "lockMeleeAttackLowerBody(e);" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v6-melee-inplace" public/game/player-3d-unified-runtime.js
           grep -q "e.model.position.x=e.modelBaseX" public/game/player-3d-unified-runtime.js
           grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" public/game/player-3d-unified-runtime.js
           grep -q "const stableHeight=" public/game/player-3d-unified-runtime.js
@@ -121,7 +128,7 @@ jobs:
           ! grep -q "localStateMissingSince" public/game/player-3d-unified-runtime.js
           ! grep -q "e.kind==='local'?500:1800" public/game/player-3d-unified-runtime.js
           ! grep -q "__PPA3D_LOCAL_PENDING" public/game/player-3d-unified-runtime.js
-          grep -q "player-3d-unified-runtime.js?v=20261003u15" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261003u16" public/index.html
           grep -q "remote-player-3d-dispatch.js?v=20261003u7" public/index.html
           ! grep -q "__PPA3D_LOCAL_PENDING" public/index.html
           test -e public/game/dungeon-mob-events.js
@@ -137,6 +144,7 @@ jobs:
           const frame=src.slice(a,b);
           if(frame.includes('updateWorldMatrix(true,true)'))throw new Error('built runtime has full-tree update in frame loop');
           if(!frame.includes('e.model.position.x=e.modelBaseX')||!frame.includes('e.rootMotionBone.position.x=e.rootMotionBaseX'))throw new Error('built root-motion lock missing');
+          if(!frame.includes('lockMeleeAttackLowerBody(e);'))throw new Error('built melee lower-body in-place lock missing');
           const worldA=src.indexOf('function worldToGround(');
           const worldB=src.indexOf('function projectIntoHud(',worldA);
           if(worldA<0||worldB<0)throw new Error('built worldToGround range missing');
