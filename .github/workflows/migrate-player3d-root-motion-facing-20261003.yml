@@ -1,0 +1,57 @@
+name: Migrate Player3D root motion and facing
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/migrate-player3d-root-motion-facing-20261003.mjs
+      - .github/workflows/migrate-player3d-root-motion-facing-20261003.yml
+permissions:
+  contents: write
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - name: Apply migration
+        run: node tools/migrate-player3d-root-motion-facing-20261003.mjs
+      - name: Syntax and invariants
+        run: |
+          node --check gateway/player-3d-unified-runtime.js
+          node --check tools/postbuild-player-3d-unified-20261002.mjs
+          grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "unified-v5-rootmotion-locked" gateway/player-3d-unified-runtime.js
+          grep -q "e.model.position.x=e.modelBaseX" gateway/player-3d-unified-runtime.js
+          grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" gateway/player-3d-unified-runtime.js
+          grep -q "if(attack){" gateway/player-3d-unified-runtime.js
+          grep -q "player-3d-unified-runtime.js?v=20261003u15" tools/postbuild-player-3d-unified-20261002.mjs
+          grep -q "v633-player3d-rootmotion-facing-20261003" build.mjs
+          ! grep -q "localStateMissingSince" gateway/player-3d-unified-runtime.js
+      - name: Production build
+        run: npm run build
+      - name: Audit final player render ownership
+        run: node tools/audit-player-render-ownership-20261003.mjs
+      - name: Verify built runtime
+        run: |
+          grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v5-rootmotion-locked" public/game/player-3d-unified-runtime.js
+          grep -q "e.model.position.x=e.modelBaseX" public/game/player-3d-unified-runtime.js
+          grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" public/game/player-3d-unified-runtime.js
+          grep -q "player-3d-unified-runtime.js?v=20261003u15" public/index.html
+          ! grep -q "localStateMissingSince" public/game/player-3d-unified-runtime.js
+      - name: Commit canonical changes
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gateway/player-3d-unified-runtime.js tools/postbuild-player-3d-unified-20261002.mjs build.mjs
+          git commit -m "Lock Player3D root motion and preserve attack facing"
+          git push
