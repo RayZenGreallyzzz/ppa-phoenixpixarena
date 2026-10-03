@@ -19,7 +19,7 @@ jobs:
       - run: npm install
       - run: node --check gateway/player-3d-unified-runtime.js
       - run: node --check gateway/remote-player-3d-dispatch.js
-      - name: Verify proven projection, idle-yaw, muzzle and ownership source invariants
+      - name: Verify proven projection, stable HUD, idle-yaw, muzzle and ownership source invariants
         run: |
           grep -q "const viewState={w:0,h:0};" gateway/player-3d-unified-runtime.js
           grep -q "const mapState={ready:false" gateway/player-3d-unified-runtime.js
@@ -30,11 +30,14 @@ jobs:
           grep -q "groundResult.z=z;return groundResult;" gateway/player-3d-unified-runtime.js
           grep -q "if(e.hiddenState===hidden)return;" gateway/player-3d-unified-runtime.js
           grep -q "prepareWorldMap();" gateway/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "const stableHeight=" gateway/player-3d-unified-runtime.js
+          grep -q "const headX=Math.round(Number(h.headX));" gateway/player-3d-unified-runtime.js
+          ! grep -q "if(e.head)e.head.getWorldPosition(scratchHead);" gateway/player-3d-unified-runtime.js
           grep -q "projectIntoHud(e.root.position,view,h,'feetX','feetY');" gateway/player-3d-unified-runtime.js
           grep -q "const wallNow=Date.now();" gateway/player-3d-unified-runtime.js
           grep -q "applyHidden(e,wallNow);" gateway/player-3d-unified-runtime.js
           grep -q "drawHud(e,wallNow);" gateway/player-3d-unified-runtime.js
-          grep -q "if(e.head)e.head.getWorldPosition(scratchHead);" gateway/player-3d-unified-runtime.js
           grep -q "if(e.hasMotionYaw&&!attack)return e.lastMotionYaw;" gateway/player-3d-unified-runtime.js
           grep -q "if(e.hasMotionYaw&&!remoteAttack)return e.lastMotionYaw;" gateway/player-3d-unified-runtime.js
           grep -q "return now<e.movingUntil?'run':'idle';" gateway/player-3d-unified-runtime.js
@@ -64,7 +67,7 @@ jobs:
           if(!world.includes('setFromCamera')||!world.includes('intersectPlane'))throw new Error('proven Raycaster projection path missing');
           const n=(src.match(/if\(e\.root\)e\.root\.updateWorldMatrix\(true,true\);/g)||[]).length;
           if(n!==1)throw new Error('expected exactly one on-demand muzzle matrix update, found '+n);
-          console.log('verified: proven Player3D projection path restored; allocation and full-tree guards remain active');
+          console.log('verified: proven Player3D projection preserved; HUD anchor is stable; allocation and full-tree guards remain active');
           NODE
       - name: Guard gameplay and mob boss source systems
         run: |
@@ -82,6 +85,10 @@ jobs:
           grep -q "scratchRay.ray.intersectPlane(scratchPlane,scratchGround)" public/game/player-3d-unified-runtime.js
           grep -q "if(e.hiddenState===hidden)return;" public/game/player-3d-unified-runtime.js
           grep -q "prepareWorldMap();" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "const stableHeight=" public/game/player-3d-unified-runtime.js
+          grep -q "const headX=Math.round(Number(h.headX));" public/game/player-3d-unified-runtime.js
+          ! grep -q "if(e.head)e.head.getWorldPosition(scratchHead);" public/game/player-3d-unified-runtime.js
           grep -q "const wallNow=Date.now();" public/game/player-3d-unified-runtime.js
           grep -q "applyHidden(e,wallNow);" public/game/player-3d-unified-runtime.js
           grep -q "drawHud(e,wallNow);" public/game/player-3d-unified-runtime.js
@@ -96,7 +103,7 @@ jobs:
           grep -q "__ppa3DAnchor" public/game/remote-player-3d-dispatch.js
           ! grep -q "e.kind==='local'?500:1800" public/game/player-3d-unified-runtime.js
           ! grep -q "__PPA3D_LOCAL_PENDING" public/game/player-3d-unified-runtime.js
-          grep -q "player-3d-unified-runtime.js?v=20261003u12" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261003u13" public/index.html
           grep -q "remote-player-3d-dispatch.js?v=20261003u7" public/index.html
           ! grep -q "__PPA3D_LOCAL_PENDING" public/index.html
           test -e public/game/dungeon-mob-events.js
