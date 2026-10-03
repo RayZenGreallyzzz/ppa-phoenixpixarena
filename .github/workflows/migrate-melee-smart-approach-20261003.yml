@@ -1,0 +1,57 @@
+name: Migrate canonical melee smart approach
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/migrate-melee-smart-approach-20261003.mjs
+      - .github/workflows/migrate-melee-smart-approach-20261003.yml
+permissions:
+  contents: write
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install
+      - name: Apply canonical packed-source migration
+        run: node tools/migrate-melee-smart-approach-20261003.mjs
+      - name: Verify packed-source invariants
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),zlib=require('zlib');
+          const p=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
+          const s=zlib.gunzipSync(Buffer.concat(p.map(x=>fs.readFileSync(x)))).toString('utf8');
+          if(!s.includes('PPA_MELEE_SMART_APPROACH_20261003'))throw new Error('marker missing');
+          if(!s.includes('tank:72,barbarian:78,paladin:74,assassin:64'))throw new Error('melee approach table missing');
+          if(!s.includes("return Number.isFinite(melee)?melee:playerBasicRange()*.90;"))throw new Error('ranged fallback missing');
+          if(!s.includes('return Math.max(35,base+edge);'))throw new Error('mob-size edge offset missing');
+          if((s.match(/PPA_MELEE_SMART_APPROACH_20261003/g)||[]).length!==1)throw new Error('duplicate marker');
+          NODE
+          grep -q "v635-melee-smart-approach-20261003" build.mjs
+      - name: Production build
+        run: npm run build
+      - name: Audit final player render ownership
+        run: node tools/audit-player-render-ownership-20261003.mjs
+      - name: Verify built gameplay
+        run: |
+          grep -q "PPA_MELEE_SMART_APPROACH_20261003" public/index.html
+          grep -q "tank:72,barbarian:78,paladin:74,assassin:64" public/index.html
+          grep -q "PPA_PLAYER3D_MELEE_INPLACE_ATTACK_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "player-3d-unified-runtime.js?v=20261003u16" public/index.html
+      - name: Commit canonical source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PPA01.bin PPA02.bin PPA03.bin PPA04.bin PPA05.bin PPA06.bin PPA07.bin PPA08.bin PPA09.bin PPA10.bin PPA11.bin PPA12.bin build.mjs
+          if git diff --cached --quiet; then
+            echo "No canonical changes to commit"
+            exit 0
+          fi
+          git commit -m "Separate melee smart approach from hit range"
+          git push
