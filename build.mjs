@@ -9,7 +9,7 @@ const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
 const EXPECTED_SOURCE_SHA256 = '7a67e1e1a42a1636e9f402ed99e91b7e4e94d9fcd40db3efc1b93cabfd47a0fa';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v635-melee-smart-approach-20261003';
+const CLIENT_BUILD = 'v636-player3d-melee-clipfilter-20261003';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
