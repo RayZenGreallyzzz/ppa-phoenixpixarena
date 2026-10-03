@@ -1,0 +1,64 @@
+name: Migrate attack button press feedback
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/migrate-attack-button-press-feedback-20261004.mjs
+      - .github/workflows/migrate-attack-button-press-feedback-20261004.yml
+permissions:
+  contents: write
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install
+      - name: Apply packed-source migration
+        run: node tools/migrate-attack-button-press-feedback-20261004.mjs
+      - name: Verify packed-source invariants
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),zlib=require('zlib');
+          const p=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
+          const s=zlib.gunzipSync(Buffer.concat(p.map(x=>fs.readFileSync(x)))).toString('utf8');
+          for(const required of [
+            'PPA_ATTACK_BUTTON_PRESS_FEEDBACK_20261004',
+            'scale:.94!important',
+            'performance.now()+90',
+            'function attackTouchStart(e)',
+            'function attackTouchEnd(e)',
+            "bA.addEventListener('pointerdown',attackPointerDown,{passive:false});",
+            "bA.addEventListener('click',triggerAttackInput,{passive:false});",
+            'if(now-_combatAttackInputStamp<170)return;'
+          ])if(!s.includes(required))throw new Error('missing invariant: '+required);
+          if((s.match(/PPA_ATTACK_BUTTON_PRESS_FEEDBACK_20261004/g)||[]).length!==1)throw new Error('duplicate feedback marker');
+          NODE
+          grep -q "v637-attack-press-feedback-20261004" build.mjs
+      - name: Production build
+        run: npm run build
+      - name: Audit final player render ownership
+        run: node tools/audit-player-render-ownership-20261003.mjs
+      - name: Verify built gameplay and performance guards
+        run: |
+          grep -q "PPA_ATTACK_BUTTON_PRESS_FEEDBACK_20261004" public/index.html
+          grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" public/game/player-3d-unified-runtime.js
+          ! grep -q "lockMeleeAttackLowerBody" public/game/player-3d-unified-runtime.js
+          ! grep -q "captureMeleeLowerBody" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v7-melee-clip-filter" public/game/player-3d-unified-runtime.js
+      - name: Commit canonical source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PPA01.bin PPA02.bin PPA03.bin PPA04.bin PPA05.bin PPA06.bin PPA07.bin PPA08.bin PPA09.bin PPA10.bin PPA11.bin PPA12.bin build.mjs
+          if git diff --cached --quiet; then
+            echo "No canonical changes to commit"
+            exit 0
+          fi
+          git commit -m "Add attack button press feedback"
+          git push
