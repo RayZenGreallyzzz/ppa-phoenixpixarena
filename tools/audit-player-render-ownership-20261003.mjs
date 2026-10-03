@@ -73,7 +73,8 @@ if(!runtime.includes('syncLocalFromGame(now);'))fail('runtime does not synchroni
 if(runtime.includes("e.kind==='local'?500:1800"))fail('local Player3D still depends on 500ms draw-call TTL');
 if(!runtime.includes('threeInitPromise'))fail('Player3D Three.js initialization is not serialized');
 if(runtime.includes('__PPA3D_LOCAL_PENDING'))fail('legacy pending local registration survived runtime');
-if(!remote.includes('__PPA_REMOTE_PLAYER3D_DISPATCH_V1'))fail('remote Player3D dispatch marker missing');
+if(!remote.includes('__PPA_REMOTE_PLAYER3D_DISPATCH_V2'))fail('remote Player3D V2 dispatch marker missing');
+if(!remote.includes('PPA_PLAYER3D_REMOTE_SCRATCH_20261003'))fail('remote Player3D reusable scratch marker missing');
 if(/\bdrawImage\s*\(/.test(remote))fail('remote real-player dispatch contains Canvas drawImage path');
 
 function functionRange(src,start){
