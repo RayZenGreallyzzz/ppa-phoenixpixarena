@@ -19,7 +19,7 @@ jobs:
       - run: npm install
       - run: node --check gateway/player-3d-unified-runtime.js
       - run: node --check gateway/remote-player-3d-dispatch.js
-      - name: Verify proven projection, stable HUD, idle-yaw, muzzle and ownership source invariants
+      - name: Verify proven projection, stable HUD, root-motion, facing, muzzle and ownership source invariants
         run: |
           grep -q "const viewState={w:0,h:0};" gateway/player-3d-unified-runtime.js
           grep -q "const mapState={ready:false" gateway/player-3d-unified-runtime.js
@@ -31,6 +31,10 @@ jobs:
           grep -q "if(e.hiddenState===hidden)return;" gateway/player-3d-unified-runtime.js
           grep -q "prepareWorldMap();" gateway/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "unified-v5-rootmotion-locked" gateway/player-3d-unified-runtime.js
+          grep -q "e.model.position.x=e.modelBaseX" gateway/player-3d-unified-runtime.js
+          grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" gateway/player-3d-unified-runtime.js
           grep -q "const stableHeight=" gateway/player-3d-unified-runtime.js
           grep -q "const headX=Math.round(Number(h.headX));" gateway/player-3d-unified-runtime.js
           ! grep -q "if(e.head)e.head.getWorldPosition(scratchHead);" gateway/player-3d-unified-runtime.js
@@ -40,6 +44,7 @@ jobs:
           grep -q "drawHud(e,wallNow);" gateway/player-3d-unified-runtime.js
           grep -q "if(e.hasMotionYaw&&!attack)return e.lastMotionYaw;" gateway/player-3d-unified-runtime.js
           grep -q "if(e.hasMotionYaw&&!remoteAttack)return e.lastMotionYaw;" gateway/player-3d-unified-runtime.js
+          grep -q "e.lastMotionYaw=e.hasMotionYaw?shortestAngle(e.lastMotionYaw,raw):raw;" gateway/player-3d-unified-runtime.js
           grep -q "return now<e.movingUntil?'run':'idle';" gateway/player-3d-unified-runtime.js
           grep -q "if(e.root)e.root.updateWorldMatrix(true,true);" gateway/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" gateway/player-3d-unified-runtime.js
@@ -60,15 +65,22 @@ jobs:
           const a=src.indexOf('function frame(now){');
           const b=src.indexOf('window.PPA_PLAYER3D={',a);
           if(a<0||b<0)throw new Error('Player3D frame range missing');
-          if(src.slice(a,b).includes('updateWorldMatrix(true,true)'))throw new Error('full-tree update leaked into Player3D frame loop');
+          const frame=src.slice(a,b);
+          if(frame.includes('updateWorldMatrix(true,true)'))throw new Error('full-tree update leaked into Player3D frame loop');
+          if(!frame.includes('e.model.position.x=e.modelBaseX')||!frame.includes('e.rootMotionBone.position.x=e.rootMotionBaseX'))throw new Error('horizontal root-motion lock missing from frame loop');
           const worldA=src.indexOf('function worldToGround(');
           const worldB=src.indexOf('function projectIntoHud(',worldA);
           if(worldA<0||worldB<0)throw new Error('worldToGround range missing');
           const world=src.slice(worldA,worldB);
           if(!world.includes('setFromCamera')||!world.includes('intersectPlane'))throw new Error('proven Raycaster projection path missing');
+          const localA=src.indexOf('function localYaw(');
+          const localB=src.indexOf('function remoteYaw(',localA);
+          if(localA<0||localB<0)throw new Error('localYaw range missing');
+          const local=src.slice(localA,localB);
+          if(!local.includes('e.lastMotionYaw=e.hasMotionYaw?shortestAngle(e.lastMotionYaw,raw):raw;')||!local.includes('if(attack){'))throw new Error('attack yaw is not persisted');
           const n=(src.match(/if\(e\.root\)e\.root\.updateWorldMatrix\(true,true\);/g)||[]).length;
           if(n!==1)throw new Error('expected exactly one on-demand muzzle matrix update, found '+n);
-          console.log('verified: proven Player3D projection preserved; HUD anchor is stable; allocation and full-tree guards remain active');
+          console.log('verified: proven projection preserved; horizontal root-motion locked; attack facing persists; allocation/full-tree guards active');
           NODE
       - name: Guard gameplay and mob boss source systems
         run: |
@@ -87,6 +99,10 @@ jobs:
           grep -q "if(e.hiddenState===hidden)return;" public/game/player-3d-unified-runtime.js
           grep -q "prepareWorldMap();" public/game/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v5-rootmotion-locked" public/game/player-3d-unified-runtime.js
+          grep -q "e.model.position.x=e.modelBaseX" public/game/player-3d-unified-runtime.js
+          grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" public/game/player-3d-unified-runtime.js
           grep -q "const stableHeight=" public/game/player-3d-unified-runtime.js
           grep -q "const headX=Math.round(Number(h.headX));" public/game/player-3d-unified-runtime.js
           ! grep -q "if(e.head)e.head.getWorldPosition(scratchHead);" public/game/player-3d-unified-runtime.js
@@ -105,7 +121,7 @@ jobs:
           ! grep -q "localStateMissingSince" public/game/player-3d-unified-runtime.js
           ! grep -q "e.kind==='local'?500:1800" public/game/player-3d-unified-runtime.js
           ! grep -q "__PPA3D_LOCAL_PENDING" public/game/player-3d-unified-runtime.js
-          grep -q "player-3d-unified-runtime.js?v=20261003u14" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261003u15" public/index.html
           grep -q "remote-player-3d-dispatch.js?v=20261003u7" public/index.html
           ! grep -q "__PPA3D_LOCAL_PENDING" public/index.html
           test -e public/game/dungeon-mob-events.js
@@ -118,7 +134,9 @@ jobs:
           const a=src.indexOf('function frame(now){');
           const b=src.indexOf('window.PPA_PLAYER3D={',a);
           if(a<0||b<0)throw new Error('built Player3D frame range missing');
-          if(src.slice(a,b).includes('updateWorldMatrix(true,true)'))throw new Error('built runtime has full-tree update in frame loop');
+          const frame=src.slice(a,b);
+          if(frame.includes('updateWorldMatrix(true,true)'))throw new Error('built runtime has full-tree update in frame loop');
+          if(!frame.includes('e.model.position.x=e.modelBaseX')||!frame.includes('e.rootMotionBone.position.x=e.rootMotionBaseX'))throw new Error('built root-motion lock missing');
           const worldA=src.indexOf('function worldToGround(');
           const worldB=src.indexOf('function projectIntoHud(',worldA);
           if(worldA<0||worldB<0)throw new Error('built worldToGround range missing');
