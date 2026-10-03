@@ -18,4 +18,9 @@ jobs:
         with:
           node-version: '24'
       - name: Audit packed attack path
-        run: node tools/audit-attack-input-20261004.mjs
+        run: node tools/audit-attack-input-20261004.mjs > attack-input-audit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: attack-input-audit
+          path: attack-input-audit.txt
+          if-no-files-found: error
