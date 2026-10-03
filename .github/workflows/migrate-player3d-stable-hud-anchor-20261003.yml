@@ -1,0 +1,48 @@
+name: Migrate Player3D stable HUD anchor
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/migrate-player3d-stable-hud-anchor-20261003.mjs'
+      - '.github/workflows/migrate-player3d-stable-hud-anchor-20261003.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - name: Apply stable HUD anchor migration
+        run: node tools/migrate-player3d-stable-hud-anchor-20261003.mjs
+      - run: node --check gateway/player-3d-unified-runtime.js
+      - name: Verify narrow HUD-only architecture change
+        run: |
+          grep -q 'PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003' gateway/player-3d-unified-runtime.js
+          grep -q 'const stableHeight=' gateway/player-3d-unified-runtime.js
+          grep -q 'const headX=Math.round(Number(h.headX));' gateway/player-3d-unified-runtime.js
+          ! grep -q "if(e.head)e.head.getWorldPosition(scratchHead)" gateway/player-3d-unified-runtime.js
+          grep -q 'scratchRay.setFromCamera(scratchNdc,camera);' gateway/player-3d-unified-runtime.js
+          grep -q 'scratchRay.ray.intersectPlane(scratchPlane,scratchGround)' gateway/player-3d-unified-runtime.js
+          grep -q 'player-3d-unified-runtime.js?v=20261003u13' tools/postbuild-player-3d-unified-20261002.mjs
+      - name: Production build
+        run: npm run build
+      - name: Audit player ownership
+        run: node tools/audit-player-render-ownership-20261003.mjs
+      - name: Commit canonical source changes only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add gateway/player-3d-unified-runtime.js tools/postbuild-player-3d-unified-20261002.mjs
+          if git diff --cached --quiet; then
+            echo 'No migration changes to commit'
+            exit 0
+          fi
+          git commit -m 'Stabilize Player3D nickname and clan HUD anchor'
+          git push origin HEAD:main
