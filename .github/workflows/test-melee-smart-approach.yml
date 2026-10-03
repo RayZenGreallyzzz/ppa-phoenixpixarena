@@ -28,7 +28,6 @@ jobs:
           ];
           for(const s of required)if(!src.includes(s))throw new Error('Missing melee approach invariant: '+s);
           if((src.match(/PPA_MELEE_SMART_APPROACH_20261003/g)||[]).length!==1)throw new Error('Melee approach marker duplicated');
-          // Legal hit ranges stay separate from the closer Smart Attack approach distances.
           for(const s of [
             "tank:{\n    name:'Страж',type:'Ближний бой',attackMode:'melee',\n    hp:260,mp:20,atk:12,def_:34,spd:2.00,atkSpd:0.95,range:95",
             "barbarian:{\n    name:'Берсерк',type:'Ближний бой',attackMode:'melee',\n    hp:150,mp:30,atk:20,def_:12,spd:3.50,atkSpd:1.20,range:105",
@@ -36,7 +35,16 @@ jobs:
             "assassin:{\n    name:'Ассасин',type:'Ближний бой',attackMode:'melee',\n    hp:100,mp:60,atk:15,def_:5,spd:4.50,atkSpd:1.55,range:95"
           ])if(!src.includes(s))throw new Error('Legal melee hit range drifted');
           NODE
-          grep -q "v635-melee-smart-approach-20261003" build.mjs
+          grep -q "v636-player3d-melee-clipfilter-20261003" build.mjs
+      - name: Verify Player3D melee hot loop is clean
+        run: |
+          grep -q "PPA_PLAYER3D_MELEE_INPLACE_ATTACK_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "makeMeleeInPlaceAttackClip" gateway/player-3d-unified-runtime.js
+          grep -q "unified-v7-melee-clip-filter" gateway/player-3d-unified-runtime.js
+          ! grep -q "lockMeleeAttackLowerBody" gateway/player-3d-unified-runtime.js
+          ! grep -q "captureMeleeLowerBody" gateway/player-3d-unified-runtime.js
+          ! grep -q "meleeLowerBody" gateway/player-3d-unified-runtime.js
       - name: Install dependencies
         run: npm install
       - name: Production build
@@ -48,4 +56,9 @@ jobs:
           grep -Fq "return Number.isFinite(melee)?melee:playerBasicRange()*.90;" public/index.html
           grep -Fq "return Math.max(35,base+edge);" public/index.html
           grep -q "PPA_PLAYER3D_MELEE_INPLACE_ATTACK_20261003" public/game/player-3d-unified-runtime.js
-          grep -q "player-3d-unified-runtime.js?v=20261003u16" public/index.html
+          grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v7-melee-clip-filter" public/game/player-3d-unified-runtime.js
+          ! grep -q "lockMeleeAttackLowerBody" public/game/player-3d-unified-runtime.js
+          ! grep -q "captureMeleeLowerBody" public/game/player-3d-unified-runtime.js
+          ! grep -q "meleeLowerBody" public/game/player-3d-unified-runtime.js
+          grep -q "player-3d-unified-runtime.js?v=20261003u17" public/index.html
