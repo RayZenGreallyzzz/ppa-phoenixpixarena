@@ -2169,6 +2169,26 @@ export class RealtimeHub extends BaseRealtimeHub {
       return;
     }
 
+    if (m.type === 'identity-sync') {
+      // PPA_REALTIME_IDENTITY_INBAND_20261003
+      a.name = cleanName(m.name || a.name || 'Игрок');
+      if (this.env && this.env.DB && a.telegramId) {
+        try {
+          const row = await this.env.DB.prepare(
+            'SELECT cm.clan_id,c.name AS clan_name FROM clan_members cm LEFT JOIN clans c ON c.id=cm.clan_id WHERE cm.telegram_id=?1 LIMIT 1'
+          ).bind(String(a.telegramId)).first();
+          a.clanId = row && row.clan_id ? String(row.clan_id).slice(0,80) : '';
+          a.clanName = row && row.clan_name ? String(row.clan_name).trim().slice(0,24) : '';
+        } catch (_) {}
+      }
+      a.lastSeenAt = now;
+      ws.serializeAttachment(a);
+      const identityRoom = cleanRoom(a.room);
+      this.roomBroadcast(identityRoom,{type:'move',player:packetFromAtt(a),room:identityRoom},ws);
+      wsJson(ws,{type:'identity-synced',name:cleanName(a.name),clanId:String(a.clanId||''),clanName:String(a.clanName||''),ts:now});
+      return;
+    }
+
     if (m.type === 'player-pk-toggle') {
       const room=cleanRoom(a.room);
       const enabled=!!m.enabled&&playerPkRoomAllowed(room)&&!a.arenaMatchId&&!a.deadLocked&&Number(a.h)>0;

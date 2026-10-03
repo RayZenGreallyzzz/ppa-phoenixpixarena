@@ -1305,7 +1305,13 @@ window.PPA_CLAN_BOSS_SELF_PID=function(){return String(RT.selfPid||'')};
     return window.PPA_RT_ARENA_CLEAR();
   };
   window.PPA_REALTIME_RESYNC=resyncRoom;
-  window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
+  // PPA_REALTIME_IDENTITY_INBAND_20261003: metadata refresh stays on the live socket.
+  window.PPA_REALTIME_IDENTITY_SYNC=function(name){
+    var clean=String(name||'').trim().slice(0,24);
+    return send({type:'identity-sync',name:clean});
+  };
+  // Keep a manual recovery hook for diagnostics only. Identity/profile updates must not call it.
+  window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4001,'Manual reconnect')}catch(_){};setTimeout(connect,250)};
   window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,serverClockReady:RT.serverClockReady,serverClockOffset:Math.round(Number(RT.serverClockOffset)||0),selfPid:RT.selfPid,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady(),pkActive:pkActive(),pkTargetId:RT.pkTargetId,serverDeadLocked:RT.serverDeadLocked,clanBossRoom:RT.clanBossRoom,clanBossId:RT.clanBossId,clanBossState:RT.clanBossState}};
 
   function boot(){

@@ -177,7 +177,7 @@
     }
     try{
       var r=await call('/api/profile/rename',{nickname:nickname,requestId:requestId});
-      try{if(window.PPA_REALTIME_RECONNECT)setTimeout(function(){window.PPA_REALTIME_RECONNECT()},60)}catch(_){}
+      try{if(window.PPA_REALTIME_IDENTITY_SYNC)setTimeout(function(){window.PPA_REALTIME_IDENTITY_SYNC(nickname)},60)}catch(_){}
       return r;
     }
     catch(err){if(err&&err.data&&err.data.ok===false)return err.data;throw err}
@@ -298,7 +298,7 @@
         console.warn('PPA fresh registration targeted apply',applyErr);
       }
 
-      try{if(window.PPA_REALTIME_RECONNECT)setTimeout(function(){window.PPA_REALTIME_RECONNECT()},60)}catch(_){}
+      try{if(window.PPA_REALTIME_IDENTITY_SYNC)setTimeout(function(){window.PPA_REALTIME_IDENTITY_SYNC(nickname)},60)}catch(_){}
       return r;
     },
     ppaSyncNicknameFromSave:async function(){return authed('/api/profile/load')},
