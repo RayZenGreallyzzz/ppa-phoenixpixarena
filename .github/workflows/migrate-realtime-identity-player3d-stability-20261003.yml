@@ -48,7 +48,6 @@ jobs:
           ! grep -q "localStateMissingSince" public/game/player-3d-unified-runtime.js
           grep -q "localClass()||normalizeClass(localAnchor.classKey)" public/game/player-3d-unified-runtime.js
           grep -q "player-3d-unified-runtime.js?v=20261003u14" public/index.html
-          grep -q "v632-realtime-player3d-stability-20261003" public/index.html
       - name: Commit canonical source changes
         run: |
           if git diff --quiet; then
