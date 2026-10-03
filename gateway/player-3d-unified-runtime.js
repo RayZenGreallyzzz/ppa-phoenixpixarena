@@ -419,6 +419,14 @@
       if(a.run)e.actions.run=e.mixer.clipAction(a.run);
       if(a.attack)e.actions.attack=e.mixer.clipAction(a.attack);
       e.cfg=a.cfg;e.pivotBone=a.pivotBone||'';
+      // PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003
+      // GLB clips may translate the scene root or hips in local X/Z. Gameplay
+      // already owns world movement, so animation root-motion must never move
+      // the visible body away from its canonical Player3D anchor. Preserve Y.
+      e.rootMotionBone=e.pivotBone?clone.getObjectByName(e.pivotBone):null;
+      e.modelBaseX=Number(clone.position.x)||0;e.modelBaseZ=Number(clone.position.z)||0;
+      e.rootMotionBaseX=e.rootMotionBone?(Number(e.rootMotionBone.position.x)||0):0;
+      e.rootMotionBaseZ=e.rootMotionBone?(Number(e.rootMotionBone.position.z)||0):0;
       e.retryAt=0;e.retryCount=0;
       switchAnim(e,'idle');
     }catch(err){
@@ -438,7 +446,7 @@
     let e=instances.get(id);
     if(!e||e.cls!==cls){
       if(e)removeEntry(id,e);
-      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,retryAt:0,retryCount:0,root:null,model:null,head:null,muzzle:null,mixer:null,actions:null,current:null,anim:'idle',cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:''};
+      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,retryAt:0,retryCount:0,root:null,model:null,head:null,muzzle:null,mixer:null,actions:null,current:null,anim:'idle',cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:'',rootMotionBone:null,modelBaseX:0,modelBaseZ:0,rootMotionBaseX:0,rootMotionBaseZ:0};
       instances.set(id,e);ensureInstance(e);
     }
     e.kind=kind;e.data=data;e.anchor=anchor;e.seenAt=performance.now();e.alive=true;
@@ -502,14 +510,25 @@
         const t=EN.find(x=>x&&x.id==P.tid);
         if(t){
           const dx=Number(t.x)-px,dy=Number(t.y)-py;
-          if(Number.isFinite(dx)&&Number.isFinite(dy)&&Math.hypot(dx,dy)>.01)return cameraYaw+Math.atan2(dx,dy)+(Number(cfg.yawOffset)||0);
+          if(Number.isFinite(dx)&&Number.isFinite(dy)&&Math.hypot(dx,dy)>.01){
+            const raw=cameraYaw+Math.atan2(dx,dy)+(Number(cfg.yawOffset)||0);
+            e.lastMotionYaw=e.hasMotionYaw?shortestAngle(e.lastMotionYaw,raw):raw;
+            e.hasMotionYaw=true;
+            return e.lastMotionYaw;
+          }
         }
       }
       // Idle owns the last real movement yaw. Legacy P.face is only a startup/attack fallback.
       if(e.hasMotionYaw&&!attack)return e.lastMotionYaw;
       let f=Number(P&&P.face),dir=4;
       if(Number.isFinite(f)&&f>=0&&f<=7)dir=Math.round(f);else if(f===8)dir=0;else if(f===-1)dir=6;else if(f===1)dir=2;
-      return cameraYaw+(4-dir)*(Math.PI/4)+(Number(cfg.yawOffset)||0);
+      const raw=cameraYaw+(4-dir)*(Math.PI/4)+(Number(cfg.yawOffset)||0);
+      if(attack){
+        e.lastMotionYaw=e.hasMotionYaw?shortestAngle(e.lastMotionYaw,raw):raw;
+        e.hasMotionYaw=true;
+        return e.lastMotionYaw;
+      }
+      return raw;
     }catch(_){return cameraYaw}
   }
   function remoteYaw(e,now){
@@ -531,7 +550,13 @@
     if(e.hasMotionYaw&&!remoteAttack)return e.lastMotionYaw;
     const f=Number(r.face);let dir=2;
     if(f===-1)dir=6;else if(f===1)dir=2;else if(Number.isFinite(f)&&f>=0&&f<=7)dir=Math.round(f);else if(f===8)dir=0;
-    return cameraYaw+(4-dir)*(Math.PI/4)+(Number(cfg.yawOffset)||0);
+    const raw=cameraYaw+(4-dir)*(Math.PI/4)+(Number(cfg.yawOffset)||0);
+    if(remoteAttack){
+      e.lastMotionYaw=e.hasMotionYaw?shortestAngle(e.lastMotionYaw,raw):raw;
+      e.hasMotionYaw=true;
+      return e.lastMotionYaw;
+    }
+    return raw;
   }
   function desiredAnim(e,now){
     if(e.kind==='local'){
@@ -640,6 +665,10 @@
 
       switchAnim(e,desiredAnim(e,now));
       try{if(e.mixer)e.mixer.update(dt)}catch(_){}
+      // Animation may contain root translation. Neutralize horizontal root-motion
+      // after sampling so the body cannot orbit/slide away from the game anchor.
+      if(e.model){e.model.position.x=e.modelBaseX;e.model.position.z=e.modelBaseZ}
+      if(e.rootMotionBone){e.rootMotionBone.position.x=e.rootMotionBaseX;e.rootMotionBone.position.z=e.rootMotionBaseZ}
       applyHidden(e,wallNow);
       // Head.getWorldPosition() updates only the required parent chain for HUD.
       // The renderer updates the full scene graph later during render(), so a
@@ -654,12 +683,12 @@
   }
 
   window.PPA_PLAYER3D={
-    version:'unified-v4-state-isolated',
+    version:'unified-v5-rootmotion-locked',
     local:registerLocal,
     remote:registerRemote,
     muzzle:muzzlePoint,
     diag:()=>({
-      version:'unified-v4-state-isolated',fps,
+      version:'unified-v5-rootmotion-locked',fps,
       instances:Array.from(instances.values()).map(e=>({
         id:e.id,kind:e.kind,cls:e.cls,ready:!!e.root,loading:!!e.loading,error:e.error||'',
         pivotBone:e.pivotBone||'',headBone:e.head&&e.head.name||'',muzzle:e.muzzle&&e.muzzle.name||'',
