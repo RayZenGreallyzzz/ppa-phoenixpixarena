@@ -72,6 +72,7 @@ function updateJoystickFromPointer(e){
       const inv=1/d;
       jX=rawDx*inv*mag;jY=rawDy*inv*mag;
     }
+    // Input remains full-rate. DOM/compositor work is decorative and capped.
     const now=Number(e.timeStamp)||performance.now();
     if(now-jVisualAt>=PPA_FLOATING_JOY_VISUAL_MS){
       jVisualAt=now;
@@ -108,6 +109,8 @@ function ppaFloatingPointerEnd(e){
   resetJoystick(e.pointerId);
 }
 
+// touch-action:none already suppresses browser panning, so move/up/cancel can be
+// passive. This keeps Chrome/Telegram WebView from waiting on every touch sample.
 joySurface.addEventListener('pointerdown',ppaFloatingPointerDown,{passive:false});
 joySurface.addEventListener('pointermove',ppaFloatingPointerMove,{passive:true});
 joySurface.addEventListener('pointerup',ppaFloatingPointerEnd,{passive:true});
