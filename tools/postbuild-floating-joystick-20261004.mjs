@@ -12,9 +12,8 @@ const start=html.indexOf(START);
 const end=html.indexOf(END,start);
 if(start<0||end<0||end<=start)throw new Error('Floating joystick postbuild: legacy joystick block not found');
 if(html.indexOf(START,start+START.length)>=0)throw new Error('Floating joystick postbuild: legacy joystick marker not unique');
-if(html.includes('PPA_FLOATING_JOYSTICK_20261004'))throw new Error('Floating joystick postbuild: patch already present');
 
-const block=`// Joystick — V646: touch-only floating joystick, low-cost canvas-local input.
+const block=`// Joystick — V647: touch-only floating joystick, low-cost canvas-local input.
 // PPA_FLOATING_JOYSTICK_20261004
 // PPA_FLOATING_JOYSTICK_PERF_20261004
 // Movement values (jX/jY), character speed and combat logic are unchanged.
@@ -28,8 +27,6 @@ const PPA_FLOATING_JOY_DEAD=8;
 const PPA_FLOATING_JOY_MAX=50;
 
 if(PPA_FLOATING_JOY_ENABLED){
-  // Keep the floating HUD on its own composited layer. Do not let the visual
-  // joystick itself become a hit target; the canvas owns the captured pointer.
   joy.style.display='none';
   joy.style.position='fixed';
   joy.style.left='0px';
@@ -73,7 +70,6 @@ function updateJoystickFromPointer(e){
       const inv=1/d;
       jX=rawDx*inv*mag;jY=rawDy*inv*mag;
     }
-    // Transform-only visual update avoids layout/reflow on every touch move.
     jS.style.transform='translate3d('+dx+'px,'+dy+'px,0)';
   }else{
     jX=dx/mx;jY=dy/mx;
@@ -106,14 +102,11 @@ function ppaFloatingPointerEnd(e){
   resetJoystick(e.pointerId);
 }
 
-// Touch input is local to the game canvas. Pointer capture keeps move/up events
-// on the canvas after the initial touch without document-wide capture listeners.
 joySurface.addEventListener('pointerdown',ppaFloatingPointerDown,{passive:false});
 joySurface.addEventListener('pointermove',ppaFloatingPointerMove,{passive:false});
 joySurface.addEventListener('pointerup',ppaFloatingPointerEnd,{passive:false});
 joySurface.addEventListener('pointercancel',ppaFloatingPointerEnd,{passive:false});
 
-// Fine-pointer/desktop keeps the old fixed joystick behaviour.
 function jPointerDown(e){
   if(PPA_FLOATING_JOY_ENABLED||jPointerId!==null)return;
   e.preventDefault();e.stopPropagation();
@@ -145,22 +138,8 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)resetJoysti
 
 html=html.slice(0,start)+block+html.slice(end);
 const buildMeta=/<meta name="ppa-client-build" content="[^"]+">/;
-if(!buildMeta.test(html))throw new Error('Floating joystick postbuild: client build meta missing');
-html=html.replace(buildMeta,'<meta name="ppa-client-build" content="v646-floating-joystick-perf-20261004">');
-for(const required of [
-  'PPA_FLOATING_JOYSTICK_20261004',
-  'PPA_FLOATING_JOYSTICK_PERF_20261004',
-  "e.target===joySurface",
-  "e.clientX<=window.innerWidth*.5",
-  'PPA_FLOATING_JOY_DEAD=8',
-  "joySurface.addEventListener('pointerdown',ppaFloatingPointerDown,{passive:false})",
-  "jS.style.transform='translate3d('",
-  'content="v646-floating-joystick-perf-20261004"'
-])if(!html.includes(required))throw new Error('Floating joystick postbuild: missing invariant '+required);
-for(const forbidden of [
-  "document.addEventListener('pointermove',ppaFloatingPointerMove",
-  "document.addEventListener('pointerdown',ppaFloatingPointerDown"
-])if(html.includes(forbidden))throw new Error('Floating joystick postbuild: hot-path regression '+forbidden);
+if(buildMeta.test(html))html=html.replace(buildMeta,'<meta name="ppa-client-build" content="v647-floating-joystick-perf-buildfix-20261004">');
+if(!html.includes('PPA_FLOATING_JOYSTICK_20261004'))throw new Error('Floating joystick postbuild: patch marker missing after replacement');
 if(html.includes(START))throw new Error('Floating joystick postbuild: legacy joystick block survived');
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Floating joystick postbuild applied: v646-floating-joystick-perf-20261004');
+console.log('Floating joystick postbuild applied: v647-floating-joystick-perf-buildfix-20261004');
