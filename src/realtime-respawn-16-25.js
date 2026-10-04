@@ -36,8 +36,7 @@ export class RealtimeHub extends StableRealtimeHub {
           const rec=health.get(ck),tomb=dead.get(ck),now=Date.now();
           watch={
             room,key,ck,
-            wasAlive:!!(rec&&Number(rec.hp)>0&&!(tomb&&Number(tomb.at)>now)),
-            wasElite:!!(rec&&rec.elite)
+            eligibleBefore:!(tomb&&Number(tomb.at)>now)&&!(rec&&rec.elite)
           };
         }catch(_){watch=null}
       }
@@ -45,12 +44,12 @@ export class RealtimeHub extends StableRealtimeHub {
 
     await super.webSocketMessage(ws,message);
 
-    if(!watch||!watch.wasAlive||watch.wasElite)return;
+    if(!watch||!watch.eligibleBefore)return;
     try{
       const {health,dead}=this.mobStores();
       const rec=health.get(watch.ck),tomb=dead.get(watch.ck);
       const now=Date.now();
-      // Only a hit that transitioned a live ordinary mob to dead reaches here.
+      // Only a hit that left an ordinary mob dead with a fresh tomb reaches here.
       if(!rec||Number(rec.hp)>0||rec.elite||!tomb||!(Number(tomb.at)>now))return;
 
       const respawnAt=now+ordinaryRespawnDelay();
