@@ -27,6 +27,64 @@ function balancedEnd(text,openAt,openChar='{',closeChar='}'){
   return -1;
 }
 
+function readObjectPropertyExpression(obj,prop){
+  const re=new RegExp('\\b'+prop+'\\s*:','g');
+  const hits=[...obj.matchAll(re)];
+  if(hits.length!==1)return null;
+  let i=hits[0].index+hits[0][0].length;
+  while(i<obj.length&&/\s/.test(obj[i]))i++;
+  const start=i;
+  let quote=null,escape=false,line=false,block=false,paren=0,bracket=0,brace=0;
+  for(;i<obj.length;i++){
+    const ch=obj[i],nx=obj[i+1];
+    if(line){if(ch==='\n')line=false;continue;}
+    if(block){if(ch==='*'&&nx==='/'){block=false;i++;}continue;}
+    if(quote){
+      if(escape){escape=false;continue;}
+      if(ch==='\\'){escape=true;continue;}
+      if(ch===quote)quote=null;
+      continue;
+    }
+    if(ch==='/'&&nx==='/'){line=true;i++;continue;}
+    if(ch==='/'&&nx==='*'){block=true;i++;continue;}
+    if(ch==='"'||ch==="'"||ch==='`'){quote=ch;continue;}
+    if(ch==='(')paren++;
+    else if(ch===')')paren--;
+    else if(ch==='[')bracket++;
+    else if(ch===']')bracket--;
+    else if(ch==='{')brace++;
+    else if(ch==='}'){
+      if(brace===0&&paren===0&&bracket===0)break;
+      brace--;
+    }else if(ch===','&&paren===0&&bracket===0&&brace===0)break;
+  }
+  const expr=obj.slice(start,i).trim();
+  return expr||null;
+}
+
+function findPpaWorldDrops(source){
+  const hits=[];
+  let pos=0;
+  while((pos=source.indexOf('LOOT.push',pos))>=0){
+    const openParen=source.indexOf('(',pos+'LOOT.push'.length);
+    if(openParen<0){pos+='LOOT.push'.length;continue;}
+    let objStart=openParen+1;
+    while(objStart<source.length&&/\s/.test(source[objStart]))objStart++;
+    if(source[objStart]!=='{'){pos=openParen+1;continue;}
+    const objEnd=balancedEnd(source,objStart,'{','}');
+    const callEnd=balancedEnd(source,openParen,'(',')');
+    if(objEnd<0||callEnd<0||objEnd>callEnd)throw new Error('Direct loot source normalize: malformed LOOT.push object');
+    const obj=source.slice(objStart,objEnd+1);
+    if(/\bkind\s*:\s*['"]ppa['"]/.test(obj)){
+      const amountExpr=readObjectPropertyExpression(obj,'amount');
+      if(!amountExpr)throw new Error('Direct loot source normalize: PPA world-drop amount expression missing/ambiguous');
+      hits.push({start:pos,end:callEnd+1,amountExpr});
+    }
+    pos=callEnd+1;
+  }
+  return hits;
+}
+
 function replaceGoldWorldDrops(source){
   // Replace every canonical computed-gold world object. This deliberately
   // matches the semantic path (gold>0 -> LOOT.push -> kind gold -> amount gold)
@@ -49,6 +107,19 @@ function replaceGoldWorldDrops(source){
   return {source:out,count:matches.length};
 }
 
+function replacePpaWorldDrops(source){
+  const hits=findPpaWorldDrops(source);
+  if(hits.length<1)throw new Error('Direct loot source normalize: no PPA world-drop paths found');
+  let out='',last=0;
+  for(const hit of hits){
+    out+=source.slice(last,hit.start);
+    out+=`(()=>{const _ppaDirectAmount=Math.max(0,Math.floor(Number(${hit.amountExpr})||0));if(_ppaDirectAmount>0){INV.ppa=(Number(INV.ppa)||0)+_ppaDirectAmount;showPickup('+'+_ppaDirectAmount+' PPA','#ffb35c');scheduleCombatSave();sendInvState();updateUI();}return LOOT.length;})()`;
+    last=hit.end;
+  }
+  out+=source.slice(last);
+  return {source:out,count:hits.length};
+}
+
 function replaceMaterialWorldDrop(source){
   const sig='function pushMaterialDrop(e,rarity,amount){';
   const start=source.indexOf(sig);
@@ -68,14 +139,16 @@ export function applyDirectLootStorage(input){
   if(input.includes(MARKER))throw new Error('Direct loot source normalize: marker already present in canonical source');
 
   const gold=replaceGoldWorldDrops(input);
-  let source=replaceMaterialWorldDrop(gold.source);
+  const ppa=replacePpaWorldDrops(gold.source);
+  let source=replaceMaterialWorldDrop(ppa.source);
 
-  // Final guards: direct reward paths must exist and all canonical gold/material
-  // world-object constructors must be gone. PPA/equipment/books/runes stay intact.
+  // Final guards: direct reward paths must exist and all canonical gold/PPA/material
+  // world-object constructors must be gone. Equipment/books/runes stay intact.
   if(count(source,MARKER)!==1)throw new Error('Direct loot source normalize: marker insertion failed');
   if(/if\s*\(\s*gold\s*>\s*0\s*\)\s*LOOT\.push\s*\(\s*\{[^;]{0,1200}?kind\s*:\s*['"]gold['"]/.test(source)){
     throw new Error('Direct loot source normalize: canonical gold world-drop survived');
   }
+  if(findPpaWorldDrops(source).length!==0)throw new Error('Direct loot source normalize: PPA world-drop survived');
   const materialStart=source.indexOf('function pushMaterialDrop(e,rarity,amount){');
   const materialEnd=materialStart>=0?balancedEnd(source,source.indexOf('{',materialStart)):-1;
   if(materialStart<0||materialEnd<0)throw new Error('Direct loot source normalize: rewritten material helper missing');
@@ -85,12 +158,14 @@ export function applyDirectLootStorage(input){
   for(const keep of [
     'INV.gold+=gold;',
     "showPickup('+'+gold+' золота','#ffcc44');",
+    'INV.ppa=(Number(INV.ppa)||0)+_ppaDirectAmount;',
+    "showPickup('+'+_ppaDirectAmount+' PPA','#ffb35c');",
     'INV.materials[name]=(INV.materials[name]||0)+n;',
     "showPickup(name+' ×'+n,RCOL_P[def.rarity]||'#a7adb5');",
-    'sendMerchantState();','sendBlacksmithState();',"kind:'ppa'"
+    'sendMerchantState();','sendInvState();','sendBlacksmithState();','updateUI();'
   ])if(!source.includes(keep))throw new Error('Direct loot source normalize: protected result missing '+keep);
 
-  return {source,stats:{goldWorldDropsRemoved:gold.count,materialWorldDropHelpersRewritten:1}};
+  return {source,stats:{goldWorldDropsRemoved:gold.count,ppaWorldDropsRemoved:ppa.count,materialWorldDropHelpersRewritten:1}};
 }
 
 export const DIRECT_LOOT_SOURCE_MARKER=MARKER;
