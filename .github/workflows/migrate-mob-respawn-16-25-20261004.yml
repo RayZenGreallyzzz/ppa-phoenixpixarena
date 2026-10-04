@@ -1,0 +1,63 @@
+name: Migrate mob respawn 16-25s
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/migrate-mob-respawn-16-25-20261004.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Patch authoritative and fallback respawn
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const serverPath='src/realtime-stable.js';
+          const postPath='tools/postbuild-mob-respawn-window-20261004.mjs';
+          let s=fs.readFileSync(serverPath,'utf8');
+          const oldConst='const DUNGEON_MOB_RESPAWN_MS = 14_000;';
+          const oldReturn='return now + DUNGEON_MOB_RESPAWN_MS;';
+          const marker='PPA_DUNGEON_MOB_RESPAWN_16_25_20261004';
+          if(!s.includes(marker)){
+            if(!s.includes(oldConst)) throw new Error('authoritative respawn const not found');
+            if(!s.includes(oldReturn)) throw new Error('authoritative respawn return not found');
+            s=s.replace(oldConst,`// ${marker}\nconst DUNGEON_MOB_RESPAWN_MIN_MS = 16_000;\nconst DUNGEON_MOB_RESPAWN_MAX_MS = 25_000;\nfunction dungeonMobRespawnDelay(){\n  return DUNGEON_MOB_RESPAWN_MIN_MS + Math.floor(Math.random()*(DUNGEON_MOB_RESPAWN_MAX_MS-DUNGEON_MOB_RESPAWN_MIN_MS+1));\n}`);
+            s=s.replace(oldReturn,'return now + dungeonMobRespawnDelay();');
+            fs.writeFileSync(serverPath,s);
+          }
+          let p=fs.readFileSync(postPath,'utf8');
+          p=p.replaceAll('20000+Math.floor(Math.random()*5001)','16000+Math.floor(Math.random()*9001)');
+          p=p.replaceAll('DUNGEON_MOB_RESPAWN_MIN_MS = 20_000','DUNGEON_MOB_RESPAWN_MIN_MS = 16_000');
+          p=p.replaceAll('v649-mob-respawn-20-25s-20261004','v650-mob-respawn-16-25s-20261004');
+          p=p.replaceAll('randomized 20-25 seconds','randomized 16-25 seconds');
+          fs.writeFileSync(postPath,p);
+          NODE
+      - name: Verify
+        run: |
+          node --check src/realtime-stable.js
+          node --check tools/postbuild-mob-respawn-window-20261004.mjs
+          grep -q 'PPA_DUNGEON_MOB_RESPAWN_16_25_20261004' src/realtime-stable.js
+          grep -q 'DUNGEON_MOB_RESPAWN_MIN_MS = 16_000' src/realtime-stable.js
+          grep -q 'DUNGEON_MOB_RESPAWN_MAX_MS = 25_000' src/realtime-stable.js
+          grep -q 'return now + dungeonMobRespawnDelay();' src/realtime-stable.js
+          grep -q '16000+Math.floor(Math.random()*9001)' tools/postbuild-mob-respawn-window-20261004.mjs
+          git diff --check
+      - name: Commit source fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/realtime-stable.js tools/postbuild-mob-respawn-window-20261004.mjs
+          git commit -m 'Set dungeon mob respawn to 16-25 seconds'
+          git push
