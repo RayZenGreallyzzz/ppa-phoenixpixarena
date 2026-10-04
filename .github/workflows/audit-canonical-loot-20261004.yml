@@ -1,0 +1,41 @@
+name: Audit canonical loot source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/audit-canonical-loot-20261004.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Inspect canonical loot code
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),zlib=require('zlib');
+          const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
+          const src=zlib.gunzipSync(Buffer.concat(parts.map(p=>fs.readFileSync(p)))).toString('utf8');
+          function show(label,re,limit=12){
+            console.log(`\n=== ${label} ===`);
+            let m,n=0;
+            while((m=re.exec(src))&&n<limit){
+              const a=Math.max(0,m.index-500),b=Math.min(src.length,m.index+900);
+              console.log(`\n--- ${label} @ ${m.index} ---\n`+src.slice(a,b).replace(/data:image\/[a-z+.-]+;base64,[A-Za-z0-9+/=]+/g,'[IMAGE]'));
+              n++;
+              if(!m[0].length)re.lastIndex++;
+            }
+            console.log(`${label} matches: ${n}`);
+          }
+          show('pushMaterialDrop',/function\s+pushMaterialDrop\s*\([^)]*\)\s*\{/g,3);
+          show('gold type',/(?:type|kind)\s*:\s*['\"](?:gold|coin|money)['\"]/gi,20);
+          show('gold push',/(?:LOOT|loot|DROP|drops)\s*\.\s*push\s*\([^\n]{0,400}(?:gold|coin|money|золот)/gi,20);
+          show('base currency',/function\s+v232BaseCurrency\s*\([^)]*\)\s*\{/g,3);
+          NODE
