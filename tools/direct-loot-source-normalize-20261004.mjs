@@ -27,17 +27,26 @@ function balancedEnd(text,openAt,openChar='{',closeChar='}'){
   return -1;
 }
 
-function replaceGoldWorldDrop(source){
-  // Structural match: tolerate whitespace and extra object fields while still
-  // requiring the canonical gold variable and gold world-drop type.
+function replaceGoldWorldDrops(source){
+  // Replace every canonical computed-gold world object. This deliberately
+  // matches the semantic path (gold>0 -> LOOT.push -> kind gold -> amount gold)
+  // rather than one brittle literal string. Other gold tokens/readers remain.
   const re=/if\s*\(\s*gold\s*>\s*0\s*\)\s*LOOT\.push\s*\(\s*\{[^;]{0,1200}?kind\s*:\s*['"]gold['"][^;]{0,1200}?amount\s*:\s*gold\b[^;]{0,1200}?\}\s*\)\s*;/g;
   const matches=[...source.matchAll(re)];
-  if(matches.length!==1){
-    const kinds=count(source,"kind:'gold'")+count(source,'kind:"gold"');
-    throw new Error(`Direct loot source normalize: expected 1 canonical gold world-drop, found ${matches.length}; gold-kind tokens=${kinds}`);
+  if(matches.length<1)throw new Error('Direct loot source normalize: no canonical gold world-drop paths found');
+
+  const direct=`if(gold>0){\n    INV.gold+=gold;\n    showPickup('+'+gold+' золота','#ffcc44');\n    scheduleCombatSave();\n    sendMerchantState();\n  }`;
+
+  let out='',last=0;
+  for(let i=0;i<matches.length;i++){
+    const m=matches[i];
+    out+=source.slice(last,m.index);
+    if(i===0)out+=MARKER+'\n  ';
+    out+=direct;
+    last=m.index+m[0].length;
   }
-  const goldNew=`${MARKER}\n  if(gold>0){\n    INV.gold+=gold;\n    showPickup('+'+gold+' золота','#ffcc44');\n    scheduleCombatSave();\n    sendMerchantState();\n  }`;
-  return source.slice(0,matches[0].index)+goldNew+source.slice(matches[0].index+matches[0][0].length);
+  out+=source.slice(last);
+  return {source:out,count:matches.length};
 }
 
 function replaceMaterialWorldDrop(source){
@@ -58,10 +67,10 @@ export function applyDirectLootStorage(input){
   if(typeof input!=='string'||input.length<1000)throw new Error('Direct loot source normalize: packed source text missing');
   if(input.includes(MARKER))throw new Error('Direct loot source normalize: marker already present in canonical source');
 
-  let source=replaceGoldWorldDrop(input);
-  source=replaceMaterialWorldDrop(source);
+  const gold=replaceGoldWorldDrops(input);
+  let source=replaceMaterialWorldDrop(gold.source);
 
-  // Final guards: direct reward paths must exist and the canonical gold/material
+  // Final guards: direct reward paths must exist and all canonical gold/material
   // world-object constructors must be gone. PPA/equipment/books/runes stay intact.
   if(count(source,MARKER)!==1)throw new Error('Direct loot source normalize: marker insertion failed');
   if(/if\s*\(\s*gold\s*>\s*0\s*\)\s*LOOT\.push\s*\(\s*\{[^;]{0,1200}?kind\s*:\s*['"]gold['"]/.test(source)){
@@ -81,7 +90,7 @@ export function applyDirectLootStorage(input){
     'sendMerchantState();','sendBlacksmithState();',"kind:'ppa'"
   ])if(!source.includes(keep))throw new Error('Direct loot source normalize: protected result missing '+keep);
 
-  return {source,stats:{goldWorldDropsRemoved:1,materialWorldDropHelpersRewritten:1}};
+  return {source,stats:{goldWorldDropsRemoved:gold.count,materialWorldDropHelpersRewritten:1}};
 }
 
 export const DIRECT_LOOT_SOURCE_MARKER=MARKER;
