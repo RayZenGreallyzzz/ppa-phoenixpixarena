@@ -62,8 +62,9 @@ function readObjectPropertyExpression(obj,prop){
   return expr||null;
 }
 
-function findPpaWorldDrops(source){
+function findWorldDropsByKind(source,kind){
   const hits=[];
+  const kindRe=new RegExp('\\bkind\\s*:\\s*[\'\"]'+kind+'[\'\"]');
   let pos=0;
   while((pos=source.indexOf('LOOT.push',pos))>=0){
     const openParen=source.indexOf('(',pos+'LOOT.push'.length);
@@ -75,9 +76,9 @@ function findPpaWorldDrops(source){
     const callEnd=balancedEnd(source,openParen,'(',')');
     if(objEnd<0||callEnd<0||objEnd>callEnd)throw new Error('Direct loot source normalize: malformed LOOT.push object');
     const obj=source.slice(objStart,objEnd+1);
-    if(/\bkind\s*:\s*['"]ppa['"]/.test(obj)){
+    if(kindRe.test(obj)){
       const amountExpr=readObjectPropertyExpression(obj,'amount');
-      if(!amountExpr)throw new Error('Direct loot source normalize: PPA world-drop amount expression missing/ambiguous');
+      if(!amountExpr)throw new Error('Direct loot source normalize: '+kind+' world-drop amount expression missing/ambiguous');
       hits.push({start:pos,end:callEnd+1,amountExpr});
     }
     pos=callEnd+1;
@@ -86,29 +87,22 @@ function findPpaWorldDrops(source){
 }
 
 function replaceGoldWorldDrops(source){
-  // Replace every canonical computed-gold world object. This deliberately
-  // matches the semantic path (gold>0 -> LOOT.push -> kind gold -> amount gold)
-  // rather than one brittle literal string. Other gold tokens/readers remain.
-  const re=/if\s*\(\s*gold\s*>\s*0\s*\)\s*LOOT\.push\s*\(\s*\{[^;]{0,1200}?kind\s*:\s*['"]gold['"][^;]{0,1200}?amount\s*:\s*gold\b[^;]{0,1200}?\}\s*\)\s*;/g;
-  const matches=[...source.matchAll(re)];
-  if(matches.length<1)throw new Error('Direct loot source normalize: no canonical gold world-drop paths found');
-
-  const direct=`if(gold>0){\n    INV.gold+=gold;\n    showPickup('+'+gold+' золота','#ffcc44');\n    scheduleCombatSave();\n    sendMerchantState();\n  }`;
-
+  const hits=findWorldDropsByKind(source,'gold');
+  if(hits.length<1)throw new Error('Direct loot source normalize: no gold world-drop paths found');
   let out='',last=0;
-  for(let i=0;i<matches.length;i++){
-    const m=matches[i];
-    out+=source.slice(last,m.index);
+  for(let i=0;i<hits.length;i++){
+    const hit=hits[i];
+    out+=source.slice(last,hit.start);
     if(i===0)out+=MARKER+'\n  ';
-    out+=direct;
-    last=m.index+m[0].length;
+    out+=`(()=>{const _goldDirectAmount=Math.max(0,Math.floor(Number(${hit.amountExpr})||0));if(_goldDirectAmount>0){INV.gold=(Number(INV.gold)||0)+_goldDirectAmount;showPickup('+'+_goldDirectAmount+' золота','#ffcc44');scheduleCombatSave();sendMerchantState();sendInvState();updateUI();}return LOOT.length;})()`;
+    last=hit.end;
   }
   out+=source.slice(last);
-  return {source:out,count:matches.length};
+  return {source:out,count:hits.length};
 }
 
 function replacePpaWorldDrops(source){
-  const hits=findPpaWorldDrops(source);
+  const hits=findWorldDropsByKind(source,'ppa');
   if(hits.length<1)throw new Error('Direct loot source normalize: no PPA world-drop paths found');
   let out='',last=0;
   for(const hit of hits){
@@ -142,13 +136,11 @@ export function applyDirectLootStorage(input){
   const ppa=replacePpaWorldDrops(gold.source);
   let source=replaceMaterialWorldDrop(ppa.source);
 
-  // Final guards: direct reward paths must exist and all canonical gold/PPA/material
-  // world-object constructors must be gone. Equipment/books/runes stay intact.
+  // Final guards: every gold/PPA world object must be gone. Materials are
+  // credited directly by their canonical helper. Equipment/books/runes stay intact.
   if(count(source,MARKER)!==1)throw new Error('Direct loot source normalize: marker insertion failed');
-  if(/if\s*\(\s*gold\s*>\s*0\s*\)\s*LOOT\.push\s*\(\s*\{[^;]{0,1200}?kind\s*:\s*['"]gold['"]/.test(source)){
-    throw new Error('Direct loot source normalize: canonical gold world-drop survived');
-  }
-  if(findPpaWorldDrops(source).length!==0)throw new Error('Direct loot source normalize: PPA world-drop survived');
+  if(findWorldDropsByKind(source,'gold').length!==0)throw new Error('Direct loot source normalize: gold world-drop survived');
+  if(findWorldDropsByKind(source,'ppa').length!==0)throw new Error('Direct loot source normalize: PPA world-drop survived');
   const materialStart=source.indexOf('function pushMaterialDrop(e,rarity,amount){');
   const materialEnd=materialStart>=0?balancedEnd(source,source.indexOf('{',materialStart)):-1;
   if(materialStart<0||materialEnd<0)throw new Error('Direct loot source normalize: rewritten material helper missing');
@@ -156,8 +148,8 @@ export function applyDirectLootStorage(input){
   if(materialFn.includes('LOOT.push')||/kind\s*:\s*['"]material['"]/.test(materialFn))throw new Error('Direct loot source normalize: material world-drop survived');
 
   for(const keep of [
-    'INV.gold+=gold;',
-    "showPickup('+'+gold+' золота','#ffcc44');",
+    'INV.gold=(Number(INV.gold)||0)+_goldDirectAmount;',
+    "showPickup('+'+_goldDirectAmount+' золота','#ffcc44');",
     'INV.ppa=(Number(INV.ppa)||0)+_ppaDirectAmount;',
     "showPickup('+'+_ppaDirectAmount+' PPA','#ffb35c');",
     'INV.materials[name]=(INV.materials[name]||0)+n;',
