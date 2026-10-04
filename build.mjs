@@ -7,9 +7,9 @@ import {stripDeadPlayerSpriteAssets} from './tools/player-source-cleanup-2026100
 
 const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
-const EXPECTED_SOURCE_SHA256 = '4e6ad47447515e1aaa430dd9d399e9253c6d067fe26d842a52c0be588c3e70e0';
+const EXPECTED_SOURCE_SHA256 = 'edbb99deae7bb62deabc5fb5081267a714ef7fbad401f9d468cbc1f144f07357';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v639-player3d-anim-hotloop-fix-20261004';
+const CLIENT_BUILD = 'v640-fartzone-axis-slide-20261004';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
