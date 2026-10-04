@@ -34,8 +34,24 @@ html=html.replace(re,`/* ${marker}: normal dungeon mobs outside the active ellip
 // reads this object; the actual sleep gate above still uses the constants.
 html=html.replace('</body>',`<script>window.PPA_DUNGEON_ACTIVE_ZONE={rx:240,ry:400,worldW:2048,worldH:997};</script>\n</body>`);
 
+// The authoritative server still sends mob coordinates at ~10 Hz. On mobile the
+// client had been applying its interpolation only every 50 ms (~20 visual steps/s),
+// which makes movement look robotic when packets arrive with any jitter. Raise the
+// visual interpolation to ~30 Hz, while materializing fewer far-away entities so
+// the extra smoothness does not cost FPS. Server authority and combat are unchanged.
+const mobClientPath=path.join(process.cwd(),'public','game','dungeon-mob-events.js');
+if(!fs.existsSync(mobClientPath))throw new Error('Dungeon AI budget: public/game/dungeon-mob-events.js missing');
+let mobClient=fs.readFileSync(mobClientPath,'utf8');
+const materializeOld='var MATERIALIZE_R=1450;';
+const smoothStepOld='var minStep=smoothMobile()?50:16;';
+if((mobClient.split(materializeOld).length-1)!==1)throw new Error('Dungeon AI budget: materialize radius target changed');
+if((mobClient.split(smoothStepOld).length-1)!==1)throw new Error('Dungeon AI budget: mobile smoothing step target changed');
+mobClient=mobClient.replace(materializeOld,'var MATERIALIZE_R=1100; // PPA_DUNGEON_CLIENT_MOB_BUDGET_20261005');
+mobClient=mobClient.replace(smoothStepOld,'var minStep=smoothMobile()?33:16;');
+fs.writeFileSync(mobClientPath,mobClient,'utf8');
+
 const buildMeta=/<meta name="ppa-client-build" content="[^"]+">/;
-if(buildMeta.test(html))html=html.replace(buildMeta,'<meta name="ppa-client-build" content="v653-dungeon-active-zone-240x400-20261004">');
+if(buildMeta.test(html))html=html.replace(buildMeta,'<meta name="ppa-client-build" content="v654-dungeon-realtime-smooth-budget-20261005">');
 
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('[PPA BUILD] Dungeon AI budget: active ellipse 240 x 400; distant normal mobs sleep; bosses unchanged');
+console.log('[PPA BUILD] Dungeon AI budget: active ellipse 240 x 400; mobile mob smoothing ~30 Hz; materialize radius 1100; bosses unchanged');
