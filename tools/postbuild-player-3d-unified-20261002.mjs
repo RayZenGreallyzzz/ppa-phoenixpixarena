@@ -130,11 +130,6 @@ for(const [from,to] of timingReplacements){
   if(n!==1)throw new Error('Unified 3D build: expected one gameplay animation timing target, found '+n+' for '+from);
   html=html.replace(from,to);
 }
-const attackFrameOld='const frameDur = Math.max(1, Math.round(60/a.fps));';
-const attackFrameNew='const frameDur = Math.max(1, Math.round(60/(a.fps*playerAttackAnimRate())));';
-const attackFrameCount=html.split(attackFrameOld).length-1;
-if(attackFrameCount!==1)throw new Error('Unified 3D build: expected one attack frame-duration target, found '+attackFrameCount);
-html=html.replace(attackFrameOld,attackFrameNew);
 if(!html.includes('const PLAYER_ANIM_TIMING={'))throw new Error('Unified 3D build: gameplay animation timing table missing');
 if(!html.includes("playerAnimTiming('attack')"))throw new Error('Unified 3D build: attack state still depends on sprite animation definition');
 
@@ -244,13 +239,13 @@ for(const dead of [
 
 html=html.replace(/\n?<script src="\/game\/player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
 html=html.replace(/\n?<script src="\/game\/remote-player-3d-runtime\.js\?v=[^"]+"><\/script>\n?/g,'\n');
-const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261004u18"></script>\n';
-if(!html.includes('player-3d-unified-runtime.js?v=20261004u18')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
+const tag='\n<script src="/game/player-3d-unified-runtime.js?v=20261004u19"></script>\n';
+if(!html.includes('player-3d-unified-runtime.js?v=20261004u19')){if(!html.includes('</body>'))throw new Error('Unified 3D build: </body> missing');html=html.replace('</body>',tag+'</body>')}
 html=html.replace(/remote-player-3d-dispatch\.js\?v=[^"']+/g,'remote-player-3d-dispatch.js?v=20261003u7');
 if(!drawBody.includes('PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003'))throw new Error('Unified 3D build: runtime-owned local marker missing from drawPlayer compatibility hook');
 for(const forbidden of ['__PPA3D_LOCAL_PENDING','worldX:Number(P.x)','worldY:Number(P.y)','PPA_PLAYER3D.local(']){
   if(drawBody.includes(forbidden))throw new Error('Unified 3D build: drawPlayer still owns local Player3D lifecycle: '+forbidden);
 }
-if(!html.includes('player-3d-unified-runtime.js?v=20261004u18'))throw new Error('Unified 3D build: runtime tag missing');
+if(!html.includes('player-3d-unified-runtime.js?v=20261004u19'))throw new Error('Unified 3D build: runtime tag missing');
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Unified Player3D V6: attack follows attack speed · run follows movement speed · idle stays 1x · zero-hot-loop melee guard preserved');
+console.log('Unified Player3D V7: attack/run 3D clip speed sync is transition-only · legacy gameplay animation timer restored · zero-hot-loop guard preserved');

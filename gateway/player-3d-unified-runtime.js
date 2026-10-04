@@ -215,6 +215,7 @@
   // PPA_PLAYER3D_MELEE_INPLACE_ATTACK_20261003
   // PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003
   // PPA_PLAYER3D_ANIM_SPEED_SYNC_20261004
+  // PPA_PLAYER3D_ANIM_HOTLOOP_FIX_20261004
   // Melee gameplay owns approach distance. Remove pelvis/leg tracks once when
   // the GLB asset is loaded instead of overwriting bone transforms every frame.
   // Upper-body/arms/weapon tracks remain untouched, so the combo still plays.
@@ -435,21 +436,10 @@
     }catch(_){}
     return 1;
   }
-  function switchAnim(e,name,now){
+  function switchAnim(e,name){
     const next=e.actions&&(e.actions[name]||e.actions.idle);
-    if(!next){e.anim=name;return}
-    const stamp=Number.isFinite(Number(now))?Number(now):performance.now();
-    const same=next===e.current;
-    if(same&&name===e.anim&&stamp<Number(e.animRateCheckAt||0))return;
+    if(!next||next===e.current){e.anim=name;return}
     const rate=playerAnimTimeScale(e,name);
-    e.animRateCheckAt=stamp+120;
-    if(same){
-      try{
-        if(Math.abs(rate-(Number(e.animRate)||1))>.01)next.setEffectiveTimeScale(rate);
-        e.animRate=rate;e.anim=name;
-      }catch(_){}
-      return;
-    }
     try{
       next.enabled=true;next.reset();next.setEffectiveTimeScale(rate);next.play();
       if(e.current)e.current.crossFadeTo(next,.10,false);
@@ -488,7 +478,7 @@
       e.rootMotionBaseX=e.rootMotionBone?(Number(e.rootMotionBone.position.x)||0):0;
       e.rootMotionBaseZ=e.rootMotionBone?(Number(e.rootMotionBone.position.z)||0):0;
       e.retryAt=0;e.retryCount=0;
-      switchAnim(e,'idle',performance.now());
+      switchAnim(e,'idle');
     }catch(err){
       e.error=String(err&&err.message||err);
       e.retryCount=Math.min(6,Number(e.retryCount||0)+1);
@@ -506,7 +496,7 @@
     let e=instances.get(id);
     if(!e||e.cls!==cls){
       if(e)removeEntry(id,e);
-      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,retryAt:0,retryCount:0,root:null,model:null,head:null,muzzle:null,mixer:null,actions:null,current:null,anim:'idle',animRate:1,animRateCheckAt:0,cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:'',rootMotionBone:null,modelBaseX:0,modelBaseZ:0,rootMotionBaseX:0,rootMotionBaseZ:0};
+      e={id,kind,cls,data,anchor,seenAt:performance.now(),alive:true,loading:false,retryAt:0,retryCount:0,root:null,model:null,head:null,muzzle:null,mixer:null,actions:null,current:null,anim:'idle',animRate:1,cfg:null,error:'',lastWX:null,lastWY:null,movingUntil:0,lastMotionYaw:0,hasMotionYaw:false,hud:{feetX:0,feetY:0,headX:0,headY:0},hiddenState:null,pivotBone:'',rootMotionBone:null,modelBaseX:0,modelBaseZ:0,rootMotionBaseX:0,rootMotionBaseZ:0};
       instances.set(id,e);ensureInstance(e);
     }
     e.kind=kind;e.data=data;e.anchor=anchor;e.seenAt=performance.now();e.alive=true;
@@ -723,7 +713,7 @@
       const target=shortestAngle(e.root.rotation.y,yaw);
       e.root.rotation.y+=(target-e.root.rotation.y)*Math.min(1,dt*14);
 
-      switchAnim(e,desiredAnim(e,now),now);
+      switchAnim(e,desiredAnim(e,now));
       try{if(e.mixer)e.mixer.update(dt)}catch(_){}
       // Animation may contain root translation. Neutralize horizontal root-motion
       // after sampling so the body cannot orbit/slide away from the game anchor.
@@ -743,12 +733,12 @@
   }
 
   window.PPA_PLAYER3D={
-    version:'unified-v8-anim-speed-sync',
+    version:'unified-v9-anim-speed-hotloop-fix',
     local:registerLocal,
     remote:registerRemote,
     muzzle:muzzlePoint,
     diag:()=>({
-      version:'unified-v8-anim-speed-sync',fps,
+      version:'unified-v9-anim-speed-hotloop-fix',fps,
       instances:Array.from(instances.values()).map(e=>({
         id:e.id,kind:e.kind,cls:e.cls,ready:!!e.root,loading:!!e.loading,error:e.error||'',
         pivotBone:e.pivotBone||'',headBone:e.head&&e.head.name||'',muzzle:e.muzzle&&e.muzzle.name||'',
