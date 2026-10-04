@@ -22,7 +22,7 @@ let jFloating=false,jCenterX=0,jCenterY=0;
 const jB=document.getElementById('joyB'),jS=document.getElementById('joyS');
 const joy=document.getElementById('joy');
 const joySurface=document.getElementById('c');
-const PPA_FLOATING_JOY_ENABLED=!!(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches)&&((navigator.maxTouchPoints||0)>0||('ontouchstart' in window));
+const PPA_FLOATING_JOY_ENABLED=((navigator.maxTouchPoints||0)>0||('ontouchstart' in window));
 const PPA_FLOATING_JOY_DEAD=8;
 const PPA_FLOATING_JOY_MAX=50;
 
@@ -46,7 +46,7 @@ function updateJoystickFromPointer(e){
     const r=joy.getBoundingClientRect();
     cx=r.left+r.width/2;cy=r.top+r.height/2;
   }
-  let rawDx=e.clientX-cx,rawDy=e.clientY-cy;
+  const rawDx=e.clientX-cx,rawDy=e.clientY-cy;
   const d=Math.hypot(rawDx,rawDy),mx=PPA_FLOATING_JOY_MAX;
   let dx=rawDx,dy=rawDy;
   if(d>mx){dx=rawDx/d*mx;dy=rawDy/d*mx;}
@@ -129,13 +129,17 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)resetJoysti
 `;
 
 html=html.slice(0,start)+block+html.slice(end);
+const buildMeta=/<meta name="ppa-client-build" content="[^"]+">/;
+if(!buildMeta.test(html))throw new Error('Floating joystick postbuild: client build meta missing');
+html=html.replace(buildMeta,'<meta name="ppa-client-build" content="v645-floating-joystick-20261004">');
 for(const required of [
   'PPA_FLOATING_JOYSTICK_20261004',
   "e.target!==joySurface",
   "e.clientX<=window.innerWidth*.5",
   'PPA_FLOATING_JOY_DEAD=8',
-  "document.addEventListener('pointerdown',ppaFloatingPointerDown,{passive:false,capture:true})"
+  "document.addEventListener('pointerdown',ppaFloatingPointerDown,{passive:false,capture:true})",
+  'content="v645-floating-joystick-20261004"'
 ])if(!html.includes(required))throw new Error('Floating joystick postbuild: missing invariant '+required);
 if(html.includes(START))throw new Error('Floating joystick postbuild: legacy joystick block survived');
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('Floating joystick postbuild applied');
+console.log('Floating joystick postbuild applied: v645-floating-joystick-20261004');
