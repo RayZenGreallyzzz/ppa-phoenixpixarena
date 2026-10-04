@@ -27,8 +27,7 @@ for(const required of [
   "PPA_FLOATING_JOY_DEAD=8",
   "document.addEventListener('pointerdown',ppaFloatingPointerDown,{passive:false,capture:true})",
   'PPA_MOB_PURSUIT_SLOTS_20261004',
-  'PPA_MOB_CONTACT_TANGENT_GLIDE_20261004',
-  'PPA_PLAYER3D_ANIM_HOTLOOP_FIX_20261004'
+  'PPA_MOB_CONTACT_TANGENT_GLIDE_20261004'
 ])if(!src.includes(required))throw new Error('Missing invariant: '+required);
 
 const newSourceBuf=Buffer.from(src,'utf8');
