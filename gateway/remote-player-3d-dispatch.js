@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_REMOTE_PLAYER3D_DISPATCH_V2)return;
-  window.__PPA_REMOTE_PLAYER3D_DISPATCH_V2=true;
+  if(window.__PPA_REMOTE_PLAYER3D_DISPATCH_V3)return;
+  window.__PPA_REMOTE_PLAYER3D_DISPATCH_V3=true;
 
   const PPA_3D_STRESS_CLASSES=['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'];
 
@@ -97,7 +97,9 @@
       // Stress bots used to be forced back to the old 2D sprite path. Keep them
       // on exactly the same unified Player3D renderer as real remote players so
       // arena load tests measure the real GLB + AnimationMixer cost.
-      var freshKey=classKey(r.cls||r.classKey||r.className);
+      // Arena realtime can expose class either as cls/classKey/className or as
+      // the compact packet field c, so accept all canonical forms before fallback.
+      var freshKey=classKey(r.cls||r.classKey||r.className||r.c||r.class);
       if(!freshKey&&stress(r))freshKey=stressClass(r);
       if(freshKey)r.__ppa3DClass=freshKey;
       var key=freshKey||classKey(r.__ppa3DClass);
