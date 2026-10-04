@@ -49,6 +49,14 @@ context('ATTACKING_STATE','P.attacking',16,1200,2500);
 context('RUN_ATTACK_TIMER','runAttackT',20,1200,2500);
 context('SHOOT_TIMER','shootT',12,1200,2200);
 context('ATTACK_SPEED','atkSpd',30,1600,3200);
+context('MOVE_SPD_CAMEL','moveSpd',30,1600,3400);
+context('MOVE_SPEED_CAMEL','moveSpeed',30,1600,3400);
+context('PLAYER_SPEED_FIELD','P.speed',30,1600,3400);
+context('PLAYER_SPD_FIELD','P.spd',30,1600,3400);
+context('RUN_SPEED','runSpeed',30,1600,3400);
+context('WALK_SPEED','walkSpeed',30,1600,3400);
+context('SPEED_MUL','speedMul',30,1600,3400);
+context('MOVE_SPEED_RU','Скорость передвижения',20,1600,3400);
 context('TARGET_ID','P.tid',20,1200,2200);
 context('AUTO_ATTACK','autoAttack',20,1200,2200);
 context('PLAYER3D_SCRIPT_REF','player-3d-unified-runtime.js',20,2200,4200);
@@ -71,8 +79,10 @@ regexContexts('POINTER_BIND',/addEventListener\(\s*['\"](?:pointerdown|pointerup
 regexContexts('ATTACK_IDENT',/\b(?:tryAttack|doAttack|basicAttack|startAttack|performAttack|attackTarget|playerAttack|attackBtn|btnAttack|atkBtn|attackButton)\b/g,40,1000,2400);
 regexContexts('THREE_ACTION_CONTROL',/\.(?:play|reset|stop|fadeIn|fadeOut|crossFadeTo|setEffectiveTimeScale|setEffectiveWeight)\s*\(/g,60,1200,2600);
 regexContexts('EARLY_RETURN_ATTACK',/if\s*\([^\n]{0,160}(?:attacking|runAttackT|shootT|atkSpd|cooldown|tid|target)[^\n]{0,160}\)\s*return/g,30,1000,2000);
+regexContexts('PLAYER_SPEEDISH_FIELD',/\bP\.(?:[A-Za-z_$][\w$]*(?:speed|spd)[A-Za-z_$\d]*|(?:speed|spd)[A-Za-z_$\d]*)\b/gi,60,1500,3000);
+regexContexts('MOVEMENT_FORMULA',/(?:move|walk|run|velocity|speed|spd)[A-Za-z_$\d]{0,24}\s*[=*+\/-]/gi,80,1200,2600);
 
 console.log('\n===== SUMMARY =====');
-for(const needle of ['PPA_MELEE_SMART_APPROACH_20261003','playerBasicRange','P.attacking','runAttackT','shootT','atkSpd','P.tid','autoAttack','player-3d-unified-runtime.js','unified-v7-melee-clip-filter','PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003','setEffectiveTimeScale','timeScale','AnimationMixer','clipAction','attackAction','Атака','cooldown','atkCD','atkCd']){
+for(const needle of ['PPA_MELEE_SMART_APPROACH_20261003','playerBasicRange','P.attacking','runAttackT','shootT','atkSpd','moveSpd','moveSpeed','P.speed','P.spd','runSpeed','walkSpeed','speedMul','Скорость передвижения','P.tid','autoAttack','player-3d-unified-runtime.js','unified-v7-melee-clip-filter','PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003','setEffectiveTimeScale','timeScale','AnimationMixer','clipAction','attackAction','Атака','cooldown','atkCD','atkCd']){
   console.log(JSON.stringify({needle,count:count(needle)}));
 }
