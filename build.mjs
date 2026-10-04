@@ -7,9 +7,9 @@ import {stripDeadPlayerSpriteAssets} from './tools/player-source-cleanup-2026100
 
 const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
-const EXPECTED_SOURCE_SHA256 = '573cd5a78045c5ca5e9ef9a222baaedc559efc295eb0f376c9458e15e39cd167';
+const EXPECTED_SOURCE_SHA256 = 'a23969659df17d6f303e688c296f4a2de67b4be8b702693a1760afb4971e43b7';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v642-mob-contact-tangent-glide-20261004';
+const CLIENT_BUILD = 'v644-mob-pursuit-slots-20261004';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
