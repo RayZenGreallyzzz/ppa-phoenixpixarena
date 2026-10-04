@@ -34,3 +34,5 @@ jobs:
           git diff --cached --quiet && exit 1
           git commit -m "Store gold and materials directly in canonical source"
           git push
+
+# retry canonical migration after runner-start failures: 2026-10-04T19:14+03:00
