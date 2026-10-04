@@ -3,9 +3,11 @@
   if(window.__PPA_REMOTE_PLAYER3D_DISPATCH_V2)return;
   window.__PPA_REMOTE_PLAYER3D_DISPATCH_V2=true;
 
+  const PPA_3D_STRESS_CLASSES=['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'];
+
   function classKey(v){
     var s=String(v||'').trim(),l=s.toLowerCase();
-    if(['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'].includes(l))return l;
+    if(PPA_3D_STRESS_CLASSES.includes(l))return l;
     try{if(typeof classKeyFromName==='function'){var k=String(classKeyFromName(s)||'').toLowerCase();if(k)return k}}catch(_){}
     if(l.includes('страж')||l.includes('tank'))return'tank';
     if(l.includes('бер')||l.includes('barb'))return'barbarian';
@@ -18,6 +20,18 @@
     return'';
   }
   function stress(r){return !!(r&&r.__ppaDebugRemote)||/^BOT\s*\d+$/i.test(String(r&&r.name||''))}
+  function stressClass(r){
+    var explicit=classKey(r&&r.__ppaDebugClass);
+    if(explicit)return explicit;
+    var m=String(r&&r.name||'').match(/BOT\s*(\d+)/i);
+    var n=m?Math.max(1,Number(m[1])||1):0;
+    if(!n){
+      var seed=String((r&&(r.i||r.id||r.pid))||'1'),h=0;
+      for(var i=0;i<seed.length;i++)h=(h*31+seed.charCodeAt(i))>>>0;
+      n=(h%PPA_3D_STRESS_CLASSES.length)+1;
+    }
+    return PPA_3D_STRESS_CLASSES[(n-1)%PPA_3D_STRESS_CLASSES.length];
+  }
   function finite(v){v=Number(v);return Number.isFinite(v)?v:null}
 
   var hitMetrics=null,hitMetricsAt=0;
@@ -78,12 +92,16 @@
     var fallback=ppaOnlineDrawRemote;
     var draw=function(r,now,nearCount){
       if(!r||!r.hasPos)return false;
-      if(stress(r))return fallback(r,now,nearCount);
 
+      // PPA_PLAYER3D_ARENA_STRESS_20261005
+      // Stress bots used to be forced back to the old 2D sprite path. Keep them
+      // on exactly the same unified Player3D renderer as real remote players so
+      // arena load tests measure the real GLB + AnimationMixer cost.
       var freshKey=classKey(r.cls||r.classKey||r.className);
+      if(!freshKey&&stress(r))freshKey=stressClass(r);
       if(freshKey)r.__ppa3DClass=freshKey;
       var key=freshKey||classKey(r.__ppa3DClass);
-      if(!key){r.__ppa3DMissingClass=true;return false}
+      if(!key){r.__ppa3DMissingClass=true;return fallback(r,now,nearCount)}
       r.__ppa3DMissingClass=false;
 
       var pos=visualPosition(r,now);
@@ -106,7 +124,8 @@
 
       var anchor=r.__ppa3DAnchor;
       if(!anchor)anchor=r.__ppa3DAnchor={classKey:'',worldX:0,worldY:0,nearCount:0,scene:null};
-      anchor.classKey=key;anchor.worldX=pos.x;anchor.worldY=pos.y;anchor.nearCount=nearCount;anchor.scene=r.scene;
+      anchor.classKey=key;anchor.worldX=pos.x;anchor.worldY=pos.y;anchor.nearCount=nearCount;
+      anchor.scene=r.scene!=null?r.scene:(typeof P!=='undefined'&&P?P.scene:null);
       try{if(window.PPA_PLAYER3D&&typeof PPA_PLAYER3D.remote==='function')PPA_PLAYER3D.remote(r,anchor)}catch(_){}
       return true;
     };
