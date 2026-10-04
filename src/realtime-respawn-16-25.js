@@ -18,7 +18,22 @@ function ordinaryRespawnDelay(){
   return 16000+Math.floor(Math.random()*9001); // 16,000..25,000 ms inclusive
 }
 
+// Keep authoritative AI at its normal ~10 Hz cadence so mob motion/combat timing
+// stays smooth, but avoid serializing the full authoritative dungeon population
+// every 2 seconds while players are moving. Deaths/respawns are still persisted
+// immediately by their dedicated paths below.
+const PPA_MOB_PERSIST_MIN_MS=5000;
+
 export class RealtimeHub extends StableRealtimeHub {
+  async maybePersistMobMovement(room,now=Date.now()){
+    if(!this._ppaMobPersistPerfTimes)this._ppaMobPersistPerfTimes=new Map();
+    room=cleanRoom(room);
+    const prev=Number(this._ppaMobPersistPerfTimes.get(room)||0);
+    if(prev&&now-prev<PPA_MOB_PERSIST_MIN_MS)return;
+    this._ppaMobPersistPerfTimes.set(room,now);
+    return super.maybePersistMobMovement(room,now);
+  }
+
   async webSocketMessage(ws,message){
     // City movement/presence/ping/chat/arena packets must never pay the respawn
     // inspection cost. Only the literal mob-hit packet enters the slow branch.
