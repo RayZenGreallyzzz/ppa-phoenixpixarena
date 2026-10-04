@@ -18,7 +18,35 @@ function ordinaryRespawnDelay(){
   return 16000+Math.floor(Math.random()*9001); // 16,000..25,000 ms inclusive
 }
 
+const PPA_MOB_AI_MIN_STEP_MS=170;
+const PPA_MOB_PERSIST_MIN_MS=5000;
+
 export class RealtimeHub extends StableRealtimeHub {
+  // The stable AI scans the full authoritative dungeon population on each tick.
+  // Player movement can request that scan ~10 times/sec. 170 ms keeps movement
+  // time-correct (stable dt cap is 180 ms) while almost halving CPU and position
+  // packet pressure on mobile sessions.
+  tickMobAI(room,now=Date.now()){
+    if(!this._ppaMobAiPerfTimes)this._ppaMobAiPerfTimes=new Map();
+    room=cleanRoom(room);
+    const prev=Number(this._ppaMobAiPerfTimes.get(room)||0);
+    if(prev&&now-prev<PPA_MOB_AI_MIN_STEP_MS)return false;
+    this._ppaMobAiPerfTimes.set(room,now);
+    return super.tickMobAI(room,now);
+  }
+
+  // Persisting the full 700+ mob room every two seconds creates large storage
+  // work even though deaths/control changes are persisted immediately elsewhere.
+  // Keep periodic movement recovery, just at a much cheaper five-second cadence.
+  async maybePersistMobMovement(room,now=Date.now()){
+    if(!this._ppaMobPersistPerfTimes)this._ppaMobPersistPerfTimes=new Map();
+    room=cleanRoom(room);
+    const prev=Number(this._ppaMobPersistPerfTimes.get(room)||0);
+    if(prev&&now-prev<PPA_MOB_PERSIST_MIN_MS)return;
+    this._ppaMobPersistPerfTimes.set(room,now);
+    return super.maybePersistMobMovement(room,now);
+  }
+
   async webSocketMessage(ws,message){
     // City movement/presence/ping/chat/arena packets must never pay the respawn
     // inspection cost. Only the literal mob-hit packet enters the slow branch.
