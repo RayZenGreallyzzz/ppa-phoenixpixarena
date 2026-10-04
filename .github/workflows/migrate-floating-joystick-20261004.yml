@@ -1,0 +1,38 @@
+name: Migrate floating joystick
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/migrate-floating-joystick-20261004.mjs
+      - .github/workflows/migrate-floating-joystick-20261004.yml
+permissions:
+  contents: write
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - name: Apply floating joystick
+        run: node tools/migrate-floating-joystick-20261004.mjs
+      - name: Verify production build
+        run: |
+          grep -q "v645-floating-joystick-20261004" build.mjs
+          npm run build
+          grep -q "PPA_FLOATING_JOYSTICK_20261004" public/index.html
+          grep -q "PPA_MOB_PURSUIT_SLOTS_20261004" public/index.html
+          grep -q "PPA_MOB_CONTACT_TANGENT_GLIDE_20261004" public/index.html
+          grep -q "PPA_PLAYER3D_ANIM_HOTLOOP_FIX_20261004" public/game/player-3d-unified-runtime.js
+          ! grep -q "animRateCheckAt" public/game/player-3d-unified-runtime.js
+      - name: Commit v645 canonical source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PPA01.bin PPA02.bin PPA03.bin PPA04.bin PPA05.bin PPA06.bin PPA07.bin PPA08.bin PPA09.bin PPA10.bin PPA11.bin PPA12.bin build.mjs
+          git commit -m "Add touch floating joystick"
+          git push
