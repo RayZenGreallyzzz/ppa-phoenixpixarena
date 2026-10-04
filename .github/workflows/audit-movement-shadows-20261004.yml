@@ -1,0 +1,23 @@
+name: Audit movement and shadows
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/audit-movement-shadows-20261004.mjs
+      - .github/workflows/audit-movement-shadows-20261004.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/audit-movement-shadows-20261004.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: movement-shadows-audit
+          path: movement-shadows-audit.txt
+          retention-days: 1
