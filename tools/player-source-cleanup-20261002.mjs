@@ -3,6 +3,8 @@
 // migration anchors (playerAnimDef/playerUses*) intentionally remain until the
 // unified Player3D postbuild converts/removes them later in the same build.
 
+import {applyDirectLootStorage} from './direct-loot-source-normalize-20261004.mjs';
+
 const CLASS_ENTRIES=[
   ['GNOME_IDLE_SRC','imgGnomeIdle'],['GNOME_RUN_SRC','imgGnomeRun'],['GNOME_ATTACK_SRC','imgGnomeAttack'],
   ['ARCHER_IDLE_SRC','imgArcherIdle'],['ARCHER_RUN_SRC','imgArcherRun'],['ARCHER_ATTACK_SRC','imgArcherAttack'],
@@ -161,7 +163,10 @@ export function stripDeadPlayerSpriteAssets(input){
   for(const bad of ['a.img','cfg.','cx.drawImage','phoneCharacterDrawHeight'])if(draw.includes(bad))throw new Error('Stage 5A2 source cleanup: AI sprite renderer token survived '+bad);
   for(const keep of ['function playerAnimDef(name){','function drawPlayer(){','const V174_AI_CLASS=','function v174SpawnAiTrainingFighter','PPA_AI_TRAINING_ACTIVE','function v174DrawAiTrainingFighter(e,sx,sy){','isAiFighter:true','PPA_ONLINE_STRESS',AI_PRIMITIVE])if(!source.includes(keep))throw new Error('Stage 5A2 source cleanup: protected feature damaged '+keep);
 
-  return {source,stats:{classAssetsRemoved,preloadsRemoved,genericSourcesRemoved:3,aiSpriteMetadataRemoved:CLASS_ANIMS.length+AI_SIMPLE.length+2,genericUrls}};
+  const directLoot=applyDirectLootStorage(source);
+  source=directLoot.source;
+
+  return {source,stats:{classAssetsRemoved,preloadsRemoved,genericSourcesRemoved:3,aiSpriteMetadataRemoved:CLASS_ANIMS.length+AI_SIMPLE.length+2,genericUrls,directLoot:directLoot.stats}};
 }
 
 export const PLAYER_SOURCE_CLEANUP_MARKER=MARKER;
