@@ -31,11 +31,12 @@ jobs:
           grep -q "PPA_PLAYER3D_MELEE_INPLACE_ATTACK_20261003" gateway/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" gateway/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_ANIM_SPEED_SYNC_20261004" gateway/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_ANIM_HOTLOOP_FIX_20261004" gateway/player-3d-unified-runtime.js
           grep -Fq "MELEE_INPLACE_CLASSES=new Set(['tank','barbarian','paladin','assassin'])" gateway/player-3d-unified-runtime.js
           grep -q "makeMeleeInPlaceAttackClip" gateway/player-3d-unified-runtime.js
-          grep -q "unified-v8-anim-speed-sync" gateway/player-3d-unified-runtime.js
+          grep -q "unified-v9-anim-speed-hotloop-fix" gateway/player-3d-unified-runtime.js
           grep -q "function playerAnimTimeScale(e,name)" gateway/player-3d-unified-runtime.js
-          grep -q "e.animRateCheckAt=stamp+120" gateway/player-3d-unified-runtime.js
+          ! grep -q "animRateCheckAt" gateway/player-3d-unified-runtime.js
           grep -q "next.setEffectiveTimeScale(rate)" gateway/player-3d-unified-runtime.js
           grep -q "Math.max(.60,Math.min(2.50,(current\*mul)/base))" gateway/player-3d-unified-runtime.js
           grep -q "Math.max(.65,Math.min(2.00,(current\*mul)/base))" gateway/player-3d-unified-runtime.js
@@ -51,9 +52,10 @@ jobs:
           grep -q "PPA_PLAYER_ANIM_RATE_SYNC_20261004" tools/postbuild-player-3d-unified-20261002.mjs
           grep -q "function playerAttackAnimRate()" tools/postbuild-player-3d-unified-20261002.mjs
           grep -q "function playerRunAnimRate()" tools/postbuild-player-3d-unified-20261002.mjs
-          grep -q "player-3d-unified-runtime.js?v=20261004u18" tools/postbuild-player-3d-unified-20261002.mjs
+          ! grep -Fq "60/(a.fps*playerAttackAnimRate())" tools/postbuild-player-3d-unified-20261002.mjs
+          grep -q "player-3d-unified-runtime.js?v=20261004u19" tools/postbuild-player-3d-unified-20261002.mjs
           grep -q "PPA_PLAYER3D_REMOTE_SCRATCH_20261003" gateway/remote-player-3d-dispatch.js
-      - name: Verify no per-frame melee bone regression
+      - name: Verify no per-frame melee bone or animation-rate regression
         run: |
           node - <<'NODE'
           const fs=require('fs');
@@ -63,8 +65,8 @@ jobs:
           if(a<0||b<0)throw new Error('Player3D frame range missing');
           const frame=src.slice(a,b);
           if(frame.includes('updateWorldMatrix(true,true)'))throw new Error('full-tree update leaked into Player3D frame loop');
-          for(const bad of ['lockMeleeAttackLowerBody','captureMeleeLowerBody','meleeLowerBody'])if(frame.includes(bad))throw new Error('per-frame melee bone work returned: '+bad);
-          if(!frame.includes('switchAnim(e,desiredAnim(e,now),now);'))throw new Error('timestamped animation switch missing');
+          for(const bad of ['lockMeleeAttackLowerBody','captureMeleeLowerBody','meleeLowerBody','animRateCheckAt'])if(frame.includes(bad))throw new Error('per-frame Player3D work returned: '+bad);
+          if(!frame.includes('switchAnim(e,desiredAnim(e,now));'))throw new Error('transition-only animation switch missing');
           if(!src.includes('PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003')||!src.includes('makeMeleeInPlaceAttackClip'))throw new Error('one-time melee clip filter missing');
           const n=(src.match(/if\(e\.root\)e\.root\.updateWorldMatrix\(true,true\);/g)||[]).length;
           if(n!==1)throw new Error('expected exactly one on-demand muzzle matrix update, found '+n);
@@ -83,19 +85,21 @@ jobs:
         run: |
           grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" public/game/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_ANIM_SPEED_SYNC_20261004" public/game/player-3d-unified-runtime.js
-          grep -q "unified-v8-anim-speed-sync" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_ANIM_HOTLOOP_FIX_20261004" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v9-anim-speed-hotloop-fix" public/game/player-3d-unified-runtime.js
           grep -q "function playerAnimTimeScale(e,name)" public/game/player-3d-unified-runtime.js
-          grep -q "e.animRateCheckAt=stamp+120" public/game/player-3d-unified-runtime.js
+          ! grep -q "animRateCheckAt" public/game/player-3d-unified-runtime.js
           grep -q "next.setEffectiveTimeScale(rate)" public/game/player-3d-unified-runtime.js
           ! grep -q "lockMeleeAttackLowerBody" public/game/player-3d-unified-runtime.js
           ! grep -q "captureMeleeLowerBody" public/game/player-3d-unified-runtime.js
           ! grep -q "meleeLowerBody" public/game/player-3d-unified-runtime.js
           grep -q "e.model.position.x=e.modelBaseX" public/game/player-3d-unified-runtime.js
           grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" public/game/player-3d-unified-runtime.js
-          grep -q "player-3d-unified-runtime.js?v=20261004u18" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261004u19" public/index.html
           grep -q "PPA_PLAYER_ANIM_RATE_SYNC_20261004" public/index.html
           grep -q "function playerAttackAnimRate()" public/index.html
           grep -q "function playerRunAnimRate()" public/index.html
+          ! grep -Fq "60/(a.fps*playerAttackAnimRate())" public/index.html
           test -e public/game/dungeon-mob-events.js
           test -e public/game/dungeon60-dragon.js
           test -e public/game/boss-drop-boost.js
