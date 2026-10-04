@@ -1,0 +1,36 @@
+name: Migrate canonical direct loot
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/migrate-direct-loot-canonical-20261004.mjs'
+      - '.github/workflows/migrate-direct-loot-canonical-20261004.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - name: Rewrite canonical packed source
+        run: node tools/migrate-direct-loot-canonical-20261004.mjs
+      - name: Verify production build
+        run: npm run build
+      - name: Commit canonical source
+        run: |
+          git config user.name "ppa-source-migrator"
+          git config user.email "actions@users.noreply.github.com"
+          git add PPA01.bin PPA02.bin PPA03.bin PPA04.bin PPA05.bin PPA06.bin PPA07.bin PPA08.bin PPA09.bin PPA10.bin PPA11.bin PPA12.bin build.mjs
+          git diff --cached --quiet && exit 1
+          git commit -m "Store gold and materials directly in canonical source"
+          git push
