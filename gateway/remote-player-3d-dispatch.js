@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_REMOTE_PLAYER3D_DISPATCH_V4)return;
-  window.__PPA_REMOTE_PLAYER3D_DISPATCH_V4=true;
+  if(window.__PPA_REMOTE_PLAYER3D_DISPATCH_V3)return;
+  window.__PPA_REMOTE_PLAYER3D_DISPATCH_V3=true;
 
   const PPA_3D_STRESS_CLASSES=['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'];
 
@@ -49,10 +49,10 @@
     }catch(_){return null}
   }
 
-  // Use the realtime layer's canonical/current coordinates directly. The realtime
-  // client already owns packet interpolation; applying a second exponential filter
-  // here made the GLB visually trail behind the actual remote player position.
-  // Keep the retained object to avoid per-frame allocations.
+  // PPA_REMOTE_CANONICAL_POSITION_20261005
+  // The realtime layer already owns packet interpolation. Rendering another
+  // exponential interpolation here makes the GLB trail behind the actual remote
+  // player position. Read the realtime layer's current x/y directly instead.
   function visualPosition(r){
     var rx=finite(r.x),ry=finite(r.y),tx=finite(r.tx),ty=finite(r.ty);
     var x=rx===null?tx:rx,y=ry===null?ty:ry;
