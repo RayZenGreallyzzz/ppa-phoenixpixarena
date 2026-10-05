@@ -37,9 +37,20 @@ const mobMatches=html.match(mobRx)||[];
 if(mobMatches.length!==1)throw new Error('Combined low-FPS sync test: expected one dungeon mob events tag, found '+mobMatches.length);
 html=html.replace(mobRx,'dungeon-mob-events.js?v=20261005mob600');
 
+// Some build variants currently omit the ppa-client-build meta entirely. The
+// build marker is cache/diagnostic metadata, not a gameplay prerequisite, so do
+// not fail a valid build because the old marker is absent: replace it when
+// present, otherwise create it in <head>.
 const buildMeta=/<meta name="ppa-client-build" content="[^"]+">/;
-if(!buildMeta.test(html))throw new Error('Combined low-FPS sync test: build meta missing');
-html=html.replace(buildMeta,'<meta name="ppa-client-build" content="v666-combined-lowfps-sync-test-20261005">');
+const nextMeta='<meta name="ppa-client-build" content="v666-combined-lowfps-sync-test-20261005">';
+if(buildMeta.test(html)){
+  html=html.replace(buildMeta,nextMeta);
+}else{
+  const headRx=/<head(?:\s[^>]*)?>/i;
+  if(!headRx.test(html))throw new Error('Combined low-FPS sync test: <head> missing for build meta');
+  html=html.replace(headRx,m=>m+'\n'+nextMeta);
+}
+if(!html.includes(nextMeta))throw new Error('Combined low-FPS sync test: build meta injection failed');
 
 fs.writeFileSync(htmlPath,html,'utf8');
 console.log('[PPA BUILD] v666 combined test applied: frame-time movement + canonical remote Player3D + dungeon materialize 600 + mobile smoothing 50 ms + mob cache-bust');
