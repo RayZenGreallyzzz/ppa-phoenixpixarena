@@ -16,7 +16,7 @@ function balancedEnd(text,openAt){
   for(let i=openAt;i<text.length;i++){
     const ch=text[i],nx=text[i+1]||'';
     if(state==='line'){if(ch==='\n')state='code';continue}
-    if(state==='block'){if(ch==='*'&&nx==='/'){state='code';i++}continue}
+    if(state==='block'){if(ch==='*'&&nx==='/'){state='code';i++;}continue}
     if(state==='string'){
       if(escaped){escaped=false;continue}
       if(ch==='\\'){escaped=true;continue}
@@ -38,10 +38,6 @@ function functionRange(text,signature){
   return [start,open,end];
 }
 
-// ---------------------------------------------------------------------------
-// 1) Unified runtime: the old runtime intentionally rejected local stress bots.
-//    Remove that second guard and accept AI-training class/animation fields too.
-// ---------------------------------------------------------------------------
 let runtime=fs.readFileSync(runtimePath,'utf8');
 const registerOld=`  function registerRemote(r,a){
     if(!r||isStressBot(r))return false;
@@ -75,9 +71,6 @@ runtime=runtime.replace(hudHiddenOld,hudHiddenNew);
 
 fs.writeFileSync(runtimePath,runtime,'utf8');
 
-// ---------------------------------------------------------------------------
-// 2) Remote dispatcher: real arena players + BOT 1..18 use this route.
-// ---------------------------------------------------------------------------
 const remote=fs.readFileSync(remotePath,'utf8');
 for(const marker of [
   'PPA_PLAYER3D_ARENA_STRESS_20261005',
@@ -87,11 +80,6 @@ for(const marker of [
   if(!remote.includes(marker))throw new Error('Arena Player3D stress postbuild: missing '+marker);
 }
 
-// ---------------------------------------------------------------------------
-// 3) Arena AI Training lives inside public/index.html and bypasses the online
-//    dispatcher completely. Register that entity directly with unified Player3D,
-//    remove only its old purple primitive BODY and retain Canvas HUD/status FX.
-// ---------------------------------------------------------------------------
 let html=fs.readFileSync(htmlPath,'utf8');
 const aiSig='function v174DrawAiTrainingFighter(e,sx,sy){';
 const [aiStart,aiOpen,aiEnd]=functionRange(html,aiSig);
@@ -127,8 +115,6 @@ html=html.slice(0,aiStart)+aiFn+html.slice(aiEnd+1);
 if(html.includes(primitive))throw new Error('Arena Player3D stress postbuild: old AI primitive body survived');
 if(!html.includes('PPA_AI_TRAINING_PLAYER3D_20261005'))throw new Error('Arena Player3D stress postbuild: AI Player3D bridge missing');
 
-// Force Telegram/WebView to fetch both patched runtime files instead of an older
-// cached u19/u7 copy.
 const remoteRx=/remote-player-3d-dispatch\.js\?v=[^"']+/g;
 const remoteMatches=html.match(remoteRx)||[];
 if(remoteMatches.length!==1)throw new Error('Arena Player3D stress postbuild: expected one remote dispatcher tag, found '+remoteMatches.length);
