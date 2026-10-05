@@ -1,7 +1,7 @@
 (function(){
   'use strict';
-  if(window.__PPA_REMOTE_PLAYER3D_DISPATCH_V3)return;
-  window.__PPA_REMOTE_PLAYER3D_DISPATCH_V3=true;
+  if(window.__PPA_REMOTE_PLAYER3D_DISPATCH_V4)return;
+  window.__PPA_REMOTE_PLAYER3D_DISPATCH_V4=true;
 
   const PPA_3D_STRESS_CLASSES=['tank','barbarian','paladin','gnome','archer','mage','assassin','priest'];
 
@@ -49,39 +49,18 @@
     }catch(_){return null}
   }
 
-  // Renderer-only interpolation. Never mutate r.x/r.y or r.lastDrawAt here:
-  // those fields belong to realtime/gameplay and are also used by targeting.
-  // PPA_PLAYER3D_REMOTE_SCRATCH_20261003: visual position and anchor objects are
-  // retained on the remote record instead of allocating two objects every draw.
-  function visualPosition(r,now){
-    var tx=finite(r.tx),ty=finite(r.ty),rx=finite(r.x),ry=finite(r.y);
-    if(tx===null)tx=rx;if(ty===null)ty=ry;
-    if(tx===null||ty===null)return null;
-
-    var sceneToken=String(r.scene==null?'':r.scene);
-    if(r.__ppa3DScene!==sceneToken){
-      r.__ppa3DScene=sceneToken;
-      r.__ppa3DX=rx===null?tx:rx;
-      r.__ppa3DY=ry===null?ty:ry;
-      r.__ppa3DLastAt=now;
-    }
-    if(!Number.isFinite(Number(r.__ppa3DX))||!Number.isFinite(Number(r.__ppa3DY))){
-      r.__ppa3DX=rx===null?tx:rx;
-      r.__ppa3DY=ry===null?ty:ry;
-    }
-
-    var dt=Math.max(0,Math.min(100,now-(Number(r.__ppa3DLastAt)||now)));
-    r.__ppa3DLastAt=now;
-    var dx=tx-Number(r.__ppa3DX),dy=ty-Number(r.__ppa3DY);
-    if(Math.hypot(dx,dy)>220){
-      r.__ppa3DX=tx;r.__ppa3DY=ty;
-    }else{
-      var alpha=1-Math.exp(-dt/105);
-      r.__ppa3DX+=dx*alpha;r.__ppa3DY+=dy*alpha;
-    }
+  // Use the realtime layer's canonical/current coordinates directly. The realtime
+  // client already owns packet interpolation; applying a second exponential filter
+  // here made the GLB visually trail behind the actual remote player position.
+  // Keep the retained object to avoid per-frame allocations.
+  function visualPosition(r){
+    var rx=finite(r.x),ry=finite(r.y),tx=finite(r.tx),ty=finite(r.ty);
+    var x=rx===null?tx:rx,y=ry===null?ty:ry;
+    if(x===null||y===null)return null;
     var out=r.__ppa3DVisualPosition;
     if(!out)out=r.__ppa3DVisualPosition={x:0,y:0};
-    out.x=Number(r.__ppa3DX);out.y=Number(r.__ppa3DY);
+    out.x=x;out.y=y;
+    r.__ppa3DX=x;r.__ppa3DY=y;
     return out;
   }
 
@@ -106,7 +85,7 @@
       if(!key){r.__ppa3DMissingClass=true;return fallback(r,now,nearCount)}
       r.__ppa3DMissingClass=false;
 
-      var pos=visualPosition(r,now);
+      var pos=visualPosition(r);
       if(!pos)return false;
       var sx=pos.x-Number(cam.x||0),sy=pos.y-Number(cam.y||0),z=Math.max(.1,Number(cameraZoom())||1);
       var vw=cv.width/z,vh=cv.height/z;
