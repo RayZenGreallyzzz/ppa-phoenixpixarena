@@ -30,11 +30,16 @@ fs.writeFileSync(mobPath,mobs,'utf8');
 const remoteRx=/remote-player-3d-dispatch\.js\?v=[^"']+/g;
 const remoteMatches=html.match(remoteRx)||[];
 if(remoteMatches.length!==1)throw new Error('Combined low-FPS sync test: expected one remote dispatcher tag, found '+remoteMatches.length);
-html=html.replace(remoteRx,'remote-player-3d-dispatch.js?v=20261005sync4');
+html=html.replace(remoteRx,'remote-player-3d-dispatch.js?v=20261005sync5');
+
+const mobRx=/dungeon-mob-events\.js\?v=[^"']+/g;
+const mobMatches=html.match(mobRx)||[];
+if(mobMatches.length!==1)throw new Error('Combined low-FPS sync test: expected one dungeon mob events tag, found '+mobMatches.length);
+html=html.replace(mobRx,'dungeon-mob-events.js?v=20261005mob600');
 
 const buildMeta=/<meta name="ppa-client-build" content="[^"]+">/;
 if(!buildMeta.test(html))throw new Error('Combined low-FPS sync test: build meta missing');
-html=html.replace(buildMeta,'<meta name="ppa-client-build" content="v665-combined-lowfps-sync-test-20261005">');
+html=html.replace(buildMeta,'<meta name="ppa-client-build" content="v666-combined-lowfps-sync-test-20261005">');
 
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('[PPA BUILD] v665 combined test applied: frame-time player movement + canonical remote Player3D + dungeon materialize 600 + mobile mob smoothing 50 ms');
+console.log('[PPA BUILD] v666 combined test applied: frame-time movement + canonical remote Player3D + dungeon materialize 600 + mobile smoothing 50 ms + mob cache-bust');
