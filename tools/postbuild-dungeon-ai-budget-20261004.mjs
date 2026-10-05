@@ -34,11 +34,12 @@ html=html.replace(re,`/* ${marker}: normal dungeon mobs outside the active ellip
 // reads this object; the actual sleep gate above still uses the constants.
 html=html.replace('</body>',`<script>window.PPA_DUNGEON_ACTIVE_ZONE={rx:240,ry:400,worldW:2048,worldH:997};</script>\n</body>`);
 
-// The authoritative server still sends mob coordinates at ~10 Hz. On mobile the
-// client had been applying its interpolation only every 50 ms (~20 visual steps/s),
-// which makes movement look robotic when packets arrive with any jitter. Raise the
-// visual interpolation to ~30 Hz, while materializing fewer far-away entities so
-// the extra smoothness does not cost FPS. Server authority and combat are unchanged.
+// Combined low-FPS test: keep the server authoritative, but stop the client from
+// materializing most of the dungeon at once. 600 px still covers the viewport and
+// a useful safety margin while avoiding the previous 1100 px near-whole-map budget.
+// Restore the mobile interpolation gate to 50 ms as well: at 12-30 rendered FPS,
+// running this client-only smoothing at ~30 Hz wastes main-thread time without
+// producing visible frames. Gameplay/combat packet frequency is unchanged.
 const mobClientPath=path.join(process.cwd(),'public','game','dungeon-mob-events.js');
 if(!fs.existsSync(mobClientPath))throw new Error('Dungeon AI budget: public/game/dungeon-mob-events.js missing');
 let mobClient=fs.readFileSync(mobClientPath,'utf8');
@@ -46,12 +47,12 @@ const materializeOld='var MATERIALIZE_R=1450;';
 const smoothStepOld='var minStep=smoothMobile()?50:16;';
 if((mobClient.split(materializeOld).length-1)!==1)throw new Error('Dungeon AI budget: materialize radius target changed');
 if((mobClient.split(smoothStepOld).length-1)!==1)throw new Error('Dungeon AI budget: mobile smoothing step target changed');
-mobClient=mobClient.replace(materializeOld,'var MATERIALIZE_R=1100; // PPA_DUNGEON_CLIENT_MOB_BUDGET_20261005');
-mobClient=mobClient.replace(smoothStepOld,'var minStep=smoothMobile()?33:16;');
+mobClient=mobClient.replace(materializeOld,'var MATERIALIZE_R=600; // PPA_DUNGEON_CLIENT_MOB_BUDGET_20261005_V2');
+mobClient=mobClient.replace(smoothStepOld,'var minStep=smoothMobile()?50:16;');
 fs.writeFileSync(mobClientPath,mobClient,'utf8');
 
 const buildMeta=/<meta name="ppa-client-build" content="[^"]+">/;
-if(buildMeta.test(html))html=html.replace(buildMeta,'<meta name="ppa-client-build" content="v654-dungeon-realtime-smooth-budget-20261005">');
+if(buildMeta.test(html))html=html.replace(buildMeta,'<meta name="ppa-client-build" content="v663-combined-lowfps-sync-test-20261005">');
 
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('[PPA BUILD] Dungeon AI budget: active ellipse 240 x 400; mobile mob smoothing ~30 Hz; materialize radius 1100; bosses unchanged');
+console.log('[PPA BUILD] Combined low-FPS test: active ellipse 240 x 400; mobile mob smoothing 50 ms; materialize radius 600; bosses unchanged');
