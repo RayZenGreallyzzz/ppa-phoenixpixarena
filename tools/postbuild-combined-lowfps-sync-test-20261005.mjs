@@ -37,12 +37,19 @@ const mobMatches=html.match(mobRx)||[];
 if(mobMatches.length!==1)throw new Error('Combined low-FPS sync test: expected one dungeon mob events tag, found '+mobMatches.length);
 html=html.replace(mobRx,'dungeon-mob-events.js?v=20261005mob600');
 
+// Keep the admin diagnostic isolated from gameplay assets. This cache bump only
+// makes the 1/2/3/5 threshold buttons arrive immediately on Telegram/WebView.
+const debugRx=/realtime-debug-bridge\.js\?v=[^"']+/g;
+const debugMatches=html.match(debugRx)||[];
+if(debugMatches.length!==1)throw new Error('Combined low-FPS sync test: expected one realtime debug bridge tag, found '+debugMatches.length);
+html=html.replace(debugRx,'realtime-debug-bridge.js?v=20261005threshold1235');
+
 // Some build variants currently omit the ppa-client-build meta entirely. The
 // build marker is cache/diagnostic metadata, not a gameplay prerequisite, so do
 // not fail a valid build because the old marker is absent: replace it when
 // present, otherwise create it in <head>.
 const buildMeta=/<meta name="ppa-client-build" content="[^"]+">/;
-const nextMeta='<meta name="ppa-client-build" content="v666-combined-lowfps-sync-test-20261005">';
+const nextMeta='<meta name="ppa-client-build" content="v667-player3d-threshold-1235-20261005">';
 if(buildMeta.test(html)){
   html=html.replace(buildMeta,nextMeta);
 }else{
@@ -53,4 +60,4 @@ if(buildMeta.test(html)){
 if(!html.includes(nextMeta))throw new Error('Combined low-FPS sync test: build meta injection failed');
 
 fs.writeFileSync(htmlPath,html,'utf8');
-console.log('[PPA BUILD] v666 combined test applied: frame-time movement + canonical remote Player3D + dungeon materialize 600 + mobile smoothing 50 ms + mob cache-bust');
+console.log('[PPA BUILD] v667 threshold test: frame-time movement + canonical remote Player3D + dungeon materialize 600 + mobile smoothing 50 ms + LOCAL STRESS 1/2/3/5');
