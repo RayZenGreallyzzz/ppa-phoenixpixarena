@@ -16,8 +16,6 @@ function replaceOnce(text,oldText,newText,label){
 let src=fs.readFileSync(runtimePath,'utf8');
 if(!src.includes('PPA_PLAYER3D_ARENA_AI_STRESS_20261005'))throw new Error('Player3D low-end budget: arena/stress Player3D patch must run first');
 
-// 1) Device profile + reusable diagnostics state. Keep DPR=1. Under crowd load
-// we reduce only the transparent Player3D render cadence, never game/realtime logic.
 const stateOld="  let cameraYaw=0,lastW=0,lastH=0,lastFrameAt=performance.now(),frames=0,lastFpsAt=performance.now(),fps=0;";
 const stateNew=`  let cameraYaw=0,lastW=0,lastH=0,lastFrameAt=performance.now(),frames=0,lastFpsAt=performance.now(),fps=0;
   // PPA_PLAYER3D_LOWEND_BUDGET_20261005
@@ -49,11 +47,11 @@ const stateNew=`  let cameraYaw=0,lastW=0,lastH=0,lastFrameAt=performance.now(),
     if(rec){rec.used=performance.now();return rec}
     const probe=document.createElement('canvas'),pg=probe.getContext('2d');
     pg.font=font;
-    const w=Math.max(8,Math.ceil(pg.measureText(text).width)+8),h=24;
+    const w=Math.max(8,Math.ceil(pg.measureText(text).width)+8),h=20;
     const c=document.createElement('canvas');c.width=w;c.height=h;
-    const g=c.getContext('2d');g.font=font;g.textAlign='center';g.textBaseline='middle';
-    g.lineJoin='round';g.lineWidth=3;g.strokeStyle='rgba(0,0,0,.95)';g.fillStyle=fill;
-    g.strokeText(text,w*.5,h*.5);g.fillText(text,w*.5,h*.5);
+    const g=c.getContext('2d');g.font=font;g.textAlign='center';g.textBaseline='bottom';
+    g.lineJoin='round';g.lineWidth=2.4;g.strokeStyle='rgba(18,8,5,.92)';g.fillStyle=fill;
+    g.strokeText(text,w*.5,h-2);g.fillText(text,w*.5,h-2);
     rec={canvas:c,w,h,used:performance.now()};PPA_HUD_TEXT_CACHE.set(key,rec);
     if(PPA_HUD_TEXT_CACHE.size>96){
       let oldestKey=null,oldest=Infinity;
@@ -130,7 +128,7 @@ const textOld=`  function textStrokeFill(text,x,y,font,fill){
   }`;
 const textNew=`  function textStrokeFill(text,x,y,font,fill){
     const rec=ppaHudTextBitmap(text,font,fill);
-    hx.drawImage(rec.canvas,Math.round(x-rec.w*.5),Math.round(y-rec.h+4));
+    hx.drawImage(rec.canvas,Math.round(x-rec.w*.5),Math.round(y-(rec.h-2)));
   }`;
 src=replaceOnce(src,textOld,textNew,'HUD text cache');
 
