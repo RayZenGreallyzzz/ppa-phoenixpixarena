@@ -35,8 +35,8 @@ const stateNew=`  let cameraYaw=0,lastW=0,lastH=0,lastFrameAt=performance.now(),
   function ppa3DMinFrameMs(visible){
     visible=Math.max(0,Number(visible)||0);
     if(PPA_LOW_END_DEVICE){
-      if(visible>=9)return 33.34; // 30 Hz for crowded weak Android/iOS devices.
-      if(visible>=5)return 25.00; // 40 Hz for medium crowds.
+      if(visible>=9)return 33.34;
+      if(visible>=5)return 25.00;
     }
     if(PPA_MOBILE_LIKE&&visible>=12)return 25.00;
     if(!PPA_MOBILE_LIKE&&visible>=18)return 20.00;
@@ -84,9 +84,6 @@ const stateNew=`  let cameraYaw=0,lastW=0,lastH=0,lastFrameAt=performance.now(),
   }`;
 src=replaceOnce(src,stateOld,stateNew,'device/perf state');
 
-// 2) Normal players share immutable materials. The old code cloned every material
-// for every skeleton instance. Private material clones are now created lazily only
-// for a character that actually enters hidden/smoke opacity.
 const materialCloneOld=`      const clone=SkeletonUtils.clone(a.scene);
       clone.traverse(o=>{
         if(!o||!o.material)return;
@@ -127,11 +124,9 @@ const hiddenNew=`  function isolateMaterialsForHidden(e){
     e.model.traverse(o=>{`;
 src=replaceOnce(src,hiddenOld,hiddenNew,'lazy hidden materials');
 
-// 3) Cache nickname/clan rasterization. drawImage remains per frame, but expensive
-// strokeText/fillText is paid only when a new label/font/color combination appears.
 const textOld=`  function textStrokeFill(text,x,y,font,fill){
-    hx.font=font;hx.textAlign='center';hx.textBaseline='bottom';hx.lineJoin='round';hx.lineWidth=3;hx.strokeStyle='rgba(0,0,0,.95)';hx.fillStyle=fill;
-    hx.strokeText(text,x,y);hx.fillText(text,x,y);
+    hx.font=font;hx.textAlign='center';hx.textBaseline='bottom';hx.lineJoin='round';hx.lineWidth=2.4;
+    hx.strokeStyle='rgba(18,8,5,.92)';hx.strokeText(text,x,y);hx.fillStyle=fill;hx.fillText(text,x,y);
   }`;
 const textNew=`  function textStrokeFill(text,x,y,font,fill){
     const rec=ppaHudTextBitmap(text,font,fill);
@@ -139,15 +134,11 @@ const textNew=`  function textStrokeFill(text,x,y,font,fill){
   }`;
 src=replaceOnce(src,textOld,textNew,'HUD text cache');
 
-// 4) Test bots/AI should disappear immediately when the test is switched OFF.
-// Keep the original 1.8s tolerance for real network players.
 const staleOld=`      if(!e.alive||(e.kind==='remote'&&now-e.seenAt>1800)){removeEntry(id,e);continue}`;
 const staleNew=`      const ppaRemoteStaleMs=e.kind==='remote'&&e.data&&(isStressBot(e.data)||e.data.isAiFighter)?300:1800;
       if(!e.alive||(e.kind==='remote'&&now-e.seenAt>ppaRemoteStaleMs)){removeEntry(id,e);continue}`;
 src=replaceOnce(src,staleOld,staleNew,'test entity TTL');
 
-// 5) Adaptive Player3D cadence. This is isolated from gameplay/realtime/hit logic:
-// only WebGL character projection, mixers, HUD and renderer submit skip redundant rAFs.
 const frameStartOld=`    syncLocalFromGame(now);
     const view=resize();if(!view)return;`;
 const frameStartNew=`    syncLocalFromGame(now);
@@ -210,7 +201,6 @@ for(const marker of ['PPA_PLAYER3D_LOWEND_BUDGET_20261005','PPA_PLAYER3D_SHARED_
 if(src.includes('clone.traverse(o=>{\n        if(!o||!o.material)return;'))throw new Error('Player3D low-end budget: eager material clone survived');
 fs.writeFileSync(runtimePath,src,'utf8');
 
-// Cache-bust only Player3D. Maps/sprites/assets are untouched.
 let html=fs.readFileSync(htmlPath,'utf8');
 const runtimeRx=/player-3d-unified-runtime\.js\?v=[^"']+/g;
 const matches=html.match(runtimeRx)||[];
