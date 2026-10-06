@@ -72,7 +72,7 @@ let runtime=fs.readFileSync(runtimePath,'utf8');
 
 const configTail="  };\n  const ENABLED=new Set(Object.keys(CLASS_CONFIG));";
 const rows=Object.entries(generated).map(([cls,levels])=>{
-  const parts=Object.keys(LEVELS).map(level=>`${level}:'/game/${levels[level].lod}?v=20261006dlod1'`);
+  const parts=Object.keys(LEVELS).map(level=>`${level}:'/game/${levels[level].lod}?v=20261006dlod2'`);
   return `    ${cls}:{${parts.join(',')}}`;
 }).join(',\n');
 const lodMap=`  };\n  // PPA_PLAYER3D_DISTANCE_LOD_20261006\n  const REMOTE_LOD_MODELS={\n${rows}\n  };\n  const REMOTE_LOD_CLOSE='lod35',REMOTE_LOD_MID='lod22',REMOTE_LOD_FAR='lod12';\n  const ENABLED=new Set(Object.keys(CLASS_CONFIG));`;
@@ -89,7 +89,7 @@ runtime=one(runtime,
 runtime=one(runtime,'      const a=await loadAsset(e.cls);','      const a=await loadAsset(e.cls,e.assetVariant);','instance asset variant');
 
 const upsertHead=`  function upsert(id,kind,cls,data,anchor){\n    if(!id||!cls||!anchor)return false;\n    let e=instances.get(id);\n    if(!e||e.cls!==cls){`;
-const upsertHeadNew=`  function ppaRemoteLodVariant(current,cls,anchor){\n    if(!REMOTE_LOD_MODELS[cls]||!anchor)return 'full';\n    const lx=Number(localAnchor.worldX),ly=Number(localAnchor.worldY),rx=Number(anchor.worldX),ry=Number(anchor.worldY);\n    if(!Number.isFinite(lx)||!Number.isFinite(ly)||!Number.isFinite(rx)||!Number.isFinite(ry))return current&&current!=='full'?current:REMOTE_LOD_CLOSE;\n    const d=Math.hypot(rx-lx,ry-ly);\n    // Hysteresis: close -> mid only after 340; mid -> close below 240.\n    // mid -> far only after 600; far -> mid below 480.\n    if(current===REMOTE_LOD_CLOSE)return d>340?REMOTE_LOD_MID:REMOTE_LOD_CLOSE;\n    if(current===REMOTE_LOD_MID){if(d<240)return REMOTE_LOD_CLOSE;if(d>600)return REMOTE_LOD_FAR;return REMOTE_LOD_MID}\n    if(current===REMOTE_LOD_FAR)return d<480?REMOTE_LOD_MID:REMOTE_LOD_FAR;\n    if(d>560)return REMOTE_LOD_FAR;if(d>300)return REMOTE_LOD_MID;return REMOTE_LOD_CLOSE;\n  }\n  function upsert(id,kind,cls,data,anchor){\n    if(!id||!cls||!anchor)return false;\n    let e=instances.get(id);\n    const assetVariant=kind==='local'?'full':ppaRemoteLodVariant(e&&e.assetVariant,cls,anchor);\n    if(!e||e.cls!==cls||e.assetVariant!==assetVariant){`;
+const upsertHeadNew=`  function ppaRemoteLodVariant(current,cls,anchor){\n    if(!REMOTE_LOD_MODELS[cls]||!anchor)return 'full';\n    if(!localAnchor.classKey)return current&&current!=='full'?current:REMOTE_LOD_CLOSE;\n    const lx=Number(localAnchor.worldX),ly=Number(localAnchor.worldY),rx=Number(anchor.worldX),ry=Number(anchor.worldY);\n    if(!Number.isFinite(lx)||!Number.isFinite(ly)||!Number.isFinite(rx)||!Number.isFinite(ry))return current&&current!=='full'?current:REMOTE_LOD_CLOSE;\n    const d=Math.hypot(rx-lx,ry-ly);\n    const prefetch=v=>{try{loadAsset(cls,v).catch(()=>{})}catch(_){}};\n    // Preload the next level before crossing the actual switch threshold.\n    // Hysteresis: close -> mid only after 340; mid -> close below 240.\n    // mid -> far only after 600; far -> mid below 480.\n    if(current===REMOTE_LOD_CLOSE){if(d>260)prefetch(REMOTE_LOD_MID);return d>340?REMOTE_LOD_MID:REMOTE_LOD_CLOSE}\n    if(current===REMOTE_LOD_MID){if(d<300)prefetch(REMOTE_LOD_CLOSE);if(d>520)prefetch(REMOTE_LOD_FAR);if(d<240)return REMOTE_LOD_CLOSE;if(d>600)return REMOTE_LOD_FAR;return REMOTE_LOD_MID}\n    if(current===REMOTE_LOD_FAR){if(d<540)prefetch(REMOTE_LOD_MID);return d<480?REMOTE_LOD_MID:REMOTE_LOD_FAR}\n    const first=d>560?REMOTE_LOD_FAR:(d>300?REMOTE_LOD_MID:REMOTE_LOD_CLOSE);\n    if(first===REMOTE_LOD_CLOSE&&d>260)prefetch(REMOTE_LOD_MID);\n    else if(first===REMOTE_LOD_MID){if(d<320)prefetch(REMOTE_LOD_CLOSE);if(d>520)prefetch(REMOTE_LOD_FAR)}\n    return first;\n  }\n  function upsert(id,kind,cls,data,anchor){\n    if(!id||!cls||!anchor)return false;\n    let e=instances.get(id);\n    const assetVariant=kind==='local'?'full':ppaRemoteLodVariant(e&&e.assetVariant,cls,anchor);\n    if(!e||e.cls!==cls||e.assetVariant!==assetVariant){`;
 runtime=one(runtime,upsertHead,upsertHeadNew,'upsert distance LOD');
 runtime=one(runtime,
   '      e={id,kind,cls,data,anchor,seenAt:performance.now()',
@@ -104,4 +104,4 @@ runtime=one(runtime,apiTail,apiTailNew,'LOD diag API');
 
 if(!runtime.includes('PPA_PLAYER3D_DISTANCE_LOD_20261006'))throw new Error('Player3D distance LOD: runtime marker missing');
 fs.writeFileSync(runtimePath,runtime,'utf8');
-console.log('[PPA BUILD] Player3D distance LOD active: LOCAL full; REMOTE/AI/STRESS lod35/lod22/lod12 with hysteresis');
+console.log('[PPA BUILD] Player3D distance LOD active: LOCAL full; REMOTE/AI/STRESS lod35/lod22/lod12 with hysteresis + prefetch');
