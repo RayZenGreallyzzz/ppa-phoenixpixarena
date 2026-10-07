@@ -762,6 +762,7 @@ const PHOENIX_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PHOENIX_FLOW_TTL_MS = 10 * 60 * 1000;
 const PHOENIX_EXCHANGE_TTL_MS = 3 * 60 * 1000;
 const PHOENIX_PASSWORD_ITERATIONS = 210000;
+const PHOENIX_TELEGRAM_CLIENT_ID = '8476557926';
 let phoenixAuthSchemaReady = false;
 
 function phoenixBase64Url(bytes) {
@@ -882,13 +883,33 @@ async function phoenixEnsureAccountForTelegram(env, tgUser, preferredAccountId =
   const player = await ensurePlayer(env, tgUser);
   const telegramId = String(tgUser.id);
   const now = Date.now();
+  const preferred = String(preferredAccountId || '').trim();
   const existing = await env.DB.prepare('SELECT * FROM phoenix_accounts WHERE telegram_id=?1 LIMIT 1').bind(telegramId).first();
+
   if (existing) {
+    if (preferred && preferred !== String(existing.account_id)) {
+      const source = await env.DB.prepare('SELECT * FROM phoenix_accounts WHERE account_id=?1 LIMIT 1').bind(preferred).first();
+      if (source) {
+        if (source.telegram_id && String(source.telegram_id) !== telegramId) {
+          throw Object.assign(new Error('Phoenix Account уже связан с другим Telegram'), { status: 409, code: 'TELEGRAM_ALREADY_LINKED' });
+        }
+        const sourceEmail = String(source.email || '').trim();
+        const existingEmail = String(existing.email || '').trim();
+        if (sourceEmail && existingEmail && sourceEmail !== existingEmail) {
+          throw Object.assign(new Error('У Telegram и Email уже разные Phoenix Accounts. Требуется ручное объединение.'), { status: 409, code: 'PHOENIX_ACCOUNT_MERGE_REQUIRED' });
+        }
+        if (sourceEmail && !existingEmail) {
+          await env.DB.prepare('UPDATE phoenix_accounts SET email=?1,password_salt=?2,password_hash=?3,email_verified=?4,updated_at=?5,last_login_at=?5 WHERE account_id=?6')
+            .bind(source.email, source.password_salt, source.password_hash, Number(source.email_verified) || 0, now, existing.account_id).run();
+        }
+        await env.DB.prepare('DELETE FROM phoenix_accounts WHERE account_id=?1').bind(preferred).run();
+      }
+    }
     await env.DB.prepare('UPDATE phoenix_accounts SET updated_at=?1,last_login_at=?1 WHERE account_id=?2').bind(now, existing.account_id).run();
     return { accountId: String(existing.account_id), player };
   }
 
-  let accountId = String(preferredAccountId || '').trim();
+  let accountId = preferred;
   if (accountId) {
     const target = await env.DB.prepare('SELECT * FROM phoenix_accounts WHERE account_id=?1 LIMIT 1').bind(accountId).first();
     if (!target) accountId = '';
@@ -1003,7 +1024,7 @@ async function phoenixValidateTelegramIdToken(idToken, env, expectedNonce) {
   const now = Math.floor(Date.now() / 1000);
   const aud = Array.isArray(claims.aud) ? claims.aud.map(String) : [String(claims.aud || '')];
   if (String(claims.iss || '') !== 'https://oauth.telegram.org' ||
-      !aud.includes(String(env.TELEGRAM_LOGIN_CLIENT_ID || '')) ||
+      !aud.includes(String(env.TELEGRAM_LOGIN_CLIENT_ID || PHOENIX_TELEGRAM_CLIENT_ID)) ||
       Number(claims.exp) <= now ||
       Number(claims.iat) > now + 300 ||
       (expectedNonce && String(claims.nonce || '') !== String(expectedNonce))) {
@@ -1107,6 +1128,33 @@ async function handlePhoenixLauncherApi(request, env, url) {
     if (url.pathname === '/api/launcher/auth/telegram/start') {
       if (request.method !== 'POST') return apiError('POST required', 405, 'METHOD_NOT_ALLOWED');
       return phoenixCreateTelegramFlow(request, env, body);
+    }
+
+    if (url.pathname === '/api/launcher/auth/telegram/native') {
+      if (request.method !== 'POST') return apiError('POST required', 405, 'METHOD_NOT_ALLOWED');
+      const idToken = String(body.idToken || '').trim();
+      if (!idToken) return apiError('Telegram ID token missing', 400, 'ID_TOKEN_MISSING');
+
+      let preferredAccountId = '';
+      try {
+        const currentSession = await phoenixSessionFromRequest(request, env, false);
+        if (currentSession) preferredAccountId = currentSession.accountId;
+      } catch (_) {}
+
+      const claims = await phoenixValidateTelegramIdToken(idToken, env, '');
+      const tgUser = {
+        id: claims.id != null ? claims.id : claims.sub,
+        username: claims.preferred_username || claims.username || '',
+        first_name: claims.given_name || claims.first_name || claims.name || '',
+        last_name: claims.family_name || claims.last_name || ''
+      };
+      const linked = await phoenixEnsureAccountForTelegram(env, tgUser, preferredAccountId);
+      const session = await phoenixCreateSession(env, linked.accountId, 'telegram-native');
+      return json({
+        ok: true,
+        session,
+        account: phoenixAccountPayload(await phoenixAccountRow(env, linked.accountId))
+      });
     }
 
     if (url.pathname === '/api/launcher/auth/exchange') {
