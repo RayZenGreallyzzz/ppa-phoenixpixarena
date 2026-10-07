@@ -1,11 +1,11 @@
 name: Extract native port source
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
     paths:
       - ".github/workflows/extract-native-port-source.yml"
-  workflow_dispatch:
 
 jobs:
   extract:
@@ -15,14 +15,10 @@ jobs:
       - name: Unpack canonical PPA source
         shell: bash
         run: |
-          node <<'NODE'
-          const fs=require('fs'),zlib=require('zlib');
-          const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-          const packed=Buffer.concat(parts.map(p=>fs.readFileSync(p)));
-          const raw=zlib.gunzipSync(packed);
-          fs.writeFileSync('native-port-source.html',raw);
-          console.log('unpacked bytes',raw.length);
-          NODE
+          set -euo pipefail
+          cat PPA01.bin PPA02.bin PPA03.bin PPA04.bin PPA05.bin PPA06.bin PPA07.bin PPA08.bin PPA09.bin PPA10.bin PPA11.bin PPA12.bin | gzip -dc > native-port-source.html
+          test -s native-port-source.html
+          wc -c native-port-source.html
       - uses: actions/upload-artifact@v4
         with:
           name: ppa-native-port-source
