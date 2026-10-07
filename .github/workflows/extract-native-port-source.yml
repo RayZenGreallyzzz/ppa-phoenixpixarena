@@ -16,9 +16,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat PPA01.bin PPA02.bin PPA03.bin PPA04.bin PPA05.bin PPA06.bin PPA07.bin PPA08.bin PPA09.bin PPA10.bin PPA11.bin PPA12.bin | gzip -dc > native-port-source.html
+          node <<'NODE'
+          const fs = require('fs');
+          const zlib = require('zlib');
+          const names = ['PPA01.bin','PPA02.bin','PPA03.bin','PPA04.bin','PPA05.bin','PPA06.bin','PPA07.bin','PPA08.bin','PPA09.bin','PPA10.bin','PPA11.bin','PPA12.bin'];
+          const parts = names.map(function(name) { return fs.readFileSync(name); });
+          const packed = Buffer.concat(parts);
+          const source = zlib.gunzipSync(packed);
+          fs.writeFileSync('native-port-source.html', source);
+          console.log('packed=' + packed.length + ' source=' + source.length);
+          NODE
           test -s native-port-source.html
-          wc -c native-port-source.html
       - uses: actions/upload-artifact@v4
         with:
           name: ppa-native-port-source
