@@ -762,6 +762,8 @@ const PHOENIX_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PHOENIX_FLOW_TTL_MS = 10 * 60 * 1000;
 const PHOENIX_EXCHANGE_TTL_MS = 3 * 60 * 1000;
 const PHOENIX_PASSWORD_ITERATIONS = 210000;
+const PHOENIX_GAME_TICKET_TTL_MS = 60 * 1000;
+const PHOENIX_GAME_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const PHOENIX_TELEGRAM_CLIENT_ID = '8476557926';
 let phoenixAuthSchemaReady = false;
 
@@ -840,10 +842,15 @@ async function ensurePhoenixAuthSchema(env) {
   await env.DB.prepare('CREATE TABLE IF NOT EXISTS phoenix_sessions (token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, provider TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, FOREIGN KEY (account_id) REFERENCES phoenix_accounts(account_id) ON DELETE CASCADE)').run();
   await env.DB.prepare('CREATE TABLE IF NOT EXISTS phoenix_auth_flows (state TEXT PRIMARY KEY, app_challenge TEXT NOT NULL, oauth_verifier TEXT, nonce TEXT, link_account_id TEXT, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)').run();
   await env.DB.prepare('CREATE TABLE IF NOT EXISTS phoenix_exchange_codes (code_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, state TEXT NOT NULL, app_challenge TEXT NOT NULL, provider TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER NOT NULL DEFAULT 0, FOREIGN KEY (account_id) REFERENCES phoenix_accounts(account_id) ON DELETE CASCADE)').run();
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS phoenix_game_tickets (ticket_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, game_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER NOT NULL DEFAULT 0, FOREIGN KEY (account_id) REFERENCES phoenix_accounts(account_id) ON DELETE CASCADE)').run();
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS phoenix_game_sessions (token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, game_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, FOREIGN KEY (account_id) REFERENCES phoenix_accounts(account_id) ON DELETE CASCADE)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_phoenix_sessions_account ON phoenix_sessions(account_id)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_phoenix_sessions_expiry ON phoenix_sessions(expires_at)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_phoenix_flows_expiry ON phoenix_auth_flows(expires_at)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_phoenix_codes_expiry ON phoenix_exchange_codes(expires_at)').run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_phoenix_game_tickets_expiry ON phoenix_game_tickets(expires_at)').run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_phoenix_game_sessions_expiry ON phoenix_game_sessions(expires_at)').run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_phoenix_game_sessions_account ON phoenix_game_sessions(account_id)').run();
   phoenixAuthSchemaReady = true;
 }
 
@@ -852,6 +859,8 @@ async function phoenixCleanupAuth(env) {
   try { await env.DB.prepare('DELETE FROM phoenix_sessions WHERE expires_at<?1').bind(now).run(); } catch (_) {}
   try { await env.DB.prepare('DELETE FROM phoenix_auth_flows WHERE expires_at<?1').bind(now).run(); } catch (_) {}
   try { await env.DB.prepare('DELETE FROM phoenix_exchange_codes WHERE expires_at<?1 OR used_at>0').bind(now).run(); } catch (_) {}
+  try { await env.DB.prepare('DELETE FROM phoenix_game_tickets WHERE expires_at<?1 OR used_at>0').bind(now).run(); } catch (_) {}
+  try { await env.DB.prepare('DELETE FROM phoenix_game_sessions WHERE expires_at<?1').bind(now).run(); } catch (_) {}
 }
 
 async function phoenixAccountRow(env, accountId) {
@@ -1116,6 +1125,98 @@ async function handlePhoenixTelegramBrowser(request, env, url) {
   return null;
 }
 
+
+async function phoenixCreateGameTicket(env, accountId, gameId) {
+  const ticket = phoenixRandomToken(32);
+  const ticketHash = await phoenixSha256Hex(ticket);
+  const now = Date.now();
+  const expiresAt = now + PHOENIX_GAME_TICKET_TTL_MS;
+  await env.DB.prepare('INSERT INTO phoenix_game_tickets (ticket_hash,account_id,game_id,created_at,expires_at,used_at) VALUES (?1,?2,?3,?4,?5,0)')
+    .bind(ticketHash, accountId, gameId, now, expiresAt).run();
+  return { ticket, expiresAt };
+}
+
+async function phoenixCreateGameSession(env, accountId, gameId) {
+  const token = phoenixRandomToken(32);
+  const tokenHash = await phoenixSha256Hex(token);
+  const now = Date.now();
+  const expiresAt = now + PHOENIX_GAME_SESSION_TTL_MS;
+  await env.DB.prepare('INSERT INTO phoenix_game_sessions (token_hash,account_id,game_id,created_at,expires_at) VALUES (?1,?2,?3,?4,?5)')
+    .bind(tokenHash, accountId, gameId, now, expiresAt).run();
+  return { token, expiresAt };
+}
+
+async function phoenixGameSessionFromRequest(request, env, required = true) {
+  const header = String(request.headers.get('authorization') || '');
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  if (!match) {
+    if (!required) return null;
+    throw Object.assign(new Error('Game session missing'), { status: 401, code: 'GAME_SESSION_MISSING' });
+  }
+  const tokenHash = await phoenixSha256Hex(match[1].trim());
+  const row = await env.DB.prepare('SELECT account_id,game_id,expires_at FROM phoenix_game_sessions WHERE token_hash=?1 LIMIT 1')
+    .bind(tokenHash).first();
+  if (!row || Number(row.expires_at) <= Date.now()) {
+    if (row) try { await env.DB.prepare('DELETE FROM phoenix_game_sessions WHERE token_hash=?1').bind(tokenHash).run(); } catch (_) {}
+    throw Object.assign(new Error('Game session expired'), { status: 401, code: 'GAME_SESSION_EXPIRED' });
+  }
+  return { tokenHash, accountId: String(row.account_id), gameId: String(row.game_id || '') };
+}
+
+async function handlePhoenixGameApi(request, env, url) {
+  if (!url.pathname.startsWith('/api/game/')) return null;
+  await ensurePhoenixAuthSchema(env);
+  try {
+    let body = {};
+    if (request.method !== 'GET') {
+      try { body = await request.json(); } catch (_) { body = {}; }
+    }
+
+    if (url.pathname === '/api/game/session/exchange') {
+      if (request.method !== 'POST') return apiError('POST required', 405, 'METHOD_NOT_ALLOWED');
+      const ticket = String(body.ticket || '').trim();
+      const requestedGameId = String(body.gameId || '').trim();
+      if (!ticket) return apiError('Game ticket missing', 400, 'GAME_TICKET_MISSING');
+
+      const ticketHash = await phoenixSha256Hex(ticket);
+      const row = await env.DB.prepare('SELECT * FROM phoenix_game_tickets WHERE ticket_hash=?1 LIMIT 1')
+        .bind(ticketHash).first();
+      const now = Date.now();
+      if (!row || Number(row.used_at) > 0 || Number(row.expires_at) <= now) {
+        return apiError('Game ticket expired or already used', 401, 'GAME_TICKET_INVALID');
+      }
+      if (requestedGameId && requestedGameId !== String(row.game_id || '')) {
+        return apiError('Game ticket does not match this game', 403, 'GAME_TICKET_WRONG_GAME');
+      }
+
+      const used = await env.DB.prepare('UPDATE phoenix_game_tickets SET used_at=?1 WHERE ticket_hash=?2 AND used_at=0')
+        .bind(now, ticketHash).run();
+      if (!used || Number(used.meta && used.meta.changes || 0) !== 1) {
+        return apiError('Game ticket already used', 401, 'GAME_TICKET_USED');
+      }
+
+      const session = await phoenixCreateGameSession(env, String(row.account_id), String(row.game_id));
+      const account = phoenixAccountPayload(await phoenixAccountRow(env, String(row.account_id)));
+      return json({ ok: true, session, gameId: String(row.game_id), account });
+    }
+
+    if (url.pathname === '/api/game/me') {
+      if (request.method !== 'GET') return apiError('GET required', 405, 'METHOD_NOT_ALLOWED');
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      const account = phoenixAccountPayload(await phoenixAccountRow(env, auth.accountId));
+      return json({ ok: true, gameId: auth.gameId, account });
+    }
+
+    return apiError('Game API route not found', 404, 'NOT_FOUND');
+  } catch (err) {
+    const status = Number(err && err.status) || 500;
+    const code = (err && err.code) || (status >= 500 ? 'SERVER_ERROR' : 'REQUEST_ERROR');
+    const message = status >= 500 && code === 'SERVER_ERROR' ? 'Phoenix game auth error' : String((err && err.message) || 'Phoenix game auth error');
+    console.error('Phoenix Game auth:', code, err);
+    return apiError(message, status, code);
+  }
+}
+
 async function handlePhoenixLauncherApi(request, env, url) {
   if (!url.pathname.startsWith('/api/launcher/')) return null;
   await ensurePhoenixAuthSchema(env);
@@ -1128,6 +1229,15 @@ async function handlePhoenixLauncherApi(request, env, url) {
     if (url.pathname === '/api/launcher/auth/telegram/start') {
       if (request.method !== 'POST') return apiError('POST required', 405, 'METHOD_NOT_ALLOWED');
       return phoenixCreateTelegramFlow(request, env, body);
+    }
+
+    if (url.pathname === '/api/launcher/game-ticket') {
+      if (request.method !== 'POST') return apiError('POST required', 405, 'METHOD_NOT_ALLOWED');
+      const auth = await phoenixSessionFromRequest(request, env, true);
+      const gameId = String(body.gameId || '').trim();
+      if (gameId !== 'phoenix-pix-arena') return apiError('Unknown Phoenix game', 404, 'GAME_NOT_FOUND');
+      const ticket = await phoenixCreateGameTicket(env, auth.accountId, gameId);
+      return json({ ok: true, gameId, ticket });
     }
 
     if (url.pathname === '/api/launcher/auth/telegram/native') {
@@ -1254,6 +1364,9 @@ async function handleApi(request, env) {
 
   const launcherApi = await handlePhoenixLauncherApi(request, env, url);
   if (launcherApi) return launcherApi;
+
+  const gameApi = await handlePhoenixGameApi(request, env, url);
+  if (gameApi) return gameApi;
 
   if (request.method !== 'POST') return apiError('POST required', 405, 'METHOD_NOT_ALLOWED');
 
