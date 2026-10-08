@@ -1207,6 +1207,35 @@ async function handlePhoenixGameApi(request, env, url) {
       return json({ ok: true, gameId: auth.gameId, account });
     }
 
+    // Native Godot game: signed Phoenix game session -> linked Telegram player's
+    // EXACT existing cloud save. Intentionally READ-ONLY; never accept a
+    // telegramId/characterId from the client and never write game state.
+    // Reuses the account/session identity established by Phoenix Launcher.
+    if (url.pathname === '/api/game/state') {
+      if (request.method !== 'GET') return apiError('GET required', 405, 'METHOD_NOT_ALLOWED');
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena') {
+        return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      }
+      const accountRow = await phoenixAccountRow(env, auth.accountId);
+      if (!accountRow) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const telegramId = accountRow.telegram_id == null ? '' : String(accountRow.telegram_id).trim();
+      if (!telegramId) {
+        return apiError('Привяжи свой Telegram аккаунт, прежде чем загружать персонажа PPA.', 409, 'TELEGRAM_NOT_LINKED');
+      }
+      const snapshot = await loadSave(env, telegramId);
+      if (!snapshot.ok) return json(snapshot, Number(snapshot.status) || 500);
+      return json({
+        ok: true,
+        readOnly: true,
+        gameId: auth.gameId,
+        profile: snapshot.profile || null,
+        version: snapshot.version,
+        state: snapshot.state,
+        updatedAt: snapshot.updatedAt || null
+      });
+    }
+
     return apiError('Game API route not found', 404, 'NOT_FOUND');
   } catch (err) {
     const status = Number(err && err.status) || 500;
