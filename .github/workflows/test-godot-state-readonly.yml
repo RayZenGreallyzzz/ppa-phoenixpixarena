@@ -1,0 +1,26 @@
+name: Verify read-only Godot game-state API
+on:
+  push:
+    branches: [ "feature/godot-readonly-state-20261009" ]
+    paths:
+      - "src/worker.js"
+      - "tools/test-godot-state-readonly.mjs"
+      - ".github/workflows/test-godot-state-readonly.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax validation
+        run: |
+          set -euo pipefail
+          node --check src/worker.js
+          node --check tools/test-godot-state-readonly.mjs
+      - name: Authenticated read-only save contract
+        run: node tools/test-godot-state-readonly.mjs
