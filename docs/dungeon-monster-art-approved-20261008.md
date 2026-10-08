@@ -2,14 +2,40 @@
 
 This is the canonical **visual correction** agreed after comparing the CURRENT PPA gameplay video with old Library art. **No runtime code is changed by this document.**
 
-## Confirmed starter dungeon monsters
+## Authoritative names and levels — CURRENT PPA gameplay video
 
-1. **Пепельная крыса** — ash rat
-2. **Пещерный паук** — cave spider
-3. **Обугленный жук** — charred beetle
-4. **Слайм-падальщик** — slime scavenger, **NOT** the older vulture-like **Падальщик**
+The in-game footage confirms the complete dungeon 1–20 sequence, **not** a five-level category-mixing bestiary:
 
-The current gameplay video includes "Слайм-падальщик" at level 4. Other existing enemies through Phoenix20 are present in the running client. Do not invent or overwrite the remaining names, level-to-monster mappings or artwork from an old poster.
+| Level | Current in-game mob |
+|---:|---|
+| 1 | Пепельная крыса |
+| 2 | Пещерный паук |
+| 3 | Обугленный жук |
+| 4 | Слайм-падальщик — green, red and blue variants mixed within level 4 |
+| 5 | Костяной грызун |
+| 6 | Гоблин-разведчик |
+| 7 | Костяной воин |
+| 8 | Пепельный волк |
+| 9 | Грибная тварь |
+| 10 | Гоблин-шаман |
+| 11 | Культист |
+| 12 | Проклятый рыцарь |
+| 13 | Каменный голем |
+| 14 | Лавовый элементаль |
+| 15 | Пепельный страж |
+| 16 | Адская гончая |
+| 17 | Огненный демон |
+| 18 | Пустотный наблюдатель |
+| 19 | Элитный голем |
+| 20 | Пепельный палач |
+
+**Phoenix20 is a boss after the twentieth level**, not another normal mob. No evidence in this video validates levels 21–60; their graphics remain pending explicit comparison.
+
+Old lists that place «Падальщик» bird at level 4 are obsolete. The existing test ZIP in Godot also contained that bird; do not reuse it.
+
+## Art-to-level rule
+
+Each spawn uses the art of **its own level**; do not assign a random monster from a broad level bracket. At level 4 only, select green/red/blue *slimes* based on stable spawn ID. All three need distinct verified source images. This visual selection must not change HP, attacks, server ownership, XP, loot, collisions, or spawn coordinates.
 
 ## Protected game systems
 
