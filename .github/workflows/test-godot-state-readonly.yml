@@ -5,6 +5,7 @@ on:
     paths:
       - "src/worker.js"
       - "tools/test-godot-state-readonly.mjs"
+      - "tools/test-godot-state-readonly-runtime.mjs"
       - ".github/workflows/test-godot-state-readonly.yml"
   workflow_dispatch:
 
@@ -22,5 +23,8 @@ jobs:
           set -euo pipefail
           node --check src/worker.js
           node --check tools/test-godot-state-readonly.mjs
+          node --check tools/test-godot-state-readonly-runtime.mjs
       - name: Authenticated read-only save contract
-        run: node tools/test-godot-state-readonly.mjs
+        run: |
+          node tools/test-godot-state-readonly.mjs
+          node tools/test-godot-state-readonly-runtime.mjs
