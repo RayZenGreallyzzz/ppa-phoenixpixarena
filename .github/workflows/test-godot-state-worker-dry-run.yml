@@ -1,0 +1,53 @@
+name: Godot native state Worker predeploy SAFE
+on:
+  push:
+    branches:
+      - feature/godot-readonly-state-20261009
+    paths:
+      - src/worker.js
+      - tools/test-godot-state-readonly.mjs
+      - tools/test-godot-state-readonly-runtime.mjs
+      - .github/workflows/test-godot-state-worker-dry-run.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Prove native route fails closed by default
+        run: |
+          set -euo pipefail
+          node tools/test-godot-state-readonly.mjs
+          node tools/test-godot-state-readonly-runtime.mjs
+      - name: Compile full existing PPA bundle in CI sandbox
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          test -s public/index.html
+          test -s public/game/ppa-bridge.js
+      - name: Dry-run actual Cloudflare Worker + assets, NEVER DEPLOY
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --outdir /tmp/ppa-godot-worker-test
+          test -d /tmp/ppa-godot-worker-test
+          echo "PPA_GODOT_WORKER_DRY_RUN_OK remote_deploy=0 live_db_writes=0 existing_assets_built=1"
+      - name: Probe old live endpoints anonymously (GET only, no save reads)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://ppa-phoenixpixarena.1988stella1988.workers.dev"
+          HEALTH="$(curl -sSf --max-time 15 "$BASE/api/health")"
+          echo "$HEALTH" | grep -q '"ok":true'
+          CODE="$(curl --silent --show-error -o /dev/null --max-time 15 -w '%{http_code}' "$BASE/api/game/state")"
+          test "$CODE" = 404
+          echo "PPA_EXISTING_PRODUCTION_UNCHANGED_OK health=200 new_endpoint_still_missing=404"
