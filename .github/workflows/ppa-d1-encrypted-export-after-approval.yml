@@ -1,0 +1,78 @@
+name: PPA D1 encrypted export (one-off approval only)
+
+on:
+  # No schedule, manual dispatch, or automatic script-triggered export.
+  # Owner authorizes a separate exact marker commit on the isolated branch.
+  push:
+    branches:
+      - ops/d1-private-backup-20261009
+    paths:
+      - ops/run-ppa-d1-export-20261009.approved
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ppa-d1-owner-approved-export
+  cancel-in-progress: false
+
+jobs:
+  encrypted-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate authorization and encryption prerequisites
+        env:
+          PPA_D1_BACKUP_PASSWORD: ${{ secrets.PPA_D1_BACKUP_PASSWORD }}
+          CLOUDFLARE_D1_READ_TOKEN: ${{ secrets.CLOUDFLARE_D1_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat ops/run-ppa-d1-export-20261009.approved)" = "OWNER_EXPLICITLY_APPROVED_BRIEF_D1_EXPORT_INTERRUPTION_20261009"
+          if [ "${#PPA_D1_BACKUP_PASSWORD}" -lt 16 ] || [ "${#CLOUDFLARE_D1_READ_TOKEN}" -lt 20 ]; then
+            echo "PPA_D1_EXPORT_ABORT: required secrets missing or too short."
+            exit 1
+          fi
+          node --check tools/d1-private-export-to-stdout.mjs
+          echo "PPA_D1_EXPORT_PREFLIGHT_OK: no live requests yet; secrets not logged."
+      - name: Install 7-Zip on isolated runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v 7z >/dev/null 2>&1 && ! command -v 7za >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq p7zip-full
+          fi
+          if command -v 7z >/dev/null 2>&1; then
+            echo "PPA_ARCHIVER=7z" >> "$GITHUB_ENV"
+          else
+            command -v 7za >/dev/null 2>&1
+            echo "PPA_ARCHIVER=7za" >> "$GITHUB_ENV"
+          fi
+      - name: Export once and immediately encrypt without plaintext files
+        shell: bash
+        env:
+          CLOUDFLARE_D1_READ_TOKEN: ${{ secrets.CLOUDFLARE_D1_READ_TOKEN }}
+          PPA_D1_BACKUP_PASSWORD: ${{ secrets.PPA_D1_BACKUP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/private-d1"
+          archive="$RUNNER_TEMP/private-d1/PPA-D1-20261009-encrypted.7z"
+          # IMPORTANT: Cloudflare D1 export may temporarily block live DB queries.
+          # SQL flows directly into encrypted 7z; no plaintext SQL file or logs.
+          node tools/d1-private-export-to-stdout.mjs |
+            "$PPA_ARCHIVER" a -t7z -mhe=on -mx=5 -p"$PPA_D1_BACKUP_PASSWORD" \
+              -si"PPA-full-d1.sql" "$archive" >/dev/null
+          test -s "$archive"
+          "$PPA_ARCHIVER" t -p"$PPA_D1_BACKUP_PASSWORD" "$archive" >/dev/null
+          echo "PPA_D1_ENCRYPTED_BACKUP_READY: integrity test passed; plaintext_log=0"
+      - name: Upload encrypted short-lived archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: PPA-D1-PRIVATE-ENCRYPTED-20261009
+          path: ${{ runner.temp }}/private-d1/*.7z
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
