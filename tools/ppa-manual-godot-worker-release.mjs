@@ -68,6 +68,27 @@ function fullOldId(history) {
   if (options.size !== 1) fail("cannot uniquely identify original live version from deployment history");
   return [...options][0];
 }
+function runtimeFingerprint(version) {
+  const resources = version && version.resources;
+  const bindings = resources && resources.bindings;
+  const runtime = resources && resources.script_runtime;
+  if (!bindings || !runtime || !runtime.exports)
+    fail("version metadata is incomplete; do not promote without inspecting bindings");
+  const canonical = value => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).sort(([a],[b]) => a.localeCompare(b))
+        .map(([k,v]) => [k, canonical(v)]));
+    }
+    return value;
+  };
+  return JSON.stringify(canonical({
+    bindings,
+    exports: runtime.exports,
+    compatibility_date: runtime.compatibility_date,
+    compatibility_flags: runtime.compatibility_flags || []
+  }));
+}
 function stateAllowed(split, oldId) {
   if (mode === "canary_1") {
     return split.length === 1 && hasExact(split, oldId, 100);
@@ -93,8 +114,14 @@ async function main() {
   const live = current[0];
   const oldId = fullOldId(current);
   const split = splitOf(live);
-  await apiGet("/versions/" + NEW_ID);
-  await apiGet("/versions/" + oldId);
+  const candidate = await apiGet("/versions/" + NEW_ID);
+  const original = await apiGet("/versions/" + oldId);
+  const runtimeMatched = runtimeFingerprint(candidate) === runtimeFingerprint(original);
+  if (!runtimeMatched) {
+    console.log("PPA_BINDING_OR_EXPORT_MISMATCH: version metadata differs");
+  } else {
+    console.log("PPA_BINDINGS_AND_EXPORTS_MATCH");
+  }
   console.log("PPA release inspection; Worker: " + WORKER);
   console.log("Original: " + oldId + "; candidate: " + NEW_ID);
   console.log("Active deployment ID: " + String(live.id));
@@ -103,6 +130,7 @@ async function main() {
     console.log("PPA_PRECHECK_OK no_changes=1 data_writes=0");
     return;
   }
+  if (!runtimeMatched) fail("Cloudflare D1/assets/realtime bindings or runtime exports differ from live; manual code review required");
   if (!stateAllowed(split, oldId))
     fail("unexpected production traffic: stop and inspect before publishing");
   // Narrow the race window: a new CF deployment between inspection and execution
