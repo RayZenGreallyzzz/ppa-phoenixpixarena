@@ -9,7 +9,7 @@ const end = src.indexOf("\nasync function handlePhoenixLauncherApi(", start);
 assert(start >= 0 && end > start);
 const handlerSrc = src.slice(start, end);
 
-function makeHarness({linkedTelegramId="tg-own",saveExists=true}={}){
+function makeHarness({linkedTelegramId="tg-own",saveExists=true,bootstrapFromProfile=false}={}){
   const reads=[],logs=[];
   let loaded=0;
   const deps={
@@ -24,7 +24,7 @@ function makeHarness({linkedTelegramId="tg-own",saveExists=true}={}){
     },
     loadSave:async(_env,id)=>{
       reads.push(id);loaded++;
-      return {ok:true,version:28,profile:{telegramId:id},state:saveExists?{lvl:43,hp:1130,mp:240,bag:[{id:"safe_test_item"}]}:null,updatedAt:12345};
+      return {ok:true,version:28,profile:{telegramId:id},bootstrapFromProfile,state:saveExists?{lvl:43,hp:1130,mp:240,bag:[{id:"safe_test_item"}]}:null,updatedAt:12345};
     },
     json:(data,status=200)=>({status,data}),
     apiError:(message,status=400,code="BAD_REQUEST")=>({status,data:{ok:false,code,message}}),
@@ -64,6 +64,14 @@ const noLink=await unlinked.handle({method:"GET"}, enabledEnv,url);
 assert.equal(noLink.status,409);
 assert.equal(noLink.data.code,"TELEGRAM_NOT_LINKED");
 assert.equal(unlinked.loaded,0);
+const missingSave = makeHarness({saveExists:false});
+const missing = await missingSave.handle({method:"GET"}, enabledEnv,url);
+assert.equal(missing.status,409);
+assert.equal(missing.data.code,"PPA_CHARACTER_SAVE_NOT_READY");
+const bootstrap = makeHarness({bootstrapFromProfile:true});
+const synthetic = await bootstrap.handle({method:"GET"}, enabledEnv,url);
+assert.equal(synthetic.status,409);
+assert.equal(synthetic.data.code,"PPA_CHARACTER_SAVE_NOT_READY");
 const defaultOff=makeHarness();
 const offResponse=await defaultOff.handle({method:"GET"}, {},url);
 assert.equal(offResponse.status,404);
@@ -72,4 +80,4 @@ assert.equal(defaultOff.loaded,0);
 const invalidFlag=await defaultOff.handle({method:"GET"}, {PPA_GODOT_STATE_READ_ENABLED:"true"},url);
 assert.equal(invalidFlag.status,404);
 assert.equal(defaultOff.loaded,0);
-console.log("PPA_NATIVE_STATE_RUNTIME_OK own_data=1 spoof_ignored=1 foreign_game_denied=1 posts_denied=1 unauth_denied=1 unlinked_denied=1 default_off=1 invalid_flag_off=1 writes=0");
+console.log("PPA_NATIVE_STATE_RUNTIME_OK own_data=1 spoof_ignored=1 foreign_game_denied=1 posts_denied=1 unauth_denied=1 unlinked_denied=1 missing_save_denied=1 bootstrap_denied=1 default_off=1 invalid_flag_off=1 writes=0");
