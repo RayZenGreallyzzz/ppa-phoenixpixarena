@@ -1,3 +1,4 @@
+import { nativeRealtimeTicketForLinkedTelegram } from './realtime.js';
 const INIT_DATA_MAX_AGE_SEC = 24 * 60 * 60;
 const encoder = new TextEncoder();
 
@@ -1247,6 +1248,26 @@ async function handlePhoenixGameApi(request, env, url) {
         state: snapshot.state,
         updatedAt: snapshot.updatedAt || null
       });
+    }
+
+    // Godot connects to the SAME ppa-global-v1 realtime Durable Object.
+    // Gate defaults OFF until native movement/combat protocol passes tests.
+    if (url.pathname === '/api/game/realtime/ticket') {
+      if (String(env.PPA_GODOT_REALTIME_ENABLED || '') !== '1') {
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      }
+      if (request.method !== 'POST') return apiError('POST required', 405, 'METHOD_NOT_ALLOWED');
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena') {
+        return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      }
+      const accountRow = await phoenixAccountRow(env, auth.accountId);
+      if (!accountRow) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const telegramId = accountRow.telegram_id == null ? '' : String(accountRow.telegram_id).trim();
+      if (!telegramId) {
+        return apiError('Link your Telegram account to access the existing realtime character.', 409, 'TELEGRAM_NOT_LINKED');
+      }
+      return json(await nativeRealtimeTicketForLinkedTelegram(env, telegramId));
     }
 
     return apiError('Game API route not found', 404, 'NOT_FOUND');
