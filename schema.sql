@@ -66,6 +66,17 @@ CREATE TABLE IF NOT EXISTS phoenix_accounts (
   last_login_at INTEGER NOT NULL DEFAULT 0
 );
 
+-- Non-destructive owner registry: stable player identity independent of login
+-- method, pointing to exactly one EXISTING legacy PPA save for Telegram heroes.
+-- No separate save copy and no fabricated Telegram ID for Email accounts.
+CREATE TABLE IF NOT EXISTS phoenix_character_identity (
+  account_id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL UNIQUE,
+  legacy_telegram_id TEXT UNIQUE,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (account_id) REFERENCES phoenix_accounts(account_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS phoenix_sessions (
   token_hash TEXT PRIMARY KEY,
   account_id TEXT NOT NULL,
