@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 const source = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
 const start = source.indexOf("if (url.pathname === '/api/game/state')");
-const end = source.indexOf("return apiError('Game API route not found'", start);
+const end = source.indexOf("\n    return apiError('Game API route not found'", start);
 assert(start > 0 && end > start, 'Godot state route is missing');
 const route = source.slice(start, end);
 assert(route.includes("PPA_GODOT_STATE_READ_ENABLED"), "Production gate must default OFF");
