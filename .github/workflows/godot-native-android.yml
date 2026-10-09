@@ -51,17 +51,6 @@ jobs:
             echo "::error::Original signing key missing; refusing to generate an incompatible update."
             exit 1
           fi
-          if false; then
-            keytool -genkeypair -v \
-              -keystore "$HOME/.android/ppa-native-debug.keystore" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Phoenix Pix Arena Debug,O=Phoenix,C=UA"
-          fi
 
       - name: Set APK update version
         env:
