@@ -22,7 +22,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: npm
       - name: Prove native route fails closed by default
         run: |
           set -euo pipefail
@@ -31,7 +30,7 @@ jobs:
       - name: Compile full existing PPA bundle in CI sandbox
         run: |
           set -euo pipefail
-          npm ci
+          npm install --no-audit --no-fund
           npm run build
           test -s public/index.html
           test -s public/game/ppa-bridge.js
