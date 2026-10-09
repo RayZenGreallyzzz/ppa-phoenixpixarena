@@ -2,6 +2,15 @@
 
 **Status: NOT DEPLOYED.** The patch is a 29-line addition to `src/worker.js` on branch `feature/godot-readonly-state-20261009`; the existing Worker runtime remains `src/entry-respawn-16-25.js` → `src/entry.js` → `src/worker.js`.
 
+## Default-OFF fail-safe and validation results
+
+- `GET /api/game/state` is gated by the exact Worker environment setting `PPA_GODOT_STATE_READ_ENABLED=1`. With this variable **missing**, `0`, `true` or any value except the exact string `1`, the new API responds **404 NOT_FOUND** and does not read the player's save. This is the default for all normal deployments.
+- Only after Cloudflare release validation, existing player sign-in checks and rollback readiness should the owner enable the exact flag in the Worker configuration. This is a deliberate **separate manual action**; enabling a variable may itself produce a new Cloudflare deployment. Never paste login tokens, private keys or real player saves into a CI job or chat.
+- The live server was anonymously checked with read-only GET requests by CI on 2026-10-09: existing `/api/health` returned 200 with `ok:true`, while `/api/game/state` returned 404 (not yet installed).
+- Safe predeploy CI passed with `npm run build` and `npx wrangler deploy --dry-run`, without any actual deployment or D1 mutation: https://github.com/RayZenGreallyzzz/ppa-phoenixpixarena/actions/runs/37911275386
+- Feature disabled and enabled, own account, spoofed Telegram ID, incorrect game session, POST, missing bearer, and unlinked-account outcomes passed isolated handler security tests: https://github.com/RayZenGreallyzzz/ppa-phoenixpixarena/actions/runs/37911275394
+- Four legacy Player3D/melee invariant jobs have unrelated baseline drift; do not alter gameplay data or marker strings just to make those jobs green. The files are identical between `main` and this branch.
+
 ## Must pass before merge or Cloudflare release
 
 1. Confirm that the last successfully deployed Cloudflare Worker version and asset bundle are known and one-click rollback is available. Do not replace live assets, D1 data, durable object definitions, realtime code, chat, clan, inventory or loot tables. Only the 29-line GET route is authorized.
