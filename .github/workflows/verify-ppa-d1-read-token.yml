@@ -26,6 +26,25 @@ jobs:
             process.exit(1);
           }
           const accountId = 'f091a5713d0a349e6e15f390cacfb029';
+          // For an account-owned token Cloudflare currently uses a cfat_ prefix.
+          // Classify ONLY, never print any secret bytes or their length.
+          if (!token.startsWith('cfat_') || token !== token.trim()) {
+            console.error('PPA_D1_TOKEN_FORMAT_UNEXPECTED: value should be the exact Cloudflare Account API token secret');
+            process.exit(1);
+          }
+          const verification = await fetch('https://api.cloudflare.com/client/v4/accounts/'+accountId+'/tokens/verify', {
+            method:'GET', headers:{Authorization:'Bearer '+token}, signal: AbortSignal.timeout(15000),
+          });
+          if (!verification.ok) {
+            console.error('PPA_D1_TOKEN_VERIFY_FAILED http_status='+verification.status);
+            process.exit(1);
+          }
+          const verified = await verification.json();
+          if (!verified?.success || verified.result?.status !== 'active') {
+            console.error('PPA_D1_TOKEN_NOT_ACTIVE');
+            process.exit(1);
+          }
+          console.log('PPA_D1_ACCOUNT_TOKEN_ACTIVE_OK');
           const databaseId = '53d15b19-362d-4850-a6b8-df058ac1fba7';
           const url = 'https://api.cloudflare.com/client/v4/accounts/'+accountId+'/d1/database/'+databaseId;
           let response;
