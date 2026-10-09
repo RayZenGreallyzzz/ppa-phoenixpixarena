@@ -1212,6 +1212,12 @@ async function handlePhoenixGameApi(request, env, url) {
     // telegramId/characterId from the client and never write game state.
     // Reuses the account/session identity established by Phoenix Launcher.
     if (url.pathname === '/api/game/state') {
+      // Fail closed on every normal PPA deployment until the owner explicitly
+      // enables this READ-ONLY native bridge in Cloudflare Worker settings.
+      // Default: behave exactly like the old nonexistent route (404).
+      if (String(env.PPA_GODOT_STATE_READ_ENABLED || '') !== '1') {
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      }
       if (request.method !== 'GET') return apiError('GET required', 405, 'METHOD_NOT_ALLOWED');
       const auth = await phoenixGameSessionFromRequest(request, env, true);
       if (auth.gameId !== 'phoenix-pix-arena') {
