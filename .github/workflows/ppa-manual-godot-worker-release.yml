@@ -1,0 +1,54 @@
+name: PPA Worker manual Godot bridge release (safe)
+
+# No push, schedule or automatic production rollouts. Only a human may start.
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "First choose inspect (NO CHANGES). Production actions require deliberate confirmation."
+        type: choice
+        required: true
+        default: inspect
+        options:
+          - inspect
+          - canary_1
+          - promote_100
+          - rollback_100
+      expected_live_prefix:
+        description: "Original live PPA version fingerprint from the dashboard (MUST remain 1fcd5eb8)."
+        type: string
+        default: 1fcd5eb8
+        required: true
+      confirmation:
+        description: "For production ONLY, type I_APPROVE_PPA_PRODUCTION_ROLLOUT; leave empty for inspect."
+        type: string
+        default: ""
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ppa-existing-worker-manual-release
+  cancel-in-progress: false
+
+jobs:
+  manual-release:
+    name: Read Cloudflare versions / explicitly approved promotion only
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm action code syntax
+        run: node --check tools/ppa-manual-godot-worker-release.mjs
+      - name: Read production Worker release state and enforce exact safe rollout
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PPA_WORKER_DEPLOY_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.PPA_WORKER_ACCOUNT_ID }}
+          ACTION_MODE: ${{ inputs.operation }}
+          EXPECTED_CURRENT_PREFIX: ${{ inputs.expected_live_prefix }}
+          RELEASE_CONFIRM: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          node tools/ppa-manual-godot-worker-release.mjs
