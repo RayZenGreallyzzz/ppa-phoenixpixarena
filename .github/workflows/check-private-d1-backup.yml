@@ -4,6 +4,8 @@ on:
     branches: [ops/d1-private-backup-20261009]
     paths:
       - tools/d1-private-export-to-stdout.mjs
+      - tools/test-d1-private-export-approval-offline.mjs
+      - .github/workflows/ppa-d1-encrypted-export-after-approval.yml
       - .github/workflows/check-private-d1-backup.yml
 
 permissions:
@@ -20,6 +22,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check tools/d1-private-export-to-stdout.mjs
+          node tools/test-d1-private-export-approval-offline.mjs
           set +e
           node tools/d1-private-export-to-stdout.mjs >/tmp/should-be-empty.sql 2>/tmp/backup-error.log
           STATUS=$?
