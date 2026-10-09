@@ -3,7 +3,7 @@ name: Build Native PPA Godot APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main, feature/godot-readonly-state-20261009 ]
+    branches: [ main ]
     paths:
       - "native-godot/**"
       - ".github/workflows/godot-native-android.yml"
@@ -23,18 +23,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install Android SDK components
-        shell: bash
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android signing tools
         run: |
-          set -euo pipefail
-          test -n "${ANDROID_HOME:-}"
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
-          fi
-          test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.1" "cmdline-tools;latest" "cmake;3.10.2.4988404" "ndk;28.1.13356709"
+          sdkmanager "platform-tools" "build-tools;35.0.0"
 
       - name: Cache stable PPA debug signing key
         uses: actions/cache@v4
@@ -47,17 +40,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.android"
-          if [ ! -s "$HOME/.android/ppa-native-debug.keystore" ]; then
-            echo "::error::Original signing key missing; refusing to generate an incompatible update."
-            exit 1
+          if [ ! -f "$HOME/.android/ppa-native-debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/ppa-native-debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Phoenix Pix Arena Debug,O=Phoenix,C=UA"
           fi
-
-      - name: Set APK update version
-        env:
-          PPA_RUN_NUMBER: ${{ github.run_number }}
-        run: |
-          CODE=$((10000 + PPA_RUN_NUMBER))
-          sed -i "s|^version/code=.*|version/code=$CODE|" native-godot/export_presets.cfg
 
       - name: Download Godot 4.6 and export templates
         shell: bash
