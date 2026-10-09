@@ -10,6 +10,9 @@ var http: HTTPRequest
 var request_mode := ""
 var session_token := ""
 var account: Dictionary = {}
+var player_snapshot: Dictionary = {}
+var snapshot_version := ""
+var snapshot_loaded_at := ""
 
 var status_label: Label
 var title_label: Label
@@ -133,10 +136,10 @@ func _build_ui() -> void:
     stack.add_child(spacer)
 
     play_button = Button.new()
-    play_button.text = "ВОЙТИ В НАТИВНЫЙ МИР"
+    play_button.text = "ПРОВЕРИТЬ ОБЩЕЕ СОХРАНЕНИЕ"
     play_button.custom_minimum_size = Vector2(0, 58)
     play_button.disabled = true
-    play_button.pressed.connect(_show_native_world)
+    play_button.pressed.connect(_load_player_state)
     _style_primary_button(play_button)
     stack.add_child(play_button)
 
@@ -231,6 +234,24 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
     if request_mode == "me":
         account = data.get("account", {})
         _show_connected()
+        return
+
+    if request_mode == "state":
+        if data.get("ok", false) != true or data.get("readOnly", false) != true or str(data.get("gameId", "")) != GAME_ID:
+            _show_error("Сервер вернул неподтверждённое состояние PPA.")
+            return
+        if not (data.get("state") is Dictionary):
+            _show_error("Сохранение имеет неожиданный формат.")
+            return
+        player_snapshot = data.get("state", {})
+        snapshot_version = str(data.get("version", ""))
+        snapshot_loaded_at = str(data.get("updatedAt", ""))
+        status_label.text = "✓ Сохранение загружено с общего сервера PPA (только чтение)"
+        status_label.add_theme_color_override("font_color", Color("#53CDAB"))
+        details_label.text = "Версия: %s · Обновлено: %s\nНикакие данные не изменены." % [snapshot_version, snapshot_loaded_at]
+        play_button.text = "ОБНОВИТЬ СОХРАНЕНИЕ"
+        play_button.disabled = false
+        retry_button.visible = false
 
 func _show_connected() -> void:
     var nickname := str(account.get("nickname", "Phoenix"))
@@ -268,13 +289,20 @@ func _retry() -> void:
     else:
         _show_error("Нужен новый запуск через Phoenix Launcher.")
 
-func _show_native_world() -> void:
-    title_label.text = "PPA NATIVE WORLD · BRIDGE ONLINE"
-    status_label.text = "✓ Launcher → Godot → Phoenix Backend → PPA профиль работает"
-    status_label.add_theme_color_override("font_color", Color("#53CDAB"))
-    details_label.text = "Следующий слой: город, карта, Player3D, управление и боевая логика."
-    play_button.text = "МОСТ ПОДКЛЮЧЁН"
+func _load_player_state() -> void:
+    if session_token.is_empty():
+        _show_error("Игровая сессия отсутствует.")
+        return
+    request_mode = "state"
     play_button.disabled = true
+    status_label.text = "Читаем актуальное сохранение персонажа PPA…"
+    var headers := PackedStringArray([
+        "Accept: application/json",
+        "Authorization: Bearer " + session_token
+    ])
+    var err := http.request(API_BASE + "/api/game/state", headers, HTTPClient.METHOD_GET)
+    if err != OK:
+        _show_error("Ошибка запроса сохранения: %s" % error_string(err))
 
 func _save_session(token: String) -> void:
     var file := FileAccess.open(SESSION_FILE, FileAccess.WRITE)
