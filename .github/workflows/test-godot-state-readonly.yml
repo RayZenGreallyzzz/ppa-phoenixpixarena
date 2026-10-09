@@ -18,6 +18,22 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Guard narrow server-only PR boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          changed="$(git diff --name-only origin/main...HEAD)"
+          while IFS= read -r path; do
+            test -n "$path" || continue
+            case "$path" in
+              src/worker.js|tools/test-godot-state-readonly.mjs|tools/test-godot-state-readonly-runtime.mjs|docs/godot-readonly-production-checklist-20261009.md|.github/workflows/test-godot-state-readonly.yml|.github/workflows/test-godot-state-worker-dry-run.yml) ;;
+              *) echo "::error::Native state server PR contains unrelated file: $path"; exit 1;;
+            esac
+          done <<< "$changed"
+          echo "PPA_NATIVE_SERVER_PR_SCOPE_OK only_allowed_worker_and_tests=1"
       - name: Syntax validation
         run: |
           set -euo pipefail
