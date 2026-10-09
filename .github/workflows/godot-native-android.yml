@@ -47,7 +47,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.android"
-          if [ ! -f "$HOME/.android/ppa-native-debug.keystore" ]; then
+          if [ ! -s "$HOME/.android/ppa-native-debug.keystore" ]; then
+            echo "::error::Original signing key missing; refusing to generate an incompatible update."
+            exit 1
+          fi
+          if false; then
             keytool -genkeypair -v \
               -keystore "$HOME/.android/ppa-native-debug.keystore" \
               -storepass android \
@@ -58,6 +62,13 @@ jobs:
               -validity 10000 \
               -dname "CN=Phoenix Pix Arena Debug,O=Phoenix,C=UA"
           fi
+
+      - name: Set APK update version
+        env:
+          PPA_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          CODE=$((10000 + PPA_RUN_NUMBER))
+          sed -i "s|^version/code=.*|version/code=$CODE|" native-godot/export_presets.cfg
 
       - name: Download Godot 4.6 and export templates
         shell: bash
