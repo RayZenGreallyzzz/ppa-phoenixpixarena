@@ -21,4 +21,7 @@ assert.match(w,/actions\/upload-artifact@v4/);
 assert.match(w,/retention-days: 3/);
 assert.match(w,/contents: read/);
 assert.ok(!w.includes("wrangler deploy"),"No accidental live Worker deployment");
+assert.match(w,/Refuse any real backup in a public repository/,"Require private-repository preflight before contacting Cloudflare");
+assert.match(w,/REPOSITORY_PRIVATE: \$\{\{ github\.event\.repository\.private \}\}/,"Fail closed unless GitHub reports a private repository");
+assert.match(w,/if \[ "\$REPOSITORY_PRIVATE" != "true" \]; then/,"Refuse public-repo exports");
 console.log("PPA_D1_EXPORT_APPROVAL_GATE_OK owner_marker_absent=1 automatic_export=0 encryption_required=1");
