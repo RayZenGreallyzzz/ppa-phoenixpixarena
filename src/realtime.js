@@ -182,7 +182,7 @@ async function playerIdentity(env, user) {
 // /api/realtime/ticket (Telegram); no parallel Godot presence is created.
 export async function nativeRealtimeTicketForLinkedTelegram(env, telegramId) {
   const id = String(telegramId || '').trim();
-  if (!/^\\d{1,24}$/.test(id)) {
+  if (!/^\d{1,24}$/.test(id)) {
     throw Object.assign(new Error('A linked Telegram character is required'), { status: 409, code: 'TELEGRAM_NOT_LINKED' });
   }
   if (!env.DB || !env.REALTIME || !env.BOT_TOKEN) {
