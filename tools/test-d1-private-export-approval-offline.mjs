@@ -1,0 +1,24 @@
+import assert from "node:assert/strict";
+import { readFileSync, existsSync } from "node:fs";
+
+const workflowPath=".github/workflows/ppa-d1-encrypted-export-after-approval.yml";
+const approveMarker="ops/run-ppa-d1-export-20261009.approved";
+const w=readFileSync(workflowPath,"utf8");
+assert.match(w,/push:\s*\n\s+branches:/,"Only branch push can authorize export");
+assert.match(w,/paths:\s*\n\s+- ops\/run-ppa-d1-export-20261009\.approved/,"Only exact approval-marker creation can trigger export");
+assert.ok(!w.includes("workflow_dispatch:"),"Default branch workflow dispatch is deliberately unavailable");
+assert.ok(!w.includes("schedule:"),"No scheduled exports");
+assert.ok(!existsSync(approveMarker),"Approval marker MUST NOT be present during preparation");
+assert.match(w,/OWNER_EXPLICITLY_APPROVED_BRIEF_D1_EXPORT_INTERRUPTION_20261009/);
+assert.match(w,/PPA_D1_BACKUP_PASSWORD: \${{ secrets\.PPA_D1_BACKUP_PASSWORD }}/);
+assert.match(w,/CLOUDFLARE_D1_READ_TOKEN: \${{ secrets\.CLOUDFLARE_D1_READ_TOKEN }}/);
+assert.match(w,/node tools\/d1-private-export-to-stdout\.mjs \|/,"Stream plaintext directly into encryption");
+assert.match(w,/-t7z -mhe=on/,"Require encrypted 7z header");
+assert.match(w,/-si"PPA-full-d1\.sql"/,"Require pipe source for plaintext");
+assert.match(w,/set -euo pipefail/,"If API fails, never upload fake backup");
+assert.match(w,/7-Zip|7z/);
+assert.match(w,/actions\/upload-artifact@v4/);
+assert.match(w,/retention-days: 3/);
+assert.match(w,/contents: read/);
+assert.ok(!w.includes("wrangler deploy"),"No accidental live Worker deployment");
+console.log("PPA_D1_EXPORT_APPROVAL_GATE_OK owner_marker_absent=1 automatic_export=0 encryption_required=1");
