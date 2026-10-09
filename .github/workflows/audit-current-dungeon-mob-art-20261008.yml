@@ -1,0 +1,35 @@
+name: Audit current dungeon mob artwork (read-only)
+on:
+  push:
+    branches:
+      - audit/approved-dungeon-mob-art-20261008
+    paths:
+      - tools/audit-dungeon-mob-art-20261008.mjs
+      - .github/workflows/audit-current-dungeon-mob-art-20261008.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-packed-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout the current PPA packed source (no live changes)
+        uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check audit syntax
+        run: node --check tools/audit-dungeon-mob-art-20261008.mjs
+      - name: Inspect current packed monster labels and image references
+        run: node tools/audit-dungeon-mob-art-20261008.mjs
+      - name: Upload diagnostic report only
+        uses: actions/upload-artifact@v4
+        with:
+          name: PPA-Dungeon-Mob-Art-Current-Audit
+          path: audit-output/dungeon-mob-art-current.json
+          if-no-files-found: error
+          retention-days: 5
