@@ -26,10 +26,10 @@ jobs:
             process.exit(1);
           }
           const accountId = 'f091a5713d0a349e6e15f390cacfb029';
-          // For an account-owned token Cloudflare currently uses a cfat_ prefix.
-          // Classify ONLY, never print any secret bytes or their length.
-          if (!token.startsWith('cfat_') || token !== token.trim()) {
-            console.error('PPA_D1_TOKEN_FORMAT_UNEXPECTED: value should be the exact Cloudflare Account API token secret');
+          // Cloudflare API token formats vary. Validate the actual credential via
+          // Cloudflare instead of assuming a token prefix; never print its bytes.
+          if (token !== token.trim()) {
+            console.error('PPA_D1_TOKEN_WHITESPACE: remove leading/trailing spaces from the GitHub secret');
             process.exit(1);
           }
           const verification = await fetch('https://api.cloudflare.com/client/v4/accounts/'+accountId+'/tokens/verify', {
