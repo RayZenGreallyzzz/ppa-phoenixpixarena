@@ -1231,6 +1231,13 @@ async function handlePhoenixGameApi(request, env, url) {
       }
       const snapshot = await loadSave(env, telegramId);
       if (!snapshot.ok) return json(snapshot, Number(snapshot.status) || 500);
+      // Existing loadSave can synthesize a bootstrap state from the profile
+      // when no save row exists. Never present that placeholder as real native
+      // progress or an inventory. Godot must wait for the original PPA save.
+      if (snapshot.bootstrapFromProfile || !snapshot.state ||
+          typeof snapshot.state !== 'object' || Array.isArray(snapshot.state)) {
+        return apiError('Existing PPA character save not ready', 409, 'PPA_CHARACTER_SAVE_NOT_READY');
+      }
       return json({
         ok: true,
         readOnly: true,
