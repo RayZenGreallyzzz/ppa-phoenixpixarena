@@ -21,6 +21,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Refuse any real backup in a public repository
+        shell: bash
+        env:
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          set -euo pipefail
+          if [ "$REPOSITORY_PRIVATE" != "true" ]; then
+            echo "PPA_D1_EXPORT_ABORT: repository is PUBLIC; sensitive backups cannot be stored as public Actions artifacts."
+            exit 1
+          fi
+          echo "PPA_D1_PRIVATE_REPO_CONFIRMED"
       - uses: actions/checkout@v4
       - name: Validate authorization and encryption prerequisites
         env:
