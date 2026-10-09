@@ -3,6 +3,9 @@
   "name": "ppa-phoenixpixarena",
   "compatibility_date": "2026-09-17",
   "main": "./src/entry-respawn-16-25.js",
+  "vars": {
+    "PPA_GODOT_STATE_READ_ENABLED": "1"
+  },
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
