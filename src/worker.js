@@ -1,3 +1,4 @@
+import { nativeRealtimeTicketForLinkedTelegram } from './realtime.js';
 const INIT_DATA_MAX_AGE_SEC = 24 * 60 * 60;
 const encoder = new TextEncoder();
 
@@ -839,6 +840,9 @@ async function ensurePhoenixAuthSchema(env) {
   if (!env.DB) throw Object.assign(new Error('D1 database is not connected'), { status: 503, code: 'DB_MISSING' });
 
   await env.DB.prepare('CREATE TABLE IF NOT EXISTS phoenix_accounts (account_id TEXT PRIMARY KEY, telegram_id TEXT UNIQUE, email TEXT UNIQUE, password_salt TEXT, password_hash TEXT, email_verified INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, last_login_at INTEGER NOT NULL DEFAULT 0)').run();
+  // Non-destructive, one-to-one owner registry. Never copy, migrate or reset
+  // saves: legacy Telegram keys stay intact and continue to be authoritative.
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS phoenix_character_identity (account_id TEXT PRIMARY KEY, character_id TEXT NOT NULL UNIQUE, legacy_telegram_id TEXT UNIQUE, created_at INTEGER NOT NULL, FOREIGN KEY (account_id) REFERENCES phoenix_accounts(account_id) ON DELETE CASCADE)').run();
   await env.DB.prepare('CREATE TABLE IF NOT EXISTS phoenix_sessions (token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, provider TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, FOREIGN KEY (account_id) REFERENCES phoenix_accounts(account_id) ON DELETE CASCADE)').run();
   await env.DB.prepare('CREATE TABLE IF NOT EXISTS phoenix_auth_flows (state TEXT PRIMARY KEY, app_challenge TEXT NOT NULL, oauth_verifier TEXT, nonce TEXT, link_account_id TEXT, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)').run();
   await env.DB.prepare('CREATE TABLE IF NOT EXISTS phoenix_exchange_codes (code_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, state TEXT NOT NULL, app_challenge TEXT NOT NULL, provider TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER NOT NULL DEFAULT 0, FOREIGN KEY (account_id) REFERENCES phoenix_accounts(account_id) ON DELETE CASCADE)').run();
@@ -864,7 +868,7 @@ async function phoenixCleanupAuth(env) {
 }
 
 async function phoenixAccountRow(env, accountId) {
-  return env.DB.prepare('SELECT a.account_id,a.telegram_id,a.email,a.email_verified,a.created_at,a.updated_at,a.last_login_at,p.nickname,p.class_key,p.telegram_username,p.telegram_first_name,p.telegram_last_name FROM phoenix_accounts a LEFT JOIN players p ON p.telegram_id=a.telegram_id WHERE a.account_id=?1 LIMIT 1').bind(accountId).first();
+  return env.DB.prepare('SELECT a.account_id,a.telegram_id,a.email,a.email_verified,a.created_at,a.updated_at,a.last_login_at,p.nickname,p.class_key,p.telegram_username,p.telegram_first_name,p.telegram_last_name,ci.character_id FROM phoenix_accounts a LEFT JOIN players p ON p.telegram_id=a.telegram_id LEFT JOIN phoenix_character_identity ci ON ci.account_id=a.account_id WHERE a.account_id=?1 LIMIT 1').bind(accountId).first();
 }
 
 function phoenixAccountPayload(row) {
@@ -875,6 +879,7 @@ function phoenixAccountPayload(row) {
   const fallback = username || (email ? email.split('@')[0] : '') || 'Phoenix';
   return {
     accountId: String(row.account_id || ''),
+    characterId: row.character_id == null ? null : String(row.character_id),
     telegramId: row.telegram_id == null ? null : String(row.telegram_id),
     email: email || null,
     emailVerified: Number(row.email_verified) === 1,
@@ -886,6 +891,40 @@ function phoenixAccountPayload(row) {
     lastName: String(row.telegram_last_name || ''),
     createdAt: Number(row.created_at) || 0
   };
+}
+
+// Bind only an EXISTING, REGISTERED Telegram hero to the signed Phoenix
+// account. No duplicated save, no nickname mutation, no synthetic Telegram ID.
+// Email-only users are intentionally unregistered until a canonical player-key
+// migration can safely cover every game module.
+async function phoenixBindExistingCharacterIdentity(env, accountId) {
+  const account = await phoenixAccountRow(env, accountId);
+  if (!account) throw Object.assign(new Error('Phoenix account missing'), { status: 404, code: 'ACCOUNT_NOT_FOUND' });
+  const id = account.telegram_id == null ? '' : String(account.telegram_id).trim();
+  const existing = await env.DB.prepare('SELECT character_id,legacy_telegram_id FROM phoenix_character_identity WHERE account_id=?1 LIMIT 1').bind(accountId).first();
+  if (!id || !String(account.nickname || '').trim()) {
+    if (existing) throw Object.assign(new Error('Registered hero lost its Telegram link'), { status: 409, code: 'CHARACTER_IDENTITY_CONFLICT' });
+    return null;
+  }
+  // NEVER treat a profile-only bootstrap as an existing save.
+  const save = await env.DB.prepare('SELECT version FROM saves WHERE telegram_id=?1 LIMIT 1').bind(id).first();
+  if (!save || Number(save.version) < 1) return null;
+  if (existing && String(existing.legacy_telegram_id || '') !== id) {
+    throw Object.assign(new Error('Character is already owned by another identity'), { status: 409, code: 'CHARACTER_IDENTITY_CONFLICT' });
+  }
+  const owner = await env.DB.prepare('SELECT account_id,character_id FROM phoenix_character_identity WHERE legacy_telegram_id=?1 LIMIT 1').bind(id).first();
+  if (owner && String(owner.account_id) !== accountId) {
+    throw Object.assign(new Error('Character ownership conflict'), { status: 409, code: 'CHARACTER_IDENTITY_CONFLICT' });
+  }
+  if (!existing) {
+    await env.DB.prepare('INSERT OR IGNORE INTO phoenix_character_identity (account_id,character_id,legacy_telegram_id,created_at) VALUES (?1,?2,?3,?4)')
+      .bind(accountId, 'pc_' + phoenixRandomToken(18), id, Date.now()).run();
+  }
+  const verified = await env.DB.prepare('SELECT character_id,legacy_telegram_id FROM phoenix_character_identity WHERE account_id=?1 LIMIT 1').bind(accountId).first();
+  if (!verified || String(verified.legacy_telegram_id) !== id) {
+    throw Object.assign(new Error('Character ownership mismatch'), { status: 409, code: 'CHARACTER_IDENTITY_CONFLICT' });
+  }
+  return { characterId: String(verified.character_id), legacyTelegramId: id };
 }
 
 async function phoenixEnsureAccountForTelegram(env, tgUser, preferredAccountId = '') {
@@ -1207,6 +1246,42 @@ async function handlePhoenixGameApi(request, env, url) {
       return json({ ok: true, gameId: auth.gameId, account });
     }
 
+    // Account-bound hero discovery is read-only with respect to original saves.
+    // The identity registry may be filled idempotently for pre-existing heroes.
+    if (url.pathname === '/api/game/character') {
+      if (request.method !== 'GET') return apiError('GET required', 405, 'METHOD_NOT_ALLOWED');
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena') return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      const identity = await phoenixBindExistingCharacterIdentity(env, auth.accountId);
+      const account = phoenixAccountPayload(await phoenixAccountRow(env, auth.accountId));
+      return json({ ok: true, account, characterId: identity ? identity.characterId : null,
+        needsCharacter: !identity, needsTelegramLink: !account.telegramId });
+    }
+
+    // NEW Telegram-linked PPA characters use exactly the original game
+    // registration path, newbie chest and save. No parallel Godot save exists.
+    // Disabled by default until a verified APK supports new-player onboarding.
+    if (url.pathname === '/api/game/character/register') {
+      if (String(env.PPA_GODOT_CHARACTER_REGISTER_ENABLED || '') !== '1')
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      if (request.method !== 'POST') return apiError('POST required', 405, 'METHOD_NOT_ALLOWED');
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena') return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      const account = await phoenixAccountRow(env, auth.accountId);
+      if (!account) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const telegramId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
+      if (!telegramId) return apiError('Email-only player creation needs the canonical player-key migration', 409, 'EMAIL_CHARACTER_REGISTRATION_NOT_READY');
+      const classKey = String(body.classKey || '').toLowerCase().trim();
+      if (!['gnome','tank','barbarian','paladin','archer','mage','assassin','priest'].includes(classKey))
+        return apiError('Unknown PPA class', 400, 'INVALID_CLASS');
+      const result = await registerCharacter(env, telegramId, body.nickname, classKey);
+      if (!result.ok) return json(result, Number(result.status) || 400);
+      const identity = await phoenixBindExistingCharacterIdentity(env, auth.accountId);
+      if (!identity) return apiError('Character save was not confirmed', 409, 'PPA_CHARACTER_SAVE_NOT_READY');
+      return json({ ok: true, characterId: identity.characterId, profile: result.profile,
+        save: result.save, newbieChestGranted: result.newbieChestGranted });
+    }
+
     // Native Godot game: signed Phoenix game session -> linked Telegram player's
     // EXACT existing cloud save. Intentionally READ-ONLY; never accept a
     // telegramId/characterId from the client and never write game state.
@@ -1247,6 +1322,26 @@ async function handlePhoenixGameApi(request, env, url) {
         state: snapshot.state,
         updatedAt: snapshot.updatedAt || null
       });
+    }
+
+    // Godot connects to the SAME ppa-global-v1 realtime Durable Object.
+    // Gate defaults OFF until native movement/combat protocol passes tests.
+    if (url.pathname === '/api/game/realtime/ticket') {
+      if (String(env.PPA_GODOT_REALTIME_ENABLED || '') !== '1') {
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      }
+      if (request.method !== 'POST') return apiError('POST required', 405, 'METHOD_NOT_ALLOWED');
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena') {
+        return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      }
+      const accountRow = await phoenixAccountRow(env, auth.accountId);
+      if (!accountRow) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const telegramId = accountRow.telegram_id == null ? '' : String(accountRow.telegram_id).trim();
+      if (!telegramId) {
+        return apiError('Link your Telegram account to access the existing realtime character.', 409, 'TELEGRAM_NOT_LINKED');
+      }
+      return json(await nativeRealtimeTicketForLinkedTelegram(env, telegramId));
     }
 
     return apiError('Game API route not found', 404, 'NOT_FOUND');

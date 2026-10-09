@@ -176,6 +176,44 @@ async function playerIdentity(env, user) {
   };
 }
 
+// Issue a ticket for an account already authenticated by the Phoenix game
+// session. The caller MUST resolve the linked Telegram ID on the server.
+// Uses exactly the same opaque player pid and ppa-global-v1 Durable Object as
+// /api/realtime/ticket (Telegram); no parallel Godot presence is created.
+export async function nativeRealtimeTicketForLinkedTelegram(env, telegramId) {
+  const id = String(telegramId || '').trim();
+  if (!/^\d{1,24}$/.test(id)) {
+    throw Object.assign(new Error('A linked Telegram character is required'), { status: 409, code: 'TELEGRAM_NOT_LINKED' });
+  }
+  if (!env.DB || !env.REALTIME || !env.BOT_TOKEN) {
+    throw Object.assign(new Error('Realtime server is not configured'), { status: 503, code: 'REALTIME_UNAVAILABLE' });
+  }
+  const player = await env.DB.prepare(
+    'SELECT nickname,class_key FROM players WHERE telegram_id=?1 LIMIT 1'
+  ).bind(id).first();
+  if (!player || !String(player.nickname || '').trim()) {
+    throw Object.assign(new Error('Registered PPA character is required'), { status: 409, code: 'PPA_CHARACTER_NOT_REGISTERED' });
+  }
+  const clan = await env.DB.prepare(
+    'SELECT cm.clan_id,c.name AS clan_name FROM clan_members cm LEFT JOIN clans c ON c.id=cm.clan_id WHERE cm.telegram_id=?1 LIMIT 1'
+  ).bind(id).first();
+  const pid = await realtimePidFor(env, id);
+  const identity = {
+    pid,
+    name: cleanName(player.nickname),
+    classKey: String(player.class_key || '').slice(0, 24),
+    clanId: clan ? String(clan.clan_id || '').slice(0, 80) : '',
+    clanName: clan ? String(clan.clan_name || '').slice(0, 24) : ''
+  };
+  const payload = { ...identity, exp: Date.now() + 90_000, nonce: crypto.randomUUID() };
+  return {
+    ok: true,
+    ticket: await makeTicket(payload, env.BOT_TOKEN),
+    user: { id: pid, name: identity.name },
+    expiresIn: 90
+  };
+}
+
 function wsJson(ws, data) {
   try { ws.send(JSON.stringify(data)); return true; } catch (_) { return false; }
 }
