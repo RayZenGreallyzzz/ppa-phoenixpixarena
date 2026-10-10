@@ -24,5 +24,7 @@ jobs:
         run: node tools/test-native-forge-material-view.mjs
       - name: Real original six-gear forge and D1 idempotency parity
         run: node --disable-warning=ExperimentalWarning tools/test-shared-forge.mjs
+      - name: Check complete original smith catalog
+        run: python3 tools/generate-shared-forge-recipes.py --print-json
       - name: Inspect original Telegram smith code (no game writes)
         run: node tools/audit-original-smith-contract.mjs
