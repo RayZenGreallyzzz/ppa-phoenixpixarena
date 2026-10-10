@@ -83,4 +83,17 @@ for(const query of [
       .map(x=>x.slice(0,560))}));
 }
 
+
+// Exact parent item sharpening semantics, not the cosmetic iframe.
+for(const term of ['function blacksmithEnhance(', 'function v238SendSmithEnhanceDelta(',
+  'function v238SmithEnhance', 'var ENH_CHANCE=', 'const ENH_CHANCE=',
+  'var ENH_CHANCE_RUNE=', 'const ENH_CHANCE_RUNE=']) {
+  const at=source.indexOf(term);
+  if(at<0)continue;
+  const end=term.startsWith('function ')
+    ?source.indexOf('\nfunction ',at+term.length):at+350;
+  const snippet=source.slice(at,Math.min(end>at?end:at+7500,at+7500));
+  console.log('PPA_SMITH_ENHANCE_EXACT',JSON.stringify({term,at,code:snippet}));
+}
+
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
