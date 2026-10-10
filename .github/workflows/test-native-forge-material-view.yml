@@ -8,6 +8,8 @@ on:
       - 'src/shared-forge.js'
       - 'src/worker.js'
       - 'tools/test-shared-forge.mjs'
+      - 'tools/generate-shared-forge-recipes.py'
+      - 'src/shared-forge-recipes.generated.json'
       - '.github/workflows/test-native-forge-material-view.yml'
 permissions:
   contents: read
