@@ -10,6 +10,12 @@ const sdk=readFileSync(new URL('../gateway/ppa-bridge.js',import.meta.url),'utf8
 for(const marker of ['serverCreditClaimMode','ppaAuctionServerCredits','ppaAuctionClaimCredit'])
  assert(front.includes(marker),'Telegram bridge missing '+marker);
 assert(front.includes('window.location.reload()'),'Canonical saved wallet reload required');
+assert(front.includes('serverCreditClaimMode&&!changed&&'),
+ 'Already-seen legacy records must not starve post-cutoff server credits');
+assert(!front.includes('serverCreditClaimMode&&credits.length===0&&'),
+ 'New seller payouts must not depend on an empty legacy credit response');
+assert(front.includes('if(changed){saveCreditSet(seen);saveGame()'),
+ 'New claims must defer until local legacy credit updates have been saved');
 assert(front.includes('NEVER call saveGame()'),'No full stale save after server payout');
 assert(sdk.includes('serverSellerCreditClaimGate=true'),'Cloud save gate not closed during claim');
 assert(sdk.includes('cloudSaveLoaded=false'),'Cloud save must stay closed until reload');
