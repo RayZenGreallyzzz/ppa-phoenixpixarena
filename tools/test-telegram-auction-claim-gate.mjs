@@ -66,6 +66,21 @@ assert.equal(a.calls[1].version,6,
 assert.equal(a.window.PPA_AUCTION_CLAIM_RELOAD_REQUIRED,true);
 await assert.rejects(a.client.ppaSaveGame({ppa:1},5),gated);
 
+// A ppaSaveGame call just before the claim must enter the queue
+// synchronously, not wait for an async auth microtask and get dropped.
+let unblockImmediateSave;
+const immediateSaveHeld=new Promise(resolve=>{unblockImmediateSave=resolve});
+const d=scenario({save:async ()=>{await immediateSaveHeld}});
+await d.client.ppaLoadSave();
+const queuedImmediately=d.client.ppaSaveGame({ppa:303},5);
+const claimingImmediately=d.client.ppaAuctionClaimCredit('credit_server_4',5);
+unblockImmediateSave();
+await queuedImmediately;
+await claimingImmediately;
+assert.deepEqual(d.calls.map(x=>x.type),['save','claim'],
+ 'Save invoked first must finish before the server payout');
+assert.equal(d.calls[1].version,6);
+
 // Lost response AFTER the server may have committed must never open saves.
 // Even a read of the new snapshot does not apply it to the running INV.
 const b=scenario({claim:async ()=>{throw new Error('Connection lost after DB commit')}});
@@ -87,4 +102,4 @@ await assert.rejects(c.client.ppaAuctionClaimCredit('credit_server_3',5),
 assert.equal(c.calls.filter(x=>x.type==='claim').length,0);
 assert.equal(c.window.PPA_AUCTION_CLAIM_RELOAD_REQUIRED,true);
 
-console.log('PPA_AUCTION_CLAIM_GATE_OK pending_save_drain=1 stale_save_blocked=1 canonical_version=1 response_lost=1 fail_closed=1 load_not_bypass=1 failed_pending_save_no_claim=1');
+console.log('PPA_AUCTION_CLAIM_GATE_OK pending_save_drain=1 synchronous_enqueue=1 stale_save_blocked=1 canonical_version=1 response_lost=1 fail_closed=1 load_not_bypass=1 failed_pending_save_no_claim=1');
