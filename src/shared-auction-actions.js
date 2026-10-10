@@ -9,6 +9,25 @@ const validVer=v=>Number.isSafeInteger(v)&&v>=1;
 const LIMIT=1_800_000;
 const encoder=new TextEncoder();
 const schema='CREATE TABLE IF NOT EXISTS ppa_native_auction_guard(id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))';
+const escrowSchema='CREATE TABLE IF NOT EXISTS ppa_native_auction_escrow ('+
+ 'lot_id TEXT PRIMARY KEY, seller_id TEXT NOT NULL, item_uid TEXT NOT NULL,'+
+ 'item_sha256 TEXT NOT NULL, created_at INTEGER NOT NULL)';
+const hashEscrow=async serialized=>{
+ const bytes=await crypto.subtle.digest('SHA-256',encoder.encode(serialized));
+ return [...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('');
+};
+export async function verifyNativeEscrowLot(env,lot){
+ if(!lot||!/^[a-z0-9_]+$/.test(String(lot.id||''))||
+  !String(lot.id).startsWith('nat_'))return false;
+ const row=await env.DB.prepare('SELECT seller_id,item_uid,item_sha256 FROM ppa_native_auction_escrow WHERE lot_id=?1')
+  .bind(String(lot.id)).first();
+ if(!row||String(row.seller_id)!==String(lot.seller_id)||
+   !gearUid(row.item_uid)||typeof lot.item_json!=='string')return false;
+ let item;try{item=JSON.parse(lot.item_json)}catch{return false}
+ if(item?.kind!=='gear'||String(item.gear?.uid)!==String(row.item_uid))return false;
+ return (await hashEscrow(lot.item_json))===String(row.item_sha256);
+}
+
 const guard=e=>e.DB.prepare('INSERT INTO ppa_native_auction_guard(id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)');
 const checkUid=(save,uid)=>{
  const all=[...(save.bag||[]),
@@ -54,9 +73,11 @@ async function place(env,owner,cmd,persist){
   return fail(413,'AUCTION_ITEM_TOO_LARGE','Предмет слишком большой для аукциона.');
  const id='nat_'+crypto.randomUUID().replace(/-/g,'');
  const now=Date.now(),expires=now+86400000;
+ const escrowDigest=await hashEscrow(lotItem);
  const sellerName=String(state.nickname||state.name||'Игрок').slice(0,24);
  const g='ag_'+crypto.randomUUID();
  await env.DB.prepare(schema).run();
+ await env.DB.prepare(escrowSchema).run();
  try{
   await env.DB.batch([
    env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5')
@@ -64,6 +85,8 @@ async function place(env,owner,cmd,persist){
    guard(env).bind(g),
    env.DB.prepare("INSERT INTO auction_lots(id,seller_id,seller_name,item_json,ui_json,qty,price,currency,created_at,expires_at,status) VALUES(?1,?2,?3,?4,?5,1,?6,?7,?8,?9,'active')")
     .bind(id,owner,sellerName,lotItem,ui,cmd.price,cmd.currency,now,expires),
+   env.DB.prepare('INSERT INTO ppa_native_auction_escrow(lot_id,seller_id,item_uid,item_sha256,created_at) VALUES(?1,?2,?3,?4,?5)')
+    .bind(id,owner,escrow.uid,escrowDigest,now),
    env.DB.prepare('DELETE FROM ppa_native_auction_guard WHERE id=?1').bind(g)
   ]);
  }catch(e){
@@ -80,6 +103,8 @@ async function cancel(env,owner,cmd,persist){
  const lot=await env.DB.prepare("SELECT * FROM auction_lots WHERE id=?1 AND seller_id=?2 AND status='active'")
   .bind(cmd.lotId,owner).first();
  if(!lot||Number(lot.qty)!==1)return fail(409,'AUCTION_LOT_UNAVAILABLE','Лот уже продан или снят.');
+ if(!await verifyNativeEscrowLot(env,lot))
+  return fail(409,'AUCTION_ESCROW_PROVENANCE','Лот не подтверждён атомарным изъятием вещи.');
  let parsed;try{parsed=JSON.parse(lot.item_json)}catch{}
  if(parsed?.kind!=='gear'||!gearUid(parsed.gear?.uid))
   return fail(409,'AUCTION_ESCROW_INVALID','Не удалось подтвердить исходный предмет лота.');
@@ -124,6 +149,8 @@ async function recover(env,owner,cmd,persist){
  const lot=await env.DB.prepare("SELECT * FROM auction_lots WHERE id=?1 AND seller_id=?2 AND qty=1 AND (status='expired' OR (status='active' AND expires_at<=?3))")
   .bind(cmd.lotId,owner,now).first();
  if(!lot)return fail(409,'AUCTION_RECOVER_UNAVAILABLE','Этот лот ещё активен, уже продан или возвращён.');
+ if(!await verifyNativeEscrowLot(env,lot))
+  return fail(409,'AUCTION_ESCROW_PROVENANCE','Источник непроданного лота не подтверждён.');
  let parsed;try{parsed=JSON.parse(lot.item_json)}catch{}
  if(parsed?.kind!=='gear'||!gearUid(parsed.gear?.uid))
   return fail(409,'AUCTION_RECOVER_INVALID','Не удалось проверить исходную вещь.');
@@ -169,6 +196,10 @@ async function buy(env,owner,cmd,persist){
  const saved=await saveFor(persist,owner);
  if(!saved||saved.version!==cmd.version)
   return fail(409,'SAVE_VERSION_CONFLICT','Обнови баланс и лот перед покупкой.');
+ const lot=await env.DB.prepare("SELECT * FROM auction_lots WHERE id=?1 AND status='active' AND expires_at>?2")
+  .bind(cmd.lotId,Date.now()).first();
+ if(!lot||Number(lot.qty)!==1||!await verifyNativeEscrowLot(env,lot))
+  return fail(409,'AUCTION_ESCROW_PROVENANCE','Это объявление не подтверждено защищённым аукционом PPA.');
  // Crucial: same original Telegram PPA atomic auctionBuy, not a second
  // settlement algorithm. Original validates actual lot and server balance.
  const r=await originalAtomicAuctionBuy(env,owner,{
