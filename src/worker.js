@@ -3,6 +3,7 @@ import { NATIVE_NPC_SERVICES, projectNativeNpcReadOnly } from './native-npc-read
 import { nativeClanOperation } from './native-clan-actions.js';
 import { sharedMerchantOperation } from './shared-merchant.js';
 import { sharedForgeOperation } from './shared-forge.js';
+import { sharedInventoryOperation } from './shared-inventory.js';
 const INIT_DATA_MAX_AGE_SEC = 24 * 60 * 60;
 const encoder = new TextEncoder();
 
@@ -1391,6 +1392,29 @@ async function handlePhoenixGameApi(request, env, url) {
       const result = await sharedForgeOperation(env, ownerId, operation, body,
         {load: id => loadSave(env, id), save: (id, state, version) => saveGameState(env, id, state, version)});
       return json(result.data, result.status);
+    }
+
+    // Original Telegram PPA equipFromBag / unequipSlot, same versioned save.
+    // Account, permissions, and real bag UID are validated on the server.
+    // Independent flags default OFF; this does NOT change live Telegram.
+    if (url.pathname === '/api/game/inventory/state' || url.pathname === '/api/game/inventory/action') {
+      if (String(env.PPA_INVENTORY_READ_ENABLED || '') !== '1')
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      const operation = url.pathname.endsWith('/state') ? 'state' : 'action';
+      if (request.method !== (operation === 'state' ? 'GET' : 'POST'))
+        return apiError('Method not allowed', 405, 'METHOD_NOT_ALLOWED');
+      if (operation === 'action' && String(env.PPA_INVENTORY_ACTIONS_ENABLED || '') !== '1')
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena')
+        return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      const account = await phoenixAccountRow(env, auth.accountId);
+      if (!account) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const ownerId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
+      if (!ownerId) return apiError('Telegram character not linked', 409, 'TELEGRAM_NOT_LINKED');
+      const result = await sharedInventoryOperation(env, ownerId, operation, body,
+        {load: id => loadSave(env,id), save: (id,state,version) => saveGameState(env,id,state,version)});
+      return json(result.data,result.status);
     }
 
     // Signed native NPC/arena read: one player, one versioned PPA save,
