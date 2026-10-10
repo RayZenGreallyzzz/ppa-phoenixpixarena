@@ -192,7 +192,15 @@ def generate():
     keys=[item["id"] for item in recipes]
     if len(keys)!=len(set(keys)):
         raise RuntimeError("Two original forge recipes share an ID")
+    # Compare prices/material requirements across different HTML revisions,
+    # rather than comparing volatile srcdoc markup and embedded art.
+    def signed_rows(rows):
+        return [[x["id"],int(x["price"]),x["rarity"],
+                 [[q["name"],int(q["count"])] for q in x["materials"]]]
+                for x in sorted(rows,key=lambda r:r["id"])]
+    signed_json=json.dumps(signed_rows(recipes),ensure_ascii=False,separators=(",",":"))
     data={"sourceSha256":SOURCE_SHA,"smithSha256":hashlib.sha256(smith.encode()).hexdigest(),
+          "recipeSignature":hashlib.sha256(signed_json.encode()).hexdigest(),
           "offers":recipes,"accessoryStats":values,"necklaceStats":necklaces}
     return data
 
