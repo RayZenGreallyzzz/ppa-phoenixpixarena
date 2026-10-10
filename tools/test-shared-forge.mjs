@@ -4,7 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { DatabaseSync } from 'node:sqlite';
-import { EPIC_GEAR, craftOriginalEpicGear, sharedForgeOperation } from '../src/shared-forge.js';
+import { EPIC_GEAR, ALL_FORGE_RECIPES, craftOriginalEpicGear, craftOriginalForgeItem, sharedForgeOperation } from '../src/shared-forge.js';
 
 const packed=Buffer.concat(Array.from({length:12},(_,i)=>readFileSync(
   new URL('../PPA'+String(i+1).padStart(2,'0')+'.bin',import.meta.url))));
@@ -138,7 +138,7 @@ const denied=await sharedForgeOperation({...env,PPA_FORGE_ACTIONS_ENABLED:'0'},
 assert.equal(denied.status,404);
 const current=await sharedForgeOperation(env,'10001','state',{},persistence);
 assert.equal(current.status,200);
-assert.equal(current.data.state.offers.length,7);
+assert.equal(current.data.state.offers.length,58);
 assert.equal(current.data.state.wallet.ppa,saves.get('10001').state.ppa);
 
 // Exercise the real signed Godot HTTP route while keeping all D1 and auth
@@ -180,6 +180,56 @@ assert.deepEqual(saves.get('10002'),originalOther);
 const repeat=await route(input,{...on,PPA_FORGE_ACTIONS_ENABLED:'1'},url);
 assert.deepEqual(await repeat.json(),routedBody,'Retry bypassed canonical forge ledger');
 assert.equal(saves.get('10001').state.bag.length,3);
+
+
+assert.equal(ALL_FORGE_RECIPES.length,58,'Original full forge registry has drifted');
+const categories=Object.groupBy(ALL_FORGE_RECIPES,x=>x.tab);
+assert.deepEqual(Object.fromEntries(Object.entries(categories).map(([k,v])=>[k,v.length])),
+  {equipment:7,legendary:11,accessories:16,pets:24});
+let covered=0;
+for(const recipe of ALL_FORGE_RECIPES){
+ const hero=initial(),original=structuredClone(hero);
+ const result=craftOriginalForgeItem(hero,recipe.id,'craft_abcdefghijklmnopqrstuvwxyz1234567890');
+ assert.equal(result.status,200,'original recipe failed '+recipe.id);
+ const item=result.state.bag.at(-1);
+ assert.equal(item.uid,'craft_abcdefghijklmnopqrstuvwxyz1234567890');
+ assert.equal(item.slot,recipe.slot);
+ assert.equal(item.rarity,recipe.rarity);
+ assert.equal(item.enh,0);
+ assert.equal(result.state.ppa,original.ppa-recipe.price);
+ assert.equal(result.state.bag.length,original.bag.length+1);
+ assert.deepEqual(result.state.equip,original.equip,'equipped legacy +7 lost');
+ assert.deepEqual(result.state.runes,original.runes,'rune bag changed by craft');
+ assert.deepEqual(hero,original,'original input save was mutated');
+ for(const mat of recipe.materials){
+   const count=mat.name==='Перо Феникса'?result.state.feathers.phoenix:result.state.materials[mat.name];
+   const before=mat.name==='Перо Феникса'?original.feathers.phoenix:original.materials[mat.name];
+   assert.equal(count,before-mat.count,'material mismatch '+recipe.id+' '+mat.name);
+ }
+ // Original craftStats and accessoryStatValues are the only authorities.
+ if(recipe.kind==='gear'){
+   const expected=JSON.parse(JSON.stringify(ctx.craftStats('gear',recipe.slot,recipe.name,recipe.rarity)));
+   const originalIt={slot:recipe.slot,rarity:recipe.rarity,stats:expected};
+   ctx.applyGearMagicWard(originalIt);
+   assert.deepEqual(item.stats,originalIt.stats,recipe.id+' gear stats');
+   if(originalIt.bm!==undefined)assert.equal(item.bm,originalIt.bm);
+ }else if(recipe.kind==='pet'){
+   const expected=JSON.parse(JSON.stringify(ctx.craftStats('pet','pet',recipe.name,recipe.rarity)));
+   assert.deepEqual(item.stats,expected,recipe.id+' pet stats');
+ }else{
+   const saved=JSON.parse(readFileSync(new URL('../src/shared-forge-recipes.generated.json',import.meta.url),'utf8'));
+   const expected=recipe.kind==='wings'?saved.accessoryStats.wings[recipe.rarity]:
+     recipe.slot==='necklace'?saved.necklaceStats[recipe.rarity]:
+     saved.accessoryStats[recipe.slot][recipe.rarity];
+   assert.deepEqual(item.stats,expected,recipe.id+' accessory stats');
+ }
+ covered++;
+}
+const negative=initial();negative.materials={'Изумруд':0};negative.feathers.phoenix=0;
+assert.equal(craftOriginalForgeItem(negative,'pet:Лесной дракончик:common',
+  'craft_abcdefghijklmnopqrstuvwxyz1234567890').status,409);
+console.log('PPA_ORIGINAL_FORGE_ALL_CATEGORIES_OK recipes='+covered+
+ ' classes=8 no_shadow_inventory=1 materials=1 legendary=1 wings=1 pets=1');
 
 console.log('PPA_SHARED_FORGE_EPIC_OK legacy_recipes=7 class_items='+cases+
   ' real_legacy_stats=1 version_cas=1 idempotent=1 no_cross_account=1 original_bag=1');
