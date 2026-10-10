@@ -58,4 +58,8 @@ for (const pattern of [/const LEGENDARY_CRAFT=\[([^;]+?)\];/,/const NECKLACE_STA
  const found=source.match(pattern);
  if(found) console.log('PPA_SMITH_EXTRA_CONSTANT',JSON.stringify({name:pattern.source,code:found[0].slice(0,7800)}));
 }
+for(const word of ['LEGENDARY_CRAFT','ACCESSORY_STAT_VALUES']){
+ const idx=source.indexOf(word);
+ console.log('PPA_SMITH_LOOKUP',JSON.stringify({word,index:idx,excerpt:source.slice(idx-50,idx+5500).slice(0,5500)}));
+}
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
