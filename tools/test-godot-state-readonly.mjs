@@ -5,8 +5,11 @@ import assert from 'node:assert/strict';
 
 const source = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
 const start = source.indexOf("if (url.pathname === '/api/game/state')");
-const end = source.indexOf("\n    return apiError('Game API route not found'", start);
-assert(start > 0 && end > start, 'Godot state route is missing');
+// The state handler ends at its own closing brace. Later typed action routes
+// may write saves, but they must not be included in this read-only guard.
+const closing = source.indexOf('\n    }\n', start);
+const end = closing + '\n    }'.length;
+assert(start > 0 && closing > start, 'Godot state route is missing');
 const route = source.slice(start, end);
 assert(route.includes("PPA_GODOT_STATE_READ_ENABLED"), "Production gate must default OFF");
 assert(route.includes("String(env.PPA_GODOT_STATE_READ_ENABLED || '') !== '1'"), "No implicit production enable");
