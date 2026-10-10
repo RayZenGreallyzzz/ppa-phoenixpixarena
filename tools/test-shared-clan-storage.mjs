@@ -34,7 +34,15 @@ const db={prepare(query){const stmt=sql.prepare(query.replace(/\?(\d+)/g,'?'));
  sql.exec('BEGIN IMMEDIATE');
  try {
   if(injection){const fn=injection;injection=null;fn();}
-  for(const stm of statements){stm.run();}
+  for(let index=0;index<statements.length;index++){
+   try{
+    const effect=statements[index].run();
+    if(writes===0)console.log('PPA_CLAN_ATOMIC_STEP',index,effect.meta?.changes);
+   }catch(error){
+    console.log('PPA_CLAN_ATOMIC_FAILURE_STEP',index,String(error));
+    throw error;
+   }
+  }
   sql.exec('COMMIT');writes++;
  }catch(e){sql.exec('ROLLBACK');throw e;}
  }};
