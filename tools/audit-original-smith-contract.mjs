@@ -131,4 +131,22 @@ for(const q of [
  console.log('PPA_SHARP_EXTRAS',JSON.stringify({query:q,code:source.slice(at,Math.min(end>at?end:at+2300,at+2300))}));
 }
 
+
+// Identify original player inventory equip/unequip path before adding a
+// shared server mutation; do not assume gear can be moved without a swap.
+for(const needle of [
+ 'function equipItem(', 'function unequipItem(', 'function equipFromBag(',
+ 'function unequipToBag(', 'function equipGear(', 'function unequipGear(',
+ "d.type==='equipItem'", "d.type==='unequipItem'",
+ "d.type==='equip'", "d.type==='unequip'",
+ 'INV.equipped[', 'function swapEquip(', 'function equipFromInventory('
+]) {
+ const hits=[]; let at=0;
+ while((at=source.indexOf(needle,at))>=0&&hits.length<12){
+   hits.push(at);at+=needle.length;
+ }
+ console.log('PPA_ORIGINAL_EQUIP_LOCATOR',JSON.stringify({needle,count:hits.length,hits,
+  nearby:hits.slice(0,5).map(i=>source.slice(Math.max(0,i-190),Math.min(source.length,i+650)))}));
+}
+
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
