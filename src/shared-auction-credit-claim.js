@@ -5,12 +5,17 @@ const failure=(status,code,message)=>({status,data:{ok:false,code,message}});
 const CREDIT_ID=/^[a-zA-Z0-9:_-]{4,140}$/;
 const MAX_SAVE=1_800_000;
 const guardSchema='CREATE TABLE IF NOT EXISTS ppa_auction_credit_cas_guard (id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))';
+// This is a one-way legacy VISIBILITY boundary, separate from permission
+// to credit money on the server. During rollback, keep the cutoff configured
+// even if SERVER_CREDIT_CLAIM_ENABLED is switched OFF: a cached Telegram client
+// must NEVER see post-cutoff credits in /api/auction/list or legacy ACK.
+export function legacyAuctionCreditCutoff(env){
+ const cutoff=Number(env.PPA_AUCTION_SERVER_CREDIT_CUTOFF_MS);
+ return Number.isSafeInteger(cutoff)&&cutoff>0?cutoff:null;
+}
 export function serverCreditClaimsCutoff(env){
  if(env.PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED!=='1')return null;
- const cutoff=Number(env.PPA_AUCTION_SERVER_CREDIT_CUTOFF_MS);
- // Explicit migration barrier, never guess one for existing legacy
- // localStorage-paid credits or cached Telegram mini-apps.
- return Number.isSafeInteger(cutoff)&&cutoff>0?cutoff:null;
+ return legacyAuctionCreditCutoff(env);
 }
 
 
