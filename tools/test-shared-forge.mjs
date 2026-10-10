@@ -140,5 +140,46 @@ const current=await sharedForgeOperation(env,'10001','state',{},persistence);
 assert.equal(current.status,200);
 assert.equal(current.data.state.offers.length,7);
 assert.equal(current.data.state.wallet.ppa,saves.get('10001').state.ppa);
+
+// Exercise the real signed Godot HTTP route while keeping all D1 and auth
+// inside the offline fixture. Only Phoenix session lookup is stubbed.
+const worker=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
+const startRoute=worker.indexOf('async function handlePhoenixGameApi(');
+const endRoute=worker.indexOf('\nasync function handlePhoenixLauncherApi(',startRoute);
+assert(startRoute>0&&endRoute>startRoute);
+const response=(data,status=200)=>new Response(JSON.stringify(data),{status});
+let authCount=0,ownerId='10001',signedGame='phoenix-pix-arena';
+const deps={ensurePhoenixAuthSchema:async()=>{},phoenixGameSessionFromRequest:async()=>{
+  authCount++;return {accountId:'signed-phoenix',gameId:signedGame};
+},phoenixAccountRow:async()=>({telegram_id:ownerId}),sharedForgeOperation,
+  loadSave:(env,id)=>persistence.load(id),saveGameState:(env,id,state,version)=>persistence.save(id,state,version),
+  json:response,apiError:(message,status,code)=>response({ok:false,message,code},status)};
+const route=new Function(...Object.keys(deps),worker.slice(startRoute,endRoute)+
+ ';return handlePhoenixGameApi;')(...Object.values(deps));
+const url={pathname:'/api/game/forge/action'};
+const input={method:'POST',json:async()=>({action:'craft',id:'gear:epic:ring',
+  version:7,requestId:'b'.repeat(32),ownerId:'10002',price:0})};
+const locked=await route(input,{},url);
+assert.equal(locked.status,404);
+assert.equal(authCount,0,'Default-off forge route must not attempt login');
+const on={...env,PPA_FORGE_READ_ENABLED:'1'};
+assert.equal((await route(input,on,url)).status,404,'Independent forge action gate bypassed');
+signedGame='other';
+assert.equal((await route(input,{...on,PPA_FORGE_ACTIONS_ENABLED:'1'},url)).status,403);
+signedGame='phoenix-pix-arena';
+ownerId='';
+assert.equal((await route(input,{...on,PPA_FORGE_ACTIONS_ENABLED:'1'},url)).status,409);
+ownerId='10001';
+const throughRoute=await route(input,{...on,PPA_FORGE_ACTIONS_ENABLED:'1'},url);
+assert.equal(throughRoute.status,200,'Signed server forge route did not craft');
+const routedBody=await throughRoute.json();
+assert.equal(routedBody.ownerId,'10001');
+assert.equal(routedBody.receipt.slot,'ring');
+assert.equal(saves.get('10001').state.bag.length,3);
+assert.deepEqual(saves.get('10002'),originalOther);
+const repeat=await route(input,{...on,PPA_FORGE_ACTIONS_ENABLED:'1'},url);
+assert.deepEqual(await repeat.json(),routedBody,'Retry bypassed canonical forge ledger');
+assert.equal(saves.get('10001').state.bag.length,3);
+
 console.log('PPA_SHARED_FORGE_EPIC_OK legacy_recipes=7 class_items='+cases+
   ' real_legacy_stats=1 version_cas=1 idempotent=1 no_cross_account=1 original_bag=1');
