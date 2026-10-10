@@ -4,6 +4,8 @@ on:
     paths:
       - 'src/worker.js'
       - 'src/realtime.js'
+      - 'src/native-npc-readonly.js'
+      - 'tools/test-native-npc-readonly.mjs'
       - 'tools/test-native-realtime-ticket.mjs'
       - 'tools/test-native-character-identity.mjs'
       - '.github/workflows/test-native-realtime-gate.yml'
@@ -23,11 +25,14 @@ jobs:
         run: |
           node --check src/worker.js
           node --check src/realtime.js
+          node --check src/native-npc-readonly.js
+          node --check tools/test-native-npc-readonly.mjs
           node --check tools/test-native-realtime-ticket.mjs
           node --check tools/test-native-character-identity.mjs
       - name: Native realtime uses the existing player identity and global hub
         run: |
           node tools/test-native-realtime-ticket.mjs
           node tools/test-native-character-identity.mjs
+          node tools/test-native-npc-readonly.mjs
           node tools/test-godot-state-readonly.mjs
           node tools/test-godot-state-readonly-runtime.mjs
