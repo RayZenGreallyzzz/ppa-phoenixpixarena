@@ -11,9 +11,9 @@ for(const [owner,state] of [['seller',original],['other',{ppa:10,gram:0,bag:[]}]
 for(const [id,owner,cur,amount,acked] of [
  ['credit_pp','seller','ppa',900,0],['credit_g','seller','gram',2.5,0],
  ['credit_other','other','ppa',15,0],['credit_done','seller','ppa',12,1],
- ['credit_bad','seller','gram',-1,0]])
+ ['credit_bad','seller','gram',-1,0],['legacy_paid_local','seller','ppa',75,0]])
  sql.prepare('INSERT INTO auction_credits VALUES(?,?,?,?,?,?,?,?)')
- .run(id,owner,'lot',1,cur,amount,0,acked);
+ .run(id,owner,'lot',1,cur,amount,id==='legacy_paid_local'?25:200,acked);
 let committed=0,injection=null;
 const DB={prepare(query){
  const order=[...query.matchAll(/\?(\d+)/g)].map(x=>Number(x[1]));
@@ -28,7 +28,7 @@ const DB={prepare(query){
  try{for(const step of steps)step.run();sql.exec('COMMIT');committed++;}
  catch(e){sql.exec('ROLLBACK');throw e;}
 }};
-const env={DB,PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED:'1'};
+const env={DB,PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED:'1',PPA_AUCTION_SERVER_CREDIT_CUTOFF_MS:'100'};
 const save=owner=>JSON.parse(sql.prepare('SELECT state_json FROM saves WHERE telegram_id=?').get(owner).state_json);
 const credit=id=>sql.prepare('SELECT acked FROM auction_credits WHERE id=?').get(id).acked;
 const countVersion=owner=>sql.prepare('SELECT version FROM saves WHERE telegram_id=?').get(owner).version;
@@ -46,6 +46,8 @@ assert.equal((await claimOriginalAuctionCredit(env,'other','credit_g',5)).status
 assert.equal((await claimOriginalAuctionCredit(env,'seller','credit_other',6)).status,409);
 assert.equal((await claimOriginalAuctionCredit(env,'seller','credit_done',6)).status,409);
 assert.equal((await claimOriginalAuctionCredit(env,'seller','credit_bad',6)).data.code,'AUCTION_CREDIT_INVALID');
+assert.equal((await claimOriginalAuctionCredit(env,'seller','legacy_paid_local',6)).status,409);
+assert.equal(credit('legacy_paid_local'),0,'Old localStorage credit must remain legacy-owned');
 assert.equal(save('other').ppa,10);
 const gram=await claimOriginalAuctionCredit(env,'seller','credit_g',6);
 assert.equal(gram.status,200);
@@ -58,7 +60,7 @@ assert.equal(disabled.status,404);
 // Concurrent Telegram/local save change before D1 batch: old credits NOT
 // ACKed and neither the mutated bag nor wallet is overwritten by claim.
 sql.prepare('INSERT INTO auction_credits VALUES(?,?,?,?,?,?,?,?)')
- .run('race_save','seller','lot',1,'ppa',10,0,0);
+ .run('race_save','seller','lot',1,'ppa',10,200,0);
 injection=()=>sql.prepare('UPDATE saves SET version=version+1 WHERE telegram_id=?').run('seller');
 const before=save('seller').ppa;
 const clash=await claimOriginalAuctionCredit(env,'seller','race_save',7);
@@ -78,4 +80,4 @@ assert.equal(save('seller').ppa,before);
 assert.equal(credit('race_save'),1);
 // Failure on DB batch cannot leave a "paid but not ACKed" partial result.
 assert.equal(committed,2,'Only the two clean claims should commit');
-console.log('PPA_ATOMIC_AUCTION_CREDIT_CLAIM_OK one_credit=1 ppa=1 gram=1 owner=1 +7_untouched=1 replay=1 save_race=1 ack_race=1 rollback=1 flag_off=1');
+console.log('PPA_ATOMIC_AUCTION_CREDIT_CLAIM_OK one_credit=1 ppa=1 gram=1 owner=1 +7_untouched=1 legacy_cutoff=1 replay=1 save_race=1 ack_race=1 rollback=1 flag_off=1');
