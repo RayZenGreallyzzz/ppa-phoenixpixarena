@@ -149,4 +149,13 @@ for(const needle of [
   nearby:hits.slice(0,5).map(i=>source.slice(Math.max(0,i-190),Math.min(source.length,i+650)))}));
 }
 
+
+for(const name of ['equipFromBag','unequipSlot']){
+ const start=source.indexOf('function '+name+'(');
+ if(start<0)throw Error('Missing real PPA inventory mutation '+name);
+ const end=source.indexOf('\nfunction ',start+13);
+ if(end<0)throw Error('Inventory function has no next boundary');
+ const code=source.slice(start,Math.min(end,start+5100));
+ console.log('PPA_ORIGINAL_EQUIP_EXACT',JSON.stringify({name,code}));
+}
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
