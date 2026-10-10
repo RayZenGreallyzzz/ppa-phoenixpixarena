@@ -45,7 +45,7 @@ const ctx=vm.createContext({Date,Math,Number,String,Array,console,
  safeJson:(s,f)=>{try{return JSON.parse(s)}catch{return f}},
  out:(data,status=200)=>({status,data})});
 vm.runInContext(sample+'\n'+ack,ctx);
-const env={DB};
+const env={DB:db};
 let snap=await ctx.auctionList(env,'ownerA');
 assert.equal(snap.credits.length,2,'Original pre-flag local payout must work');
 assert.equal(snap.serverCreditClaimMode,false);
