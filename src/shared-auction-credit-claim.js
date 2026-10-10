@@ -5,16 +5,25 @@ const failure=(status,code,message)=>({status,data:{ok:false,code,message}});
 const CREDIT_ID=/^[a-zA-Z0-9:_-]{4,140}$/;
 const MAX_SAVE=1_800_000;
 const guardSchema='CREATE TABLE IF NOT EXISTS ppa_auction_credit_cas_guard (id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))';
+export function serverCreditClaimsCutoff(env){
+ if(env.PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED!=='1')return null;
+ const cutoff=Number(env.PPA_AUCTION_SERVER_CREDIT_CUTOFF_MS);
+ // Explicit migration barrier, never guess one for existing legacy
+ // localStorage-paid credits or cached Telegram mini-apps.
+ return Number.isSafeInteger(cutoff)&&cutoff>0?cutoff:null;
+}
+
 
 export async function claimOriginalAuctionCredit(env,ownerId,creditId,expectedVersion){
  const owner=String(ownerId),id=String(creditId||'');
- if(env.PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED!=='1')
-  return failure(404,'AUCTION_CREDIT_CLAIM_DISABLED','Получение средств через сервер пока не включено.');
+ const cutoff=serverCreditClaimsCutoff(env);
+ if(cutoff===null)
+  return failure(404,'AUCTION_CREDIT_CLAIM_DISABLED','Безопасная миграция выплат ещё не включена.');
  if(!CREDIT_ID.test(id)||!Number.isSafeInteger(expectedVersion)||expectedVersion<1)
   return failure(400,'AUCTION_CREDIT_BAD_REQUEST','Неверный номер начисления или версия персонажа.');
- const credit=await env.DB.prepare('SELECT id,seller_id,currency,amount,acked FROM auction_credits WHERE id=?1 AND seller_id=?2')
+ const credit=await env.DB.prepare('SELECT id,seller_id,currency,amount,acked,created_at FROM auction_credits WHERE id=?1 AND seller_id=?2')
   .bind(id,owner).first();
- if(!credit||Number(credit.acked)!==0)
+ if(!credit||Number(credit.acked)!==0||Number(credit.created_at)<cutoff)
   return failure(409,'AUCTION_CREDIT_UNAVAILABLE','Начисление уже получено или не принадлежит персонажу.');
  const amount=Number(credit.amount),currency=String(credit.currency||'');
  if(!['ppa','gram'].includes(currency)||!Number.isFinite(amount)||amount<=0||
@@ -47,8 +56,8 @@ export async function claimOriginalAuctionCredit(env,ownerId,creditId,expectedVe
    env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5')
     .bind(expectedVersion+1,raw,now,owner,expectedVersion),
    env.DB.prepare('INSERT INTO ppa_auction_credit_cas_guard(id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(a),
-   env.DB.prepare('UPDATE auction_credits SET acked=1 WHERE id=?1 AND seller_id=?2 AND acked=0')
-    .bind(id,owner),
+   env.DB.prepare('UPDATE auction_credits SET acked=1 WHERE id=?1 AND seller_id=?2 AND acked=0 AND created_at>=?3')
+    .bind(id,owner,cutoff),
    env.DB.prepare('INSERT INTO ppa_auction_credit_cas_guard(id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(b),
    env.DB.prepare('DELETE FROM ppa_auction_credit_cas_guard WHERE id=?1 OR id=?2').bind(a,b)
   ]);
