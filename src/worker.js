@@ -6,6 +6,7 @@ import { sharedForgeOperation } from './shared-forge.js';
 import { sharedInventoryOperation } from './shared-inventory.js';
 import { sharedStorageOperation } from './shared-storage.js';
 import { sharedClanStorageOperation } from './shared-clan-storage.js';
+import { nativeAuctionReadOnly } from './native-auction-readonly.js';
 const INIT_DATA_MAX_AGE_SEC = 24 * 60 * 60;
 const encoder = new TextEncoder();
 
@@ -1463,6 +1464,25 @@ async function handlePhoenixGameApi(request, env, url) {
       const ownerId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
       if (!ownerId) return apiError('Telegram character not linked',409,'TELEGRAM_NOT_LINKED');
       const result = await sharedClanStorageOperation(env,ownerId,operation,body);
+      return json(result.data,result.status);
+    }
+
+    // Existing Telegram PPA auction tables, NO independent trade economy.
+    // Until original web and native settlement share one verified atomic
+    // transfer, ONLY expose signed buy/mine/credit previews.
+    if (url.pathname === '/api/game/auction/state') {
+      if (String(env.PPA_AUCTION_READ_ENABLED || '') !== '1')
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      if (request.method !== 'GET')
+        return apiError('Method not allowed', 405, 'METHOD_NOT_ALLOWED');
+      const auth = await phoenixGameSessionFromRequest(request,env,true);
+      if (auth.gameId !== 'phoenix-pix-arena')
+        return apiError('Wrong game session',403,'GAME_SESSION_WRONG_GAME');
+      const account = await phoenixAccountRow(env,auth.accountId);
+      if (!account) return apiError('Phoenix account missing',404,'ACCOUNT_NOT_FOUND');
+      const ownerId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
+      if (!ownerId) return apiError('Telegram character not linked',409,'TELEGRAM_NOT_LINKED');
+      const result = await nativeAuctionReadOnly(env,ownerId,id=>loadSave(env,id));
       return json(result.data,result.status);
     }
 
