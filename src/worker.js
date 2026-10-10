@@ -7,6 +7,7 @@ import { sharedInventoryOperation } from './shared-inventory.js';
 import { sharedStorageOperation } from './shared-storage.js';
 import { sharedClanStorageOperation } from './shared-clan-storage.js';
 import { nativeAuctionReadOnly } from './native-auction-readonly.js';
+import { sharedAuctionAction } from './shared-auction-actions.js';
 const INIT_DATA_MAX_AGE_SEC = 24 * 60 * 60;
 const encoder = new TextEncoder();
 
@@ -1467,14 +1468,18 @@ async function handlePhoenixGameApi(request, env, url) {
       return json(result.data,result.status);
     }
 
-    // Existing Telegram PPA auction tables, NO independent trade economy.
-    // Until original web and native settlement share one verified atomic
-    // transfer, ONLY expose signed buy/mine/credit previews.
-    if (url.pathname === '/api/game/auction/state') {
+    // One original Telegram PPA auction. New native gear escrow and
+    // existing atomic legacy purchase share auction_lots/auction_credits.
+    // Flag OFF by default; do not enable until both client QA is complete.
+    if (url.pathname === '/api/game/auction/state' ||
+        url.pathname === '/api/game/auction/action') {
       if (String(env.PPA_AUCTION_READ_ENABLED || '') !== '1')
         return apiError('Game API route not found', 404, 'NOT_FOUND');
-      if (request.method !== 'GET')
+      const operation = url.pathname.endsWith('/state') ? 'state' : 'action';
+      if (request.method !== (operation === 'state' ? 'GET' : 'POST'))
         return apiError('Method not allowed', 405, 'METHOD_NOT_ALLOWED');
+      if (operation === 'action' && String(env.PPA_AUCTION_ACTIONS_ENABLED || '') !== '1')
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
       const auth = await phoenixGameSessionFromRequest(request,env,true);
       if (auth.gameId !== 'phoenix-pix-arena')
         return apiError('Wrong game session',403,'GAME_SESSION_WRONG_GAME');
@@ -1482,7 +1487,11 @@ async function handlePhoenixGameApi(request, env, url) {
       if (!account) return apiError('Phoenix account missing',404,'ACCOUNT_NOT_FOUND');
       const ownerId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
       if (!ownerId) return apiError('Telegram character not linked',409,'TELEGRAM_NOT_LINKED');
-      const result = await nativeAuctionReadOnly(env,ownerId,id=>loadSave(env,id));
+      const result = operation === 'state'
+        ? await nativeAuctionReadOnly(env,ownerId,id=>loadSave(env,id))
+        : await sharedAuctionAction(env,ownerId,body,{
+            load:id=>loadSave(env,id),
+            save:(id,state,version)=>saveGameState(env,id,state,version)});
       return json(result.data,result.status);
     }
 
