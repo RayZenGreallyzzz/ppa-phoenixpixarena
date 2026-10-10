@@ -108,4 +108,15 @@ for(const query of [
   console.log('PPA_ENHANCE_DETAIL',JSON.stringify({query,code:source.slice(i,Math.min(e>i?e:i+4900,i+4900))}));
 }
 
+for(const q of ['const ENH_STAT_BONUS=', 'var ENH_STAT_BONUS=',
+  'function sharpenRoundStat(', 'function applyAwakeningExtras(',
+  'function applyPetEnhancementExtras(', 'function cloneNumericStats(',
+  'function stellarGuardianPrepareBase(', 'const STELLAR_GUARDIAN_NAME=']) {
+ const i=source.indexOf(q);
+ if(i<0) { console.log('PPA_SHARP_RULE_MISSING',q); continue; }
+ const end=q.startsWith('function ')?source.indexOf('\nfunction ',i+q.length):i+280;
+ const code=source.slice(i,Math.min(end>i?end:i+4000,i+4000));
+ console.log('PPA_SHARP_RULE',JSON.stringify({query:q,code}));
+}
+
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
