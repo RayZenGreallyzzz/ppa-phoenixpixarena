@@ -175,4 +175,13 @@ for(const needle of [
   positions:hits,nearby:hits.slice(0,3).map(k=>source.slice(Math.max(0,k-170),k+580))}));
 }
 
+
+for(const name of ['storageMove','storageMoveAll','storageSort','sendStorageState']){
+ const at=source.indexOf('function '+name+'(');
+ if(at<0)throw Error('Missing '+name);
+ const end=source.indexOf('\nfunction ',at+13);
+ const code=source.slice(at,Math.min(end>at?end:at+7200,at+7200));
+ console.log('PPA_STORAGE_ORIGINAL_FUNCTION',JSON.stringify({name,code}));
+}
+
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
