@@ -14,7 +14,7 @@ function publicItem(raw){
   icon:String(x.icon||'').slice(0,24),
   enh:Number.isSafeInteger(x.enh)?x.enh:0};
 }
-function view(row,own){
+function view(row,own,enabled){
  const price=Number(row.price),qty=Number(row.qty);
  if(!Number.isFinite(price)||price<=0||price>999999999||
   !Number.isSafeInteger(qty)||qty<1||qty>999)return null;
@@ -25,7 +25,8 @@ function view(row,own){
  return {id:id(row.id).slice(0,100),item,price,qty,currency,
   sellerName:String(row.seller_name||'Игрок').slice(0,32),
   sellerId:id(row.seller_id),mine:own,expiresAt:Number(row.expires_at)||0,
-  canBuy:false,canCancel:false};
+  canBuy:enabled&&!own&&id(row.id).startsWith('nat_'),
+  canCancel:enabled&&own&&id(row.id).startsWith('nat_')};
 }
 export async function nativeAuctionReadOnly(env,ownerId,loadSave){
  const owner=id(ownerId);
@@ -34,6 +35,7 @@ export async function nativeAuctionReadOnly(env,ownerId,loadSave){
    !Number.isSafeInteger(saved.version)||saved.version<1)
   return err(409,'PPA_AUCTION_SAVE_UNAVAILABLE','Сохранение PPA ещё не подтверждено.');
  const state=saved.state,now=Date.now();
+ const enabled=env.PPA_AUCTION_ACTIONS_ENABLED==='1';
  let rows,credits;
  try{
   [rows,credits]=await Promise.all([
@@ -47,7 +49,7 @@ export async function nativeAuctionReadOnly(env,ownerId,loadSave){
  }
  const lots=[],mine=[];
  for(const row of rows.results||[]){
-  const own=id(row.seller_id)===owner,result=view(row,own);
+  const own=id(row.seller_id)===owner,result=view(row,own,enabled);
   if(result)(own?mine:lots).push(result);
  }
  const pendingCredits=(credits.results||[]).map(row=>({
@@ -63,11 +65,11 @@ export async function nativeAuctionReadOnly(env,ownerId,loadSave){
    enh:Number.isSafeInteger(item.enh)?item.enh:0
  }:null).filter(Boolean):[];
  return {status:200,data:{
-  ok:true,gameId:'phoenix-pix-arena',contract:'ppa-auction-readonly-v1',
-  ownerId:owner,actions:[],
+  ok:true,gameId:'phoenix-pix-arena',contract:'ppa-auction-v1',
+  ownerId:owner,actions:enabled?['place','buy','cancel']:[],
   state:{connected:true,self:{id:owner},version:saved.version,
    wallet:{ppa:money(Number(state.ppa)),gram:money(Number(state.gram))},
    commissionPct:10,source:'Telegram PPA auction_lots/auction_credits',
-   lots,mine,pendingCredits,bag,settlementEnabled:false}
+   lots,mine,pendingCredits,bag,settlementEnabled:enabled}
  }};
 }
