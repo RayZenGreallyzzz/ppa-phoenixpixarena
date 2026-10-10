@@ -41,7 +41,7 @@ jobs:
       - name: Verify optimized melee Player3D source
         run: |
           grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" gateway/player-3d-unified-runtime.js
-          grep -q "unified-v7-melee-clip-filter" gateway/player-3d-unified-runtime.js
+          grep -q "unified-v9-anim-speed-hotloop-fix" gateway/player-3d-unified-runtime.js
           ! grep -q "lockMeleeAttackLowerBody" gateway/player-3d-unified-runtime.js
           ! grep -q "captureMeleeLowerBody" gateway/player-3d-unified-runtime.js
           ! grep -q "meleeLowerBody" gateway/player-3d-unified-runtime.js
@@ -59,7 +59,7 @@ jobs:
           grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" public/game/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" public/game/player-3d-unified-runtime.js
           grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" public/game/player-3d-unified-runtime.js
-          grep -q "unified-v7-melee-clip-filter" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v9-anim-speed-hotloop-fix" public/game/player-3d-unified-runtime.js
           ! grep -q "lockMeleeAttackLowerBody" public/game/player-3d-unified-runtime.js
           ! grep -q "captureMeleeLowerBody" public/game/player-3d-unified-runtime.js
           ! grep -q "meleeLowerBody" public/game/player-3d-unified-runtime.js
@@ -76,9 +76,9 @@ jobs:
           ! grep -q "e.kind==='local'?500:1800" public/game/player-3d-unified-runtime.js
           ! grep -q "__PPA3D_LOCAL_PENDING" public/game/player-3d-unified-runtime.js
           ! grep -q "__PPA3D_LOCAL_PENDING" public/index.html
-          grep -q "player-3d-unified-runtime.js?v=20261003u17" public/index.html
-          grep -q "remote-player-3d-dispatch.js?v=20261003u7" public/index.html
-          grep -q "PPA_PLAYER3D_REMOTE_SCRATCH_20261003" public/game/remote-player-3d-dispatch.js
+          grep -q "player-3d-unified-runtime.js?v=20261005perf1" public/index.html
+          grep -q "remote-player-3d-dispatch.js?v=20261005sync5" public/index.html
+          grep -q "PPA_REMOTE_CANONICAL_POSITION_20261005" public/game/remote-player-3d-dispatch.js
           grep -q "__ppa3DVisualPosition" public/game/remote-player-3d-dispatch.js
           grep -q "__ppa3DAnchor" public/game/remote-player-3d-dispatch.js
           grep -q "const PLAYER_ANIM_TIMING=" public/index.html
@@ -88,7 +88,7 @@ jobs:
           grep -q "function v174DrawAiTrainingFighter(e,sx,sy){" public/index.html
           grep -q "isAiFighter:true" public/index.html
           grep -q "PPA_ONLINE_STRESS" public/index.html
-          grep -Fq "cx.fillStyle='#9d63db';cx.beginPath();cx.arc(sx,sy-10,aiVisualSize*.35,0,Math.PI*2);cx.fill();" public/index.html
+          grep -q "PPA_AI_TRAINING_BODY_OWNED_BY_PLAYER3D_20261005" public/index.html
           grep -q "name:'Safe Zone Map'" public/index.html
           grep -q "name:'Arena Map'" public/index.html
           test -e public/game/dungeon-mob-events.js
