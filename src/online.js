@@ -1292,6 +1292,10 @@ export async function handleOnlineRoute(path, ctx) {
   return null;
 }
 
+// Reuse the SAME original, now atomic, auction purchase and premium slot
+// rules from both Telegram WebApp and the signed native PPA client.
+export { auctionBuy as originalAtomicAuctionBuy, activeSlots as originalAuctionSlots };
+
 export async function handleOnlineRequest(request, env) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/clan/') && !url.pathname.startsWith('/api/auction/') && !url.pathname.startsWith('/api/wallet/') && !url.pathname.startsWith('/api/admin/') && !url.pathname.startsWith('/api/stat-chest/')) return null;
