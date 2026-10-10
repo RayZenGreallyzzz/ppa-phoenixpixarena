@@ -1,4 +1,5 @@
 import { nativeRealtimeTicketForLinkedTelegram } from './realtime.js';
+import { NATIVE_NPC_SERVICES, projectNativeNpcReadOnly } from './native-npc-readonly.js';
 const INIT_DATA_MAX_AGE_SEC = 24 * 60 * 60;
 const encoder = new TextEncoder();
 
@@ -1321,6 +1322,37 @@ async function handlePhoenixGameApi(request, env, url) {
         version: snapshot.version,
         state: snapshot.state,
         updatedAt: snapshot.updatedAt || null
+      });
+    }
+
+    // Signed native NPC/arena read: one player, one versioned PPA save,
+    // ZERO price promises, ZERO actions and ZERO write to Telegram data.
+    // Both service and save-read flags default OFF in production.
+    if (url.pathname.startsWith('/api/game/npc/')) {
+      if (String(env.PPA_GODOT_NPC_READ_ENABLED || '') !== '1' ||
+          String(env.PPA_GODOT_STATE_READ_ENABLED || '') !== '1') {
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      }
+      if (request.method !== 'GET') return apiError('GET required', 405, 'METHOD_NOT_ALLOWED');
+      const service = url.pathname.slice('/api/game/npc/'.length);
+      if (!NATIVE_NPC_SERVICES.includes(service)) return apiError('Unknown NPC service', 404, 'UNKNOWN_NPC_SERVICE');
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena') return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      const row = await phoenixAccountRow(env, auth.accountId);
+      if (!row) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const telegramId = row.telegram_id == null ? '' : String(row.telegram_id).trim();
+      if (!telegramId) return apiError('Telegram character not linked', 409, 'TELEGRAM_NOT_LINKED');
+      const saved = await loadSave(env, telegramId);
+      if (!saved.ok) return json(saved, Number(saved.status) || 500);
+      if (saved.bootstrapFromProfile || !saved.state || !Number.isInteger(saved.version) || saved.version < 1) {
+        return apiError('Existing PPA save not ready', 409, 'PPA_CHARACTER_SAVE_NOT_READY');
+      }
+      const data = projectNativeNpcReadOnly(service, saved.state);
+      if (!data) return apiError('NPC view not available', 400, 'NPC_VIEW_UNAVAILABLE');
+      return json({
+        ok: true, readOnly: true, gameId: auth.gameId,
+        service, version: saved.version, updatedAt: saved.updatedAt || null,
+        data
       });
     }
 
