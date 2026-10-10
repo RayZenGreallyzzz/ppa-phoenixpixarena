@@ -51,7 +51,7 @@ const initial=(cls='gnome')=>({
  gatewayProfileBound:true,cls,classKey:cls,ppa:50000,gold:17,gram:8,lvl:35,hp:711,mp:124,
  bag:[{uid:'real_existing_+7',slot:'weapon',enh:7,rarity:'legendary',stats:{atk:500}}],
  equip:{weapon:{uid:'equipped_+7',enh:7,stats:{atk:400}}},
- materials:Object.fromEntries(EPIC_GEAR.flatMap(x=>x.materials.filter(m=>m.name!=='Перо Феникса')).map(x=>[x.name,10000])),
+ materials:Object.fromEntries(ALL_FORGE_RECIPES.flatMap(x=>x.materials.filter(m=>m.name!=='Перо Феникса')).map(x=>[x.name,10000])),
  feathers:{phoenix:100},skillRanks:{fireball:3},stones:{normal:3},runes:{atk:3}
 });
 let cases=0;
