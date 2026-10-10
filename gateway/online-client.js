@@ -16,6 +16,15 @@
   function saveCreditSet(set){try{localStorage.setItem('ppaAuctionCreditsAppliedV279',JSON.stringify(Array.from(set).slice(-300)))}catch(_){}}
   async function refreshAuction(){
     if(!online()||!PPA.ppaAuctionList)return;
+    // An ambiguous server payout response cannot be retried with a stale
+    // in-memory wallet. Wait for a full authenticated page reload.
+    if(window.PPA_AUCTION_CLAIM_RELOAD_REQUIRED){
+      if(!window.PPA_AUCTION_CLAIM_RECOVERY_NOTICE_SHOWN){
+        window.PPA_AUCTION_CLAIM_RECOVERY_NOTICE_SHOWN=true;
+        try{showPickup('АУКЦИОН · ОБНОВИ ИГРУ ДЛЯ СВЕРКИ ВЫПЛАТЫ','#ffb36b')}catch(_){}
+      }
+      return;
+    }
     try{
       var r=await PPA.ppaAuctionList();
       if(r&&Array.isArray(r.lots)&&window.PPA_SET_AUCTION_MARKET)window.PPA_SET_AUCTION_MARKET(r.lots);
@@ -31,6 +40,33 @@
       });
       if(changed){saveCreditSet(seen);saveGame();sendInvState();sendAuctionState();sendPremiumState();updateUI()}
       if(ack.length&&PPA.ppaAuctionAckCredits)PPA.ppaAuctionAckCredits(ack).catch(function(){});
+      // After the explicit migration cutoff, never add seller credits to
+      // INV/localStorage. Pre-cutoff credits keep the old flow above.
+      // Old cached Telegram clients receive no new server-mode credits
+      // from /api/auction/list, preventing double local payment.
+      // Legacy credits already seen/awaiting ACK must not stall NEW server
+      // claims forever. Only defer during a tick that changed local INV.
+      if(r&&r.serverCreditClaimMode&&!changed&&
+         PPA.ppaAuctionServerCredits&&PPA.ppaAuctionClaimCredit&&
+         !window.PPA_AUCTION_SERVER_CLAIM_PENDING){
+        var pending=await PPA.ppaAuctionServerCredits();
+        var serverCredits=Array.isArray(pending&&pending.credits)?pending.credits:[];
+        if(serverCredits.length){
+          var first=serverCredits[0];
+          window.PPA_AUCTION_SERVER_CLAIM_PENDING=true;
+          try{
+            var paid=await PPA.ppaAuctionClaimCredit(first.id,pending.version);
+            if(paid&&paid.ok){
+              try{showPickup('Аукцион · выплата получена с сервера','#8dff9a')}catch(_){}
+              // Reload canonical player state. NEVER call saveGame() here:
+              // that would overwrite the atomic credited wallet with an old
+              // full character snapshot from the running Telegram client.
+              window.location.reload();
+              return;
+            }
+          }finally{window.PPA_AUCTION_SERVER_CLAIM_PENDING=false}
+        }
+      }
     }catch(e){console.warn('Auction sync',e)}
   }
 
