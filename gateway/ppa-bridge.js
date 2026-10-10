@@ -120,8 +120,11 @@
   }
 
   function queueSave(state,version){
+    // Saves queued BEFORE a payout must finish before the claim is sent.
+    // Saves queued AFTER payout begins must never run with stale local INV.
+    var admittedBeforeClaim=!serverSellerCreditClaimGate;
     saveQueue=saveQueue.catch(function(){}).then(async function(){
-      if(serverSellerCreditClaimGate){
+      if(!admittedBeforeClaim){
         var blocked=new Error('Начисление аукциона ожидает серверного подтверждения. Сейв можно отправить после перезагрузки.');
         blocked.code='AUCTION_CREDIT_SAVE_GATE';blocked.status=409;throw blocked;
       }
@@ -339,7 +342,9 @@
       // already credited server wallet after a successful claim.
       serverSellerCreditClaimGate=true;
       try{
-        await saveQueue.catch(function(){});
+        // A failed earlier save must abort the payout. Never swallow a
+        // conflict here and accidentally credit an older character snapshot.
+        await saveQueue;
         var expected=await resolveSaveVersion(version);
         var result=await authed('/api/auction/claim-credit',{creditId:String(creditId||''),version:expected});
         if(result&&result.version!=null)noteSaveVersion(result.version);
@@ -349,7 +354,16 @@
         try{if(window.PPA_CLOUD)window.PPA_CLOUD.creditClaimNeedsReload=true}catch(_){}
         return result;
       }catch(e){
-        serverSellerCreditClaimGate=false;
+        // Even an HTTP error can mean the server committed the payout but
+        // the response was lost. Fail closed until a FULL page reload has
+        // applied the canonical server save to the in-memory inventory.
+        cloudSaveLoaded=false;
+        try{
+          if(window.PPA_CLOUD){
+            window.PPA_CLOUD.creditClaimNeedsReload=true;
+            window.PPA_CLOUD.ready=false;
+          }
+        }catch(_){}
         throw e;
       }
     },
