@@ -1,0 +1,26 @@
+name: Test native canonical clan actions
+on:
+  pull_request:
+    paths:
+      - 'src/worker.js'
+      - 'src/clan-online.js'
+      - 'src/native-clan-actions.js'
+      - 'src/native-action-ledger.js'
+      - 'src/shared-merchant.js'
+      - 'tools/test-shared-merchant.mjs'
+      - 'tools/test-native-clan-actions.mjs'
+      - '.github/workflows/test-native-clan-actions.yml'
+permissions:
+  contents: read
+jobs:
+  clans:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/test-native-clan-actions.mjs
+      - run: node tools/test-shared-merchant.mjs
+      - run: node tools/test-native-city-position.mjs
+      - run: node tools/test-native-npc-readonly.mjs

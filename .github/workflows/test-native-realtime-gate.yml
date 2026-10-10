@@ -8,6 +8,8 @@ on:
       - 'tools/test-native-npc-readonly.mjs'
       - 'tools/test-native-realtime-ticket.mjs'
       - 'tools/test-native-character-identity.mjs'
+      - 'tools/test-godot-state-readonly.mjs'
+      - 'tools/test-godot-state-readonly-runtime.mjs'
       - '.github/workflows/test-native-realtime-gate.yml'
   workflow_dispatch:
 permissions:
