@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import vm from 'node:vm';
-import {serverCreditClaimsCutoff} from '../src/shared-auction-credit-claim.js';
+import {serverCreditClaimsCutoff,legacyAuctionCreditCutoff} from '../src/shared-auction-credit-claim.js';
 
 const online=readFileSync(new URL('../src/online.js',import.meta.url),'utf8');
 const front=readFileSync(new URL('../gateway/online-client.js',import.meta.url),'utf8');
@@ -23,6 +23,9 @@ assert(sdk.includes('await saveQueue.catch(function(){});'),'Pending saves must 
 assert.equal(serverCreditClaimsCutoff({PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED:'1'}),null);
 assert.equal(serverCreditClaimsCutoff({PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED:'1',
  PPA_AUCTION_SERVER_CREDIT_CUTOFF_MS:'100'}),100);
+assert.equal(legacyAuctionCreditCutoff({PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED:'0',
+ PPA_AUCTION_SERVER_CREDIT_CUTOFF_MS:'100'}),100,
+ 'Rollback must preserve the legacy visibility boundary');
 const get=(start,end)=>{
  const i=online.indexOf(start),j=online.indexOf(end,i+start.length);
  assert(i>=0&&j>i,start+' source missing');
@@ -73,6 +76,9 @@ assert.equal(remaining.serverCreditClaimMode,true);
 env.PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED='0';
 snap=await ctx.auctionList(env,'ownerA');
 assert.equal(snap.serverCreditClaimMode,false);
-assert.deepEqual(JSON.parse(JSON.stringify(snap.credits.map(x=>x.id))),['native_server'],
- 'Feature rollback preserves old Telegram-mode credit visibility');
-console.log('PPA_TELEGRAM_AUCTION_CREDIT_CUTOVER_OK old_mode=1 cutoff=1 old_ack_guard=1 server_credit_hidden_from_old_clients=1 save_gate=1 old_mode_rollback=1');
+assert.deepEqual(JSON.parse(JSON.stringify(snap.credits.map(x=>x.id))),[],
+ 'Claim-mode rollback must NOT re-expose post-cutoff credits to cached Telegram clients');
+await ctx.auctionAck(env,'ownerA',{ids:['native_server']});
+assert.equal(sql.prepare('SELECT acked FROM auction_credits WHERE id=?').get('native_server').acked,0,
+ 'Rollback must NOT allow legacy ACK of post-cutoff credit');
+console.log('PPA_TELEGRAM_AUCTION_CREDIT_CUTOVER_OK old_mode=1 cutoff=1 old_ack_guard=1 server_credit_hidden_from_old_clients=1 save_gate=1 rollback_fail_closed=1');
