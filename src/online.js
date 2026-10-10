@@ -735,39 +735,76 @@ async function auctionBuy(env, telegramId, body) {
   await expireAuction(env);
   const id = sanitizeLotId(body.lotId);
   const qtyWanted = Math.max(1, Math.min(999, Math.floor(Number(body.qty) || 1)));
-  const lot = await env.DB.prepare("SELECT * FROM auction_lots WHERE id=?1 AND status='active' AND expires_at>?2").bind(id, Date.now()).first();
+  const now = Date.now();
+  const lot = await env.DB.prepare("SELECT * FROM auction_lots WHERE id=?1 AND status='active' AND expires_at>?2").bind(id, now).first();
   if (!lot) return out({ ok: false, message: 'Лот уже недоступен.' }, 409);
   if (String(lot.seller_id) === telegramId) return out({ ok: false, message: 'Нельзя купить свой лот.' }, 409);
   const currency = sanitizeCurrency(body.currency);
-  if (currency !== lot.currency || Math.abs(Number(body.expectedUnitPrice) - Number(lot.price)) > 0.0001) return out({ ok: false, message: 'Цена лота изменилась. Обнови аукцион.' }, 409);
-  const qty = Math.min(qtyWanted, Number(lot.qty) || 1);
+  if (currency !== lot.currency || Math.abs(Number(body.expectedUnitPrice) - Number(lot.price)) > 0.0001)
+    return out({ ok: false, message: 'Цена лота изменилась. Обнови аукцион.' }, 409);
+  const oldQty = Number(lot.qty);
+  if (!Number.isSafeInteger(oldQty) || oldQty <= 0 || oldQty > 999)
+    return out({ ok: false, message: 'Количество предмета лота повреждено.' }, 409);
+  const qty = Math.min(qtyWanted, oldQty);
   const gross = Math.round(Number(lot.price) * qty * 100) / 100;
+  if (!Number.isFinite(gross) || gross <= 0 || !['ppa','gram'].includes(currency))
+    return out({ ok: false, message: 'Недопустимая цена лота.' }, 409);
   const save = await loadSaveRow(env, telegramId);
   if (!save) return out({ ok: false, message: 'Облачный сейв покупателя не найден.' }, 409);
+  const oldVersion = Number(save.row.version);
+  if (!Number.isSafeInteger(oldVersion) || oldVersion < 1)
+    return out({ ok: false, message: 'Некорректная версия сохранения.' }, 409);
   const state = save.state;
   const balance = Math.max(0, Number(state[currency]) || 0);
-  if (balance + 1e-9 < gross) return out({ ok: false, message: 'Недостаточно ' + currency.toUpperCase() + '.' }, 409);
+  if (balance + 1e-9 < gross)
+    return out({ ok: false, message: 'Недостаточно ' + currency.toUpperCase() + '.' }, 409);
   const item = safeJson(lot.item_json || '{}', null);
   if (!item) return out({ ok: false, message: 'Предмет лота повреждён.' }, 500);
+  // Legacy gear lots hold one actual original item UID, not one UID per
+  // stacked copy. Reject malformed gear qty>1 instead of cloning an item.
+  if (item.kind === 'gear' && oldQty !== 1)
+    return out({ ok: false, message: 'Экипировка продаётся только по одной вещи.' }, 409);
   const addErr = addAuctionPayload(state, item, qty);
   if (addErr) return out({ ok: false, message: addErr }, 409);
   state[currency] = Math.round((balance - gross) * 100) / 100;
   const raw = JSON.stringify(state);
-  if (new TextEncoder().encode(raw).byteLength > 1_800_000) return out({ ok: false, message: 'Сейв после покупки слишком большой.' }, 413);
-  const nextQty = (Number(lot.qty) || 1) - qty;
+  if (new TextEncoder().encode(raw).byteLength > 1_800_000)
+    return out({ ok: false, message: 'Сейв после покупки слишком большой.' }, 413);
+  const nextQty = oldQty - qty;
   const status = nextQty <= 0 ? 'sold' : 'active';
   const credit = Math.round(gross * 0.90 * 100) / 100;
   const creditId = 'credit_' + crypto.randomUUID();
-  const now = Date.now();
-  const nextSaveVersion=(Number(save.row.version) || 0) + 1;
-  await env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4')
-    .bind(nextSaveVersion, raw, now, telegramId).run();
-  await env.DB.prepare('UPDATE auction_lots SET qty=?1,status=?2 WHERE id=?3').bind(Math.max(0, nextQty), status, id).run();
-  await env.DB.prepare('INSERT INTO auction_credits(id,seller_id,lot_id,sold_qty,currency,amount,created_at,acked) VALUES(?1,?2,?3,?4,?5,?6,?7,0)')
-    .bind(creditId, lot.seller_id, id, qty, lot.currency, credit, now).run();
-  return out({ ok: true, message: 'Покупка подтверждена сервером.', item, qty, total: gross, currency: lot.currency,
-    version:nextSaveVersion,
-    balances: { gram: Math.max(0, Number(state.gram) || 0), ppa: Math.max(0, Number(state.ppa) || 0) } });
+  const guardA = 'ab_' + crypto.randomUUID();
+  const guardB = 'al_' + crypto.randomUUID();
+  const nextSaveVersion = oldVersion + 1;
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS auction_buy_cas_guard(id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))').run();
+  try {
+    // D1.batch is an implicit SQLite transaction. Both CHECK guards
+    // abort it if the buyer save or lot qty/status changed after our read.
+    // Credit creation is inside the SAME transaction: no duplicate payout.
+    await env.DB.batch([
+      env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5')
+        .bind(nextSaveVersion,raw,now,telegramId,oldVersion),
+      env.DB.prepare('INSERT INTO auction_buy_cas_guard(id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)')
+        .bind(guardA),
+      env.DB.prepare("UPDATE auction_lots SET qty=?1,status=?2 WHERE id=?3 AND qty=?4 AND status='active' AND expires_at>?5 AND price=?6 AND currency=?7")
+        .bind(Math.max(0,nextQty),status,id,oldQty,now,Number(lot.price),currency),
+      env.DB.prepare('INSERT INTO auction_buy_cas_guard(id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)')
+        .bind(guardB),
+      env.DB.prepare('INSERT INTO auction_credits(id,seller_id,lot_id,sold_qty,currency,amount,created_at,acked) VALUES(?1,?2,?3,?4,?5,?6,?7,0)')
+        .bind(creditId,lot.seller_id,id,qty,lot.currency,credit,now),
+      env.DB.prepare('DELETE FROM auction_buy_cas_guard WHERE id=?1 OR id=?2').bind(guardA,guardB)
+    ]);
+  } catch (e) {
+    if (/CHECK constraint failed|SQLITE_CONSTRAINT_CHECK|constraint failed/i.test(String(e)))
+      return out({ ok:false, code:'AUCTION_VERSION_CONFLICT',
+        message:'Лот или сохранение изменились. Обнови аукцион.' },409);
+    throw e;
+  }
+  return out({ok:true,message:'Покупка подтверждена сервером.',item,qty,
+    total:gross,currency:lot.currency,version:nextSaveVersion,
+    balances:{gram:Math.max(0,Number(state.gram)||0),
+      ppa:Math.max(0,Number(state.ppa)||0)}});
 }
 async function openStatChest(env, telegramId, body) {
   const tier = normalizeStatChestTier(body && body.tier);
