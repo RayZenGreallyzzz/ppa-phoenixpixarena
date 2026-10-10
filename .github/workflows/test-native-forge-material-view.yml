@@ -19,6 +19,8 @@ on:
       - 'src/native-auction-readonly.js'
       - 'tools/test-native-auction-readonly.mjs'
       - 'tools/test-atomic-auction-buy.mjs'
+      - 'src/shared-auction-actions.js'
+      - 'tools/test-shared-auction-actions.mjs'
       - 'src/online.js'
       - 'tools/generate-shared-forge-recipes.py'
       - 'src/shared-forge-recipes.generated.json'
@@ -50,6 +52,8 @@ jobs:
         run: node --disable-warning=ExperimentalWarning tools/test-native-auction-readonly.mjs
       - name: Verify original Telegram auction purchase is atomic and fee remains 10 percent
         run: node --disable-warning=ExperimentalWarning tools/test-atomic-auction-buy.mjs
+      - name: Verify native gear auction escrow, same-world purchase, return and 10% commission
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-auction-actions.mjs
       - name: Check complete original smith catalog
         run: python3 tools/generate-shared-forge-recipes.py --print-json
       - name: Inspect original Telegram smith code (no game writes)
