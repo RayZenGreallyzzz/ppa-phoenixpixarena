@@ -158,6 +158,7 @@ function stateView(ownerId,saved){
     ?{phoenix:owned(state.feathers.phoenix)}:null;
   return {connected:true,self:{id:String(ownerId)},version:saved.version,
     catalogSourceSha:CANONICAL.smithSha256,
+    catalogRecipeSha:CANONICAL.recipeSignature,
     wallet:{ppa:owned(state.ppa)},materials,feathers,
     offers:ALL_FORGE_RECIPES.map(offer=>({
       id:offer.id,name:offer.name,price:offer.price,currency:'ppa',kind:offer.kind,
