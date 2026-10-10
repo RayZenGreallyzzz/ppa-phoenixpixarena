@@ -8,6 +8,8 @@ on:
       - 'src/shared-forge.js'
       - 'src/worker.js'
       - 'tools/test-shared-forge.mjs'
+      - 'tools/test-shared-sharpen.mjs'
+      - 'src/shared-sharpen.js'
       - 'tools/generate-shared-forge-recipes.py'
       - 'src/shared-forge-recipes.generated.json'
       - '.github/workflows/test-native-forge-material-view.yml'
@@ -26,6 +28,8 @@ jobs:
         run: node tools/test-native-forge-material-view.mjs
       - name: Real original six-gear forge and D1 idempotency parity
         run: node --disable-warning=ExperimentalWarning tools/test-shared-forge.mjs
+      - name: Compare real Telegram blacksmith odds and stats with PPA server sharpening
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-sharpen.mjs
       - name: Check complete original smith catalog
         run: python3 tools/generate-shared-forge-recipes.py --print-json
       - name: Inspect original Telegram smith code (no game writes)
