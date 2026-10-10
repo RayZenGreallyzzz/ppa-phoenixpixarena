@@ -351,6 +351,7 @@
         // On success, keep the save gate closed until startup loads the
         // entire canonical save. The old in-memory INV is not authoritative.
         cloudSaveLoaded=false;
+        window.PPA_AUCTION_CLAIM_RELOAD_REQUIRED=true;
         try{if(window.PPA_CLOUD)window.PPA_CLOUD.creditClaimNeedsReload=true}catch(_){}
         return result;
       }catch(e){
@@ -358,6 +359,7 @@
         // the response was lost. Fail closed until a FULL page reload has
         // applied the canonical server save to the in-memory inventory.
         cloudSaveLoaded=false;
+        window.PPA_AUCTION_CLAIM_RELOAD_REQUIRED=true;
         try{
           if(window.PPA_CLOUD){
             window.PPA_CLOUD.creditClaimNeedsReload=true;
