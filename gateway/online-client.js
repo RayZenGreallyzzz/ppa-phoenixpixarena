@@ -16,6 +16,15 @@
   function saveCreditSet(set){try{localStorage.setItem('ppaAuctionCreditsAppliedV279',JSON.stringify(Array.from(set).slice(-300)))}catch(_){}}
   async function refreshAuction(){
     if(!online()||!PPA.ppaAuctionList)return;
+    // An ambiguous server payout response cannot be retried with a stale
+    // in-memory wallet. Wait for a full authenticated page reload.
+    if(window.PPA_AUCTION_CLAIM_RELOAD_REQUIRED){
+      if(!window.PPA_AUCTION_CLAIM_RECOVERY_NOTICE_SHOWN){
+        window.PPA_AUCTION_CLAIM_RECOVERY_NOTICE_SHOWN=true;
+        try{showPickup('АУКЦИОН · ОБНОВИ ИГРУ ДЛЯ СВЕРКИ ВЫПЛАТЫ','#ffb36b')}catch(_){}
+      }
+      return;
+    }
     try{
       var r=await PPA.ppaAuctionList();
       if(r&&Array.isArray(r.lots)&&window.PPA_SET_AUCTION_MARKET)window.PPA_SET_AUCTION_MARKET(r.lots);
