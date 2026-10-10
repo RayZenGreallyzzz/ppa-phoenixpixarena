@@ -1,0 +1,29 @@
+name: Guard cross-client auction seller credits
+on:
+  pull_request:
+    paths:
+      - 'src/shared-auction-credit-claim.js'
+      - 'src/online.js'
+      - 'gateway/ppa-bridge.js'
+      - 'gateway/online-client.js'
+      - 'tools/test-shared-auction-credit-claim.mjs'
+      - 'tools/test-telegram-auction-credit-cutover.mjs'
+      - 'tools/test-telegram-auction-claim-gate.mjs'
+      - '.github/workflows/test-auction-credit-claim-safety.yml'
+permissions:
+  contents: read
+jobs:
+  seller-credit-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Atomic seller credit + save transaction checks
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-auction-credit-claim.mjs
+      - name: Legacy Telegram cutoff and rollback safety
+        run: node --disable-warning=ExperimentalWarning tools/test-telegram-auction-credit-cutover.mjs
+      - name: Dropped response and pending save safety
+        run: node --disable-warning=ExperimentalWarning tools/test-telegram-auction-claim-gate.mjs
