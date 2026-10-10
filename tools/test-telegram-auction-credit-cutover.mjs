@@ -19,7 +19,7 @@ assert(front.includes('if(changed){saveCreditSet(seen);saveGame()'),
 assert(front.includes('NEVER call saveGame()'),'No full stale save after server payout');
 assert(sdk.includes('serverSellerCreditClaimGate=true'),'Cloud save gate not closed during claim');
 assert(sdk.includes('cloudSaveLoaded=false'),'Cloud save must stay closed until reload');
-assert(sdk.includes('await saveQueue.catch(function(){});'),'Pending saves must drain before claim');
+assert(sdk.includes('await saveQueue;'),'Pending saves must drain AND propagate errors before claim');
 assert.equal(serverCreditClaimsCutoff({PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED:'1'}),null);
 assert.equal(serverCreditClaimsCutoff({PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED:'1',
  PPA_AUCTION_SERVER_CREDIT_CUTOFF_MS:'100'}),100);
