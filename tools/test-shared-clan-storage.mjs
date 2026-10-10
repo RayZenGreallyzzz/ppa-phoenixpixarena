@@ -25,9 +25,10 @@ sql.prepare('INSERT INTO clan_meta VALUES(?,?,?,?,?,?)').run(
 sql.prepare('INSERT INTO saves VALUES(?,?,?,?)').run('ownerA',6,json(originalHero),100);
 sql.prepare('INSERT INTO saves VALUES(?,?,?,?)').run('ownerB',2,json(hero('leader-bag')),100);
 let injection=null, writes=0;
-const db={prepare(query){const stmt=sql.prepare(query.replace(/\?(\d+)/g,'?'));
+const db={prepare(query){const positions=[...query.matchAll(/\?(\d+)/g)].map(x=>Number(x[1]));
+ const stmt=sql.prepare(query.replace(/\?(\d+)/g,'?'));
  let bound=[];
- return {query,debugArgs:()=>bound,bind(...args){bound=args;return this},
+ return {query,debugArgs:()=>bound,bind(...args){bound=positions.length?positions.map(n=>args[n-1]):args;return this},
   first(){return stmt.get(...bound)||null},
   run(){const result=stmt.run(...bound);return{meta:{changes:Number(result.changes)}}}};
 },async batch(statements){
