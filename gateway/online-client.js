@@ -35,7 +35,9 @@
       // INV/localStorage. Pre-cutoff credits keep the old flow above.
       // Old cached Telegram clients receive no new server-mode credits
       // from /api/auction/list, preventing double local payment.
-      if(r&&r.serverCreditClaimMode&&credits.length===0&&
+      // Legacy credits already seen/awaiting ACK must not stall NEW server
+      // claims forever. Only defer during a tick that changed local INV.
+      if(r&&r.serverCreditClaimMode&&!changed&&
          PPA.ppaAuctionServerCredits&&PPA.ppaAuctionClaimCredit&&
          !window.PPA_AUCTION_SERVER_CLAIM_PENDING){
         var pending=await PPA.ppaAuctionServerCredits();
