@@ -38,6 +38,7 @@ export async function nativeAuctionReadOnly(env,ownerId,loadSave){
   return err(409,'PPA_AUCTION_SAVE_UNAVAILABLE','Сохранение PPA ещё не подтверждено.');
  const state=saved.state,now=Date.now();
  const enabled=env.PPA_AUCTION_ACTIONS_ENABLED==='1';
+ const canClaim=enabled&&env.PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED==='1';
  let rows,credits,expired;
  try{
   [rows,credits,expired]=await Promise.all([
@@ -84,7 +85,8 @@ export async function nativeAuctionReadOnly(env,ownerId,loadSave){
  const pendingCredits=(credits.results||[]).map(row=>({
   id:id(row.id).slice(0,100),lotId:id(row.lot_id).slice(0,100),
   soldQty:Number(row.sold_qty)||0,currency:String(row.currency||'').toLowerCase(),
-  amount:money(Number(row.amount)),createdAt:Number(row.created_at)||0
+  amount:money(Number(row.amount)),createdAt:Number(row.created_at)||0,
+  canClaim:canClaim
  })).filter(x=>x.amount!==null);
  const bag=Array.isArray(state.bag)?state.bag.slice(0,100).map(item=>item&&typeof item==='object'?{
    uid:typeof item.uid==='string'?item.uid:null,
@@ -95,11 +97,13 @@ export async function nativeAuctionReadOnly(env,ownerId,loadSave){
  }:null).filter(Boolean):[];
  return {status:200,data:{
   ok:true,gameId:'phoenix-pix-arena',contract:'ppa-auction-v1',
-  ownerId:owner,actions:enabled?['place','buy','cancel','recover']:[],
+  ownerId:owner,actions:enabled?
+   (canClaim?['place','buy','cancel','recover','claim']:['place','buy','cancel','recover']):[],
   state:{connected:true,self:{id:owner},version:saved.version,
    wallet:{ppa:money(Number(state.ppa)),gram:money(Number(state.gram))},
    commissionPct:10,source:'Telegram PPA auction_lots/auction_credits',
    lots,mine,recoverable,pendingCredits,bag,
-   maxSellSlots:originalAuctionSlots(state),settlementEnabled:enabled}
+   maxSellSlots:originalAuctionSlots(state),settlementEnabled:enabled,
+   serverCreditClaimsEnabled:canClaim}
  }};
 }
