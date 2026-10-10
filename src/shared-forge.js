@@ -1,4 +1,5 @@
 import { executeNativeCommandOnce } from './native-action-ledger.js';
+import { sharpenOriginalPPAItem, ENH_CHANCE_GAME, ENH_CHANCE_RUNE_GAME, MODES, SHARPENABLE_SLOTS } from './shared-sharpen.js';
 import CANONICAL from './shared-forge-recipes.generated.json' with { type: 'json' };
 
 // All public original Telegram smith recipes, source SHA-locked by the
@@ -156,10 +157,23 @@ function stateView(ownerId,saved){
       .map(([name,value])=>[name,owned(value)])):null;
   const feathers=state.feathers&&typeof state.feathers==='object'&&!Array.isArray(state.feathers)
     ?{phoenix:owned(state.feathers.phoenix)}:null;
+  const stones=state.stones&&typeof state.stones==='object'&&!Array.isArray(state.stones)
+    ?Object.fromEntries(['normal','premium','rune'].map(key=>[key,owned(state.stones[key])])):null;
+  // Never transmit unbounded visuals or any client-crafted stat rules here.
+  // Only the actual owned bag item IDs, slots and levels for this character.
+  const enhanceItems=Array.isArray(state.bag)?state.bag.slice(0,100)
+    .filter(item=>item&&typeof item==='object'&&SHARPENABLE_SLOTS.includes(item.slot)&&
+      typeof item.uid==='string'&&item.uid.length<=160)
+    .map(item=>({uid:item.uid,name:String(item.name||'Предмет').slice(0,100),
+      slot:item.slot,rarity:String(item.rarity||'common'),
+      enh:Number.isInteger(item.enh)?item.enh:0,
+      special:!!item.stellarGuardian||item.petName==='Звёздный Хранитель'})):null;
   return {connected:true,self:{id:String(ownerId)},version:saved.version,
     catalogSourceSha:CANONICAL.smithSha256,
     catalogRecipeSha:CANONICAL.recipeSignature,
-    wallet:{ppa:owned(state.ppa)},materials,feathers,
+    wallet:{ppa:owned(state.ppa)},materials,feathers,stones,enhanceItems,
+    enhanceRules:{normal:ENH_CHANCE_GAME.slice(1),rune:ENH_CHANCE_RUNE_GAME.slice(1),
+      normalMax:5,premiumMax:7,stoneModes:MODES},
     offers:ALL_FORGE_RECIPES.map(offer=>({
       id:offer.id,name:offer.name,price:offer.price,currency:'ppa',kind:offer.kind,
       rarity:offer.rarity,slot:offer.slot,materials:offer.materials.map(x=>({...x}))
@@ -167,9 +181,12 @@ function stateView(ownerId,saved){
 }
 
 export async function sharedForgeOperation(env,ownerId,operation,body,persistence){
+  const availableActions=[];
+  if(env.PPA_FORGE_ACTIONS_ENABLED==='1')availableActions.push('craft');
+  if(env.PPA_FORGE_ENHANCE_ENABLED==='1')availableActions.push('enhance');
   const envelope=data=>({...data,gameId:'phoenix-pix-arena',
     contract:'ppa-forge-v1',ownerId:String(ownerId),
-    actions:env.PPA_FORGE_ACTIONS_ENABLED==='1'?['craft']:[]});
+    actions:availableActions});
   const load=async()=>{
     const saved=await persistence.load(ownerId);
     return saved.ok&&!saved.bootstrapFromProfile&&saved.state&&
@@ -180,25 +197,45 @@ export async function sharedForgeOperation(env,ownerId,operation,body,persistenc
     return saved?{status:200,data:envelope({ok:true,state:stateView(ownerId,saved)})}
       :error(409,'PPA_CHARACTER_SAVE_NOT_READY','Сначала синхронизируй персонажа PPA.');
   }
-  if(env.PPA_FORGE_ACTIONS_ENABLED!=='1')
-    return error(404,'NOT_FOUND','Forge API route not found');
-  if(body?.action!=='craft'||!RECIPE_INDEX.has(body.id)||
-    !Number.isSafeInteger(body.version)||body.version<1)
-    return error(400,'FORGE_RECIPE_INVALID','Неверный рецепт или версия сохранения.');
-  const command={service:'forge',action:'craft',id:body.id,version:body.version};
+  if(!availableActions.includes(body?.action))
+    return error(404,'NOT_FOUND','Forge API action not enabled');
+  if(!Number.isSafeInteger(body.version)||body.version<1)
+    return error(400,'FORGE_VERSION_INVALID','Неверная версия сохранения.');
+  const action=body.action;
+  if(action==='craft'&&!RECIPE_INDEX.has(body.id))
+    return error(400,'FORGE_RECIPE_INVALID','Неверный рецепт.');
+  if(action==='enhance'&&
+    (typeof body.uid!=='string'||body.uid.length>160||!MODES.includes(body.stone)))
+    return error(400,'FORGE_SHARPEN_INVALID','Неверная вещь или камень заточки.');
+  const command=action==='craft'
+    ?{service:'forge',action,id:body.id,version:body.version}
+    :{service:'forge',action,uid:body.uid,stone:body.stone,version:body.version};
   return executeNativeCommandOnce(env,String(ownerId),body.requestId,command,async()=>{
     const finish=r=>({status:r.status,data:envelope({...r.data,requestId:body.requestId,commandStatus:'done'})});
     const saved=await load();
     if(!saved)return finish(error(409,'PPA_CHARACTER_SAVE_NOT_READY','Сохранение не готово.'));
     if(saved.version!==command.version)
       return finish(error(409,'SAVE_VERSION_CONFLICT','Обнови кузницу: сохранение изменилось.'));
-    const uid='craft_'+crypto.randomUUID().replace(/-/g,'');
-    const crafted=craftOriginalForgeItem(saved.state,command.id,uid);
-    if(crafted.status!==200)return finish(crafted);
-    const write=await persistence.save(ownerId,crafted.state,saved.version);
+    let outcome;
+    if(action==='craft'){
+      const uid='craft_'+crypto.randomUUID().replace(/-/g,'');
+      outcome=craftOriginalForgeItem(saved.state,command.id,uid);
+    }else{
+      // Chance is drawn ONLY inside the authenticated Worker, never from the
+      // client request. 32-bit unsigned native Web Crypto random fraction.
+      const words=new Uint32Array(1);
+      crypto.getRandomValues(words);
+      const roll=words[0]/4294967296*100;
+      outcome=sharpenOriginalPPAItem(saved.state,command.uid,command.stone,roll);
+    }
+    if(outcome.status!==200)return finish(outcome);
+    const write=await persistence.save(ownerId,outcome.state,saved.version);
     if(!write.ok)return finish({status:Number(write.status)||409,data:write});
-    return finish({status:200,data:{ok:true,receipt:crafted.receipt,
-      message:'Создано: '+crafted.receipt.name,
-      state:stateView(ownerId,{state:crafted.state,version:write.version})}});
+    const msg=action==='enhance'
+      ?{success:'Заточка успешна',protected:'Неудача · премиум сохранил вещь',
+        downgrade:'Неудача · эпик потерял уровень',destroyed:'Неудача · вещь сгорела'}[outcome.receipt.outcome]
+      :'Создано: '+outcome.receipt.name;
+    return finish({status:200,data:{ok:true,receipt:outcome.receipt,
+      message:msg,state:stateView(ownerId,{state:outcome.state,version:write.version})}});
   });
 }
