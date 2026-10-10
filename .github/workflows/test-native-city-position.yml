@@ -1,0 +1,24 @@
+name: Verify native shared city position
+on:
+  pull_request:
+    paths:
+      - 'src/realtime-stable.js'
+      - 'tools/test-native-city-position.mjs'
+      - '.github/workflows/test-native-city-position.yml'
+permissions:
+  contents: read
+jobs:
+  city:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          node --check src/realtime-stable.js
+          node tools/test-native-city-position.mjs
+          node tools/test-native-realtime-ticket.mjs
+          node tools/test-native-character-identity.mjs
+          node tools/test-native-npc-readonly.mjs
+          node tools/test-godot-state-readonly-runtime.mjs
