@@ -4,6 +4,7 @@ on:
     paths:
       - 'src/native-npc-readonly.js'
       - 'tools/test-native-forge-material-view.mjs'
+      - 'tools/audit-original-smith-contract.mjs'
       - '.github/workflows/test-native-forge-material-view.yml'
 permissions:
   contents: read
@@ -18,3 +19,5 @@ jobs:
           node-version: '22'
       - name: Signed forge projection parity (offline, no D1)
         run: node tools/test-native-forge-material-view.mjs
+      - name: Inspect original Telegram smith code (no game writes)
+        run: node tools/audit-original-smith-contract.mjs
