@@ -162,7 +162,7 @@ const input={method:'POST',json:async()=>({action:'craft',id:'gear:epic:ring',
 const locked=await route(input,{},url);
 assert.equal(locked.status,404);
 assert.equal(authCount,0,'Default-off forge route must not attempt login');
-const on={...env,PPA_FORGE_READ_ENABLED:'1'};
+const on={...env,PPA_FORGE_READ_ENABLED:'1',PPA_FORGE_ACTIONS_ENABLED:'0'};
 assert.equal((await route(input,on,url)).status,404,'Independent forge action gate bypassed');
 signedGame='other';
 assert.equal((await route(input,{...on,PPA_FORGE_ACTIONS_ENABLED:'1'},url)).status,403);
