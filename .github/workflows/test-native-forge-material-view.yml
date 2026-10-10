@@ -18,6 +18,8 @@ on:
       - 'tools/test-shared-clan-storage.mjs'
       - 'src/native-auction-readonly.js'
       - 'tools/test-native-auction-readonly.mjs'
+      - 'tools/test-atomic-auction-buy.mjs'
+      - 'src/online.js'
       - 'tools/generate-shared-forge-recipes.py'
       - 'src/shared-forge-recipes.generated.json'
       - '.github/workflows/test-native-forge-material-view.yml'
@@ -46,6 +48,8 @@ jobs:
         run: node --disable-warning=ExperimentalWarning tools/test-shared-clan-storage.mjs
       - name: Verify native auction uses the ORIGINAL Telegram PPA listings (safe read-only)
         run: node --disable-warning=ExperimentalWarning tools/test-native-auction-readonly.mjs
+      - name: Verify original Telegram auction purchase is atomic and fee remains 10 percent
+        run: node --disable-warning=ExperimentalWarning tools/test-atomic-auction-buy.mjs
       - name: Check complete original smith catalog
         run: python3 tools/generate-shared-forge-recipes.py --print-json
       - name: Inspect original Telegram smith code (no game writes)
