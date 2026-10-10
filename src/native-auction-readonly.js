@@ -1,5 +1,6 @@
 // Authenticated read-only view over the exact existing Telegram PPA
 // auction_lots and auction_credits. Never mint items or debit balances.
+import {originalAuctionSlots} from './online.js';
 const err=(status,code,message)=>({status,data:{ok:false,code,message}});
 const json=(value,fallback)=>{try{return JSON.parse(value)}catch{return fallback}};
 const money=n=>Number.isFinite(n)&&n>=0?Math.round(n*100)/100:null;
@@ -70,6 +71,7 @@ export async function nativeAuctionReadOnly(env,ownerId,loadSave){
   state:{connected:true,self:{id:owner},version:saved.version,
    wallet:{ppa:money(Number(state.ppa)),gram:money(Number(state.gram))},
    commissionPct:10,source:'Telegram PPA auction_lots/auction_credits',
-   lots,mine,pendingCredits,bag,settlementEnabled:enabled}
+   lots,mine,pendingCredits,bag,
+   maxSellSlots:originalAuctionSlots(state),settlementEnabled:enabled}
  }};
 }
