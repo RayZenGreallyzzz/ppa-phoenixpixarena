@@ -3033,6 +3033,35 @@ export class RealtimeHub extends BaseRealtimeHub {
       return;
     }
 
+    // PPA_NATIVE_CITY_POSITION_V1: position-only adapter for the authenticated
+    // native city client. Legacy move carries HP/combat stats; never synthesize
+    // those fields from an incomplete Godot save snapshot just to move a hero.
+    if (m.type === 'player-position') {
+      const reject = code => wsJson(ws, { type:'player-position-rejected', code, room:cleanRoom(a.room), ts:now });
+      if (String(this.env.PPA_GODOT_REALTIME_ENABLED || '') !== '1') { reject('NATIVE_REALTIME_DISABLED'); return; }
+      const room = cleanRoom(a.room);
+      if (room !== 'safe' || m.room !== 'safe' || a.arenaMatchId) { reject('CITY_ONLY'); return; }
+      if (a.deadLocked) { reject('PLAYER_DEAD'); return; }
+      if (typeof m.x !== 'number' || typeof m.y !== 'number' || !Number.isFinite(m.x) || !Number.isFinite(m.y) ||
+          m.x < 0 || m.y < 0 || m.x > 2822 || m.y > 2822) { reject('INVALID_POSITION'); return; }
+      if (now - (Number(a.lastNativePosition) || 0) < 120) return;
+      a.x = Math.round(m.x * 10) / 10;
+      a.y = Math.round(m.y * 10) / 10;
+      if (typeof m.f === 'number' && Number.isFinite(m.f)) a.f = Math.max(0, Math.min(7, Math.round(m.f)));
+      a.a = m.a === 'run' ? 'run' : 'idle';
+      a.lastNativePosition = now;
+      a.lastSeenAt = now;
+      a.q = (Number(a.q) || 0) + 1;
+      const pushSnapshot = now - (Number(a.lastSnapshotPush) || 0) >= 1200;
+      if (pushSnapshot) a.lastSnapshotPush = now;
+      ws.serializeAttachment(a);
+      // Reuse Telegram's move/snapshot receiver and exact server-owned pid.
+      this.roomBroadcast(room, { type:'move', player:packetFromAtt(a), room, ts:now }, ws);
+      wsJson(ws, { type:'player-position-ack', room, x:a.x, y:a.y, f:a.f, a:a.a, q:a.q, ts:now });
+      if (pushSnapshot) this.sendRoomSnapshot(ws, room);
+      return;
+    }
+
     if (m.type === 'move') {
       if (now - (Number(a.lastMove) || 0) < 90) return;
 
