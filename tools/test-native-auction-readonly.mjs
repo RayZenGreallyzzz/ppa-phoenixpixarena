@@ -45,7 +45,7 @@ const beforeLots=db.prepare('SELECT * FROM auction_lots ORDER BY id').all();
 const beforeCredits=db.prepare('SELECT * FROM auction_credits ORDER BY id').all();
 const a=await nativeAuctionReadOnly(env,'ownerA',load);
 assert.equal(a.status,200,JSON.stringify(a));
-assert.equal(a.data.contract,'ppa-auction-readonly-v1');
+assert.equal(a.data.contract,'ppa-auction-v1');
 assert.equal(a.data.state.commissionPct,10);
 assert.deepEqual(a.data.actions,[],'No unaudited buy/sell actions allowed');
 assert.equal(a.data.state.lots.length,1);
