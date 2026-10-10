@@ -88,6 +88,41 @@ assert.equal(state.bag.length,1);
 assert.deepEqual(state.bag[0],gear('cancel-weapon'));
 assert.deepEqual(await send('seller','cancel',{lotId:id2},
  {requestId:'e'.repeat(32),version:7}),cancel);
+const expiry=await send('seller','place',{uid:'cancel-weapon',price:200,currency:'ppa'},
+ {requestId:'7'.repeat(32),version:8});
+assert.equal(expiry.status,200,JSON.stringify(expiry));
+const expiredId=expiry.data.receipt.id;
+sql.prepare("UPDATE auction_lots SET status='expired',expires_at=? WHERE id=?")
+ .run(Date.now()-1000,expiredId);
+const expiredList=await nativeAuctionReadOnly(env,'seller',owner=>persist.load(owner));
+assert.equal(expiredList.data.state.recoverable.length,1,'Unclaimed original item must be visible');
+assert.equal(expiredList.data.state.recoverable[0].uid,'cancel-weapon');
+const stolen=await send('buyer','recover',{lotId:expiredId},
+ {requestId:'8'.repeat(32),version:6});
+assert.equal(stolen.status,409,'Other players cannot return a seller escrow');
+let sellerRow=sql.prepare("SELECT version,state_json FROM saves WHERE telegram_id='seller'").get();
+const unfilled=JSON.parse(sellerRow.state_json);
+const filled=structuredClone(unfilled);
+filled.bag=Array.from({length:100},(_,i)=>({uid:'filler'+i}));
+sql.prepare("UPDATE saves SET state_json=? WHERE telegram_id='seller'")
+ .run(JSON.stringify(filled));
+const full=await send('seller','recover',{lotId:expiredId},
+ {requestId:'9'.repeat(32),version:9});
+assert.equal(full.status,409);
+assert.equal(full.data.code,'AUCTION_BAG_FULL');
+assert.equal(sql.prepare('SELECT status FROM auction_lots WHERE id=?').get(expiredId).status,'expired');
+sql.prepare("UPDATE saves SET state_json=? WHERE telegram_id='seller'")
+ .run(JSON.stringify(unfilled));
+const recovered=await send('seller','recover',{lotId:expiredId},
+ {requestId:'0'.repeat(32),version:9});
+assert.equal(recovered.status,200,JSON.stringify(recovered));
+assert.equal(recovered.data.receipt.enh,7);
+state=JSON.parse(sql.prepare("SELECT state_json FROM saves WHERE telegram_id='seller'").get().state_json);
+assert.deepEqual(state.bag[0],gear('cancel-weapon'));
+assert.equal(sql.prepare('SELECT status FROM auction_lots WHERE id=?').get(expiredId).status,'returned');
+assert.deepEqual(await send('seller','recover',{lotId:expiredId},
+ {requestId:'0'.repeat(32),version:9}),recovered);
+assert.equal(sql.prepare('SELECT status FROM auction_lots WHERE id=?').get(expiredId).status,'returned');
 const no=await send('buyer','cancel',{lotId:id2},{requestId:'f'.repeat(32),version:6});
 assert.equal(no.status,409);
 const legacy=await send('buyer','buy',{lotId:'legacy123',expectedUnitPrice:100,currency:'ppa'},
@@ -96,4 +131,4 @@ assert.equal(legacy.status,400,'Legacy lots remain inaccessible from native buy 
 const off=await sharedAuctionAction({...env,PPA_AUCTION_ACTIONS_ENABLED:'0'},'buyer',{
  action:'buy',version:6,lotId:id,expectedUnitPrice:1200,currency:'ppa',requestId:'2'.repeat(32)},persist);
 assert.equal(off.status,404);
-console.log('PPA_SHARED_AUCTION_ESCROW_OK listed_real_uid=1 original_plus7=1 buyer_wallet=1 native_buy=1 cancel_restore=1 fee=10 replay=1 legacy_guard=1');
+console.log('PPA_SHARED_AUCTION_ESCROW_OK listed_real_uid=1 original_plus7=1 buyer_wallet=1 native_buy=1 cancel_restore=1 expired_recover=1 full_bag_wait=1 other_owner_denied=1 fee=10 replay=1 legacy_guard=1');
