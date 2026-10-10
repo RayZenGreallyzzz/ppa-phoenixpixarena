@@ -1378,7 +1378,9 @@ async function handlePhoenixGameApi(request, env, url) {
       const operation = url.pathname.endsWith('/state') ? 'state' : 'action';
       if (request.method !== (operation === 'state' ? 'GET' : 'POST'))
         return apiError('Method not allowed', 405, 'METHOD_NOT_ALLOWED');
-      if (operation === 'action' && String(env.PPA_FORGE_ACTIONS_ENABLED || '') !== '1')
+      if (operation === 'action' && !(body.action === 'craft' &&
+          String(env.PPA_FORGE_ACTIONS_ENABLED || '') === '1') &&
+          !(body.action === 'enhance' && String(env.PPA_FORGE_ENHANCE_ENABLED || '') === '1'))
         return apiError('Game API route not found', 404, 'NOT_FOUND');
       const auth = await phoenixGameSessionFromRequest(request, env, true);
       if (auth.gameId !== 'phoenix-pix-arena') return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
