@@ -23,6 +23,9 @@ on:
       - 'tools/test-shared-auction-actions.mjs'
       - 'src/shared-auction-credit-claim.js'
       - 'tools/test-shared-auction-credit-claim.mjs'
+      - 'tools/test-telegram-auction-credit-cutover.mjs'
+      - 'gateway/online-client.js'
+      - 'gateway/ppa-bridge.js'
       - 'tools/audit-original-auction-contract.mjs'
       - 'src/online.js'
       - 'tools/generate-shared-forge-recipes.py'
@@ -61,6 +64,8 @@ jobs:
         run: node --disable-warning=ExperimentalWarning tools/audit-original-auction-contract.mjs
       - name: Verify safe seller PPA and Gram credits with atomic save plus ACK
         run: node --disable-warning=ExperimentalWarning tools/test-shared-auction-credit-claim.mjs
+      - name: Confirm original Telegram local-credit fallback and server cutoff cannot duplicate payouts
+        run: node --disable-warning=ExperimentalWarning tools/test-telegram-auction-credit-cutover.mjs
       - name: Check complete original smith catalog
         run: python3 tools/generate-shared-forge-recipes.py --print-json
       - name: Inspect original Telegram smith code (no game writes)
