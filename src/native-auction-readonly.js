@@ -2,6 +2,7 @@
 // auction_lots and auction_credits. Never mint items or debit balances.
 import {originalAuctionSlots} from './online.js';
 import {nativeEscrowProofMatches} from './shared-auction-actions.js';
+import {serverCreditClaimsCutoff} from './shared-auction-credit-claim.js';
 const err=(status,code,message)=>({status,data:{ok:false,code,message}});
 const json=(value,fallback)=>{try{return JSON.parse(value)}catch{return fallback}};
 const money=n=>Number.isFinite(n)&&n>=0?Math.round(n*100)/100:null;
@@ -38,7 +39,8 @@ export async function nativeAuctionReadOnly(env,ownerId,loadSave){
   return err(409,'PPA_AUCTION_SAVE_UNAVAILABLE','Сохранение PPA ещё не подтверждено.');
  const state=saved.state,now=Date.now();
  const enabled=env.PPA_AUCTION_ACTIONS_ENABLED==='1';
- const canClaim=enabled&&env.PPA_AUCTION_SERVER_CREDIT_CLAIM_ENABLED==='1';
+ const cutoff=enabled?serverCreditClaimsCutoff(env):null;
+ const canClaim=cutoff!==null;
  let rows,credits,expired;
  try{
   [rows,credits,expired]=await Promise.all([
@@ -86,7 +88,7 @@ export async function nativeAuctionReadOnly(env,ownerId,loadSave){
   id:id(row.id).slice(0,100),lotId:id(row.lot_id).slice(0,100),
   soldQty:Number(row.sold_qty)||0,currency:String(row.currency||'').toLowerCase(),
   amount:money(Number(row.amount)),createdAt:Number(row.created_at)||0,
-  canClaim:canClaim
+  canClaim:canClaim&&Number(row.created_at)>=cutoff
  })).filter(x=>x.amount!==null);
  const bag=Array.isArray(state.bag)?state.bag.slice(0,100).map(item=>item&&typeof item==='object'?{
    uid:typeof item.uid==='string'?item.uid:null,
