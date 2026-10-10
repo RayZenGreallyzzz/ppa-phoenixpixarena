@@ -1,0 +1,40 @@
+name: One-shot Player3D conflict repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/one-shot-player3d-conflict-fix-20261003.mjs
+      - .github/workflows/one-shot-player3d-conflict-fix-20261003.yml
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install
+      - name: Apply repair
+        run: node tools/one-shot-player3d-conflict-fix-20261003.mjs
+      - name: Validate changed JavaScript
+        run: |
+          node --check gateway/player-3d-unified-runtime.js
+          node --check gateway/remote-player-3d-dispatch.js
+          node --check tools/postbuild-player-3d-unified-20261002.mjs
+          npm run build
+      - name: Commit repaired sources
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gateway/player-3d-unified-runtime.js gateway/remote-player-3d-dispatch.js tools/postbuild-player-3d-unified-20261002.mjs package.json
+          git commit -m "Fix Player3D state and scene conflicts"
+          git push

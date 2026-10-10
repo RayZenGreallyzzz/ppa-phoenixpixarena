@@ -2,6 +2,7 @@ name: Test player source cleanup
 on:
   push:
     branches:
+      - main
       - stage-5a1-player-source-assets-20261002
       - stage-5a2-ai-sprite-source-cleanup-20261002
       - stage-5a2-recovery-audit-20261002
@@ -22,6 +23,7 @@ jobs:
       - run: node --check tools/player-source-cleanup-20261002.mjs
       - run: node --check tools/test-player-source-cleanup-20261002.mjs
       - run: node --check tools/postbuild-player-3d-unified-20261002.mjs
+      - run: node --check tools/audit-player-render-ownership-20261003.mjs
       - name: Verify canonical packed-source transform
         run: node tools/test-player-source-cleanup-20261002.mjs
       - name: Verify obsolete cleanup layers are gone
@@ -30,21 +32,55 @@ jobs:
           test ! -e tools/postbuild-player-sprite-asset-cleanup-20261002.mjs
           test ! -e tools/postbuild-player-generic-sprite-cleanup-20261002.mjs
           test ! -e tools/postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs
+          test ! -e tools/postbuild-player-3d-local-lifecycle-20261003.mjs
           test ! -e tools/fix-stage-5a2-early-metadata-guards.mjs
           test ! -e .github/workflows/fix-stage-5a2-early-metadata-guards.yml
           test ! -e .github/workflows/test-stage-5a2-source-transform-temp.yml
-          ! grep -q "postbuild-player-sprite-preload-cleanup-20261002.mjs\|postbuild-player-sprite-asset-cleanup-20261002.mjs\|postbuild-player-generic-sprite-cleanup-20261002.mjs\|postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs" package.json
+          ! grep -q "postbuild-player-sprite-preload-cleanup-20261002.mjs\|postbuild-player-sprite-asset-cleanup-20261002.mjs\|postbuild-player-generic-sprite-cleanup-20261002.mjs\|postbuild-ai-training-sprite-metadata-cleanup-20261002.mjs\|postbuild-player-3d-local-lifecycle-20261003.mjs" package.json
           grep -q "postbuild-player-3d-unified-20261002.mjs" package.json
+      - name: Verify optimized melee Player3D source
+        run: |
+          grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" gateway/player-3d-unified-runtime.js
+          grep -q "unified-v7-melee-clip-filter" gateway/player-3d-unified-runtime.js
+          ! grep -q "lockMeleeAttackLowerBody" gateway/player-3d-unified-runtime.js
+          ! grep -q "captureMeleeLowerBody" gateway/player-3d-unified-runtime.js
+          ! grep -q "meleeLowerBody" gateway/player-3d-unified-runtime.js
       - name: Build final production output
         run: npm run build | tee /tmp/ppa-stage5a2-build.log
+      - name: Audit final player render ownership
+        run: node tools/audit-player-render-ownership-20261003.mjs
       - name: Verify Stage 5A2 source cleanup and final Player3D output
         run: |
           grep -q "PPA build complete: 650 unique embedded images externalized." /tmp/ppa-stage5a2-build.log
           grep -q "PPA_PLAYER_SPRITE_SOURCE_CLEANUP_20261002" public/index.html
           grep -q "PPA_AI_TRAINING_SPRITE_SOURCE_CLEANUP_20261002" public/index.html
           grep -q "__PPA_PLAYER3D_UNIFIED_V2" public/game/player-3d-unified-runtime.js
-          grep -q "worldX:Number(P.x),worldY:Number(P.y)" public/index.html
-          grep -q "worldX:Number(r.x),worldY:Number(r.y)" public/game/remote-player-3d-dispatch.js
+          grep -q "PPA_PLAYER3D_RUNTIME_OWNS_LOCAL_STATE_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_STABLE_HUD_ANCHOR_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_ROOT_MOTION_LOCK_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003" public/game/player-3d-unified-runtime.js
+          grep -q "unified-v7-melee-clip-filter" public/game/player-3d-unified-runtime.js
+          ! grep -q "lockMeleeAttackLowerBody" public/game/player-3d-unified-runtime.js
+          ! grep -q "captureMeleeLowerBody" public/game/player-3d-unified-runtime.js
+          ! grep -q "meleeLowerBody" public/game/player-3d-unified-runtime.js
+          grep -q "e.model.position.x=e.modelBaseX" public/game/player-3d-unified-runtime.js
+          grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" public/game/player-3d-unified-runtime.js
+          grep -q "const stableHeight=" public/game/player-3d-unified-runtime.js
+          grep -q "const headX=Math.round(Number(h.headX));" public/game/player-3d-unified-runtime.js
+          ! grep -q "if(e.head)e.head.getWorldPosition(scratchHead);" public/game/player-3d-unified-runtime.js
+          grep -q "scratchRay.setFromCamera(scratchNdc,camera);" public/game/player-3d-unified-runtime.js
+          grep -q "scratchRay.ray.intersectPlane(scratchPlane,scratchGround)" public/game/player-3d-unified-runtime.js
+          grep -q "syncLocalFromGame(now);" public/game/player-3d-unified-runtime.js
+          grep -q "threeInitPromise" public/game/player-3d-unified-runtime.js
+          ! grep -q "localStateMissingSince" public/game/player-3d-unified-runtime.js
+          ! grep -q "e.kind==='local'?500:1800" public/game/player-3d-unified-runtime.js
+          ! grep -q "__PPA3D_LOCAL_PENDING" public/game/player-3d-unified-runtime.js
+          ! grep -q "__PPA3D_LOCAL_PENDING" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261003u17" public/index.html
+          grep -q "remote-player-3d-dispatch.js?v=20261003u7" public/index.html
+          grep -q "PPA_PLAYER3D_REMOTE_SCRATCH_20261003" public/game/remote-player-3d-dispatch.js
+          grep -q "__ppa3DVisualPosition" public/game/remote-player-3d-dispatch.js
+          grep -q "__ppa3DAnchor" public/game/remote-player-3d-dispatch.js
           grep -q "const PLAYER_ANIM_TIMING=" public/index.html
           grep -q "const V174_AI_CLASS=" public/index.html
           grep -q "function v174SpawnAiTrainingFighter" public/index.html
@@ -59,9 +95,9 @@ jobs:
           test -e public/game/dungeon60-dragon.js
           test -e public/game/boss-drop-boost.js
           test -e public/game/clan-boss-loot.js
-          for sym in GNOME_IDLE_SRC GNOME_RUN_SRC GNOME_ATTACK_SRC ARCHER_IDLE_SRC ARCHER_RUN_SRC ARCHER_ATTACK_SRC ASSASSIN_IDLE_SRC ASSASSIN_RUN_SRC ASSASSIN_ATTACK_SRC TANK_IDLE_SRC TANK_RUN_SRC TANK_ATTACK_SRC BERSERKER_IDLE_SRC BERSERKER_RUN_SRC BERSERKER_ATTACK_SRC PRIEST_IDLE_SRC PRIEST_RUN_SRC PRIEST_ATTACK_SRC MAGE_IDLE_SRC MAGE_RUN_SRC MAGE_ATTACK_SRC PALADIN_IDLE_SRC PALADIN_RUN_SRC PALADIN_ATTACK_SRC imgGnomeIdle imgGnomeRun imgGnomeAttack imgArcherIdle imgArcherRun imgArcherAttack imgAssassinIdle imgAssassinRun imgAssassinAttack imgTankIdle imgTankRun imgTankAttack imgBerserkerIdle imgBerserkerRun imgBerserkerAttack imgPriestIdle imgPriestRun imgPriestAttack imgMageIdle imgMageRun imgMageAttack imgPaladinIdle imgPaladinRun imgPaladinAttack SPR_IDLE SPR_RUN SPR_ATK imgIdle imgRun imgAtk v174AiSpriteCfg v174AiDirIndex GNOME_ANIM ARCHER_ANIM ASSASSIN_ANIM TANK_ANIM BERSERKER_ANIM PRIEST_ANIM MAGE_ANIM PALADIN_ANIM GNOME_SOURCE_ROW ARCHER_SOURCE_ROW ASSASSIN_RUN_SOURCE_ROW ASSASSIN_4DIR_ROW TANK_4DIR_ROW BERSERKER_4DIR_ROW PRIEST_4DIR_ROW MAGE_4DIR_ROW PALADIN_4DIR_ROW GNOME_FLIP_BY_DIR ARCHER_FLIP_BY_DIR GNOME_DRAW_SCALE ARCHER_DRAW_SCALE ASSASSIN_RUN_DRAW_SCALE ASSASSIN_IDLE_DRAW_SCALE ASSASSIN_ATTACK_DRAW_SCALE TANK_DRAW_SCALE BERSERKER_DRAW_SCALE PRIEST_DRAW_SCALE MAGE_DRAW_SCALE PALADIN_DRAW_SCALE; do
+          for sym in GNOME_IDLE_SRC GNOME_RUN_SRC GNOME_ATTACK_SRC ARCHER_IDLE_SRC ARCHER_RUN_SRC ARCHER_ATTACK_SRC ASSASSIN_IDLE_SRC ASSASSIN_RUN_SRC ASSASSIN_ATTACK_SRC TANK_IDLE_SRC TANK_RUN_SRC TANK_ATTACK_SRC BERSERKER_IDLE_SRC BERSERKER_RUN_SRC BERSERKER_ATTACK_SRC PRIEST_IDLE_SRC PRIEST_RUN_SRC PRIEST_ATTACK_SRC MAGE_IDLE_SRC MAGE_RUN_SRC MAGE_ATTACK_SRC PALADIN_IDLE_SRC PALADIN_RUN_SRC PALADIN_ATTACK_SRC SPR_IDLE SPR_RUN SPR_ATK imgIdle imgRun imgAtk v174AiSpriteCfg v174AiDirIndex GNOME_ANIM ARCHER_ANIM ASSASSIN_ANIM TANK_ANIM BERSERKER_ANIM PRIEST_ANIM MAGE_ANIM PALADIN_ANIM GNOME_SOURCE_ROW ARCHER_SOURCE_ROW ASSASSIN_RUN_SOURCE_ROW ASSASSIN_4DIR_ROW TANK_4DIR_ROW BERSERKER_4DIR_ROW PRIEST_4DIR_ROW MAGE_4DIR_ROW PALADIN_4DIR_ROW GNOME_FLIP_BY_DIR ARCHER_FLIP_BY_DIR GNOME_DRAW_SCALE ARCHER_DRAW_SCALE ASSASSIN_RUN_DRAW_SCALE ASSASSIN_IDLE_DRAW_SCALE ASSASSIN_ATTACK_DRAW_SCALE TANK_DRAW_SCALE BERSERKER_DRAW_SCALE PRIEST_DRAW_SCALE MAGE_DRAW_SCALE PALADIN_DRAW_SCALE; do
             ! grep -q "$sym" public/index.html
           done
           ! grep -q "const ANIM=" public/index.html
           ! grep -q "playerAnimDef(" public/index.html
-          echo "verified: Stage 5A2 source cleanup is canonical; Player3D/gameplay/AI Training/online stress/mob-boss systems preserved"
+          echo "verified: packed 2D player art is removed; Player3D melee in-place uses one-time clip filtering"

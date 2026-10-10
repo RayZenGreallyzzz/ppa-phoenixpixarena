@@ -1,6 +1,7 @@
 (function(){
   'use strict';
-  var lastClan=null,lastName=null,lastReconnect=0;
+  // PPA_REALTIME_IDENTITY_INBAND_20261003
+  var lastClan=null,lastName=null;
   function current(){
     try{
       if(typeof CLAN_LOCAL_STATE==='undefined'||!CLAN_LOCAL_STATE||!CLAN_LOCAL_STATE.connected)return null;
@@ -9,14 +10,15 @@
       return {clan:clan,name:name};
     }catch(_){return null}
   }
+  function sync(v){
+    if(!v||typeof window.PPA_REALTIME_IDENTITY_SYNC!=='function')return false;
+    return window.PPA_REALTIME_IDENTITY_SYNC(v.name);
+  }
   setInterval(function(){
-    if(typeof window.PPA_REALTIME_RECONNECT!=='function')return;
     var v=current();if(!v)return;
-    if(lastClan===null){lastClan=v.clan;lastName=v.name;return}
+    if(lastClan===null){lastClan=v.clan;lastName=v.name;sync(v);return}
     if(v.clan===lastClan&&v.name===lastName)return;
     lastClan=v.clan;lastName=v.name;
-    if(Date.now()-lastReconnect<3000)return;
-    lastReconnect=Date.now();
-    window.PPA_REALTIME_RECONNECT();
+    sync(v);
   },1500);
 })();

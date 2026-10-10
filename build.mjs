@@ -8,9 +8,9 @@ import {patchGnomeCannonSource} from './tools/source-gnome-cannon-fix-20261002.m
 
 const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
-const EXPECTED_SOURCE_SHA256 = 'caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
+const EXPECTED_SOURCE_SHA256 = 'a23969659df17d6f303e688c296f4a2de67b4be8b702693a1760afb4971e43b7';
 const parts = Array.from({length:EXPECTED_PARTS},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
-const CLIENT_BUILD = 'v629-dungeon-add-plus3-plus9-spread-20260929';
+const CLIENT_BUILD = 'v644-mob-pursuit-slots-20261004';
 
 const missing = parts.filter((name)=>!fs.existsSync(path.join(ROOT,name)));
 if (missing.length) {
@@ -8174,11 +8174,11 @@ if(_ppaClanBossTrackCalls<1){
       !realtimeServer.includes("type:'clan-boss-reward'") ||
       !realtimeServer.includes('clanBossBuildMistressDistribution') ||
       !realtimeServer.includes('clanBossSharedRoll') ||
-      !realtimeServer.includes('.filter(x=>x.damage>=5000)') ||
+      !(realtimeServer.includes("const minDamage=String(st&&st.bossId||'')==='clan_boss_2'?100000:5000") && realtimeServer.includes('.filter(x=>x.damage>=minDamage)')) ||
       !realtimeServer.includes("clanBossSharedRoll(eligible,'blueGear','Синий шмот / оружие')") ||
       !realtimeServer.includes("clanBossSharedRoll(eligible,'premiumStone','Премиум камень заточки')") ||
       !realtimeServer.includes("clanBossSharedRoll(eligible,'grayRune','Серая универсальная руна')") ||
-      !realtimeServer.includes('const chance=1') ||
+      !realtimeServer.includes('clanBossSharedRoll(eligible,kind,label,chance=1)') ||
       !realtimeServer.includes('normalStones:4+Math.floor(Math.random()*4)') ||
       !realtimeServer.includes("m.type === 'clan-boss-chest-open'") ||
       !realtimeServer.includes("m.type === 'clan-boss-chest-complete'") ||

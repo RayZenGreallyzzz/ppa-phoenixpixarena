@@ -55,7 +55,9 @@
     title.textContent='LOCAL STRESS ';
     title.style.cssText='margin-right:4px;color:#d7b36d';
     p.appendChild(title);
-    [0,5,10,14,18].forEach(function(n){
+    // PPA_PLAYER3D_IDLE_THRESHOLD_20261005
+    // Exact low-count buttons for finding the first visible-player FPS cliff.
+    [0,1,2,3,5].forEach(function(n){
       var b=document.createElement('button');
       b.type='button';b.dataset.stress=String(n);b.textContent=n===0?'OFF':String(n);
       b.style.cssText='min-width:30px;height:25px;margin:0 2px;padding:0 6px;border:1px solid #76522b;border-radius:5px;background:#21160d;color:#e4bd73;font:800 8px monospace;touch-action:manipulation';

@@ -1,0 +1,26 @@
+name: Audit attack input path
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/audit-attack-input-20261004.mjs
+      - .github/workflows/audit-attack-input-20261004.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Audit packed attack path
+        run: node tools/audit-attack-input-20261004.mjs > attack-input-audit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: attack-input-audit
+          path: attack-input-audit.txt
+          if-no-files-found: error

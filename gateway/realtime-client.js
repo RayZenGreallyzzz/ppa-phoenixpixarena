@@ -137,7 +137,7 @@
     if(kind==='gnome-cannon'){
       try{
         var api=window.PPA_PLAYER3D;
-        var m=api&&typeof api.localMuzzle==='function'?api.localMuzzle(tx,ty):null;
+        var m=api&&typeof api.muzzle==='function'?api.muzzle('local'):null;
         if(m&&Number.isFinite(Number(m.x))&&Number.isFinite(Number(m.y))){o.x=Number(m.x);o.y=Number(m.y)}
       }catch(_){}
     }
@@ -146,7 +146,7 @@
   function emitCombatFx(kind,sx,sy,tx,ty,animMs){
     var o=combatFxOrigin(kind,sx,sy,tx,ty);
     var dx=(Number(tx)||0)-o.x,dy=(Number(ty)||0)-o.y;
-    var d={kind:kind,x:o.x,y:o.y,tx:Number(tx)||0,ty:Number(ty)||0,ang:Math.atan2(dy,dx),animMs:animMs||420};
+    var d={kind:kind,x:o.x,y:o.y,tx:Number(tx)||0,ty:Number(ty)||0,ang:Math.atan2(dy,dx),animMs:animMs||420,originResolved:true};
     try{if(kind==='gnome-cannon'&&window.PPA_LOCAL_COMBAT_FX)window.PPA_LOCAL_COMBAT_FX(d)}catch(_){}
     try{if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX(d)}catch(_){}
   }
@@ -1267,10 +1267,18 @@ window.PPA_CLAN_BOSS_SELF_PID=function(){return String(RT.selfPid||'')};
       d=d||{};
       var kind=String(d.kind||'');
       if(['gnome-cannon','archer-arrow','melee'].indexOf(kind)<0)return false;
+      var fxX=Number(d.x)||0,fxY=Number(d.y)||0;
+      // PPA_GNOME_FX_3D_MUZZLE_20261002
+      if(kind==='gnome-cannon'&&d.originResolved!==true){
+        try{
+          var muzzle=window.PPA_PLAYER3D&&typeof window.PPA_PLAYER3D.muzzle==='function'?window.PPA_PLAYER3D.muzzle('local'):null;
+          if(muzzle&&Number.isFinite(Number(muzzle.x))&&Number.isFinite(Number(muzzle.y))){fxX=Number(muzzle.x);fxY=Number(muzzle.y)}
+        }catch(_){}
+      }
       return send({
         type:'player-combat-fx',kind:kind,
-        x:Number(d.x)||0,y:Number(d.y)||0,tx:Number(d.tx)||0,ty:Number(d.ty)||0,
-        ang:Number.isFinite(Number(d.ang))?Number(d.ang):0,
+        x:fxX,y:fxY,tx:Number(d.tx)||0,ty:Number(d.ty)||0,
+        ang:kind==='gnome-cannon'?Math.atan2((Number(d.ty)||0)-fxY,(Number(d.tx)||0)-fxX):(Number.isFinite(Number(d.ang))?Number(d.ang):0),
         animMs:Math.max(240,Math.min(700,Math.round(Number(d.animMs)||480)))
       });
     }catch(_){return false}
@@ -1315,7 +1323,13 @@ window.PPA_CLAN_BOSS_SELF_PID=function(){return String(RT.selfPid||'')};
     return window.PPA_RT_ARENA_CLEAR();
   };
   window.PPA_REALTIME_RESYNC=resyncRoom;
-  window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4000,'Identity refresh')}catch(_){};setTimeout(connect,250)};
+  // PPA_REALTIME_IDENTITY_INBAND_20261003: metadata refresh stays on the live socket.
+  window.PPA_REALTIME_IDENTITY_SYNC=function(name){
+    var clean=String(name||'').trim().slice(0,24);
+    return send({type:'identity-sync',name:clean});
+  };
+  // Keep a manual recovery hook for diagnostics only. Identity/profile updates must not call it.
+  window.PPA_REALTIME_RECONNECT=function(){try{if(RT.ws)RT.ws.close(4001,'Manual reconnect')}catch(_){};setTimeout(connect,250)};
   window.PPA_REALTIME_DIAG=function(){var d=dungeonInfo(RT.lastRoom);return{connected:!!(RT.ws&&RT.ws.readyState===WebSocket.OPEN),room:RT.lastRoom,serverRoom:RT.serverRoom,roomPeers:RT.roomPeers,online:RT.onlineCount,ping:Number.isFinite(RT.pingMs)?Math.round(RT.pingMs):null,retry:RT.retry,mode:'fullsize',fullscreen:!!(tg()&&tg().isFullscreen),party:(window.PPA_PARTY_STATE&&window.PPA_PARTY_STATE.partyId)||'',dungeonBase:d?d.base:'',dungeonInstance:d&&d.instance?d.instance:0,dungeonCapacity:RT.dungeonCapacity||40,serverAge:RT.lastServerAt?Date.now()-RT.lastServerAt:null,serverClockReady:RT.serverClockReady,serverClockOffset:Math.round(Number(RT.serverClockOffset)||0),selfPid:RT.selfPid,arenaMatchId:RT.arenaMatchId,arenaSide:RT.arenaSide,arenaOpponentId:RT.arenaOpponentId,arenaCombatReady:arenaCombatReady(),pkActive:pkActive(),pkTargetId:RT.pkTargetId,serverDeadLocked:RT.serverDeadLocked,clanBossRoom:RT.clanBossRoom,clanBossId:RT.clanBossId,clanBossState:RT.clanBossState}};
 
   function boot(){

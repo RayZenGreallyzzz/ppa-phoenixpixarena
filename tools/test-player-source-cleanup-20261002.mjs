@@ -3,12 +3,15 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import {stripDeadPlayerSpriteAssets,PLAYER_SOURCE_CLEANUP_MARKER,AI_TRAINING_SOURCE_CLEANUP_MARKER} from './player-source-cleanup-20261002.mjs';
 
-const EXPECTED_SHA='caea00852b6e54cef46d18c479f6042faa705a04313e342ab8b90cfaac18192b';
+const buildSource=fs.readFileSync('build.mjs','utf8');
+const hashMatch=buildSource.match(/const EXPECTED_SOURCE_SHA256 = '([a-f0-9]{64})';/);
+if(!hashMatch)throw new Error('Stage 5A2 test: build.mjs canonical source SHA missing');
+const EXPECTED_SHA=hashMatch[1];
 const parts=Array.from({length:12},(_,i)=>`PPA${String(i+1).padStart(2,'0')}.bin`);
 const packed=Buffer.concat(parts.map(p=>fs.readFileSync(p)));
 const raw=zlib.gunzipSync(packed);
 const sha=crypto.createHash('sha256').update(raw).digest('hex');
-if(sha!==EXPECTED_SHA)throw new Error('Stage 5A2 test: canonical packed source SHA changed: '+sha);
+if(sha!==EXPECTED_SHA)throw new Error(`Stage 5A2 test: canonical packed source SHA ${sha} does not match build.mjs ${EXPECTED_SHA}`);
 const source=raw.toString('utf8');
 const dataUriRe=/data:image\/(?:png|webp|jpeg);base64,[A-Za-z0-9+/=]+/g;
 const before=(source.match(dataUriRe)||[]).length;
@@ -28,5 +31,5 @@ const anims=['GNOME_ANIM','ARCHER_ANIM','ASSASSIN_ANIM','TANK_ANIM','BERSERKER_A
 for(const name of anims)if(result.source.includes(`const ${name}=`))throw new Error('Stage 5A2 test: dead class metadata declaration survived: '+name);
 const simple=['GNOME_SOURCE_ROW','ARCHER_SOURCE_ROW','ASSASSIN_RUN_SOURCE_ROW','ASSASSIN_4DIR_ROW','TANK_4DIR_ROW','BERSERKER_4DIR_ROW','PRIEST_4DIR_ROW','MAGE_4DIR_ROW','PALADIN_4DIR_ROW','GNOME_FLIP_BY_DIR','ARCHER_FLIP_BY_DIR','GNOME_DRAW_SCALE','ARCHER_DRAW_SCALE','ASSASSIN_RUN_DRAW_SCALE','ASSASSIN_IDLE_DRAW_SCALE','ASSASSIN_ATTACK_DRAW_SCALE','TANK_DRAW_SCALE','BERSERKER_DRAW_SCALE','PRIEST_DRAW_SCALE','MAGE_DRAW_SCALE','PALADIN_DRAW_SCALE'];
 for(const name of simple)if(new RegExp(`const\\s+${name}\\s*=`).test(result.source))throw new Error('Stage 5A2 test: dead sprite metadata declaration survived: '+name);
-console.log(JSON.stringify({sha,beforeDataUris:before,afterDataUris:after,removedDataUris:before-after,...result.stats},null,2));
+console.log(JSON.stringify({sha,expectedSha:EXPECTED_SHA,beforeDataUris:before,afterDataUris:after,removedDataUris:before-after,...result.stats},null,2));
 console.log('STAGE_5A2_SOURCE_TRANSFORM_OK');

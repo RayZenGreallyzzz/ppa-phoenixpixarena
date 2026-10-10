@@ -51,3 +51,59 @@ CREATE TABLE IF NOT EXISTS save_history (
 );
 CREATE INDEX IF NOT EXISTS idx_save_history_user_archived
   ON save_history(telegram_id, archived_at DESC);
+
+
+-- Phoenix Launcher account layer. Existing PPA saves remain keyed by telegram_id.
+CREATE TABLE IF NOT EXISTS phoenix_accounts (
+  account_id TEXT PRIMARY KEY,
+  telegram_id TEXT UNIQUE,
+  email TEXT UNIQUE,
+  password_salt TEXT,
+  password_hash TEXT,
+  email_verified INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  last_login_at INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS phoenix_sessions (
+  token_hash TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  FOREIGN KEY (account_id) REFERENCES phoenix_accounts(account_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_phoenix_sessions_account
+  ON phoenix_sessions(account_id);
+CREATE INDEX IF NOT EXISTS idx_phoenix_sessions_expiry
+  ON phoenix_sessions(expires_at);
+
+CREATE TABLE IF NOT EXISTS phoenix_auth_flows (
+  state TEXT PRIMARY KEY,
+  app_challenge TEXT NOT NULL,
+  oauth_verifier TEXT,
+  nonce TEXT,
+  link_account_id TEXT,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_phoenix_flows_expiry
+  ON phoenix_auth_flows(expires_at);
+
+CREATE TABLE IF NOT EXISTS phoenix_exchange_codes (
+  code_hash TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  app_challenge TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (account_id) REFERENCES phoenix_accounts(account_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_phoenix_codes_expiry
+  ON phoenix_exchange_codes(expires_at);

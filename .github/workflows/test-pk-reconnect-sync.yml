@@ -19,9 +19,31 @@ jobs:
           node-version: '24'
       - run: npm install
       - run: node --check gateway/realtime-client.js
+      - run: node --check gateway/realtime-identity-sync.js
+      - run: node --check gateway/ppa-bridge.js
+      - run: node --check src/realtime-stable.js
       - run: node tools/test-pk-reconnect-sync.mjs gateway/realtime-client.js
+      - name: Guard in-band realtime identity sync
+        run: |
+          grep -q "PPA_REALTIME_IDENTITY_INBAND_20261003" gateway/realtime-client.js
+          grep -q "PPA_REALTIME_IDENTITY_INBAND_20261003" gateway/realtime-identity-sync.js
+          grep -q "PPA_REALTIME_IDENTITY_INBAND_20261003" src/realtime-stable.js
+          grep -q "type:'identity-sync'" gateway/realtime-client.js
+          grep -q "m.type === 'identity-sync'" src/realtime-stable.js
+          grep -q "FROM clan_members cm LEFT JOIN clans c" src/realtime-stable.js
+          grep -q "bind(String(a.telegramId))" src/realtime-stable.js
+          ! grep -q "close(4000,'Identity refresh')" gateway/realtime-client.js
+          ! grep -q "PPA_REALTIME_RECONNECT" gateway/realtime-identity-sync.js
+          ! grep -q "PPA_REALTIME_RECONNECT.*nickname" gateway/ppa-bridge.js
       - run: npm run build
       - run: node tools/test-pk-reconnect-sync.mjs public/game/realtime-client.js
+      - name: Verify built in-band identity path
+        run: |
+          grep -q "PPA_REALTIME_IDENTITY_INBAND_20261003" public/game/realtime-client.js
+          grep -q "PPA_REALTIME_IDENTITY_INBAND_20261003" public/game/realtime-identity-sync.js
+          grep -q "type:'identity-sync'" public/game/realtime-client.js
+          ! grep -q "close(4000,'Identity refresh')" public/game/realtime-client.js
+          ! grep -q "PPA_REALTIME_RECONNECT" public/game/realtime-identity-sync.js
       - name: Guard unrelated gameplay runtimes
         run: |
           test -e public/game/dungeon-mob-events.js
