@@ -18,7 +18,7 @@ const end=original.indexOf('];',start)+1;
 assert(end>start&&end-start<9000);
 const legacyGear=JSON.parse(decoded(original.slice(start+'const GEAR='.length,end)));
 console.log('PPA_ORIGINAL_GEAR_SLOTS',JSON.stringify(legacyGear.map(x=>({slot:x.slot,name:x.name,price:x.price,mats:x.mats}))));
-assert.equal(legacyGear.length,6);
+assert.equal(legacyGear.length,7);
 for(const [i,g] of legacyGear.entries()){
  const offer=EPIC_GEAR.find(x=>x.slot===g.slot);
  assert(offer,g.slot);
@@ -138,7 +138,7 @@ const denied=await sharedForgeOperation({...env,PPA_FORGE_ACTIONS_ENABLED:'0'},
 assert.equal(denied.status,404);
 const current=await sharedForgeOperation(env,'10001','state',{},persistence);
 assert.equal(current.status,200);
-assert.equal(current.data.state.offers.length,6);
+assert.equal(current.data.state.offers.length,7);
 assert.equal(current.data.state.wallet.ppa,saves.get('10001').state.ppa);
-console.log('PPA_SHARED_FORGE_EPIC_OK legacy_recipes=6 class_items='+cases+
+console.log('PPA_SHARED_FORGE_EPIC_OK legacy_recipes=7 class_items='+cases+
   ' real_legacy_stats=1 version_cas=1 idempotent=1 no_cross_account=1 original_bag=1');
