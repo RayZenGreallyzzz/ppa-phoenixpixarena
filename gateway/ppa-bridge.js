@@ -250,7 +250,9 @@
       try{if(window.PPA_CLOUD)window.PPA_CLOUD.saveConflict=null}catch(_){}
       return r;
     },
-    ppaSaveGame:async function(state,version){await auth();return queueSave(state,version)},
+    // Enqueue synchronously, before the next payout can close the gate.
+    // The authenticated cloud-save prerequisite is checked in queueSave.
+    ppaSaveGame:function(state,version){return queueSave(state,version)},
     ppaRegisterCharacter:async function(nickname,classKey){
       await auth();
       var r=await call('/api/character/register',{nickname:nickname,classKey:classKey||''});
