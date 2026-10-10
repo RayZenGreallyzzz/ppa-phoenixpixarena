@@ -73,8 +73,11 @@ if(!runtime.includes('syncLocalFromGame(now);'))fail('runtime does not synchroni
 if(runtime.includes("e.kind==='local'?500:1800"))fail('local Player3D still depends on 500ms draw-call TTL');
 if(!runtime.includes('threeInitPromise'))fail('Player3D Three.js initialization is not serialized');
 if(runtime.includes('__PPA3D_LOCAL_PENDING'))fail('legacy pending local registration survived runtime');
-if(!remote.includes('__PPA_REMOTE_PLAYER3D_DISPATCH_V2'))fail('remote Player3D V2 dispatch marker missing');
-if(!remote.includes('PPA_PLAYER3D_REMOTE_SCRATCH_20261003'))fail('remote Player3D reusable scratch marker missing');
+if(!remote.includes('__PPA_REMOTE_PLAYER3D_DISPATCH_V3'))fail('remote Player3D V3 dispatch marker missing');
+if(!remote.includes('PPA_REMOTE_CANONICAL_POSITION_20261005'))fail('remote Player3D canonical position marker missing');
+if(!remote.includes('out=r.__ppa3DVisualPosition')||!remote.includes('out.x=x;out.y=y;'))fail('remote Player3D reusable position scratch missing');
+if(!remote.includes('var x=rx===null?tx:rx,y=ry===null?ty:ry;'))fail('remote Player3D no longer reads canonical realtime coordinates');
+if(/r\.[xy]\s*\+=/.test(remote)||remote.includes('__ppa3DLastAt'))fail('remote Player3D added a second interpolation owner');
 if(/\bdrawImage\s*\(/.test(remote))fail('remote real-player dispatch contains Canvas drawImage path');
 
 function functionRange(src,start){

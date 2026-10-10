@@ -1,0 +1,30 @@
+name: Test gnome cannon projectiles
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  cannon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify cannon source/runtime invariants
+        run: |
+          node --check tools/source-gnome-cannon-fix-20261002.mjs
+          node --check tools/test-gnome-cannon-projectiles-20261002.mjs
+          node --check gateway/player-3d-unified-runtime.js
+          node --check gateway/remote-combat-fx.js
+          node --check gateway/realtime-client.js
+          node tools/test-gnome-cannon-projectiles-20261002.mjs
+      - name: Install dependencies
+        run: npm install
+      - name: Full production build
+        run: npm run build
+      - name: Verify final public cannon path
+        run: node tools/test-gnome-cannon-projectiles-20261002.mjs --public

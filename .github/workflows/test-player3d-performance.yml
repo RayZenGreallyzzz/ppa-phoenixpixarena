@@ -54,7 +54,8 @@ jobs:
           grep -q "function playerRunAnimRate()" tools/postbuild-player-3d-unified-20261002.mjs
           ! grep -Fq "60/(a.fps*playerAttackAnimRate())" tools/postbuild-player-3d-unified-20261002.mjs
           grep -q "player-3d-unified-runtime.js?v=20261004u19" tools/postbuild-player-3d-unified-20261002.mjs
-          grep -q "PPA_PLAYER3D_REMOTE_SCRATCH_20261003" gateway/remote-player-3d-dispatch.js
+          grep -q "PPA_REMOTE_CANONICAL_POSITION_20261005" gateway/remote-player-3d-dispatch.js
+          grep -q "__ppa3DVisualPosition" gateway/remote-player-3d-dispatch.js
       - name: Verify no per-frame melee bone or animation-rate regression
         run: |
           node - <<'NODE'
@@ -69,7 +70,8 @@ jobs:
           if(!frame.includes('switchAnim(e,desiredAnim(e,now));'))throw new Error('transition-only animation switch missing');
           if(!src.includes('PPA_PLAYER3D_MELEE_CLIP_FILTER_20261003')||!src.includes('makeMeleeInPlaceAttackClip'))throw new Error('one-time melee clip filter missing');
           const n=(src.match(/if\(e\.root\)e\.root\.updateWorldMatrix\(true,true\);/g)||[]).length;
-          if(n!==1)throw new Error('expected exactly one on-demand muzzle matrix update, found '+n);
+          if(n!==0)throw new Error('full GLB subtree update returned in on-demand muzzle path: '+n);
+          if(!src.includes('e.muzzle.updateWorldMatrix(true,false);'))throw new Error('on-demand muzzle parent-chain update missing');
           console.log('verified Player3D source performance invariants');
           NODE
       - name: Guard gameplay and boss systems
@@ -95,7 +97,7 @@ jobs:
           ! grep -q "meleeLowerBody" public/game/player-3d-unified-runtime.js
           grep -q "e.model.position.x=e.modelBaseX" public/game/player-3d-unified-runtime.js
           grep -q "e.rootMotionBone.position.x=e.rootMotionBaseX" public/game/player-3d-unified-runtime.js
-          grep -q "player-3d-unified-runtime.js?v=20261004u19" public/index.html
+          grep -q "player-3d-unified-runtime.js?v=20261005perf1" public/index.html
           grep -q "PPA_PLAYER_ANIM_RATE_SYNC_20261004" public/index.html
           grep -q "function playerAttackAnimRate()" public/index.html
           grep -q "function playerRunAnimRate()" public/index.html

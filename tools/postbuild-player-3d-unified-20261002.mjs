@@ -156,10 +156,13 @@ for(const [from] of gameplayClassReplacements){if(html.includes(from))throw new 
 
 
 // PPA_GNOME_PVE_3D_MUZZLE_20261002
-const gnome3DFire="function gnomeFireCannonball(){\n  let target=null;\n  if(P.tid!=null){\n    target=EN.find(function(e){return e&&e.id==P.tid&&e.hp>0&&targetIsValid(e)})||null;\n    if(target){\n      const edge=(target.sz&&target.sz>30)?Math.max(0,(target.sz-30)*.4):0;\n      if(Math.hypot(target.x-P.x,target.y-P.y)>playerBasicRange()+edge)target=null;\n    }\n  }\n  if(!target)target=findNearBasic();\n  P.tid=target?target.id:null;\n  if(!target)return false;\n\n  const dx=target.x-P.x,dy=target.y-P.y;\n  const dist=Math.max(1,Math.hypot(dx,dy));\n  const ang=Math.atan2(dy,dx);\n  const speed=7;\n\n  P.face=dx<0?-1:1;\n  P.meleeAng=ang;\n  P.shootT=1;\n  P.recoil=0;\n\n  let muzzleX=P.x,muzzleY=P.y;\n  try{\n    const muzzle=window.PPA_PLAYER3D&&typeof window.PPA_PLAYER3D.muzzle==='function'?window.PPA_PLAYER3D.muzzle('local'):null;\n    if(muzzle&&Number.isFinite(Number(muzzle.x))&&Number.isFinite(Number(muzzle.y))){muzzleX=Number(muzzle.x);muzzleY=Number(muzzle.y)}\n  }catch(_){}\n\n  const shotDx=target.x-muzzleX,shotDy=target.y-muzzleY;\n  const shotDist=Math.max(1,Math.hypot(shotDx,shotDy));\n  PLAYER_CANNONBALLS.push({\n    x:muzzleX,\n    y:muzzleY,\n    vx:shotDx/shotDist*speed,\n    vy:shotDy/shotDist*speed,\n    remaining:shotDist,\n    target:target\n  });\n\n  for(let i=0;i<3;i++){\n    PT.push({\n      x:muzzleX,y:muzzleY,\n      vx:shotDx/shotDist*(1.2+i*.45)+(Math.random()-.5)*.6,\n      vy:shotDy/shotDist*(1.2+i*.45)+(Math.random()-.5)*.6,\n      life:6,ml:6,sz:1.5+i*.45,\n      col:i===0?'#ffd36a':'#c47a32'\n    });\n  }\n  return true;\n}";
-html=replaceFunction(html,'function gnomeFireCannonball(){',gnome3DFire);
-if(html.includes('const muzzleX=P.x+dx/dist*24')||html.includes('const muzzleY=P.y-7+dy/dist*10'))throw new Error('Unified 3D build: legacy gnome 2D muzzle survived');
-if(!html.includes("window.PPA_PLAYER3D.muzzle('local')"))throw new Error('Unified 3D build: gnome 3D muzzle hook missing');
+// The pre-externalize source transform owns this function. Replacing it here
+// used to silently discard reservations and peer FX from a successful build.
+const [fireA,fireB]=functionRange(html,'function gnomeFireCannonball(){');
+const fireBody=html.slice(fireA,fireB);
+for(const token of ["api.muzzle('local')",'pendingMin>=Math.max(1,Number(target.hp)||0)','originResolved:true']){
+  if(!fireBody.includes(token))throw new Error('Unified 3D build: canonical cannon transform lost '+token);
+}
 
 html=removeFunction(html,'function playerAnimDef(name){');
 

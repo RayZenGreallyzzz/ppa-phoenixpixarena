@@ -367,7 +367,9 @@
       const raw=String(id||'local');
       const e=instances.get(raw)||instances.get('remote:'+raw);
       if(!e||e.cls!=='gnome'||!e.muzzle)return null;
-      if(e.root)e.root.updateWorldMatrix(true,true);
+      // Only update the marker's animated parent chain on demand. The renderer
+      // owns descendant updates; a shot must not walk the entire GLB subtree.
+      e.muzzle.updateWorldMatrix(true,false);
       return nodeGamePoint(e.muzzle);
     }catch(_){return null}
   }

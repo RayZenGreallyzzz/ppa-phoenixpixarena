@@ -132,6 +132,24 @@
   function status(text,col){try{if(typeof ppaOnlineSetStatus==='function'){ppaOnlineSetStatus(text,col);fixOnlineBadge()}}catch(_){}}
   function refreshBadge(){if(RT.ws&&RT.ws.readyState===WebSocket.OPEN)status(badgeText(),'#9fffc1')}
   function send(o){try{if(RT.ws&&RT.ws.readyState===WebSocket.OPEN){RT.ws.send(JSON.stringify(o));return true}}catch(_){}return false}
+  function combatFxOrigin(kind,sx,sy,tx,ty){
+    var o={x:Number(sx)||0,y:Number(sy)||0};
+    if(kind==='gnome-cannon'){
+      try{
+        var api=window.PPA_PLAYER3D;
+        var m=api&&typeof api.muzzle==='function'?api.muzzle('local'):null;
+        if(m&&Number.isFinite(Number(m.x))&&Number.isFinite(Number(m.y))){o.x=Number(m.x);o.y=Number(m.y)}
+      }catch(_){}
+    }
+    return o;
+  }
+  function emitCombatFx(kind,sx,sy,tx,ty,animMs){
+    var o=combatFxOrigin(kind,sx,sy,tx,ty);
+    var dx=(Number(tx)||0)-o.x,dy=(Number(ty)||0)-o.y;
+    var d={kind:kind,x:o.x,y:o.y,tx:Number(tx)||0,ty:Number(ty)||0,ang:Math.atan2(dy,dx),animMs:animMs||420,originResolved:true};
+    try{if(kind==='gnome-cannon'&&window.PPA_LOCAL_COMBAT_FX)window.PPA_LOCAL_COMBAT_FX(d)}catch(_){}
+    try{if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX(d)}catch(_){}
+  }
 
   function clanBossEntity(){
     try{
@@ -1040,7 +1058,7 @@
       try{
         var cls=String(selfClass()||'').toLowerCase();
         var kind=cls==='gnome'?'gnome-cannon':(cls==='archer'?'archer-arrow':'melee');
-        if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX({kind:kind,x:sx,y:sy,tx:rp.x,ty:rp.y,ang:Math.atan2(rp.y-sy,rp.x-sx),animMs:420});
+        emitCombatFx(kind,sx,sy,rp.x,rp.y,420);
       }catch(_){}
       if(Number(P.smokeUntil)>now){P.smokeUntil=0;P.smokeDodgeBonus=0;try{send({type:'player-stealth',duration:0})}catch(_){}}
       return true;
@@ -1116,7 +1134,7 @@
         var cls='';
         try{cls=String(typeof classBaseKey==='function'?classBaseKey():'').toLowerCase()}catch(_){}
         var kind=cls==='gnome'?'gnome-cannon':(cls==='archer'?'archer-arrow':'melee');
-        if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX({kind:kind,x:sx,y:sy,tx:rp.x,ty:rp.y,ang:Math.atan2(rp.y-sy,rp.x-sx),animMs:420});
+        emitCombatFx(kind,sx,sy,rp.x,rp.y,420);
       }catch(_){}
       if(Number(P.smokeUntil)>now){
         P.smokeUntil=0;P.smokeDodgeBonus=0;
@@ -1251,7 +1269,7 @@ window.PPA_CLAN_BOSS_SELF_PID=function(){return String(RT.selfPid||'')};
       if(['gnome-cannon','archer-arrow','melee'].indexOf(kind)<0)return false;
       var fxX=Number(d.x)||0,fxY=Number(d.y)||0;
       // PPA_GNOME_FX_3D_MUZZLE_20261002
-      if(kind==='gnome-cannon'){
+      if(kind==='gnome-cannon'&&d.originResolved!==true){
         try{
           var muzzle=window.PPA_PLAYER3D&&typeof window.PPA_PLAYER3D.muzzle==='function'?window.PPA_PLAYER3D.muzzle('local'):null;
           if(muzzle&&Number.isFinite(Number(muzzle.x))&&Number.isFinite(Number(muzzle.y))){fxX=Number(muzzle.x);fxY=Number(muzzle.y)}
@@ -1260,7 +1278,7 @@ window.PPA_CLAN_BOSS_SELF_PID=function(){return String(RT.selfPid||'')};
       return send({
         type:'player-combat-fx',kind:kind,
         x:fxX,y:fxY,tx:Number(d.tx)||0,ty:Number(d.ty)||0,
-        ang:Number.isFinite(Number(d.ang))?Number(d.ang):0,
+        ang:kind==='gnome-cannon'?Math.atan2((Number(d.ty)||0)-fxY,(Number(d.tx)||0)-fxX):(Number.isFinite(Number(d.ang))?Number(d.ang):0),
         animMs:Math.max(240,Math.min(700,Math.round(Number(d.animMs)||480)))
       });
     }catch(_){return false}

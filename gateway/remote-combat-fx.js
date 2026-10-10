@@ -28,6 +28,13 @@
     }catch(_){}
   };
 
+  window.PPA_LOCAL_COMBAT_FX=function(d){
+    try{
+      var m=Object.assign({from:'local'},d||{});
+      window.PPA_REMOTE_COMBAT_FX_RECEIVE(m);
+      return true;
+    }catch(_){return false}
+  };
   function drawFx(){
     try{
       if(typeof cx==='undefined'||typeof cam==='undefined')return;

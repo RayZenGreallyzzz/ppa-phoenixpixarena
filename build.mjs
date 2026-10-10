@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import sharp from 'sharp';
 import {stripDeadPlayerSpriteAssets} from './tools/player-source-cleanup-20261002.mjs';
+import {patchGnomeCannonSource} from './tools/source-gnome-cannon-fix-20261002.mjs';
 
 const ROOT = process.cwd();
 const EXPECTED_PARTS = 12;
@@ -787,8 +788,10 @@ for (const [srcName, outName] of fartGuardSources) {
 const extByMime = { png: 'png', webp: 'webp', jpeg: 'jpg' };
 const seen = new Map();
 const playerSourceCleanup=stripDeadPlayerSpriteAssets(source);
-const sourceForBuild=playerSourceCleanup.source;
+const gnomeCannonSource=patchGnomeCannonSource(playerSourceCleanup.source);
+const sourceForBuild=gnomeCannonSource.source;
 console.log(`[PPA BUILD] Stage 5A1 pre-externalize player cleanup: ${playerSourceCleanup.stats.classAssetsRemoved} embedded class atlases + ${playerSourceCleanup.stats.preloadsRemoved} preload rows + ${playerSourceCleanup.stats.genericSourcesRemoved} generic sprite sources removed`);
+console.log('[PPA BUILD] Gnome cannon: Player3D muzzle + lethal in-flight reservation enabled');
 const dataUri = /data:image\/(png|webp|jpeg);base64,([A-Za-z0-9+/=]+)/g;
 let count = 0;
 
@@ -1762,22 +1765,6 @@ if(!output.includes("function auctionCanonicalLegendaryArt(it)") ||
 /* ======================================================================== */
 
 ppaPatchRegex(
-  'gnome realtime cannon visual',
-  /PLAYER_CANNONBALLS\.push\(\{\s*x:muzzleX,\s*y:muzzleY,\s*vx:dx\/dist\*speed,\s*vy:dy\/dist\*speed,\s*remaining:dist,\s*target:target\s*\}\);/,
-  `PLAYER_CANNONBALLS.push({
-    x:muzzleX,
-    y:muzzleY,
-    vx:dx/dist*speed,
-    vy:dy/dist*speed,
-    remaining:dist,
-    target:target
-  });
-  if(window.PPA_RT_COMBAT_FX)window.PPA_RT_COMBAT_FX({
-    kind:'gnome-cannon',x:muzzleX,y:muzzleY,tx:target.x,ty:target.y,ang:ang,animMs:480
-  });`
-);
-
-ppaPatchRegex(
   'archer realtime arrow visual',
   /PLAYER_ARROWS\.push\(\{\s*x:startX,y:startY,\s*vx:Math\.cos\(ang\)\*speed,\s*vy:Math\.sin\(ang\)\*speed,\s*remaining:dist,\s*target:target,\s*ang:ang\s*\}\);/,
   `PLAYER_ARROWS.push({
@@ -1793,7 +1780,6 @@ ppaPatchRegex(
   });`
 );
 
-if (!output.includes("kind:'gnome-cannon'")) throw new Error('Gnome realtime cannon visual patch did not apply');
 if (!output.includes("kind:'archer-arrow'")) throw new Error('Archer realtime arrow visual patch did not apply');
 
 /* === MONSTER CORE DUNGEON DROP ========================================= */
