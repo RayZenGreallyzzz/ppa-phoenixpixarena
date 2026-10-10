@@ -158,4 +158,21 @@ for(const name of ['equipFromBag','unequipSlot']){
  const code=source.slice(start,Math.min(end,start+5100));
  console.log('PPA_ORIGINAL_EQUIP_EXACT',JSON.stringify({name,code}));
 }
+
+for(const needle of [
+ 'function moveToStorage(', 'function moveFromStorage(',
+ 'function depositStorage(', 'function withdrawStorage(',
+ 'function storagePut(', 'function storageTake(',
+ 'function putInStorage(', 'function takeFromStorage(',
+ 'function stashItem(', 'function unstashItem(',
+ 'storage.personal.push(', 'storage.personal.splice(',
+ 'INV.storage.personal', 'function storageAction(', 'd.type===\'storage',
+ 'function personalStorage', 'storageDeposit', 'storageWithdraw'
+]){
+ const hits=[];let i=0;
+ while((i=source.indexOf(needle,i))>=0&&hits.length<10){hits.push(i);i+=needle.length;}
+ console.log('PPA_STORAGE_LOCATOR',JSON.stringify({needle,count:hits.length,
+  positions:hits,nearby:hits.slice(0,3).map(k=>source.slice(Math.max(0,k-170),k+580))}));
+}
+
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
