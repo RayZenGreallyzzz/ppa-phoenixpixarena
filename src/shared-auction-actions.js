@@ -1,5 +1,6 @@
 import {executeNativeCommandOnce} from './native-action-ledger.js';
 import {originalAtomicAuctionBuy,originalAuctionSlots} from './online.js';
+import {claimOriginalAuctionCredit} from './shared-auction-credit-claim.js';
 
 const fail=(status,code,message)=>({status,data:{ok:false,code,message}});
 const gearUid=u=>typeof u==='string'&&u.length>0&&u.length<=160;
@@ -218,13 +219,17 @@ export async function sharedAuctionAction(env,ownerId,body,persistence){
  if(env.PPA_AUCTION_ACTIONS_ENABLED!=='1')
   return fail(404,'NOT_FOUND','Auction actions disabled');
  const owner=String(ownerId),action=body?.action;
- if(!['place','buy','cancel','recover'].includes(action)||!validVer(body?.version))
+ if(!['place','buy','cancel','recover','claim'].includes(action)||!validVer(body?.version))
   return fail(400,'AUCTION_INVALID_ACTION','Неверная операция аукциона.');
  let command={service:'auction',action,version:body.version};
  if(action==='place'){
   if(!gearUid(body.uid)||!money(body.price)||!['ppa','gram'].includes(body.currency))
    return fail(400,'AUCTION_INVALID_LOT','Некорректная вещь, цена или валюта.');
   Object.assign(command,{uid:body.uid,price:body.price,currency:body.currency});
+ }else if(action==='claim'){
+  if(typeof body.creditId!=='string'||!/^[a-zA-Z0-9:_-]{4,140}$/.test(body.creditId))
+   return fail(400,'AUCTION_CREDIT_INVALID','Некорректное начисление.');
+  command.creditId=body.creditId;
  }else if(action==='cancel'||action==='recover'){
   if(typeof body.lotId!=='string'||!/^nat_[a-z0-9]{32}$/.test(body.lotId))
    return fail(400,'AUCTION_INVALID_LOT','Недопустимый лот.');
@@ -242,6 +247,7 @@ export async function sharedAuctionAction(env,ownerId,body,persistence){
   const result=action==='place'?await place(env,owner,command,persistence):
    action==='cancel'?await cancel(env,owner,command,persistence):
    action==='recover'?await recover(env,owner,command,persistence):
+   action==='claim'?await claimOriginalAuctionCredit(env,owner,command.creditId,command.version):
    await buy(env,owner,command,persistence);
   return envelope(result);
  });
