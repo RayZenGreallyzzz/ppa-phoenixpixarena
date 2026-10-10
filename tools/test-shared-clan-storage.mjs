@@ -86,7 +86,8 @@ assert.equal(writes,2,'Failed transfer counted as committed');
 assert.equal(sql.prepare('SELECT version FROM saves WHERE telegram_id=?').get('ownerA').version,8);
 assert.equal(JSON.parse(sql.prepare('SELECT storage_json FROM clan_meta').get().storage_json).length,1);
 assert.equal(JSON.parse(sql.prepare('SELECT state_json FROM saves WHERE telegram_id=?').get('ownerA').state_json).bag[0].uid,'clan-+5');
-sql.prepare('INSERT INTO clan_members VALUES(?,?,?)').run('clan1','ownerA','member');
+assert.equal(sql.prepare('SELECT role FROM clan_members WHERE telegram_id=?').get('ownerA').role,'member',
+ 'Failed batch must restore the removed member too');
 
 // Simulate the save changing after readContext, before CAS. No clan write.
 snapshot=await state('ownerA');
