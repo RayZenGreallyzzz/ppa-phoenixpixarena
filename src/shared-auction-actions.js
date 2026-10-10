@@ -16,16 +16,20 @@ const hashEscrow=async serialized=>{
  const bytes=await crypto.subtle.digest('SHA-256',encoder.encode(serialized));
  return [...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('');
 };
-export async function verifyNativeEscrowLot(env,lot){
+export async function nativeEscrowProofMatches(lot,row){
  if(!lot||!/^[a-z0-9_]+$/.test(String(lot.id||''))||
   !String(lot.id).startsWith('nat_'))return false;
- const row=await env.DB.prepare('SELECT seller_id,item_uid,item_sha256 FROM ppa_native_auction_escrow WHERE lot_id=?1')
-  .bind(String(lot.id)).first();
  if(!row||String(row.seller_id)!==String(lot.seller_id)||
    !gearUid(row.item_uid)||typeof lot.item_json!=='string')return false;
  let item;try{item=JSON.parse(lot.item_json)}catch{return false}
  if(item?.kind!=='gear'||String(item.gear?.uid)!==String(row.item_uid))return false;
  return (await hashEscrow(lot.item_json))===String(row.item_sha256);
+}
+export async function verifyNativeEscrowLot(env,lot){
+ if(!lot?.id)return false;
+ const row=await env.DB.prepare('SELECT seller_id,item_uid,item_sha256 FROM ppa_native_auction_escrow WHERE lot_id=?1')
+  .bind(String(lot.id)).first();
+ return nativeEscrowProofMatches(lot,row);
 }
 
 const guard=e=>e.DB.prepare('INSERT INTO ppa_native_auction_guard(id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)');
