@@ -27,7 +27,7 @@ sql.prepare('INSERT INTO saves VALUES(?,?,?,?)').run('ownerB',2,json(hero('leade
 let injection=null, writes=0;
 const db={prepare(query){const stmt=sql.prepare(query.replace(/\?(\d+)/g,'?'));
  let bound=[];
- return {bind(...args){bound=args;return this},
+ return {query,debugArgs:()=>bound,bind(...args){bound=args;return this},
   first(){return stmt.get(...bound)||null},
   run(){const result=stmt.run(...bound);return{meta:{changes:Number(result.changes)}}}};
 },async batch(statements){
@@ -38,6 +38,11 @@ const db={prepare(query){const stmt=sql.prepare(query.replace(/\?(\d+)/g,'?'));
    try{
     const effect=statements[index].run();
     if(writes===0)console.log('PPA_CLAN_ATOMIC_STEP',index,effect.meta?.changes);
+    if(writes===0 && index===2){
+      console.log('PPA_CLAN_EXPECTED_META',JSON.stringify(sql.prepare('SELECT clan_id,storage_json,permissions_json,events_json,history_json,updated_at FROM clan_meta').get()));
+      console.log('PPA_CLAN_UPDATED_SQL',statements[index].query);
+      console.log('PPA_CLAN_UPDATED_BINDS',JSON.stringify(statements[index].debugArgs()));
+    }
    }catch(error){
     console.log('PPA_CLAN_ATOMIC_FAILURE_STEP',index,String(error));
     throw error;
