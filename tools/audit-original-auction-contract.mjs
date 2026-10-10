@@ -12,7 +12,8 @@ const needles=['auctionCredit','auctionCredits','auctionAck','ack-credits','auct
  'function auctionNormalizeLots(','function auctionApply','function sendAuctionState(',
  'function auctionSync','function auctionRefresh','function auctionPay',
  'auctionPayout','auctionPending','credits','function auctionOn',
- 'auctionClaim','credit.amount','acked','auctionRemote','auctionLot'];
+ 'auctionClaim','credit.amount','acked','auctionRemote','auctionLot',
+ 'auctionApplySellerSettlement','PPA_AUCTION_SELLER','PPA_AUCTION_MARKET','PPA_AUCTION_BUY_HANDLER','sellerSettlement'];
 for(const word of needles){
  let at=0,found=[];
  while((at=source.toLowerCase().indexOf(word.toLowerCase(),at))>=0&&found.length<15){
@@ -21,7 +22,7 @@ for(const word of needles){
  console.log('PPA_AUCTION_FLOW_LOCATOR',JSON.stringify({word,hits:found,
   excerpts:found.slice(0,5).map(i=>source.slice(Math.max(0,i-200),Math.min(source.length,i+700)))}));
 }
-for(const name of ['auctionCancelLot','auctionReturnPayload','auctionNormalizeLots',
+for(const name of ['auctionApplySellerSettlement','auctionCancelLot','auctionReturnPayload','auctionNormalizeLots',
  'auctionPlaceLot','sendAuctionState']){
  const start=source.indexOf('function '+name+'(');
  if(start<0)continue;
