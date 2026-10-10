@@ -30,4 +30,13 @@ for(let j=0;j<expressions.length;j++){
  }
  console.log('PPA_FORGE_SOURCE_GROUP',j,'samples',shown);
 }
+for (const functionName of ['blacksmithCraft','applyGearMagicWard','craftStats']) {
+ const signature='function '+functionName+'(';
+ const at=source.indexOf(signature);
+ if(at<0) throw Error('Original PPA core forge function missing: '+functionName);
+ const until=source.indexOf('\nfunction ',at+signature.length);
+ const segment=source.slice(at,Math.min(until<0?at+9000:until,at+9000));
+ // Keep output free of embedded huge art and player data. Function logic only.
+ console.log('PPA_SMITH_EXACT_FUNCTION',JSON.stringify({name:functionName,body:segment}));
+}
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
