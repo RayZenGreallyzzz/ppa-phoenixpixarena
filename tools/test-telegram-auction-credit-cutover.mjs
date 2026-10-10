@@ -49,7 +49,7 @@ const db={prepare(query){
  all(){return{results:stmt.all(...args)}},
  first(){return stmt.get(...args)}}}};
 const ctx=vm.createContext({Date,Math,Number,String,Array,console,
- serverCreditClaimsCutoff,
+ serverCreditClaimsCutoff,legacyAuctionCreditCutoff,
  expireAuction:async env=>{env.DB.prepare("UPDATE auction_lots SET status='expired' WHERE status='active' AND expires_at<=?1").bind(Date.now()).run();},
  safeJson:(s,f)=>{try{return JSON.parse(s)}catch{return f}},
  out:(data,status=200)=>({status,data})});
