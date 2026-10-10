@@ -24,6 +24,7 @@ on:
       - 'src/shared-auction-credit-claim.js'
       - 'tools/test-shared-auction-credit-claim.mjs'
       - 'tools/test-telegram-auction-credit-cutover.mjs'
+      - 'tools/test-telegram-auction-claim-gate.mjs'
       - 'gateway/online-client.js'
       - 'gateway/ppa-bridge.js'
       - 'tools/audit-original-auction-contract.mjs'
@@ -66,6 +67,8 @@ jobs:
         run: node --disable-warning=ExperimentalWarning tools/test-shared-auction-credit-claim.mjs
       - name: Confirm original Telegram local-credit fallback and server cutoff cannot duplicate payouts
         run: node --disable-warning=ExperimentalWarning tools/test-telegram-auction-credit-cutover.mjs
+      - name: Exercise Telegram seller payout under dropped responses and pending saves
+        run: node --disable-warning=ExperimentalWarning tools/test-telegram-auction-claim-gate.mjs
       - name: Check complete original smith catalog
         run: python3 tools/generate-shared-forge-recipes.py --print-json
       - name: Inspect original Telegram smith code (no game writes)
