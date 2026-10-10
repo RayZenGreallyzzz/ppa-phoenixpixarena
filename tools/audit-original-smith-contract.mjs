@@ -46,4 +46,16 @@ for (const signature of ['const CLASS_ITEM_NAMES=', 'var CLASS_ITEM_NAMES=', 'fu
  const raw=source.slice(at,Math.min(at+4600,until>0?until:at+4600));
  console.log('PPA_SMITH_REFERENCE',JSON.stringify({signature,excerpt:raw}));
 }
+for (const name of ['accessoryStatValues','petQty','qtyForRarity']) {
+ const start=source.indexOf('function '+name+'(');
+ if(start<0) throw Error('original '+name+' missing');
+ const end=source.indexOf('\nfunction ',start+10);
+ const code=source.slice(start,Math.min(end>start?end:start+2800,start+2800));
+ console.log('PPA_SMITH_EXTRA_FUNCTION',JSON.stringify({name,code}));
+}
+for (const pattern of [/const LEGENDARY_CRAFT=\[([^;]+?)\];/,/const NECKLACE_STAT_VALUES=([^;]+);/,
+                       /var RPREF=([^;]+);/,/const RPREF=([^;]+);/]) {
+ const found=source.match(pattern);
+ if(found) console.log('PPA_SMITH_EXTRA_CONSTANT',JSON.stringify({name:pattern.source,code:found[0].slice(0,7800)}));
+}
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
