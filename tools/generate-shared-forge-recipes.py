@@ -101,11 +101,14 @@ def js_numeric_map(smith,name):
         raise RuntimeError("Original stats map is no longer a numeric literal: "+name) from e
     if not isinstance(result,dict):
         raise RuntimeError("Stat map not a dictionary")
+    def all_numeric(values):
+        return isinstance(values,dict) and all(
+            isinstance(n,(int,float)) and not isinstance(n,bool) for n in values.values())
     for kind,tiers in result.items():
         if not isinstance(tiers,dict): raise RuntimeError("Stat tier not object")
+        if all_numeric(tiers): continue  # NECKLACE rarity -> stats
         for rarity,vals in tiers.items():
-            if not isinstance(vals,dict) or any(
-                not isinstance(n,(int,float)) or isinstance(n,bool) for n in vals.values()):
+            if not all_numeric(vals):
                 raise RuntimeError("Non-numeric original stats: "+kind+"/"+rarity)
     return result
 
