@@ -62,4 +62,25 @@ for(const word of ['LEGENDARY_CRAFT','ACCESSORY_STAT_VALUES']){
  const idx=source.indexOf(word);
  console.log('PPA_SMITH_LOOKUP',JSON.stringify({word,index:idx,excerpt:source.slice(idx-50,idx+5500).slice(0,5500)}));
 }
+
+// Find the ORIGINAL parent handler for the blacksmithEnhance postMessage.
+// Do not infer success probabilities/penalties from UI labels or change them.
+for(const query of [
+  "function blacksmithEnhance(", "function enhanceItem(", "function getEnhance",
+  "function sharpenItem(", "case 'blacksmithEnhance'",
+  "d.type==='blacksmithEnhance'", "d.type === 'blacksmithEnhance'",
+  "type==='blacksmithEnhance'", "type === 'blacksmithEnhance'",
+  "ENHANCE_CHANCES", "ENHANCE_BASE", "premium_rune", "normal_rune"
+]) {
+  const positions=[];
+  let pos=0;
+  while((pos=source.indexOf(query,pos))>=0 && positions.length<12) {
+    positions.push(pos);
+    pos+=query.length;
+  }
+  console.log('PPA_ORIGINAL_ENHANCE_LOCATOR',JSON.stringify({query,positions,
+    previews:positions.map(i=>source.slice(Math.max(0,i-160),i+400))
+      .map(x=>x.slice(0,560))}));
+}
+
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
