@@ -90,8 +90,15 @@ export function craftOriginalEpicGear(state, id, uid) {
 
 function stateView(ownerId,saved) {
   const state=saved.state;
+  const materials=state.materials&&typeof state.materials==='object'&&!Array.isArray(state.materials)
+    ?Object.fromEntries(Object.entries(state.materials).slice(0,512)
+       .filter(([name])=>name.length>0&&name.length<=120)
+       .map(([name,value])=>[name,owned(value)])):null;
+  const feathers=state.feathers&&typeof state.feathers==='object'&&!Array.isArray(state.feathers)
+    ?{phoenix:owned(state.feathers.phoenix)}:null;
   return {connected:true,self:{id:String(ownerId)},version:saved.version,
-    wallet:{ppa:owned(state.ppa)},offers:EPIC_GEAR.map(offer=>({
+    wallet:{ppa:owned(state.ppa)},materials,feathers,
+    offers:EPIC_GEAR.map(offer=>({
       id:offer.id,name:offer.name,price:offer.price,currency:'ppa',
       rarity:'epic',slot:offer.slot,materials:offer.materials.map(x=>({...x}))
     }))};
