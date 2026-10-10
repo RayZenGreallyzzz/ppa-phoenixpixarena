@@ -326,6 +326,12 @@
     ppaAuctionCancel:function(payload){return authed('/api/auction/cancel',payload||{})},
     ppaAuctionBuy:async function(payload){var r=await authed('/api/auction/buy',payload||{});if(r&&r.version!=null)noteSaveVersion(r.version);return r},
     ppaAuctionAckCredits:function(ids){return authed('/api/auction/ack-credits',{ids:Array.isArray(ids)?ids:[]})},
+    ppaAuctionServerCredits:function(){return authed('/api/auction/server-credits')},
+    ppaAuctionClaimCredit:async function(creditId,version){
+      var result=await authed('/api/auction/claim-credit',{creditId:String(creditId||''),version:Number(version)});
+      if(result&&result.version!=null)noteSaveVersion(result.version);
+      return result;
+    },
 
     ppaWalletState:function(){return authed('/api/wallet/state')},
     ppaWalletLink:function(address){return authed('/api/wallet/link',{address:address||''})},
