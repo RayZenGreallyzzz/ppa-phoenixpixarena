@@ -38,7 +38,7 @@ def unpack_smith():
     parser.feed(data.decode("utf-8"))
     if len(parser.smith) != 1:
         raise RuntimeError("Original blacksmithFrame missing or duplicated")
-    return parser.smith[0]
+    return parser.smith[0], data.decode("utf-8")
 
 def js_json(smith, variable, kind):
     match = re.search(r"\bconst\s+" + re.escape(variable) + r"\s*=\s*",smith)
@@ -131,15 +131,17 @@ def legendary_offers(smith):
     return parsed
 
 def generate():
-    smith=unpack_smith()
+    smith, original_game=unpack_smith()
     gear=js_json(smith,"GEAR",list)
     acc=js_json(smith,"ACC",dict)
     pets=js_json(smith,"PETS",dict)
     mult=multiplier(smith)
     acc_qty=quantities(smith,"qtyForRarity")
     pet_qty=quantities(smith,"petQty")
-    values=js_numeric_map(smith,"ACCESSORY_STAT_VALUES")
-    necklaces=js_numeric_map(smith,"NECKLACE_STAT_VALUES")
+    # Accessory stat tables are defined in the original parent game, not
+    # inside the embedded blacksmith iframe.
+    values=js_numeric_map(original_game,"ACCESSORY_STAT_VALUES")
+    necklaces=js_numeric_map(original_game,"NECKLACE_STAT_VALUES")
     # NECKLACE_STAT_VALUES is a simple rarity -> numeric object, unlike
     # ACCESSORY_STAT_VALUES (slot -> rarity -> object).
     recipes=[]
