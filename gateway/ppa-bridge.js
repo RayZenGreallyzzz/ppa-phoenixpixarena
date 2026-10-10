@@ -9,6 +9,7 @@
   var saveConflict=null;
   var saveConflictKey='';
   var cloudSaveLoaded=false;
+  var serverSellerCreditClaimGate=false;
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var x=tg();return x&&x.initData?String(x.initData):''}
@@ -120,6 +121,10 @@
 
   function queueSave(state,version){
     saveQueue=saveQueue.catch(function(){}).then(async function(){
+      if(serverSellerCreditClaimGate){
+        var blocked=new Error('Начисление аукциона ожидает серверного подтверждения. Сейв можно отправить после перезагрузки.');
+        blocked.code='AUCTION_CREDIT_SAVE_GATE';blocked.status=409;throw blocked;
+      }
       if(!cloudSaveLoaded){
         var e=new Error('Облачный сейв ещё не загружен. Локальный кэш не может перезаписать Telegram-сейв.');
         e.code='CLOUD_SAVE_NOT_LOADED';e.status=409;throw e;
@@ -328,9 +333,25 @@
     ppaAuctionAckCredits:function(ids){return authed('/api/auction/ack-credits',{ids:Array.isArray(ids)?ids:[]})},
     ppaAuctionServerCredits:function(){return authed('/api/auction/server-credits')},
     ppaAuctionClaimCredit:async function(creditId,version){
-      var result=await authed('/api/auction/claim-credit',{creditId:String(creditId||''),version:Number(version)});
-      if(result&&result.version!=null)noteSaveVersion(result.version);
-      return result;
+      if(serverSellerCreditClaimGate)throw new Error('Серверная выплата уже обрабатывается');
+      // Block NEW legacy client saves before waiting for older queued writes.
+      // Otherwise the pending old-version INV snapshot could overwrite an
+      // already credited server wallet after a successful claim.
+      serverSellerCreditClaimGate=true;
+      try{
+        await saveQueue.catch(function(){});
+        var expected=await resolveSaveVersion(version);
+        var result=await authed('/api/auction/claim-credit',{creditId:String(creditId||''),version:expected});
+        if(result&&result.version!=null)noteSaveVersion(result.version);
+        // On success, keep the save gate closed until startup loads the
+        // entire canonical save. The old in-memory INV is not authoritative.
+        cloudSaveLoaded=false;
+        try{if(window.PPA_CLOUD)window.PPA_CLOUD.creditClaimNeedsReload=true}catch(_){}
+        return result;
+      }catch(e){
+        serverSellerCreditClaimGate=false;
+        throw e;
+      }
     },
 
     ppaWalletState:function(){return authed('/api/wallet/state')},
