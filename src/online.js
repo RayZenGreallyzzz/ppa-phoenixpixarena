@@ -1,4 +1,4 @@
-import {claimOriginalAuctionCredit,serverCreditClaimsCutoff} from './shared-auction-credit-claim.js';
+import {claimOriginalAuctionCredit,serverCreditClaimsCutoff,legacyAuctionCreditCutoff} from './shared-auction-credit-claim.js';
 const encoder = new TextEncoder();
 
 const PPA_TON_TREASURY = 'UQCMgQWdxCPSkC87_JTUpCLMowIr4Ol4qYg3kZBWzNcH61Dx';
@@ -657,7 +657,7 @@ async function auctionList(env, telegramId) {
     return { id: r.id, item, qty: Number(r.qty) || 1, price: Number(r.price) || 0, currency: r.currency,
       sellerName: r.seller_name || 'Игрок', sellerId: String(r.seller_id), isOwn: false, canBuy: true, expiresAt: Number(r.expires_at) || 0 };
   });
-  const cutoff=serverCreditClaimsCutoff(env);
+  const cutoff=legacyAuctionCreditCutoff(env);
   // Legacy Telegram mini-apps must never receive post-cutoff credits to
   // add directly to INV/localStorage. New clients claim those on the
   // server and then reload the authoritative save.
@@ -665,7 +665,7 @@ async function auctionList(env, telegramId) {
     ? await env.DB.prepare('SELECT id,lot_id,sold_qty,currency,amount,created_at FROM auction_credits WHERE seller_id=?1 AND acked=0 ORDER BY created_at ASC LIMIT 100').bind(telegramId).all()
     : await env.DB.prepare('SELECT id,lot_id,sold_qty,currency,amount,created_at FROM auction_credits WHERE seller_id=?1 AND acked=0 AND created_at<?2 ORDER BY created_at ASC LIMIT 100').bind(telegramId,cutoff).all();
   return { ok:true,lots:resultLots,credits:credits.results||[],
-    serverCreditClaimMode:cutoff!==null };
+    serverCreditClaimMode:serverCreditClaimsCutoff(env)!==null };
 }
 async function auctionPlace(env, telegramId, player, body) {
   const lot = body.lot && typeof body.lot === 'object' ? body.lot : {};
@@ -907,7 +907,7 @@ async function auctionClaimCredit(env,telegramId,body){
 }
 async function auctionAck(env, telegramId, body) {
   const ids = Array.isArray(body.ids) ? body.ids.slice(0, 100).map(String) : [];
-  const cutoff=serverCreditClaimsCutoff(env);
+  const cutoff=legacyAuctionCreditCutoff(env);
   for (const id of ids) {
     if(cutoff===null) await env.DB.prepare('UPDATE auction_credits SET acked=1 WHERE id=?1 AND seller_id=?2').bind(id,telegramId).run();
     else await env.DB.prepare('UPDATE auction_credits SET acked=1 WHERE id=?1 AND seller_id=?2 AND created_at<?3').bind(id,telegramId,cutoff).run();
