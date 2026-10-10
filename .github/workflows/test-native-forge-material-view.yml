@@ -21,6 +21,8 @@ on:
       - 'tools/test-atomic-auction-buy.mjs'
       - 'src/shared-auction-actions.js'
       - 'tools/test-shared-auction-actions.mjs'
+      - 'src/shared-auction-credit-claim.js'
+      - 'tools/test-shared-auction-credit-claim.mjs'
       - 'tools/audit-original-auction-contract.mjs'
       - 'src/online.js'
       - 'tools/generate-shared-forge-recipes.py'
@@ -57,6 +59,8 @@ jobs:
         run: node --disable-warning=ExperimentalWarning tools/test-shared-auction-actions.mjs
       - name: Audit checksum-locked Telegram PPA credit and legacy auction source
         run: node --disable-warning=ExperimentalWarning tools/audit-original-auction-contract.mjs
+      - name: Verify safe seller PPA and Gram credits with atomic save plus ACK
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-auction-credit-claim.mjs
       - name: Check complete original smith catalog
         run: python3 tools/generate-shared-forge-recipes.py --print-json
       - name: Inspect original Telegram smith code (no game writes)
