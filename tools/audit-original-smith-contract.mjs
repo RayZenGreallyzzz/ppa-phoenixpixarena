@@ -96,4 +96,16 @@ for(const term of ['function blacksmithEnhance(', 'function v238SendSmithEnhance
   console.log('PPA_SMITH_ENHANCE_EXACT',JSON.stringify({term,at,code:snippet}));
 }
 
+
+for(const query of [
+  'function ensureEnhBaseStats(', 'function applyEnhancementStats(',
+  'function syncItemBM(', 'ENH_CHANCE_GAME=', 'ENH_CHANCE_RUNE_GAME=',
+  'function v238SmithPersist', 'function v238SmithLiteItem('
+]){
+  const i=source.indexOf(query);
+  if(i<0){console.log('PPA_ENHANCE_DETAIL_MISSING',query);continue;}
+  const e=query.startsWith('function ') ?source.indexOf('\nfunction ',i+query.length):i+390;
+  console.log('PPA_ENHANCE_DETAIL',JSON.stringify({query,code:source.slice(i,Math.min(e>i?e:i+4900,i+4900))}));
+}
+
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
