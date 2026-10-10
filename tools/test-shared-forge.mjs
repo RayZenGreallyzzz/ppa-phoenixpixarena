@@ -17,6 +17,7 @@ assert(start>0,'Original Telegram blacksmith GEAR JSON not present');
 const end=original.indexOf('];',start)+1;
 assert(end>start&&end-start<9000);
 const legacyGear=JSON.parse(decoded(original.slice(start+'const GEAR='.length,end)));
+console.log('PPA_ORIGINAL_GEAR_SLOTS',JSON.stringify(legacyGear.map(x=>({slot:x.slot,name:x.name,price:x.price,mats:x.mats}))));
 assert.equal(legacyGear.length,6);
 for(const [i,g] of legacyGear.entries()){
  const offer=EPIC_GEAR.find(x=>x.slot===g.slot);
