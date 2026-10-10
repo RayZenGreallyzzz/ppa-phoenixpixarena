@@ -114,6 +114,55 @@ async function cancel(env,owner,cmd,persist){
   receipt:{action:'cancel',id:cmd.lotId,uid:parsed.gear.uid,enh:parsed.gear.enh||0},
   version:saved.version+1,refreshRequired:true}};
 }
+
+async function recover(env,owner,cmd,persist){
+ // Expired NATIVE escrow still owns the original gear. Recover it exactly
+ // once: a user cannot lose a +7 item because a 24-hour listing timed out.
+ if(!cmd.lotId.startsWith('nat_'))
+  return fail(409,'AUCTION_LEGACY_RECOVERY','Устаревшие объявления возвращаются своим исходным механизмом.');
+ const now=Date.now();
+ const lot=await env.DB.prepare("SELECT * FROM auction_lots WHERE id=?1 AND seller_id=?2 AND qty=1 AND (status='expired' OR (status='active' AND expires_at<=?3))")
+  .bind(cmd.lotId,owner,now).first();
+ if(!lot)return fail(409,'AUCTION_RECOVER_UNAVAILABLE','Этот лот ещё активен, уже продан или возвращён.');
+ let parsed;try{parsed=JSON.parse(lot.item_json)}catch{}
+ if(parsed?.kind!=='gear'||!gearUid(parsed.gear?.uid))
+  return fail(409,'AUCTION_RECOVER_INVALID','Не удалось проверить исходную вещь.');
+ const saved=await saveFor(persist,owner);
+ if(!saved||saved.version!==cmd.version)
+  return fail(409,'SAVE_VERSION_CONFLICT','Обнови сумку и аукцион.');
+ const state=saved.state;
+ if(!Array.isArray(state.bag)||state.bag.length>=100)
+  return fail(409,'AUCTION_BAG_FULL','Сумка заполнена. Освободи ячейку и верни вещь позже.');
+ if(!checkUid({...state,bag:[...state.bag,parsed.gear]},parsed.gear.uid))
+  return fail(409,'AUCTION_UID_COLLISION','Вещь уже существует в другом разделе.');
+ const next=structuredClone(state);
+ next.bag.push(parsed.gear);
+ const raw=JSON.stringify(next);
+ if(!byteSafe(raw))return fail(413,'AUCTION_SAVE_TOO_LARGE','Сейв превышает лимит.');
+ const guardSave='ar_'+crypto.randomUUID();
+ const guardLot='al_'+crypto.randomUUID();
+ await env.DB.prepare(schema).run();
+ try{
+  await env.DB.batch([
+   env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5')
+    .bind(saved.version+1,raw,now,owner,saved.version),
+   guard(env).bind(guardSave),
+   env.DB.prepare("UPDATE auction_lots SET status='returned' WHERE id=?1 AND seller_id=?2 AND qty=1 AND (status='expired' OR (status='active' AND expires_at<=?3))")
+    .bind(cmd.lotId,owner,now),
+   guard(env).bind(guardLot),
+   env.DB.prepare('DELETE FROM ppa_native_auction_guard WHERE id=?1 OR id=?2')
+    .bind(guardSave,guardLot)
+  ]);
+ }catch(e){
+  if(/constraint failed/i.test(String(e)))
+   return fail(409,'AUCTION_RECOVER_CONFLICT','Лот или инвентарь изменился. Обнови аукцион.');
+  throw e;
+ }
+ return {status:200,data:{ok:true,message:'Непроданная вещь возвращена в исходную сумку',
+  receipt:{action:'recover',id:cmd.lotId,uid:parsed.gear.uid,
+    enh:parsed.gear.enh||0},version:saved.version+1,refreshRequired:true}};
+}
+
 async function buy(env,owner,cmd,persist){
  if(!cmd.lotId.startsWith('nat_'))
   return fail(409,'AUCTION_LEGACY_BUY','Старые лоты требуют отдельной проверки источника товара.');
@@ -134,14 +183,14 @@ export async function sharedAuctionAction(env,ownerId,body,persistence){
  if(env.PPA_AUCTION_ACTIONS_ENABLED!=='1')
   return fail(404,'NOT_FOUND','Auction actions disabled');
  const owner=String(ownerId),action=body?.action;
- if(!['place','buy','cancel'].includes(action)||!validVer(body?.version))
+ if(!['place','buy','cancel','recover'].includes(action)||!validVer(body?.version))
   return fail(400,'AUCTION_INVALID_ACTION','Неверная операция аукциона.');
  let command={service:'auction',action,version:body.version};
  if(action==='place'){
   if(!gearUid(body.uid)||!money(body.price)||!['ppa','gram'].includes(body.currency))
    return fail(400,'AUCTION_INVALID_LOT','Некорректная вещь, цена или валюта.');
   Object.assign(command,{uid:body.uid,price:body.price,currency:body.currency});
- }else if(action==='cancel'){
+ }else if(action==='cancel'||action==='recover'){
   if(typeof body.lotId!=='string'||!/^nat_[a-z0-9]{32}$/.test(body.lotId))
    return fail(400,'AUCTION_INVALID_LOT','Недопустимый лот.');
   command.lotId=body.lotId;
@@ -157,6 +206,7 @@ export async function sharedAuctionAction(env,ownerId,body,persistence){
  return executeNativeCommandOnce(env,owner,body.requestId,command,async()=>{
   const result=action==='place'?await place(env,owner,command,persistence):
    action==='cancel'?await cancel(env,owner,command,persistence):
+   action==='recover'?await recover(env,owner,command,persistence):
    await buy(env,owner,command,persistence);
   return envelope(result);
  });
