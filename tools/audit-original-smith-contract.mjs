@@ -39,4 +39,11 @@ for (const functionName of ['blacksmithCraft','applyGearMagicWard','craftStats']
  // Keep output free of embedded huge art and player data. Function logic only.
  console.log('PPA_SMITH_EXACT_FUNCTION',JSON.stringify({name:functionName,body:segment}));
 }
+for (const signature of ['const CLASS_ITEM_NAMES=', 'var CLASS_ITEM_NAMES=', 'function itemBM(']) {
+ const at=source.indexOf(signature);
+ if(at<0) { console.log('PPA_SMITH_MISSING_OPTIONAL',signature); continue; }
+ const until=source.indexOf('\nfunction ',at+signature.length);
+ const raw=source.slice(at,Math.min(at+4600,until>0?until:at+4600));
+ console.log('PPA_SMITH_REFERENCE',JSON.stringify({signature,excerpt:raw}));
+}
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
