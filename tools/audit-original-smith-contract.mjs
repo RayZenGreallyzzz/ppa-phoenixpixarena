@@ -184,4 +184,18 @@ for(const name of ['storageMove','storageMoveAll','storageSort','sendStorageStat
  console.log('PPA_STORAGE_ORIGINAL_FUNCTION',JSON.stringify({name,code}));
 }
 
+
+for(const needle of ['function auction','auctionBuy(', 'auctionSell(', 'auctionList(', 'auction_lots',
+ 'auction_credits', '/api/auction', 'auctionPost', 'auctionCancel', 'auctionClaim',
+ 'auctionRefresh', 'auctionFrame', 'auctionSellItem', 'auctionSelect', 'auctionTrade',
+ 'AUCTION_FEE','auction fee']){
+ const matches=[];let i=0;
+ while((i=source.toLowerCase().indexOf(needle.toLowerCase(),i))>=0&&matches.length<14){
+  matches.push(i);i+=needle.length;
+ }
+ console.log('PPA_ORIGINAL_AUCTION_LOCATOR',JSON.stringify({needle,
+  count:matches.length,position:matches,
+  samples:matches.slice(0,4).map(i=>source.slice(Math.max(0,i-120),i+440))}));
+}
+
 console.log('PPA_ORIGINAL_SMITH_CONTRACT_SOURCE_OK',sha,'chars',source.length);
