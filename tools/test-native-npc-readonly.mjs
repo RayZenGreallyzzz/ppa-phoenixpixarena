@@ -5,7 +5,10 @@ import { NATIVE_NPC_SERVICES, projectNativeNpcReadOnly } from '../src/native-npc
 const sample = {
   gold: 270, ppa: 85, gram: 3.5, arenaTokens: 12,
   pvp: { rating: 1240, wins: 8, losses: 2 },
-  blackMarket: { refreshAt: Date.now() + 100000, offers: [{ id: 'saved-actual-offer', price: 120 }] },
+  blackMarket: { refreshAt: Date.now() + 100000,
+    offers: [{ id: 'saved-actual-offer', price: 120, limit: 2,
+      item: { name: 'Руна PPA', stats: { atk: 7 } } }],
+    bought: { 'saved-actual-offer': 1 } },
   storage: { personal: [{ uid: 'keep-1' }], clan: [], premium: [] },
 };
 const unchanged = JSON.stringify(sample);
@@ -19,6 +22,16 @@ assert.equal(projectNativeNpcReadOnly('merchant', {}, 100).currency.gold, null);
 assert.equal(projectNativeNpcReadOnly('forged-not-a-service', sample), null);
 const bm = projectNativeNpcReadOnly('blackmarket', sample);
 assert.equal(bm.offers.length, 1);
+assert.equal(bm.offers[0].bought, 1,
+  'Original Black Market bought counter must come from D1 blackMarket.bought');
+bm.offers[0].item.stats.atk = 999;
+assert.equal(sample.blackMarket.offers[0].item.stats.atk, 7,
+  'Read-only NPC nested items must never alias the original Telegram save');
+assert.deepEqual(projectNativeNpcReadOnly('blackmarket',
+  { blackMarket: { refreshAt: Date.now() + 100000,
+    offers: [{ id: 'unknown-buy', price: 99, bought: 0, limit: 2 }] } }).offers
+    .map(offer => offer.bought), [undefined],
+  'A missing purchased-count must remain UNKNOWN, not an invented zero');
 assert.equal(projectNativeNpcReadOnly('blackmarket', sample, sample.blackMarket.refreshAt + 10).offers.length, 0);
 assert.equal(projectNativeNpcReadOnly('storage', sample).storageCount.personal, 1);
 assert.equal(JSON.stringify(sample), unchanged, 'server projection must not mutate the existing save');
