@@ -60,8 +60,21 @@ export function projectNativeNpcReadOnly(service, state, now = Date.now()) {
     const market = object(state.blackMarket) || {};
     const expiry = numeric(market, ['refreshAt']);
     // Personal offers only if not expired, never newly rolled by native.
+    const purchased = object(market.bought);
     out.offers = Array.isArray(market.offers) && expiry !== null && expiry > now
-      ? market.offers.slice(0, 64).filter(object).map(item => ({ ...item }))
+      ? market.offers.slice(0, 64).filter(object).map(item => {
+          // The original Telegram client stores daily per-offer purchase
+          // counts in blackMarket.bought, not on the offer. Copy the real
+          // nested item too so this read view cannot alias the saved state.
+          const projected = structuredClone(item);
+          delete projected.bought; // Do not trust a stale embedded counter.
+          const id = String(item.id ?? '');
+          if (id && purchased && Object.hasOwn(purchased, id)) {
+            const count = purchased[id];
+            if (Number.isSafeInteger(count) && count >= 0) projected.bought = count;
+          }
+          return projected;
+        })
       : [];
     out.offersValidUntil = expiry;
     out.offersReadOnly = true;
