@@ -20,6 +20,9 @@ const needles=[
   ['RUNE_RARITY','const RUNE_RARITY'],
   ['RUNE_DEFINITION','function runeDefByKey'],
   ['RUNE_BONUS','function runeBonus'],
+  ['RUNE_UNLOCK','function runeUnlockedSlots'],
+  ['RUNE_MAX_SLOTS','const RUNE_MAX_SLOTS'],
+  ['CLASS_FROM_NAME','function classKeyFromName'],
   ['CLASS_KEY','function classBaseKey'],
   ['GEAR_BONUS','function gearBonus'],
   ['RECOMPUTE','function recomputeStats'],
@@ -29,8 +32,9 @@ for(const [label,needle] of needles){
   const offset=source.indexOf(needle);
   // Targeted source signatures only. Do not print the full packed game, its
   // user/session data or unrelated source.
-  const excerpt=offset>=0?source.slice(offset,offset+1400):'';
+  const max=label==='RECOMPUTE'?6000:label==='CLASS_BASE'?2400:label==='RUNE_TYPES'?2200:2000;
+  const excerpt=offset>=0?source.slice(offset,offset+max):'';
   const signature=crypto.createHash('sha256').update(excerpt).digest('hex').slice(0,16);
   console.log('SOURCE_'+label+'_FOUND='+(offset>=0)+' SIG='+signature+
-    ' HEAD='+JSON.stringify(excerpt.slice(0,1050)));
+    ' HEAD='+JSON.stringify(excerpt));
 }
