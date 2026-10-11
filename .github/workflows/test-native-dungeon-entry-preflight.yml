@@ -12,6 +12,9 @@ on:
       - 'tools/test-native-pve-atomic-kill-lab.mjs'
       - 'src/native-pve-hit-geometry-lab.js'
       - 'tools/test-native-pve-hit-geometry-lab.mjs'
+      - 'tools/audit-original-pve-damage-source.mjs'
+      - 'src/native-pve-original-basic-damage-parity.js'
+      - 'tools/test-native-pve-basic-damage-parity.mjs'
       - 'src/realtime-stable.js'
       - 'tools/test-native-dungeon-entry-preflight.mjs'
       - '.github/workflows/test-native-dungeon-entry-preflight.yml'
@@ -38,6 +41,10 @@ jobs:
         run: node tools/test-native-pve-atomic-kill-lab.mjs
       - name: Audit server-state target generation, range, moving mobs and synthetic LOS
         run: node tools/test-native-pve-hit-geometry-lab.mjs
+      - name: Inspect checksum-locked original Telegram PvE damage call sites
+        run: node tools/audit-original-pve-damage-source.mjs
+      - name: Differential-test Telegram basic damage for all eight classes
+        run: node tools/test-native-pve-basic-damage-parity.mjs
       - name: Preserve native combat intent and fake-damage rejections
         run: node tools/test-native-pve-combat-intent.mjs
       - name: Keep server PvE readiness fail-closed
