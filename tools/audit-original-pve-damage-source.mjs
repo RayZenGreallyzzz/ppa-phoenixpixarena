@@ -49,7 +49,7 @@ for(const [label,term,n] of explicit){
   const found=at>=0;
   console.log('PPA_DAMAGE_EXACT_'+label+'_FOUND '+found);
   if(found){
-    const sample=src.slice(at,at+n).replace(/[\\r\\n\\t]+/g,' ')
+    const sample=src.slice(at,at+n).replace(/\s+/g,' ')
       .replace(/data:image[^ ]{50,}/gi,'[image]');
     console.log('PPA_DAMAGE_EXACT_'+label+'_SOURCE '+JSON.stringify(sample));
   }
