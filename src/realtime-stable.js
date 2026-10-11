@@ -304,7 +304,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     // dungeon seat, enter the combat loop, receive rewards or send attacks.
     // Only already-authoritative monster changes are mirrored.
     if (!room.startsWith('dungeon-') ||
-        !['mob-authority','mob-position','mob-hp','mob-dead','mob-state'].includes(String(data && data.type || '')) ||
+        !['mob-authority','mob-position','mob-hp','mob-dead'].includes(String(data && data.type || '')) ||
         this.countRoom(room) < 1) return;
     for (const ws of this.sockets()) {
       if (ws === except) continue;
