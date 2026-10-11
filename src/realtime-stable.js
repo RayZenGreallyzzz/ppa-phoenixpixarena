@@ -2054,6 +2054,8 @@ export class RealtimeHub extends BaseRealtimeHub {
     const clanId = String(request.headers.get('x-ppa-clan-id') || '').slice(0, 80);
     const clanName = String(request.headers.get('x-ppa-clan-name') || '').trim().slice(0, 24);
     const classKey = String(request.headers.get('x-ppa-class-key') || '').slice(0, 24);
+    // Native kind is inserted by the ticket-verifying gateway only.
+    const nativePositionOnly = request.headers.get('x-ppa-client-kind') === 'godot-city-v1';
     if (!pid || !telegramId) return new Response('Unauthorized', { status: 401 });
 
     // Persist a real game visit at successful realtime handshake. Telegram/WebView
@@ -2072,7 +2074,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     const client = pair[0], server = pair[1];
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({
-      pid, telegramId, name, clanId, clanName, classKey,
+      pid, telegramId, name, clanId, clanName, classKey, nativePositionOnly,
       room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
       lastSeenAt: Date.now(), lastSnapshotPush: 0, lastMobSnapshotAt: 0, hiddenUntil: 0,
       atk: 1, def: 0, attackRange: 60, crit: 0, critDmg: 180, atkSpd: 1,
@@ -2101,6 +2103,23 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     const a = attOf(ws);
     const now = Date.now();
+
+    // The signed Godot city socket is not the Telegram gameplay socket:
+    // only safe-city movement, ping and safe-room refresh are allowed.
+    // In particular, legacy 'move' can inject HP/ATK and 'mob-hit-event'
+    // accepts client damage; neither is ever accepted from native.
+    if (a.nativePositionOnly === true &&
+        !['ping', 'room', 'player-position'].includes(m.type)) {
+      wsJson(ws, { type:'player-position-rejected',
+        code:'NATIVE_CITY_ONLY', room:cleanRoom(a.room), ts:now });
+      return;
+    }
+    if (a.nativePositionOnly === true && m.type === 'room' && m.room !== 'safe') {
+      wsJson(ws, { type:'player-position-rejected',
+        code:'CITY_ONLY', room:cleanRoom(a.room), ts:now });
+      return;
+    }
+
 
     if (m.type === 'clan-boss-enter') {
       await this.clanBossEnter(ws,a,String(m.bossId||''),String(m.requestId||''),now);
@@ -3030,6 +3049,38 @@ export class RealtimeHub extends BaseRealtimeHub {
         this.sendMobAuthoritySnapshot(ws, room, now);
       }
       if (a.partyId) this.sendPartyState(a.partyId);
+      return;
+    }
+
+    // PPA_NATIVE_CITY_POSITION_V1: position-only adapter for the authenticated
+    // native city client. Legacy move carries HP/combat stats; never synthesize
+    // those fields from an incomplete Godot save snapshot just to move a hero.
+    if (m.type === 'player-position') {
+      const reject = code => wsJson(ws, { type:'player-position-rejected', code, room:cleanRoom(a.room), ts:now });
+      if (String(this.env.PPA_GODOT_REALTIME_ENABLED || '') !== '1') { reject('NATIVE_REALTIME_DISABLED'); return; }
+      if (a.nativePositionOnly !== true) { reject('NATIVE_TICKET_REQUIRED'); return; }
+      const room = cleanRoom(a.room);
+      if (room !== 'safe' || m.room !== 'safe' || a.arenaMatchId) { reject('CITY_ONLY'); return; }
+      if (a.deadLocked) { reject('PLAYER_DEAD'); return; }
+      if (typeof m.x !== 'number' || typeof m.y !== 'number' || !Number.isFinite(m.x) || !Number.isFinite(m.y) ||
+          m.x < 0 || m.y < 0 || m.x > 2822 || m.y > 2822 ||
+          typeof m.f !== 'number' || !Number.isInteger(m.f) || m.f < 0 || m.f > 7 ||
+          !['run', 'idle'].includes(m.a)) { reject('INVALID_POSITION'); return; }
+      if (now - (Number(a.lastNativePosition) || 0) < 120) return;
+      a.x = Math.round(m.x * 10) / 10;
+      a.y = Math.round(m.y * 10) / 10;
+      if (typeof m.f === 'number' && Number.isFinite(m.f)) a.f = Math.max(0, Math.min(7, Math.round(m.f)));
+      a.a = m.a === 'run' ? 'run' : 'idle';
+      a.lastNativePosition = now;
+      a.lastSeenAt = now;
+      a.q = (Number(a.q) || 0) + 1;
+      const pushSnapshot = now - (Number(a.lastSnapshotPush) || 0) >= 1200;
+      if (pushSnapshot) a.lastSnapshotPush = now;
+      ws.serializeAttachment(a);
+      // Reuse Telegram's move/snapshot receiver and exact server-owned pid.
+      this.roomBroadcast(room, { type:'move', player:packetFromAtt(a), room, ts:now }, ws);
+      wsJson(ws, { type:'player-position-ack', room, x:a.x, y:a.y, f:a.f, a:a.a, q:a.q, ts:now });
+      if (pushSnapshot) this.sendRoomSnapshot(ws, room);
       return;
     }
 
