@@ -7,6 +7,8 @@ on:
       - 'tools/test-native-npc-readonly.mjs'
       - 'src/native-combat-profile-readonly.js'
       - 'src/native-combat-stat-parity.js'
+      - 'src/native-original-class-rune-parity.js'
+      - 'tools/test-native-original-class-rune-parity.mjs'
       - 'tools/test-native-combat-stat-parity.mjs'
       - 'tools/audit-original-rune-class-source.mjs'
       - 'src/shared-sharpen.js'
@@ -32,6 +34,8 @@ jobs:
         run: node tools/test-native-combat-profile-readonly.mjs
       - name: Verify original Telegram stat cap and enhancement parity without damage
         run: node tools/test-native-combat-stat-parity.mjs
+      - name: Compare 8 classes and all runes against original runtime recomputeStats
+        run: node tools/test-native-original-class-rune-parity.mjs
       - name: Inspect checksum-locked original class and rune definitions
         run: node tools/audit-original-rune-class-source.mjs
       - name: Rehearse two-owner NPC rollout and blocked economy actions
