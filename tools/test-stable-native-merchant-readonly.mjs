@@ -53,7 +53,7 @@ for(const needle of [
  'saved.bootstrapFromProfile',
  'projectOriginalMerchantReadOnly(ownerId, saved)',
  "contract: 'ppa-merchant-v1'",
- 'ownerId, actions: [], state'
+ "ownerId, actions: String(env.PPA_MERCHANT_ACTIONS_ENABLED || '') === '1' ? ['buy'] : []"
 ])assert(merchant.includes(needle),'Missing merchant guard: '+needle);
 assert(merchant.includes("action && String(env.PPA_MERCHANT_ACTIONS_ENABLED || '') !== '1'"),
   'Default closed action gate required');
