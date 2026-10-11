@@ -1,4 +1,6 @@
 import { RealtimeHub as BaseRealtimeHub } from './realtime.js';
+import { validateNativePveIntent } from './native-pve-combat-intent.js';
+import { auditNativePveReadiness } from './native-pve-readiness-guard.js';
 
 function attOf(ws) {
   try { return ws.deserializeAttachment() || {}; } catch (_) { return {}; }
@@ -298,6 +300,19 @@ export class RealtimeHub extends BaseRealtimeHub {
     const raw = JSON.stringify(data);
     for (const ws of this.roomSockets(room)) {
       if (ws === except) continue;
+      try { ws.send(raw); } catch (_) {}
+    }
+    // Passive Godot observers stay in the safe room and NEVER occupy a
+    // dungeon seat, enter the combat loop, receive rewards or send attacks.
+    // Only already-authoritative monster changes are mirrored.
+    if (!room.startsWith('dungeon-') ||
+        !['mob-authority','mob-position','mob-hp','mob-dead'].includes(String(data && data.type || '')) ||
+        this.countRoom(room) < 1) return;
+    for (const ws of this.sockets()) {
+      if (ws === except) continue;
+      const a = attOf(ws);
+      if (a.nativePositionOnly !== true || cleanRoom(a.room) !== 'safe' ||
+          String(a.observerRoom || '') !== room) continue;
       try { ws.send(raw); } catch (_) {}
     }
   }
@@ -1402,10 +1417,11 @@ export class RealtimeHub extends BaseRealtimeHub {
     return changed;
   }
 
-  sendMobAuthoritySnapshot(ws, room, now = Date.now()) {
+  sendMobAuthoritySnapshot(ws, room, now = Date.now(), observerReadOnly = false) {
     room = cleanRoom(room);
     if (!mobAuthorityRoom(room)) return;
-    this.processMobRespawns(room, now);
+    // An observer must not advance server respawns or persist mob state.
+    if (!observerReadOnly) this.processMobRespawns(room, now);
     const { health, dead } = this.mobStores();
     const prefix = room + '|';
     const rows = [];
@@ -2054,6 +2070,9 @@ export class RealtimeHub extends BaseRealtimeHub {
     const clanId = String(request.headers.get('x-ppa-clan-id') || '').slice(0, 80);
     const clanName = String(request.headers.get('x-ppa-clan-name') || '').trim().slice(0, 24);
     const classKey = String(request.headers.get('x-ppa-class-key') || '').slice(0, 24);
+    // The upstream WebSocket gateway overwrites this header from the signed
+    // HMAC ticket. Never learn native privileges from a gameplay packet.
+    const nativePositionOnly = request.headers.get('x-ppa-client-kind') === 'godot-city-v1';
     if (!pid || !telegramId) return new Response('Unauthorized', { status: 401 });
 
     // Persist a real game visit at successful realtime handshake. Telegram/WebView
@@ -2072,8 +2091,8 @@ export class RealtimeHub extends BaseRealtimeHub {
     const client = pair[0], server = pair[1];
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({
-      pid, telegramId, name, clanId, clanName, classKey,
-      room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
+      pid, telegramId, name, clanId, clanName, classKey, nativePositionOnly,
+      room: 'safe', partyId: '', pet: '', lastChat: 0,
       lastSeenAt: Date.now(), lastSnapshotPush: 0, lastMobSnapshotAt: 0, hiddenUntil: 0,
       atk: 1, def: 0, attackRange: 60, crit: 0, critDmg: 180, atkSpd: 1,
       deadLocked:false,deadAt:0,pkEnabled:false,pkHpLockUntil:0,lastPkAttack:0,lastPkSkill:0,lastPkControl:0,
@@ -2101,6 +2120,124 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     const a = attOf(ws);
     const now = Date.now();
+
+    // A signed Godot city socket is a movement observer, not an alternative
+    // Telegram combat client. Prevent spoofed legacy HP/damage/rooms/loot.
+    // Chat, PvP and dungeon authorization can be added only when a canonical
+    // combat-intent protocol has been tested against BOTH clients.
+    if (a.nativePositionOnly === true &&
+        !['ping', 'room', 'player-position', 'dungeon-observe',
+          'dungeon-observe-leave', 'dungeon-combat-intent'].includes(m.type)) {
+      wsJson(ws, { type:'player-position-rejected', code:'NATIVE_CITY_ONLY',
+        room:cleanRoom(a.room), ts:now });
+      return;
+    }
+    if (a.nativePositionOnly === true && m.type === 'room' &&
+        m.room !== 'safe') {
+      wsJson(ws, { type:'player-position-rejected', code:'CITY_ONLY',
+        room:cleanRoom(a.room), ts:now });
+      return;
+    }
+
+    if (m.type === 'dungeon-combat-intent') {
+      const deny = (code,requestId='') => wsJson(ws,{
+        type:'dungeon-combat-preflight-rejected', code,
+        requestId, canAttack:false, ts:now
+      });
+      // This is a non-mutating staging contract ONLY. Native combat cannot
+      // use legacy mob-hit-event because that packet includes CLIENT damage.
+      if (a.nativePositionOnly !== true) { deny('NATIVE_TICKET_REQUIRED'); return; }
+      const validation = validateNativePveIntent(m);
+      if (!validation.ok) { deny(validation.code); return; }
+      const intent = validation.intent;
+      if (String(this.env.PPA_GODOT_REALTIME_ENABLED || '') !== '1' ||
+          String(this.env.PPA_GODOT_DUNGEON_OBSERVE_ENABLED || '') !== '1' ||
+          String(this.env.PPA_GODOT_PVE_PREFLIGHT_ENABLED || '') !== '1') {
+        deny('PVE_PREFLIGHT_DISABLED', intent.requestId); return;
+      }
+      if (cleanRoom(a.room) !== 'safe' ||
+          !a.observerRoom || String(a.observerRoom) !== intent.room) {
+        deny('UNCONFIRMED_DUNGEON', intent.requestId); return;
+      }
+      // Confirm the target from the existing server-owned mob stores. Never
+      // seed from the request, change HP, tick respawns or persist D1.
+      const isActive = [...this.roomSockets(intent.room)].some(peer => {
+        const p = attOf(peer);
+        return p.nativePositionOnly !== true && cleanRoom(p.room) === intent.room;
+      });
+      if (!isActive) { deny('DUNGEON_EMPTY', intent.requestId); return; }
+      const rec = this.mobStores().health.get(this.mobCompound(intent.room,intent.key));
+      if (!rec) { deny('MOB_UNCONFIRMED', intent.requestId); return; }
+      if (!(Number(rec.hp)>0)) { deny('MOB_DEAD', intent.requestId); return; }
+      if (intent.action === 'skill') {
+        // The canonical server skill registry/mana/cooldowns are NOT yet
+        // integrated. A syntactically valid id is NOT an authorized ability.
+        deny('SERVER_SKILL_NOT_READY', intent.requestId);
+        return;
+      }
+      const readiness = auditNativePveReadiness(intent,null,{
+        room:intent.room,key:intent.key,
+        hp:Number(rec.hp),x:Number(rec.x),y:Number(rec.y)
+      },now,{
+        pid:a.pid,ownerId:a.telegramId,room:cleanRoom(a.room)
+      });
+      wsJson(ws,{
+        type:'dungeon-combat-preflight', requestId:intent.requestId,
+        room:intent.room, key:intent.key, action:intent.action,
+        targetConfirmed:true, canAttack:false, readOnly:true,
+        readiness:{
+          readOnly:readiness.readOnly,
+          canAttack:readiness.canAttack,
+          blockers:readiness.blockers
+        },
+        reason:'SERVER_COMBAT_PROFILE_REQUIRED', ts:now
+      });
+      return;
+    }
+
+    if (m.type === 'dungeon-observe' || m.type === 'dungeon-observe-leave') {
+      const reject = code => wsJson(ws, { type:'dungeon-observe-rejected', code, ts:now });
+      if (a.nativePositionOnly !== true) { reject('NATIVE_TICKET_REQUIRED'); return; }
+      if (String(this.env.PPA_GODOT_REALTIME_ENABLED || '') !== '1' ||
+          String(this.env.PPA_GODOT_DUNGEON_OBSERVE_ENABLED || '') !== '1') {
+        reject('OBSERVE_DISABLED'); return;
+      }
+      if (m.type === 'dungeon-observe-leave') {
+        delete a.observerRoom;
+        ws.serializeAttachment(a);
+        wsJson(ws, { type:'dungeon-observe-ended', room:'safe', ts:now });
+        return;
+      }
+      if (cleanRoom(a.room) !== 'safe' || a.arenaMatchId || a.deadLocked) {
+        reject('CITY_ONLY'); return;
+      }
+      const allowedBases = ['dungeon-1-20','dungeon-21-40','dungeon-41-60'];
+      if (!allowedBases.includes(m.base) || m.room != null || m.instance != null) {
+        reject('INVALID_DUNGEON_BASE'); return;
+      }
+      // Choose a genuinely active Telegram dungeon instance on THIS existing
+      // global DO. Do not create one via assignDungeon, trust a client room,
+      // reserve seats, alter player party membership, or simulate combat.
+      const active = this.candidateDungeonRooms(m.base).filter(room =>
+        [...this.roomSockets(room)].some(peer => {
+          const p = attOf(peer);
+          return p.nativePositionOnly !== true && cleanRoom(p.room) === room;
+        }));
+      active.sort((left, right) =>
+        this.countRoom(right) - this.countRoom(left) || left.localeCompare(right));
+      if (!active.length) { reject('NO_ACTIVE_DUNGEON'); return; }
+      const target = active[0];
+      a.observerRoom = target;
+      ws.serializeAttachment(a);
+      wsJson(ws, {
+        type:'dungeon-observe-assigned', base:m.base, room:target,
+        readOnly:true, actionsEnabled:false, ts:now
+      });
+      // Never seed monster state from an untrusted Godot mob catalogue.
+      // The existing players are already maintaining this room's state.
+      this.sendMobAuthoritySnapshot(ws, target, now, true);
+      return;
+    }
 
     if (m.type === 'clan-boss-enter') {
       await this.clanBossEnter(ws,a,String(m.bossId||''),String(m.requestId||''),now);
@@ -2960,6 +3097,15 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     if (m.type === 'ping') {
       a.lastSeenAt = now;
+      if (a.nativePositionOnly === true && a.observerRoom) {
+        const observed = String(a.observerRoom);
+        if (![...this.roomSockets(observed)].some(peer =>
+            attOf(peer).nativePositionOnly !== true &&
+            cleanRoom(attOf(peer).room) === observed)) {
+          delete a.observerRoom;
+          wsJson(ws,{type:'dungeon-observe-ended',room:'safe',reason:'ROOM_EMPTY',ts:now});
+        }
+      }
       {
         const pingRoom = cleanRoom(a.room);
         if (isClanBossRoom(pingRoom)&&a.clanBossRoom&&cleanRoom(a.clanBossRoom)===pingRoom&&now-Number(a.lastClanBossStateAt||0)>=5000) {
@@ -3039,11 +3185,14 @@ export class RealtimeHub extends BaseRealtimeHub {
     if (m.type === 'player-position') {
       const reject = code => wsJson(ws, { type:'player-position-rejected', code, room:cleanRoom(a.room), ts:now });
       if (String(this.env.PPA_GODOT_REALTIME_ENABLED || '') !== '1') { reject('NATIVE_REALTIME_DISABLED'); return; }
+      if (a.nativePositionOnly !== true) { reject('NATIVE_TICKET_REQUIRED'); return; }
       const room = cleanRoom(a.room);
       if (room !== 'safe' || m.room !== 'safe' || a.arenaMatchId) { reject('CITY_ONLY'); return; }
       if (a.deadLocked) { reject('PLAYER_DEAD'); return; }
       if (typeof m.x !== 'number' || typeof m.y !== 'number' || !Number.isFinite(m.x) || !Number.isFinite(m.y) ||
-          m.x < 0 || m.y < 0 || m.x > 2822 || m.y > 2822) { reject('INVALID_POSITION'); return; }
+          m.x < 0 || m.y < 0 || m.x > 2822 || m.y > 2822 ||
+          typeof m.f !== 'number' || !Number.isInteger(m.f) || m.f < 0 || m.f > 7 ||
+          !['run', 'idle'].includes(m.a)) { reject('INVALID_POSITION'); return; }
       if (now - (Number(a.lastNativePosition) || 0) < 120) return;
       a.x = Math.round(m.x * 10) / 10;
       a.y = Math.round(m.y * 10) / 10;

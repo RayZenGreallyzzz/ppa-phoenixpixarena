@@ -205,7 +205,7 @@ export async function nativeRealtimeTicketForLinkedTelegram(env, telegramId) {
     clanId: clan ? String(clan.clan_id || '').slice(0, 80) : '',
     clanName: clan ? String(clan.clan_name || '').slice(0, 24) : ''
   };
-  const payload = { ...identity, exp: Date.now() + 90_000, nonce: crypto.randomUUID() };
+  const payload = { ...identity, clientKind: 'godot-city-v1', exp: Date.now() + 90_000, nonce: crypto.randomUUID() };
   return {
     ok: true,
     ticket: await makeTicket(payload, env.BOT_TOKEN),
@@ -601,6 +601,9 @@ export async function handleRealtimeRequest(request, env) {
       h.set('x-ppa-clan-id', p.clanId || '');
       h.set('x-ppa-clan-name', p.clanName || '');
       h.set('x-ppa-class-key', p.classKey || '');
+      // Never accept a caller-supplied client kind: derive it only from
+      // the HMAC-verified native ticket before reaching the Durable Object.
+      h.set('x-ppa-client-kind', p.clientKind === 'godot-city-v1' ? 'godot-city-v1' : 'telegram');
       return stub.fetch(new Request(request, { headers: h }));
     } catch (e) {
       return new Response(String((e && e.message) || 'Realtime auth error'), { status: Number(e && e.status) || 401 });

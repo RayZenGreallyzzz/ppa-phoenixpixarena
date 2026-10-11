@@ -1,0 +1,75 @@
+name: Verify signed PPA forge material projection
+on:
+  pull_request:
+    paths:
+      - 'src/native-npc-readonly.js'
+      - 'tools/test-native-forge-material-view.mjs'
+      - 'tools/audit-original-smith-contract.mjs'
+      - 'src/shared-forge.js'
+      - 'src/worker.js'
+      - 'tools/test-shared-forge.mjs'
+      - 'tools/test-shared-sharpen.mjs'
+      - 'src/shared-sharpen.js'
+      - 'src/shared-inventory.js'
+      - 'tools/test-shared-inventory.mjs'
+      - 'src/shared-storage.js'
+      - 'tools/test-shared-storage.mjs'
+      - 'src/shared-clan-storage.js'
+      - 'tools/test-shared-clan-storage.mjs'
+      - 'src/native-auction-readonly.js'
+      - 'tools/test-native-auction-readonly.mjs'
+      - 'tools/test-atomic-auction-buy.mjs'
+      - 'src/shared-auction-actions.js'
+      - 'tools/test-shared-auction-actions.mjs'
+      - 'src/shared-auction-credit-claim.js'
+      - 'tools/test-shared-auction-credit-claim.mjs'
+      - 'tools/test-telegram-auction-credit-cutover.mjs'
+      - 'tools/test-telegram-auction-claim-gate.mjs'
+      - 'gateway/online-client.js'
+      - 'gateway/ppa-bridge.js'
+      - 'tools/audit-original-auction-contract.mjs'
+      - 'src/online.js'
+      - 'tools/generate-shared-forge-recipes.py'
+      - 'src/shared-forge-recipes.generated.json'
+      - '.github/workflows/test-native-forge-material-view.yml'
+permissions:
+  contents: read
+jobs:
+  forge-materials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Signed forge projection parity (offline, no D1)
+        run: node tools/test-native-forge-material-view.mjs
+      - name: Real original six-gear forge and D1 idempotency parity
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-forge.mjs
+      - name: Compare real Telegram blacksmith odds and stats with PPA server sharpening
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-sharpen.mjs
+      - name: Verify original Telegram equip and unequip with versioned D1 idempotency
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-inventory.mjs
+      - name: Protect real personal storage and +7 items against replay and stale saves
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-storage.mjs
+      - name: Verify atomic D1 clan storage deposit and withdrawal
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-clan-storage.mjs
+      - name: Verify native auction uses the ORIGINAL Telegram PPA listings (safe read-only)
+        run: node --disable-warning=ExperimentalWarning tools/test-native-auction-readonly.mjs
+      - name: Verify original Telegram auction purchase is atomic and fee remains 10 percent
+        run: node --disable-warning=ExperimentalWarning tools/test-atomic-auction-buy.mjs
+      - name: Verify native gear auction escrow, same-world purchase, return and 10% commission
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-auction-actions.mjs
+      - name: Audit checksum-locked Telegram PPA credit and legacy auction source
+        run: node --disable-warning=ExperimentalWarning tools/audit-original-auction-contract.mjs
+      - name: Verify safe seller PPA and Gram credits with atomic save plus ACK
+        run: node --disable-warning=ExperimentalWarning tools/test-shared-auction-credit-claim.mjs
+      - name: Confirm original Telegram local-credit fallback and server cutoff cannot duplicate payouts
+        run: node --disable-warning=ExperimentalWarning tools/test-telegram-auction-credit-cutover.mjs
+      - name: Exercise Telegram seller payout under dropped responses and pending saves
+        run: node --disable-warning=ExperimentalWarning tools/test-telegram-auction-claim-gate.mjs
+      - name: Check complete original smith catalog
+        run: python3 tools/generate-shared-forge-recipes.py --print-json
+      - name: Inspect original Telegram smith code (no game writes)
+        run: node tools/audit-original-smith-contract.mjs

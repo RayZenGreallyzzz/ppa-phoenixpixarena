@@ -29,6 +29,23 @@ export function projectNativeNpcReadOnly(service, state, now = Date.now()) {
     clanCoins: numeric(state, ['clanCoins']),
   };
   const out = { service, readOnly: true, currency: money, actionsEnabled: false };
+  if (service === 'forge') {
+    // Authoritative owned resources ONLY. The recipe catalog itself is
+    // extracted from the original Telegram blacksmith by the native build;
+    // this projection never invents prices, gear, material quantities or
+    // a craft result. No equip/forge write operation is exposed here.
+    const materials = object(state.materials);
+    const feathers = object(state.feathers);
+    const safeOwned = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+    out.materials = materials
+      ? Object.fromEntries(Object.entries(materials)
+          .filter(([name]) => typeof name === 'string' && name.length > 0 && name.length <= 120)
+          .slice(0, 512).map(([name, value]) => [name, safeOwned(value)]))
+      : null;
+    out.feathers = feathers ? {phoenix: safeOwned(feathers.phoenix)} : null;
+    out.recipeActionsEnabled = false;
+    out.catalogSource = 'public-live-PPA:blacksmithFrame';
+  }
   if (service === 'arena') {
     // Do not invent leaderboards or matchmaking; those belong to live PvP.
     const arena = object(state.pvp) || object(state.arena) || {};
@@ -43,8 +60,21 @@ export function projectNativeNpcReadOnly(service, state, now = Date.now()) {
     const market = object(state.blackMarket) || {};
     const expiry = numeric(market, ['refreshAt']);
     // Personal offers only if not expired, never newly rolled by native.
+    const purchased = object(market.bought);
     out.offers = Array.isArray(market.offers) && expiry !== null && expiry > now
-      ? market.offers.slice(0, 64).filter(object).map(item => ({ ...item }))
+      ? market.offers.slice(0, 64).filter(object).map(item => {
+          // The original Telegram client stores daily per-offer purchase
+          // counts in blackMarket.bought, not on the offer. Copy the real
+          // nested item too so this read view cannot alias the saved state.
+          const projected = structuredClone(item);
+          delete projected.bought; // Do not trust a stale embedded counter.
+          const id = String(item.id ?? '');
+          if (id && purchased && Object.hasOwn(purchased, id)) {
+            const count = purchased[id];
+            if (Number.isSafeInteger(count) && count >= 0) projected.bought = count;
+          }
+          return projected;
+        })
       : [];
     out.offersValidUntil = expiry;
     out.offersReadOnly = true;

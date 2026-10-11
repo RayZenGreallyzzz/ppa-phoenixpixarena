@@ -1,0 +1,56 @@
+name: PPA native NPC signed-owner read-only QA
+on:
+  pull_request:
+    paths:
+      - 'src/worker.js'
+      - 'src/native-npc-readonly.js'
+      - 'tools/test-native-npc-readonly.mjs'
+      - 'src/native-combat-profile-readonly.js'
+      - 'src/native-combat-stat-parity.js'
+      - 'src/native-original-class-rune-parity.js'
+      - 'tools/test-native-original-class-rune-parity.mjs'
+      - 'tools/audit-original-skill-clan-source.mjs'
+      - 'src/native-original-passive-catalog.generated.js'
+      - 'src/native-original-passive-parity.js'
+      - 'tools/test-native-original-passive-parity.mjs'
+      - 'src/native-original-active-catalog.generated.js'
+      - 'src/native-original-active-parity.js'
+      - 'src/native-original-clan-bonus-parity.js'
+      - 'tools/test-native-original-active-clan-parity.mjs'
+      - 'tools/test-native-combat-stat-parity.mjs'
+      - 'tools/audit-original-rune-class-source.mjs'
+      - 'src/shared-sharpen.js'
+      - 'build.mjs'
+      - 'tools/test-native-combat-profile-readonly.mjs'
+      - 'tools/test-native-npc-rollout-matrix.mjs'
+      - 'docs/ppa-godot-npc-readonly-rollout.md'
+      - '.github/workflows/test-native-npc-identity-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  read-only-npc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify signed owner, feature gates, no D1 writes
+        run: node tools/test-native-npc-readonly.mjs
+      - name: Verify saved combat-loadout audit cannot authorize real attacks
+        run: node tools/test-native-combat-profile-readonly.mjs
+      - name: Verify original Telegram stat cap and enhancement parity without damage
+        run: node tools/test-native-combat-stat-parity.mjs
+      - name: Compare 8 classes and all runes against original runtime recomputeStats
+        run: node tools/test-native-original-class-rune-parity.mjs
+      - name: Compare all passive skills rank I-V against original Telegram PPA
+        run: node tools/test-native-original-passive-parity.mjs
+      - name: Verify all original active skills and clan rank references without casting
+        run: node tools/test-native-original-active-clan-parity.mjs
+      - name: Inspect original skill progression and clan combat buffs
+        run: node tools/audit-original-skill-clan-source.mjs
+      - name: Inspect checksum-locked original class and rune definitions
+        run: node tools/audit-original-rune-class-source.mjs
+      - name: Rehearse two-owner NPC rollout and blocked economy actions
+        run: node tools/test-native-npc-rollout-matrix.mjs

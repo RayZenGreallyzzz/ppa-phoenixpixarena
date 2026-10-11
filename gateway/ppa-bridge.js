@@ -9,6 +9,7 @@
   var saveConflict=null;
   var saveConflictKey='';
   var cloudSaveLoaded=false;
+  var serverSellerCreditClaimGate=false;
 
   function tg(){try{return window.Telegram&&window.Telegram.WebApp}catch(_){return null}}
   function initData(){var x=tg();return x&&x.initData?String(x.initData):''}
@@ -119,7 +120,14 @@
   }
 
   function queueSave(state,version){
+    // Saves queued BEFORE a payout must finish before the claim is sent.
+    // Saves queued AFTER payout begins must never run with stale local INV.
+    var admittedBeforeClaim=!serverSellerCreditClaimGate;
     saveQueue=saveQueue.catch(function(){}).then(async function(){
+      if(!admittedBeforeClaim){
+        var blocked=new Error('Начисление аукциона ожидает серверного подтверждения. Сейв можно отправить после перезагрузки.');
+        blocked.code='AUCTION_CREDIT_SAVE_GATE';blocked.status=409;throw blocked;
+      }
       if(!cloudSaveLoaded){
         var e=new Error('Облачный сейв ещё не загружен. Локальный кэш не может перезаписать Telegram-сейв.');
         e.code='CLOUD_SAVE_NOT_LOADED';e.status=409;throw e;
@@ -242,7 +250,9 @@
       try{if(window.PPA_CLOUD)window.PPA_CLOUD.saveConflict=null}catch(_){}
       return r;
     },
-    ppaSaveGame:async function(state,version){await auth();return queueSave(state,version)},
+    // Enqueue synchronously, before the next payout can close the gate.
+    // The authenticated cloud-save prerequisite is checked in queueSave.
+    ppaSaveGame:function(state,version){return queueSave(state,version)},
     ppaRegisterCharacter:async function(nickname,classKey){
       await auth();
       var r=await call('/api/character/register',{nickname:nickname,classKey:classKey||''});
@@ -326,6 +336,41 @@
     ppaAuctionCancel:function(payload){return authed('/api/auction/cancel',payload||{})},
     ppaAuctionBuy:async function(payload){var r=await authed('/api/auction/buy',payload||{});if(r&&r.version!=null)noteSaveVersion(r.version);return r},
     ppaAuctionAckCredits:function(ids){return authed('/api/auction/ack-credits',{ids:Array.isArray(ids)?ids:[]})},
+    ppaAuctionServerCredits:function(){return authed('/api/auction/server-credits')},
+    ppaAuctionClaimCredit:async function(creditId,version){
+      if(serverSellerCreditClaimGate)throw new Error('Серверная выплата уже обрабатывается');
+      // Block NEW legacy client saves before waiting for older queued writes.
+      // Otherwise the pending old-version INV snapshot could overwrite an
+      // already credited server wallet after a successful claim.
+      serverSellerCreditClaimGate=true;
+      try{
+        // A failed earlier save must abort the payout. Never swallow a
+        // conflict here and accidentally credit an older character snapshot.
+        await saveQueue;
+        var expected=await resolveSaveVersion(version);
+        var result=await authed('/api/auction/claim-credit',{creditId:String(creditId||''),version:expected});
+        if(result&&result.version!=null)noteSaveVersion(result.version);
+        // On success, keep the save gate closed until startup loads the
+        // entire canonical save. The old in-memory INV is not authoritative.
+        cloudSaveLoaded=false;
+        window.PPA_AUCTION_CLAIM_RELOAD_REQUIRED=true;
+        try{if(window.PPA_CLOUD)window.PPA_CLOUD.creditClaimNeedsReload=true}catch(_){}
+        return result;
+      }catch(e){
+        // Even an HTTP error can mean the server committed the payout but
+        // the response was lost. Fail closed until a FULL page reload has
+        // applied the canonical server save to the in-memory inventory.
+        cloudSaveLoaded=false;
+        window.PPA_AUCTION_CLAIM_RELOAD_REQUIRED=true;
+        try{
+          if(window.PPA_CLOUD){
+            window.PPA_CLOUD.creditClaimNeedsReload=true;
+            window.PPA_CLOUD.ready=false;
+          }
+        }catch(_){}
+        throw e;
+      }
+    },
 
     ppaWalletState:function(){return authed('/api/wallet/state')},
     ppaWalletLink:function(address){return authed('/api/wallet/link',{address:address||''})},
