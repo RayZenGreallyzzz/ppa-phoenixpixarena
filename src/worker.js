@@ -1,3 +1,11 @@
+import { NATIVE_NPC_SERVICES, projectNativeNpcReadOnly } from './native-npc-readonly.js';
+import { projectOriginalMerchantReadOnly } from './native-merchant-readonly.js';
+import { sharedMerchantOperation } from './shared-merchant.js';
+import { sharedForgeOperation } from './shared-forge.js';
+import { sharedInventoryOperation } from './shared-inventory.js';
+import { sharedStorageOperation } from './shared-storage.js';
+import { nativeRealtimeTicketForLinkedTelegram } from './realtime.js';
+
 const INIT_DATA_MAX_AGE_SEC = 24 * 60 * 60;
 const encoder = new TextEncoder();
 
@@ -1246,6 +1254,152 @@ async function handlePhoenixGameApi(request, env, url) {
         version: snapshot.version,
         state: snapshot.state,
         updatedAt: snapshot.updatedAt || null
+      });
+    }
+
+    // Exact original merchantFrame catalogue for the SAME authenticated owner,
+    // backed by the SAME existing PPA save. Read-only: no native purchase
+    // route and absolutely no economy, inventory or balance mutation.
+    if (url.pathname === '/api/game/merchant/state' ||
+        url.pathname === '/api/game/merchant/action') {
+      if (String(env.PPA_GODOT_STATE_READ_ENABLED || '') !== '1')
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      const action = url.pathname.endsWith('/action');
+      if (request.method !== (action ? 'POST' : 'GET'))
+        return apiError('Method not allowed', 405, 'METHOD_NOT_ALLOWED');
+      // No purchase route unless the operator explicitly enables it;
+      // successful catalog reads do not authorize a purchase.
+      if (action && String(env.PPA_MERCHANT_ACTIONS_ENABLED || '') !== '1')
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena')
+        return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      const account = await phoenixAccountRow(env, auth.accountId);
+      if (!account) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const ownerId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
+      if (!ownerId) return apiError('Telegram character not linked', 409, 'TELEGRAM_NOT_LINKED');
+      const persistence = {
+        load: id => loadSave(env, id),
+        save: (id, state, version) => saveGameState(env, id, state, version),
+      };
+      if (action) {
+        // The staged command handler ignores client-supplied prices, character
+        // identity, balance and inventory and uses its once-only D1 ledger.
+        const result = await sharedMerchantOperation(env, ownerId, 'action', body, persistence);
+        return json(result.data, result.status);
+      }
+      const saved = await persistence.load(ownerId);
+      if (!saved.ok) return json(saved, Number(saved.status) || 500);
+      if (saved.bootstrapFromProfile || !saved.state ||
+          typeof saved.state !== 'object' || Array.isArray(saved.state)) {
+        return apiError('Existing PPA character save not ready', 409, 'PPA_CHARACTER_SAVE_NOT_READY');
+      }
+      const state = projectOriginalMerchantReadOnly(ownerId, saved);
+      if (!state) return apiError('Merchant state not ready', 409, 'PPA_CHARACTER_SAVE_NOT_READY');
+      return json({
+        ok: true, gameId: auth.gameId, contract: 'ppa-merchant-v1',
+        ownerId, actions: String(env.PPA_MERCHANT_ACTIONS_ENABLED || '') === '1' ? ['buy'] : [],
+        state,
+      });
+    }
+
+    // Original Telegram PPA forge, inventory and personal warehouse,
+    // each backed by the same owner-validated, versioned save. Their
+    // mutations are independently OFF by default; no client-supplied
+    // character ID, gear, materials, bonus stats or purchase price is used.
+    if (url.pathname === '/api/game/forge/state' ||
+        url.pathname === '/api/game/forge/action' ||
+        url.pathname === '/api/game/inventory/state' ||
+        url.pathname === '/api/game/inventory/action' ||
+        url.pathname === '/api/game/storage/personal/state' ||
+        url.pathname === '/api/game/storage/personal/action') {
+      const service = url.pathname.startsWith('/api/game/forge/') ? 'forge'
+        : url.pathname.startsWith('/api/game/inventory/') ? 'inventory' : 'storage';
+      const operation = url.pathname.endsWith('/state') ? 'state' : 'action';
+      const readFlag = service === 'forge' ? 'PPA_FORGE_READ_ENABLED'
+        : service === 'inventory' ? 'PPA_INVENTORY_READ_ENABLED'
+          : 'PPA_PERSONAL_STORAGE_READ_ENABLED';
+      if (String(env[readFlag] || '') !== '1')
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      if (request.method !== (operation === 'state' ? 'GET' : 'POST'))
+        return apiError('Method not allowed', 405, 'METHOD_NOT_ALLOWED');
+      if (operation === 'action') {
+        const actionAllowed = service === 'forge'
+          ? ((body.action === 'craft' && String(env.PPA_FORGE_ACTIONS_ENABLED || '') === '1') ||
+             (body.action === 'enhance' && String(env.PPA_FORGE_ENHANCE_ENABLED || '') === '1'))
+          : service === 'inventory' ? String(env.PPA_INVENTORY_ACTIONS_ENABLED || '') === '1'
+            : String(env.PPA_PERSONAL_STORAGE_ACTIONS_ENABLED || '') === '1';
+        if (!actionAllowed) return apiError('Game API route not found', 404, 'NOT_FOUND');
+      }
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena')
+        return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      const account = await phoenixAccountRow(env, auth.accountId);
+      if (!account) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const ownerId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
+      if (!ownerId) return apiError('Telegram character not linked', 409, 'TELEGRAM_NOT_LINKED');
+      const persistence = {
+        load: id => loadSave(env, id),
+        save: (id, state, version) => saveGameState(env, id, state, version),
+      };
+      const operationHandler = service === 'forge' ? sharedForgeOperation
+        : service === 'inventory' ? sharedInventoryOperation : sharedStorageOperation;
+      const result = await operationHandler(env, ownerId, operation, body, persistence);
+      return json(result.data, result.status);
+    }
+
+    // Game Session -> SAME Telegram PPA pid in SAME Durable Object;
+    // native tickets are strictly safe-city position-only (no HP/combat).
+    if (url.pathname === '/api/game/realtime/ticket') {
+      if (String(env.PPA_GODOT_REALTIME_ENABLED || '') !== '1')
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      if (request.method !== 'POST')
+        return apiError('POST required', 405, 'METHOD_NOT_ALLOWED');
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena')
+        return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      const account = await phoenixAccountRow(env, auth.accountId);
+      if (!account) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const ownerId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
+      if (!ownerId) return apiError('Telegram character not linked', 409, 'TELEGRAM_NOT_LINKED');
+      return json(await nativeRealtimeTicketForLinkedTelegram(env, ownerId));
+    }
+
+    // Existing Phoenix game-state feature gate also controls these READ-ONLY
+    // NPC views. Same signed game session, same linked Telegram identity,
+    // same canonical save; no separate native save, prices or write endpoint.
+    // Keep this as a narrowly scoped main cutover, NOT a merge of experimental
+    // staged merchant/combat routes or production D1 migrations.
+    if (url.pathname.startsWith('/api/game/npc/')) {
+      if (String(env.PPA_GODOT_STATE_READ_ENABLED || '') !== '1') {
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      }
+      if (request.method !== 'GET') return apiError('GET required', 405, 'METHOD_NOT_ALLOWED');
+      const service = url.pathname.slice('/api/game/npc/'.length);
+      if (!NATIVE_NPC_SERVICES.includes(service)) {
+        return apiError('Unknown NPC service', 404, 'UNKNOWN_NPC_SERVICE');
+      }
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena') {
+        return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      }
+      const account = await phoenixAccountRow(env, auth.accountId);
+      if (!account) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const ownerId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
+      if (!ownerId) return apiError('Telegram character not linked', 409, 'TELEGRAM_NOT_LINKED');
+      const saved = await loadSave(env, ownerId);
+      if (!saved.ok) return json(saved, Number(saved.status) || 500);
+      if (saved.bootstrapFromProfile || !saved.state ||
+          typeof saved.state !== 'object' || Array.isArray(saved.state) ||
+          !Number.isSafeInteger(saved.version) || saved.version < 1) {
+        return apiError('Existing PPA character save not ready', 409, 'PPA_CHARACTER_SAVE_NOT_READY');
+      }
+      const data = projectNativeNpcReadOnly(service, saved.state);
+      if (!data) return apiError('NPC view unavailable', 409, 'NPC_VIEW_UNAVAILABLE');
+      return json({
+        ok: true, readOnly: true, gameId: auth.gameId,
+        ownerId, service, version: saved.version,
+        updatedAt: saved.updatedAt || null, data,
       });
     }
 
