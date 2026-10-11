@@ -2054,6 +2054,9 @@ export class RealtimeHub extends BaseRealtimeHub {
     const clanId = String(request.headers.get('x-ppa-clan-id') || '').slice(0, 80);
     const clanName = String(request.headers.get('x-ppa-clan-name') || '').trim().slice(0, 24);
     const classKey = String(request.headers.get('x-ppa-class-key') || '').slice(0, 24);
+    // The upstream WebSocket gateway overwrites this header from the signed
+    // HMAC ticket. Never learn native privileges from a gameplay packet.
+    const nativePositionOnly = request.headers.get('x-ppa-client-kind') === 'godot-city-v1';
     if (!pid || !telegramId) return new Response('Unauthorized', { status: 401 });
 
     // Persist a real game visit at successful realtime handshake. Telegram/WebView
@@ -2072,8 +2075,8 @@ export class RealtimeHub extends BaseRealtimeHub {
     const client = pair[0], server = pair[1];
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({
-      pid, telegramId, name, clanId, clanName, classKey,
-      room: 'safe', partyId: '', pet: '', lastChat: 0, lastMove: 0,
+      pid, telegramId, name, clanId, clanName, classKey, nativePositionOnly,
+      room: 'safe', partyId: '', pet: '', lastChat: 0,
       lastSeenAt: Date.now(), lastSnapshotPush: 0, lastMobSnapshotAt: 0, hiddenUntil: 0,
       atk: 1, def: 0, attackRange: 60, crit: 0, critDmg: 180, atkSpd: 1,
       deadLocked:false,deadAt:0,pkEnabled:false,pkHpLockUntil:0,lastPkAttack:0,lastPkSkill:0,lastPkControl:0,
@@ -2101,6 +2104,23 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     const a = attOf(ws);
     const now = Date.now();
+
+    // A signed Godot city socket is a movement observer, not an alternative
+    // Telegram combat client. Prevent spoofed legacy HP/damage/rooms/loot.
+    // Chat, PvP and dungeon authorization can be added only when a canonical
+    // combat-intent protocol has been tested against BOTH clients.
+    if (a.nativePositionOnly === true &&
+        !['ping', 'room', 'player-position'].includes(m.type)) {
+      wsJson(ws, { type:'player-position-rejected', code:'NATIVE_CITY_ONLY',
+        room:cleanRoom(a.room), ts:now });
+      return;
+    }
+    if (a.nativePositionOnly === true && m.type === 'room' &&
+        m.room !== 'safe') {
+      wsJson(ws, { type:'player-position-rejected', code:'CITY_ONLY',
+        room:cleanRoom(a.room), ts:now });
+      return;
+    }
 
     if (m.type === 'clan-boss-enter') {
       await this.clanBossEnter(ws,a,String(m.bossId||''),String(m.requestId||''),now);
@@ -3039,11 +3059,14 @@ export class RealtimeHub extends BaseRealtimeHub {
     if (m.type === 'player-position') {
       const reject = code => wsJson(ws, { type:'player-position-rejected', code, room:cleanRoom(a.room), ts:now });
       if (String(this.env.PPA_GODOT_REALTIME_ENABLED || '') !== '1') { reject('NATIVE_REALTIME_DISABLED'); return; }
+      if (a.nativePositionOnly !== true) { reject('NATIVE_TICKET_REQUIRED'); return; }
       const room = cleanRoom(a.room);
       if (room !== 'safe' || m.room !== 'safe' || a.arenaMatchId) { reject('CITY_ONLY'); return; }
       if (a.deadLocked) { reject('PLAYER_DEAD'); return; }
       if (typeof m.x !== 'number' || typeof m.y !== 'number' || !Number.isFinite(m.x) || !Number.isFinite(m.y) ||
-          m.x < 0 || m.y < 0 || m.x > 2822 || m.y > 2822) { reject('INVALID_POSITION'); return; }
+          m.x < 0 || m.y < 0 || m.x > 2822 || m.y > 2822 ||
+          typeof m.f !== 'number' || !Number.isInteger(m.f) || m.f < 0 || m.f > 7 ||
+          !['run', 'idle'].includes(m.a)) { reject('INVALID_POSITION'); return; }
       if (now - (Number(a.lastNativePosition) || 0) < 120) return;
       a.x = Math.round(m.x * 10) / 10;
       a.y = Math.round(m.y * 10) / 10;
