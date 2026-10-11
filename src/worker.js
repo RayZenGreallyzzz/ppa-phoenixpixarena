@@ -1521,6 +1521,9 @@ async function handlePhoenixGameApi(request, env, url) {
       if (!data) return apiError('NPC view not available', 400, 'NPC_VIEW_UNAVAILABLE');
       return json({
         ok: true, readOnly: true, gameId: auth.gameId,
+        // Canonical session-linked Telegram owner; never taken from any
+        // client query string, request body or user-supplied game state.
+        ownerId: telegramId,
         service, version: saved.version, updatedAt: saved.updatedAt || null,
         data
       });
