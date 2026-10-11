@@ -1,6 +1,7 @@
 import { RealtimeHub as BaseRealtimeHub } from './realtime.js';
 import { validateNativePveIntent } from './native-pve-combat-intent.js';
 import { auditNativePveReadiness } from './native-pve-readiness-guard.js';
+import { inspectNativeDungeonEntry } from './native-dungeon-entry-preflight.js';
 
 function attOf(ws) {
   try { return ws.deserializeAttachment() || {}; } catch (_) { return {}; }
@@ -2127,7 +2128,8 @@ export class RealtimeHub extends BaseRealtimeHub {
     // combat-intent protocol has been tested against BOTH clients.
     if (a.nativePositionOnly === true &&
         !['ping', 'room', 'player-position', 'dungeon-observe',
-          'dungeon-observe-leave', 'dungeon-combat-intent'].includes(m.type)) {
+          'dungeon-observe-leave', 'dungeon-combat-intent',
+          'dungeon-entry-check'].includes(m.type)) {
       wsJson(ws, { type:'player-position-rejected', code:'NATIVE_CITY_ONLY',
         room:cleanRoom(a.room), ts:now });
       return;
@@ -2136,6 +2138,31 @@ export class RealtimeHub extends BaseRealtimeHub {
         m.room !== 'safe') {
       wsJson(ws, { type:'player-position-rejected', code:'CITY_ONLY',
         room:cleanRoom(a.room), ts:now });
+      return;
+    }
+
+    if (m.type === 'dungeon-entry-check') {
+      // A non-mutating, default-OFF admission diagnosis. This MUST NOT call
+      // assignDungeon(), moveSocketRoom(), combat or any D1 writer.
+      const room = String(a.observerRoom || '');
+      const peers = room ? [...this.roomSockets(room)] : [];
+      const telegramCount = peers.filter(peer => {
+        const p = attOf(peer);
+        return p.nativePositionOnly !== true && cleanRoom(p.room) === room;
+      }).length;
+      const enabled = String(this.env.PPA_GODOT_REALTIME_ENABLED || '') === '1' &&
+        String(this.env.PPA_GODOT_DUNGEON_OBSERVE_ENABLED || '') === '1' &&
+        String(this.env.PPA_GODOT_DUNGEON_ENTRY_PREFLIGHT_ENABLED || '') === '1';
+      const result = inspectNativeDungeonEntry(m, {
+        enabled, signedNative:a.nativePositionOnly === true,
+        pid:a.pid, ownerId:a.telegramId,
+        currentRoom:cleanRoom(a.room), observerRoom:room,
+        deadLocked:a.deadLocked, arenaMatchId:a.arenaMatchId,
+        partyId:a.partyId, activeTelegramCount:telegramCount,
+        occupiedSeats:room ? this.roomPidSet(room).size : 0,
+        reservedSeats:room ? this.reservedSlots(room, '', now) : 0
+      });
+      wsJson(ws, { ...result, ts:now });
       return;
     }
 

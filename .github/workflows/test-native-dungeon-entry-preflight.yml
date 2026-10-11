@@ -1,0 +1,25 @@
+name: PPA Godot dungeon entry read-only admission QA
+on:
+  pull_request:
+    paths:
+      - 'src/native-dungeon-entry-preflight.js'
+      - 'src/realtime-stable.js'
+      - 'tools/test-native-dungeon-entry-preflight.mjs'
+      - '.github/workflows/test-native-dungeon-entry-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  dungeon-entry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify signed socket room eligibility stays observer only
+        run: node tools/test-native-dungeon-entry-preflight.mjs
+      - name: Preserve native combat intent and fake-damage rejections
+        run: node tools/test-native-pve-combat-intent.mjs
+      - name: Keep server PvE readiness fail-closed
+        run: node tools/test-native-pve-readiness-guard.mjs
