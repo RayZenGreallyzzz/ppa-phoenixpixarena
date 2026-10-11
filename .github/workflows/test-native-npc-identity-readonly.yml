@@ -13,6 +13,10 @@ on:
       - 'src/native-original-passive-catalog.generated.js'
       - 'src/native-original-passive-parity.js'
       - 'tools/test-native-original-passive-parity.mjs'
+      - 'src/native-original-active-catalog.generated.js'
+      - 'src/native-original-active-parity.js'
+      - 'src/native-original-clan-bonus-parity.js'
+      - 'tools/test-native-original-active-clan-parity.mjs'
       - 'tools/test-native-combat-stat-parity.mjs'
       - 'tools/audit-original-rune-class-source.mjs'
       - 'src/shared-sharpen.js'
@@ -42,6 +46,8 @@ jobs:
         run: node tools/test-native-original-class-rune-parity.mjs
       - name: Compare all passive skills rank I-V against original Telegram PPA
         run: node tools/test-native-original-passive-parity.mjs
+      - name: Verify all original active skills and clan rank references without casting
+        run: node tools/test-native-original-active-clan-parity.mjs
       - name: Inspect original skill progression and clan combat buffs
         run: node tools/audit-original-skill-clan-source.mjs
       - name: Inspect checksum-locked original class and rune definitions
