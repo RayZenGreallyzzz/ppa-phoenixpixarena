@@ -7,6 +7,15 @@ on:
       - 'src/native-merchant-readonly.js'
       - 'src/shared-merchant.js'
       - 'src/native-action-ledger.js'
+      - 'src/shared-forge.js'
+      - 'src/shared-sharpen.js'
+      - 'src/shared-forge-recipes.generated.json'
+      - 'src/shared-inventory.js'
+      - 'src/shared-storage.js'
+      - 'tools/test-shared-forge.mjs'
+      - 'tools/test-shared-sharpen.mjs'
+      - 'tools/test-shared-inventory.mjs'
+      - 'tools/test-shared-storage.mjs'
       - 'tools/test-stable-merchant-purchases.mjs'
       - 'tools/test-stable-native-merchant-readonly.mjs'
       - 'tools/test-stable-native-npc-readonly.mjs'
@@ -30,3 +39,11 @@ jobs:
         run: node tools/test-stable-native-merchant-readonly.mjs
       - name: Differential original Telegram purchases, signed native route, replay and CAS
         run: node tools/test-stable-merchant-purchases.mjs
+      - name: Original PPA forge recipes, 8 classes and signed route
+        run: node tools/test-shared-forge.mjs
+      - name: Original PPA sharpen +1 to +7, server random and replay
+        run: node tools/test-shared-sharpen.mjs
+      - name: Original equipment UID and class-bound inventory moves
+        run: node tools/test-shared-inventory.mjs
+      - name: Original warehouse bag capacities and +7 preservation
+        run: node tools/test-shared-storage.mjs
