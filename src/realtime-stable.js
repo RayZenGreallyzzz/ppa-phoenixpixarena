@@ -2,6 +2,7 @@ import { RealtimeHub as BaseRealtimeHub } from './realtime.js';
 import { validateNativePveIntent } from './native-pve-combat-intent.js';
 import { auditNativePveReadiness } from './native-pve-readiness-guard.js';
 import { inspectNativeDungeonEntry } from './native-dungeon-entry-preflight.js';
+import { NativeDungeonShadowActors } from './native-dungeon-shadow-actors.js';
 
 function attOf(ws) {
   try { return ws.deserializeAttachment() || {}; } catch (_) { return {}; }
@@ -225,6 +226,12 @@ function packetFromAtt(a) {
 }
 
 export class RealtimeHub extends BaseRealtimeHub {
+  nativeDungeonShadows() {
+    // Server-local diagnostics only: hibernation loses them fail-closed.
+    if (!this._nativeDungeonShadows) this._nativeDungeonShadows = new NativeDungeonShadowActors();
+    return this._nativeDungeonShadows;
+  }
+
   ensureRoomIndex() {
     if (this._roomIndex) return this._roomIndex;
     this._roomIndex = new Map();
@@ -2106,6 +2113,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     wsJson(server, { type: 'hello', pid, name, clanId, clanName, serverRoom: 'safe', ts: Date.now() });
 
     for (const old of oldSockets) {
+      if (this._nativeDungeonShadows) this._nativeDungeonShadows.revoke(old);
       try { old.close(4001, 'Reconnected'); } catch (_) {}
     }
 
@@ -2153,7 +2161,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       const enabled = String(this.env.PPA_GODOT_REALTIME_ENABLED || '') === '1' &&
         String(this.env.PPA_GODOT_DUNGEON_OBSERVE_ENABLED || '') === '1' &&
         String(this.env.PPA_GODOT_DUNGEON_ENTRY_PREFLIGHT_ENABLED || '') === '1';
-      const result = inspectNativeDungeonEntry(m, {
+      const evidence = {
         enabled, signedNative:a.nativePositionOnly === true,
         pid:a.pid, ownerId:a.telegramId,
         currentRoom:cleanRoom(a.room), observerRoom:room,
@@ -2161,7 +2169,14 @@ export class RealtimeHub extends BaseRealtimeHub {
         partyId:a.partyId, activeTelegramCount:telegramCount,
         occupiedSeats:room ? this.roomPidSet(room).size : 0,
         reservedSeats:room ? this.reservedSlots(room, '', now) : 0
-      });
+      };
+      const result = inspectNativeDungeonEntry(m, evidence);
+      if (result.eligibleForFutureRuntime) {
+        // Still an OBSERVER: no room move, HP/MP, attack or loot.
+        this.nativeDungeonShadows().stage(ws, evidence, result, now);
+      } else if (this._nativeDungeonShadows) {
+        this._nativeDungeonShadows.revoke(ws);
+      }
       wsJson(ws, { ...result, ts:now });
       return;
     }
@@ -2230,6 +2245,7 @@ export class RealtimeHub extends BaseRealtimeHub {
         reject('OBSERVE_DISABLED'); return;
       }
       if (m.type === 'dungeon-observe-leave') {
+        if (this._nativeDungeonShadows) this._nativeDungeonShadows.revoke(ws);
         delete a.observerRoom;
         ws.serializeAttachment(a);
         wsJson(ws, { type:'dungeon-observe-ended', room:'safe', ts:now });
@@ -2238,6 +2254,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (cleanRoom(a.room) !== 'safe' || a.arenaMatchId || a.deadLocked) {
         reject('CITY_ONLY'); return;
       }
+      if (this._nativeDungeonShadows) this._nativeDungeonShadows.revoke(ws);
       const allowedBases = ['dungeon-1-20','dungeon-21-40','dungeon-41-60'];
       if (!allowedBases.includes(m.base) || m.room != null || m.instance != null) {
         reject('INVALID_DUNGEON_BASE'); return;
@@ -3330,6 +3347,7 @@ export class RealtimeHub extends BaseRealtimeHub {
   }
 
   scheduleGoneCheck(ws) {
+    if (this._nativeDungeonShadows) this._nativeDungeonShadows.revoke(ws);
     const a = attOf(ws);
     const pid = String(a.pid || '');
     const room = cleanRoom(a.room);
