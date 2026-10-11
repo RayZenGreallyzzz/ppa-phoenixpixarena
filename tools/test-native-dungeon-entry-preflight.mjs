@@ -24,7 +24,7 @@ for(const packet of [
   {...request,room}, {...request,instance:1}, {...request,partyId:'p'},
   {...request,damage:9999}, {...request,mp:999}, {...request,x:500},
   {...request,ownerId:'11'}, {...request,role:'fighter'},
-  {...request,base:'dungeon-41-60'}, {...request,base:'safe'},
+  {...request,base:'safe'},
   {...request,requestId:'short'}, {...request,requestId:'../bad'},
   {...request,type:'dungeon-join'}
 ]) {
@@ -53,6 +53,7 @@ for(const [change,expected] of [
   assert.equal(got.canAttack,false);
   assert.equal(got.canReceiveRewards,false);
 }
+assert.equal(check({...request,base:'dungeon-41-60'}).code,'SERVER_DUNGEON_ASSIGNMENT_REQUIRED');
 assert.equal(check(request,{...evidence,occupiedSeats:39,reservedSeats:0}).eligibleForFutureRuntime,true);
 
 function socket(pid,roomValue,nativePositionOnly) {
@@ -86,7 +87,6 @@ hub.env.PPA_GODOT_DUNGEON_ENTRY_PREFLIGHT_ENABLED='1';
 await send(native,request);
 assert.equal(last(native).code,'SERVER_DUNGEON_ASSIGNMENT_REQUIRED');
 await send(native,{type:'dungeon-observe',base:'dungeon-1-20'});
-assert.equal(last(native).type,'mob-authority-snapshot'===last(native).type?'mob-authority-snapshot':last(native).type);
 // The observer room comes ONLY from the server, not from client-supplied room.
 assert.equal(native.state().observerRoom,room);
 await send(native,request);
