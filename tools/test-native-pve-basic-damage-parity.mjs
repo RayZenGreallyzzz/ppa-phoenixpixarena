@@ -89,10 +89,11 @@ for(const classKey of classes)for(const mode of [0,1,2,3,4,5]) {
   const originalBasic=vm.runInContext('('+basic+')',sandbox,{timeout:1000});
   const target={def:sample.targetDef,isAiFighter:false,
     isClanBoss:false,isBoss:false,hp:200};
-  const originalResult=vm.runInContext(
-    'basicAttackRoll(target)',vm.createContext({...common,
-      target,basicAttackRoll:originalBasic,
-      shopDamageMul:originalShop,clanDamageMulFor:originalClan}),{timeout:1000});
+  sandbox.target=target;
+  sandbox.basicAttackRoll=originalBasic;
+  sandbox.shopDamageMul=originalShop;
+  sandbox.clanDamageMulFor=originalClan;
+  const originalResult=vm.runInContext('basicAttackRoll(target)',sandbox,{timeout:1000});
   assert.equal(pure.critical,originalResult.crit,
     'Crit mismatch '+classKey+' '+mode);
   assert(Math.abs(pure.damageReference-originalResult.damage)<1e-10,
