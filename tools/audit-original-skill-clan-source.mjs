@@ -38,11 +38,11 @@ const objectLiteral=(prefix)=>{
     const c=src[i];
     if(quote){
       if(escape){escape=false;continue}
-      if(c==='\\\\'){escape=true;continue}
+      if(c.charCodeAt(0)===92){escape=true;continue}
       if(c===quote)quote='';
       continue;
     }
-    if(c==="'"||c==='"'||c==='\\`'){quote=c;continue}
+    if(c.charCodeAt(0)===39||c.charCodeAt(0)===34||c.charCodeAt(0)===96){quote=c;continue}
     if(c==='{')depth++;
     else if(c==='}' && --depth===0)
       return src.slice(start,i+1);
