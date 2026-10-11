@@ -49,7 +49,7 @@ for(const needle of [
  "auth.gameId !== 'phoenix-pix-arena'",
  'phoenixAccountRow(env, auth.accountId)',
  'account.telegram_id',
- 'loadSave(env, ownerId)',
+ 'load: id => loadSave(env, id)',
  'saved.bootstrapFromProfile',
  'projectOriginalMerchantReadOnly(ownerId, saved)',
  "contract: 'ppa-merchant-v1'",
