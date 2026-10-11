@@ -13,7 +13,8 @@ const Hub=new Function('BaseRealtimeHub','Date',prefix+'\nreturn class extends B
 function harness(overrides={},flag='1'){
   const actor={pid:'p:0123456789abcdef0123456789abcdef',telegramId:'123',name:'Hero',classKey:'gnome',
     room:'safe',h:200,m:900,atk:99,def:77,crit:25,critDmg:180,atkSpd:1.2,
-    deadLocked:false,deadAt:0,pkEnabled:false,arenaMatchId:'',q:0,lastMove:0,...overrides};
+    deadLocked:false,deadAt:0,pkEnabled:false,arenaMatchId:'',q:0,lastMove:0,
+    nativePositionOnly:true,...overrides};
   const messages=[],broadcasts=[];
   const ws={deserializeAttachment:()=>structuredClone(actor),serializeAttachment:a=>Object.assign(actor,a),send:raw=>messages.push(JSON.parse(raw))};
   const hub=new Hub();hub.env={PPA_GODOT_REALTIME_ENABLED:flag};
@@ -44,12 +45,32 @@ for(const [overrides,packet,flag,code] of [
   [{},{...good,x:null},'1','INVALID_POSITION'],
   [{},{...good,y:-1},'1','INVALID_POSITION'],
   [{},{...good,x:2822.1},'1','INVALID_POSITION'],
+  [{},{...good,f:9},'1','INVALID_POSITION'],
+  [{},{...good,f:0.5},'1','INVALID_POSITION'],
+  [{},{...good,a:'attack'},'1','INVALID_POSITION'],
+  [{nativePositionOnly:false},good,'1','NATIVE_TICKET_REQUIRED'],
+  [{nativePositionOnly:true},{type:'move',room:'safe',x:1395,y:1463,h:9900,m:9999},'1','NATIVE_CITY_ONLY'],
+  [{nativePositionOnly:true},{type:'room',room:'dungeon-1'},'1','CITY_ONLY'],
+  [{nativePositionOnly:true},{type:'mob-hit-event',room:'safe',damage:9999},'1','NATIVE_CITY_ONLY'],
+  [{nativePositionOnly:true},{type:'arena-hit',room:'safe',damage:9999},'1','NATIVE_CITY_ONLY'],
 ]){
   const denied=harness(overrides,flag),saved=structuredClone(denied.actor);
   await denied.send(packet);
   assert.equal(denied.messages[0].code,code);
   assert.deepEqual(denied.actor,saved);assert.equal(denied.broadcasts.length,0);
 }
+// The real deployed entry uses RealtimeHub from realtime-stable.js,
+// not the simpler base class. Native privilege must reach the stable
+// Durable Object from the signed ticket; ordinary Telegram remains legacy.
+const base=fs.readFileSync('src/realtime.js','utf8');
+const entry=fs.readFileSync('src/entry.js','utf8');
+assert(entry.includes("RealtimeHub } from './realtime-stable.js'"));
+assert(base.includes("clientKind: 'godot-city-v1'") &&
+       base.includes("p.clientKind === 'godot-city-v1'"),
+  'Native socket privileges must be minted from a signed game ticket');
+assert(source.includes("request.headers.get('x-ppa-client-kind') === 'godot-city-v1'"));
+assert(source.includes('nativePositionOnly,'),'Stable DO must keep signed socket kind');
+
 // Exact damage-handler bytes from main: the adapter must never change server
 // PK/Arena/PvE adjudication, cooldowns, rewards or hit timing.
 const guards=[
@@ -63,4 +84,4 @@ for(const [begin,finish,expected] of guards){
   assert(a>0&&b>a);
   assert.equal(crypto.createHash('sha256').update(source.slice(a,b)).digest('hex'),expected,begin+' authority changed');
 }
-console.log('NATIVE_CITY_POSITION_OK original_pid=1 pixel_coords=1 health_unchanged=1 authority_unchanged=1 dead_locked=1 safe_only=1 rate_120ms=1');
+console.log('NATIVE_CITY_POSITION_OK original_pid=1 pixel_coords=1 signed_socket_kind=1 telegram_spoof_blocked=1 legacy_move_blocked=1 battle_messages_blocked=1 health_unchanged=1 authority_unchanged=1 dead_locked=1 safe_only=1 rate_120ms=1');
