@@ -5,6 +5,9 @@ on:
       - 'src/worker.js'
       - 'src/native-npc-readonly.js'
       - 'src/native-merchant-readonly.js'
+      - 'src/shared-merchant.js'
+      - 'src/native-action-ledger.js'
+      - 'tools/test-stable-merchant-purchases.mjs'
       - 'tools/test-stable-native-merchant-readonly.mjs'
       - 'tools/test-stable-native-npc-readonly.mjs'
       - '.github/workflows/test-stable-native-npc-readonly.yml'
@@ -25,3 +28,5 @@ jobs:
         run: node tools/test-stable-native-npc-readonly.mjs
       - name: Verify exact PPA merchant stock with no-spend contract
         run: node tools/test-stable-native-merchant-readonly.mjs
+      - name: Differential original Telegram purchases, signed native route, replay and CAS
+        run: node tools/test-stable-merchant-purchases.mjs
