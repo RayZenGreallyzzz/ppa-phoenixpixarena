@@ -1,5 +1,6 @@
 import { RealtimeHub as BaseRealtimeHub } from './realtime.js';
 import { validateNativePveIntent } from './native-pve-combat-intent.js';
+import { auditNativePveReadiness } from './native-pve-readiness-guard.js';
 
 function attOf(ws) {
   try { return ws.deserializeAttachment() || {}; } catch (_) { return {}; }
@@ -2174,10 +2175,21 @@ export class RealtimeHub extends BaseRealtimeHub {
         deny('SERVER_SKILL_NOT_READY', intent.requestId);
         return;
       }
+      const readiness = auditNativePveReadiness(intent,null,{
+        room:intent.room,key:intent.key,
+        hp:Number(rec.hp),x:Number(rec.x),y:Number(rec.y)
+      },now,{
+        pid:a.pid,ownerId:a.telegramId,room:cleanRoom(a.room)
+      });
       wsJson(ws,{
         type:'dungeon-combat-preflight', requestId:intent.requestId,
         room:intent.room, key:intent.key, action:intent.action,
         targetConfirmed:true, canAttack:false, readOnly:true,
+        readiness:{
+          readOnly:readiness.readOnly,
+          canAttack:readiness.canAttack,
+          blockers:readiness.blockers
+        },
         reason:'SERVER_COMBAT_PROFILE_REQUIRED', ts:now
       });
       return;
