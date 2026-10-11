@@ -2161,7 +2161,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       // global DO. Do not create one via assignDungeon, trust a client room,
       // reserve seats, alter player party membership, or simulate combat.
       const active = this.candidateDungeonRooms(m.base).filter(room =>
-        this.roomSockets(room).some(peer => {
+        [...this.roomSockets(room)].some(peer => {
           const p = attOf(peer);
           return p.nativePositionOnly !== true && cleanRoom(p.room) === room;
         }));
@@ -3041,7 +3041,7 @@ export class RealtimeHub extends BaseRealtimeHub {
       a.lastSeenAt = now;
       if (a.nativePositionOnly === true && a.observerRoom) {
         const observed = String(a.observerRoom);
-        if (!this.roomSockets(observed).some(peer =>
+        if (![...this.roomSockets(observed)].some(peer =>
             attOf(peer).nativePositionOnly !== true &&
             cleanRoom(attOf(peer).room) === observed)) {
           delete a.observerRoom;
