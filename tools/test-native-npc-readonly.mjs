@@ -63,6 +63,8 @@ assert.equal(result.status,200);
 assert.equal(result.data.service,'arena');
 assert.equal(result.data.readOnly,true);
 assert.equal(result.data.version,19);
+assert.equal(result.data.ownerId,'12345678','NPC projection must be bound to the verified Telegram character');
+assert(!('telegramId' in result.data.data),'projected NPC data must not expose a client-specified identity');
 assert.equal(result.data.data.arenaTokens,12);
 assert.deepEqual(calls.read,['12345678']);
 assert.equal((await handle({method:'POST'},env,url)).status,405);
