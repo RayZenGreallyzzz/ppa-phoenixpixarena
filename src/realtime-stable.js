@@ -1,4 +1,5 @@
 import { RealtimeHub as BaseRealtimeHub } from './realtime.js';
+import { validateNativePveIntent } from './native-pve-combat-intent.js';
 
 function attOf(ws) {
   try { return ws.deserializeAttachment() || {}; } catch (_) { return {}; }
@@ -2125,7 +2126,7 @@ export class RealtimeHub extends BaseRealtimeHub {
     // combat-intent protocol has been tested against BOTH clients.
     if (a.nativePositionOnly === true &&
         !['ping', 'room', 'player-position', 'dungeon-observe',
-          'dungeon-observe-leave'].includes(m.type)) {
+          'dungeon-observe-leave', 'dungeon-combat-intent'].includes(m.type)) {
       wsJson(ws, { type:'player-position-rejected', code:'NATIVE_CITY_ONLY',
         room:cleanRoom(a.room), ts:now });
       return;
@@ -2134,6 +2135,51 @@ export class RealtimeHub extends BaseRealtimeHub {
         m.room !== 'safe') {
       wsJson(ws, { type:'player-position-rejected', code:'CITY_ONLY',
         room:cleanRoom(a.room), ts:now });
+      return;
+    }
+
+    if (m.type === 'dungeon-combat-intent') {
+      const deny = (code,requestId='') => wsJson(ws,{
+        type:'dungeon-combat-preflight-rejected', code,
+        requestId, canAttack:false, ts:now
+      });
+      // This is a non-mutating staging contract ONLY. Native combat cannot
+      // use legacy mob-hit-event because that packet includes CLIENT damage.
+      if (a.nativePositionOnly !== true) { deny('NATIVE_TICKET_REQUIRED'); return; }
+      if (String(this.env.PPA_GODOT_REALTIME_ENABLED || '') !== '1' ||
+          String(this.env.PPA_GODOT_DUNGEON_OBSERVE_ENABLED || '') !== '1' ||
+          String(this.env.PPA_GODOT_PVE_PREFLIGHT_ENABLED || '') !== '1') {
+        deny('PVE_PREFLIGHT_DISABLED'); return;
+      }
+      const validation = validateNativePveIntent(m);
+      if (!validation.ok) { deny(validation.code); return; }
+      const intent = validation.intent;
+      if (cleanRoom(a.room) !== 'safe' ||
+          !a.observerRoom || String(a.observerRoom) !== intent.room) {
+        deny('UNCONFIRMED_DUNGEON', intent.requestId); return;
+      }
+      // Confirm the target from the existing server-owned mob stores. Never
+      // seed from the request, change HP, tick respawns or persist D1.
+      const isActive = [...this.roomSockets(intent.room)].some(peer => {
+        const p = attOf(peer);
+        return p.nativePositionOnly !== true && cleanRoom(p.room) === intent.room;
+      });
+      if (!isActive) { deny('DUNGEON_EMPTY', intent.requestId); return; }
+      const rec = this.mobStores().health.get(this.mobCompound(intent.room,intent.key));
+      if (!rec) { deny('MOB_UNCONFIRMED', intent.requestId); return; }
+      if (!(Number(rec.hp)>0)) { deny('MOB_DEAD', intent.requestId); return; }
+      if (intent.action === 'skill') {
+        // The canonical server skill registry/mana/cooldowns are NOT yet
+        // integrated. A syntactically valid id is NOT an authorized ability.
+        deny('SERVER_SKILL_NOT_READY', intent.requestId);
+        return;
+      }
+      wsJson(ws,{
+        type:'dungeon-combat-preflight', requestId:intent.requestId,
+        room:intent.room, key:intent.key, action:intent.action,
+        targetConfirmed:true, canAttack:false, readOnly:true,
+        reason:'SERVER_COMBAT_PROFILE_REQUIRED', ts:now
+      });
       return;
     }
 
