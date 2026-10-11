@@ -19,6 +19,12 @@ const deny=code=>Object.freeze({ok:false,code,canAttack:false,canCast:false,canR
 const MAX_LEASE_MS=30_000;
 const MAX_EFFECTS=32;
 const MAX_COOLDOWNS=32;
+const SEED_KEYS=new Set(['origin','room','pid','ownerId','classKey','saveVersion',
+  'revision','maxHp','maxMp','hp','mp','position','skillRanks','cooldownUntil',
+  'statusEffects']);
+const TICK_KEYS=new Set(['origin','revision','hp','mp','position','cooldownUntil',
+  'statusEffects']);
+const onlyKeys=(value,allowed)=>Object.keys(value).every(k=>allowed.has(k));
 
 // A testable contract for the future actual server-side combat state.
 // The fixture-only provenance is intentional: do not accidentally treat
@@ -42,7 +48,8 @@ export class NativePveAuthorityStateLab {
     if(!socket||typeof socket!=='object'||!object(evidence)||!uint(now)||
        evidence.signedNative!==true||!PID.test(evidence.pid||'')||
        !OWNER.test(evidence.ownerId||'')||!ROOM.test(evidence.room||'')||
-       !object(fixture)||fixture.origin!=='synthetic-pve-test-only'||
+       !object(fixture)||!onlyKeys(fixture,SEED_KEYS)||
+       fixture.origin!=='synthetic-pve-test-only'||
        fixture.room!==evidence.room||fixture.pid!==evidence.pid||
        fixture.ownerId!==evidence.ownerId||
        !Object.hasOwn(ORIGINAL_CLASS_BASE,fixture.classKey)||
@@ -91,7 +98,8 @@ export class NativePveAuthorityStateLab {
   applySyntheticServerTick(socket,evidence,tick,now) {
     const entry=this.#lookup(socket,evidence,now);
     if(!entry)return deny('SERVER_STATE_ABSENT_OR_STALE');
-    if(!object(tick)||tick.origin!=='synthetic-server-tick-only'||
+    if(!object(tick)||!onlyKeys(tick,TICK_KEYS)||
+       tick.origin!=='synthetic-server-tick-only'||
        tick.revision!==entry.revision+1||
        !uint(tick.hp,entry.maxHp)||!uint(tick.mp,entry.maxMp)||
        !point(tick.position)||!uint(tick.position.serverAt)||
