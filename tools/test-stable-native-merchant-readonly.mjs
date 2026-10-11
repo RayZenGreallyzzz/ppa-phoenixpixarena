@@ -44,7 +44,7 @@ const merchant=worker.split("if (url.pathname === '/api/game/merchant/state' ||"
 assert(merchant,'Missing owner-bound read route');
 for(const needle of [
  'PPA_GODOT_STATE_READ_ENABLED',
- "request.method !== 'GET'",
+ "request.method !== (action ? 'POST' : 'GET')",
  'phoenixGameSessionFromRequest(request, env, true)',
  "auth.gameId !== 'phoenix-pix-arena'",
  'phoenixAccountRow(env, auth.accountId)',
