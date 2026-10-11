@@ -39,7 +39,7 @@ assert.equal(missing.wallet.gold,null,'Never invent a gold balance');
 assert.equal(missing.offers[0].owned,null,'Unknown count is not an owned zero');
 
 const worker=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
-const merchant=worker.split("if (url.pathname === '/api/game/merchant/state') {")[1]
+const merchant=worker.split("if (url.pathname === '/api/game/merchant/state' ||")[1]
   ?.split("// Existing Phoenix game-state feature gate also controls these READ-ONLY")[0];
 assert(merchant,'Missing owner-bound read route');
 for(const needle of [
@@ -55,7 +55,9 @@ for(const needle of [
  "contract: 'ppa-merchant-v1'",
  'ownerId, actions: [], state'
 ])assert(merchant.includes(needle),'Missing merchant guard: '+needle);
-assert(!/saveGameState\(|executeNativeCommandOnce\(|merchantPurchase\(/.test(merchant));
-assert(!worker.includes("if (url.pathname === '/api/game/merchant/action')"),
- 'Read-only cutover must NOT offer purchase HTTP route');
-console.log('PPA_STABLE_MERCHANT_READ_OK offers=12 original_ids=1 signed_owner=1 read_only=1 no_fake_money=1 no_PPA_spend=1');
+assert(merchant.includes("action && String(env.PPA_MERCHANT_ACTIONS_ENABLED || '') !== '1'"),
+  'Default closed action gate required');
+assert(merchant.includes('sharedMerchantOperation(env, ownerId, \'action\', body, persistence)'),
+  'Use previously audited server purchase rules when actions are enabled');
+assert(!merchant.includes('body.price'),'Client cannot quote a price');
+console.log('PPA_STABLE_MERCHANT_READ_OK offers=12 original_ids=1 signed_owner=1 read_only_default=1 no_fake_money=1 buy_gate=1');
