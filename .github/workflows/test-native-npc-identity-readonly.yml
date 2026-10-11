@@ -6,6 +6,7 @@ on:
       - 'src/native-npc-readonly.js'
       - 'tools/test-native-npc-readonly.mjs'
       - 'tools/test-native-npc-rollout-matrix.mjs'
+      - 'docs/ppa-godot-npc-readonly-rollout.md'
       - '.github/workflows/test-native-npc-identity-readonly.yml'
 permissions:
   contents: read
