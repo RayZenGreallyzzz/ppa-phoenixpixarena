@@ -1,5 +1,6 @@
 import { auditOriginalStatAllocation, auditOriginalEquippedEnhancements } from './native-combat-stat-parity.js';
 import { auditOriginalClassRuneReference } from './native-original-class-rune-parity.js';
+import { auditOriginalPassiveSkills } from './native-original-passive-parity.js';
 
 // Staging-only audit of the ORIGINAL Telegram PPA D1 save for native combat.
 //
@@ -61,9 +62,11 @@ export function projectNativeCombatProfileReadOnly(saved) {
   const allocationParity = auditOriginalStatAllocation(allocations);
   const equippedEnhancementParity = auditOriginalEquippedEnhancements(equipment);
   const classRuneParity = auditOriginalClassRuneReference(state,classKey);
+  const passiveParity = auditOriginalPassiveSkills(state,classKey);
   if (!allocationParity.allStaticCapsSatisfied) failures.push('STAT_ALLOCATION_CAPS_NOT_VERIFIED');
   if (equippedEnhancementParity.unverified) failures.push('EQUIPPED_ENHANCEMENTS_PARTIALLY_UNVERIFIED');
   if (classRuneParity.status !== 'REFERENCE_PARITY_ONLY') failures.push('CLASS_RUNE_'+classRuneParity.status);
+  if (passiveParity.status !== 'REFERENCE_PASSIVE_ONLY') failures.push('PASSIVE_'+passiveParity.status);
   // Even when all saved fields are present: cannot attack from this record.
   failures.push('TELEGRAM_RUNTIME_STAT_FORMULAS_NOT_PORTED');
   failures.push('SERVER_SKILL_REGISTRY_AND_COOLDOWNS_NOT_PORTED');
@@ -81,7 +84,7 @@ export function projectNativeCombatProfileReadOnly(saved) {
       allocatedStats, equipped, skillRanks,
       // Audit statuses only. These are NOT effective or executable combat
       // stats, and cannot be trusted to compute actual damage yet.
-      allocationParity, equippedEnhancementParity, classRuneParity
+      allocationParity, equippedEnhancementParity, classRuneParity, passiveParity
     },
     blockedReasons:failures
   };
