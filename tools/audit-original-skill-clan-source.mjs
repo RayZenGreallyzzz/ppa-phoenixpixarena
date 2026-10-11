@@ -71,12 +71,15 @@ for(const [ck,cat] of Object.entries(catalog)){
 }
 console.log('PASSIVE_REGISTRY_JSON='+JSON.stringify(passiveMap));
 console.log('PASSIVE_COUNT='+Object.values(passiveMap).reduce((n,v)=>n+v.length,0));
+const activeMeta=vm.runInNewContext('('+objectLiteral('const ACTIVE_META=')+')',Object.create(null),{timeout:3000});
 const activeMap={};
 for(const [ck,cat] of Object.entries(catalog)){
   if(!Array.isArray(cat.active))continue;
   activeMap[ck]=cat.active.map(sk=>{
     assert(typeof sk.id==='string'&&sk.id.length<=50);
-    return {id:sk.id};
+    const effect=activeMeta[sk.id];
+    assert(effect&&Number.isFinite(effect.mp)&&Array.isArray(effect.cd)&&effect.cd.length===3&&effect.cd.every(Number.isFinite),'Unknown V189 active skill '+ck+'.'+sk.id);
+    return {id:sk.id,mp:effect.mp,cd:Array.from(effect.cd)};
   });
 }
 console.log('ACTIVE_REGISTRY_JSON='+JSON.stringify(activeMap));
