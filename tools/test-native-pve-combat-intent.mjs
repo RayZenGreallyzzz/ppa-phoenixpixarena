@@ -91,6 +91,10 @@ assert.equal(last(native).targetConfirmed,true);
 assert.equal(last(native).canAttack,false);
 assert.equal(last(native).reason,'SERVER_COMBAT_PROFILE_REQUIRED');
 assert.equal(last(native).readOnly,true);
+assert.deepEqual(last(native).readiness.blockers,['SERVER_COMBAT_RUNTIME_MISSING'],
+  'Observer preflight must not infer combat authority from legacy player HP/MP');
+assert.equal(last(native).readiness.canAttack,false);
+assert.equal(last(native).readiness.readOnly,true);
 const ack=last(native);
 await send(native,base);
 assert.equal(last(native).canAttack,false,'Repeated intent unexpectedly dealt damage');
@@ -98,6 +102,18 @@ assert.equal(last(native).requestId,ack.requestId);
 await send(native,{...base,action:'skill',skillId:'slash_01'});
 assert.equal(last(native).code,'SERVER_SKILL_NOT_READY',
   'Unverified skill unexpectedly passed the action registry');
+for (const fakeState of [
+  {serverRuntime:{origin:'server-dungeon-combat-runtime-v1'}},
+  {mp:1000000}, {maxMp:1000000}, {cooldownUntil:{}},
+  {position:{x:400,y:500,serverAt:Date.now()}},
+  {statusEffects:[{id:'force-buff',expiresAt:Date.now()+1e9}]},
+  {participating:true}, {classKey:'mage'}, {seenRequestIds:[]},
+]) {
+  await send(native,{...base,...fakeState});
+  assert.equal(last(native).type,'dungeon-combat-preflight-rejected');
+  assert.equal(last(native).code,'UNTRUSTED_FIELD',
+    'Client-controlled runtime fields bypassed signed observer lockdown');
+}
 const attackCount=telegram.messages.length;
 await send(native,{type:'mob-hit-event',room:base.room,key:'s0',
   amount:999999,mhp:350,event:'forged-damage'});
