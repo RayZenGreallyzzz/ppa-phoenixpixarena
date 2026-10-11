@@ -15,6 +15,7 @@ on:
       - 'src/realtime.js'
       - 'src/realtime-stable.js'
       - 'tools/test-native-city-position.mjs'
+      - 'tools/test-native-realtime-ticket.mjs'
       - 'tools/test-shared-forge.mjs'
       - 'tools/test-shared-sharpen.mjs'
       - 'tools/test-shared-inventory.mjs'
@@ -52,3 +53,5 @@ jobs:
         run: node tools/test-shared-storage.mjs
       - name: Signed Godot safe-city realtime and no client combat forgery
         run: node tools/test-native-city-position.mjs
+      - name: Signed Godot session maps into the ORIGINAL Telegram realtime pid
+        run: node tools/test-native-realtime-ticket.mjs
