@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'src/native-dungeon-entry-preflight.js'
+      - 'src/native-dungeon-shadow-actors.js'
+      - 'tools/test-native-dungeon-shadow-actors.mjs'
       - 'src/realtime-stable.js'
       - 'tools/test-native-dungeon-entry-preflight.mjs'
       - '.github/workflows/test-native-dungeon-entry-preflight.yml'
@@ -19,6 +21,8 @@ jobs:
           node-version: '22'
       - name: Verify signed socket room eligibility stays observer only
         run: node tools/test-native-dungeon-entry-preflight.mjs
+      - name: Verify owner-fenced, expiring observer-only actor shadow
+        run: node tools/test-native-dungeon-shadow-actors.mjs
       - name: Preserve native combat intent and fake-damage rejections
         run: node tools/test-native-pve-combat-intent.mjs
       - name: Keep server PvE readiness fail-closed
