@@ -5,6 +5,8 @@ on:
       - 'src/worker.js'
       - 'src/native-npc-readonly.js'
       - 'tools/test-native-npc-readonly.mjs'
+      - 'src/native-combat-profile-readonly.js'
+      - 'tools/test-native-combat-profile-readonly.mjs'
       - 'tools/test-native-npc-rollout-matrix.mjs'
       - 'docs/ppa-godot-npc-readonly-rollout.md'
       - '.github/workflows/test-native-npc-identity-readonly.yml'
@@ -21,5 +23,7 @@ jobs:
           node-version: '22'
       - name: Verify signed owner, feature gates, no D1 writes
         run: node tools/test-native-npc-readonly.mjs
+      - name: Verify saved combat-loadout audit cannot authorize real attacks
+        run: node tools/test-native-combat-profile-readonly.mjs
       - name: Rehearse two-owner NPC rollout and blocked economy actions
         run: node tools/test-native-npc-rollout-matrix.mjs
