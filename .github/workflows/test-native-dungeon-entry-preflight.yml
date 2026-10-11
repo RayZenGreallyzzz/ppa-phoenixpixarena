@@ -8,6 +8,8 @@ on:
       - 'tools/test-native-pve-shadow-intent.mjs'
       - 'src/native-pve-authority-state-lab.js'
       - 'tools/test-native-pve-authority-state-lab.mjs'
+      - 'src/native-pve-atomic-kill-lab.js'
+      - 'tools/test-native-pve-atomic-kill-lab.mjs'
       - 'src/realtime-stable.js'
       - 'tools/test-native-dungeon-entry-preflight.mjs'
       - '.github/workflows/test-native-dungeon-entry-preflight.yml'
@@ -30,6 +32,8 @@ jobs:
         run: node tools/test-native-pve-shadow-intent.mjs
       - name: Audit isolated authoritative-vitals simulation and original skill references
         run: node tools/test-native-pve-authority-state-lab.mjs
+      - name: Verify SQLite atomic kill claim and save CAS with rollback
+        run: node tools/test-native-pve-atomic-kill-lab.mjs
       - name: Preserve native combat intent and fake-damage rejections
         run: node tools/test-native-pve-combat-intent.mjs
       - name: Keep server PvE readiness fail-closed
