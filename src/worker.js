@@ -1,5 +1,6 @@
 import { nativeRealtimeTicketForLinkedTelegram } from './realtime.js';
 import { NATIVE_NPC_SERVICES, projectNativeNpcReadOnly } from './native-npc-readonly.js';
+import { projectNativeCombatProfileReadOnly } from './native-combat-profile-readonly.js';
 import { nativeClanOperation } from './native-clan-actions.js';
 import { sharedMerchantOperation } from './shared-merchant.js';
 import { sharedForgeOperation } from './shared-forge.js';
@@ -1330,6 +1331,33 @@ async function handlePhoenixGameApi(request, env, url) {
         version: snapshot.version,
         state: snapshot.state,
         updatedAt: snapshot.updatedAt || null
+      });
+    }
+
+    // Audit, not execution: read the original registered Telegram PPA
+    // character + D1 loadout. Never infer final runtime combat statistics,
+    // cooldowns, skill effects or damage from save fields alone.
+    if (url.pathname === '/api/game/combat/profile') {
+      if (String(env.PPA_GODOT_STATE_READ_ENABLED || '') !== '1' ||
+          String(env.PPA_GODOT_COMBAT_PROFILE_READ_ENABLED || '') !== '1') {
+        return apiError('Game API route not found',404,'NOT_FOUND');
+      }
+      if (request.method !== 'GET')
+        return apiError('GET required',405,'METHOD_NOT_ALLOWED');
+      const auth = await phoenixGameSessionFromRequest(request,env,true);
+      if (auth.gameId !== 'phoenix-pix-arena')
+        return apiError('Wrong game session',403,'GAME_SESSION_WRONG_GAME');
+      const account = await phoenixAccountRow(env,auth.accountId);
+      if (!account) return apiError('Phoenix account missing',404,'ACCOUNT_NOT_FOUND');
+      const ownerId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
+      if (!ownerId) return apiError('Telegram character not linked',409,'TELEGRAM_NOT_LINKED');
+      const snapshot = await loadSave(env,ownerId);
+      if (!snapshot.ok) return json(snapshot,Number(snapshot.status)||500);
+      const audit = projectNativeCombatProfileReadOnly(snapshot);
+      if (!audit) return apiError('Existing PPA character save not ready',409,'PPA_CHARACTER_SAVE_NOT_READY');
+      return json({
+        ok:true,ownerId,gameId:auth.gameId,version:snapshot.version,
+        readOnly:true,actionsEnabled:false,combat:audit
       });
     }
 
