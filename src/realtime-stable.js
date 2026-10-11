@@ -300,6 +300,19 @@ export class RealtimeHub extends BaseRealtimeHub {
       if (ws === except) continue;
       try { ws.send(raw); } catch (_) {}
     }
+    // Passive Godot observers stay in the safe room and NEVER occupy a
+    // dungeon seat, enter the combat loop, receive rewards or send attacks.
+    // Only already-authoritative monster changes are mirrored.
+    if (!room.startsWith('dungeon-') ||
+        !['mob-authority','mob-position','mob-hp','mob-dead','mob-state'].includes(String(data && data.type || '')) ||
+        this.countRoom(room) < 1) return;
+    for (const ws of this.sockets()) {
+      if (ws === except) continue;
+      const a = attOf(ws);
+      if (a.nativePositionOnly !== true || cleanRoom(a.room) !== 'safe' ||
+          String(a.observerRoom || '') !== room) continue;
+      try { ws.send(raw); } catch (_) {}
+    }
   }
 
   sendRoomSnapshot(ws, room) {
@@ -1402,10 +1415,11 @@ export class RealtimeHub extends BaseRealtimeHub {
     return changed;
   }
 
-  sendMobAuthoritySnapshot(ws, room, now = Date.now()) {
+  sendMobAuthoritySnapshot(ws, room, now = Date.now(), observerReadOnly = false) {
     room = cleanRoom(room);
     if (!mobAuthorityRoom(room)) return;
-    this.processMobRespawns(room, now);
+    // An observer must not advance server respawns or persist mob state.
+    if (!observerReadOnly) this.processMobRespawns(room, now);
     const { health, dead } = this.mobStores();
     const prefix = room + '|';
     const rows = [];
@@ -2110,7 +2124,8 @@ export class RealtimeHub extends BaseRealtimeHub {
     // Chat, PvP and dungeon authorization can be added only when a canonical
     // combat-intent protocol has been tested against BOTH clients.
     if (a.nativePositionOnly === true &&
-        !['ping', 'room', 'player-position'].includes(m.type)) {
+        !['ping', 'room', 'player-position', 'dungeon-observe',
+          'dungeon-observe-leave'].includes(m.type)) {
       wsJson(ws, { type:'player-position-rejected', code:'NATIVE_CITY_ONLY',
         room:cleanRoom(a.room), ts:now });
       return;
@@ -2119,6 +2134,50 @@ export class RealtimeHub extends BaseRealtimeHub {
         m.room !== 'safe') {
       wsJson(ws, { type:'player-position-rejected', code:'CITY_ONLY',
         room:cleanRoom(a.room), ts:now });
+      return;
+    }
+
+    if (m.type === 'dungeon-observe' || m.type === 'dungeon-observe-leave') {
+      const reject = code => wsJson(ws, { type:'dungeon-observe-rejected', code, ts:now });
+      if (a.nativePositionOnly !== true) { reject('NATIVE_TICKET_REQUIRED'); return; }
+      if (String(this.env.PPA_GODOT_REALTIME_ENABLED || '') !== '1' ||
+          String(this.env.PPA_GODOT_DUNGEON_OBSERVE_ENABLED || '') !== '1') {
+        reject('OBSERVE_DISABLED'); return;
+      }
+      if (m.type === 'dungeon-observe-leave') {
+        delete a.observerRoom;
+        ws.serializeAttachment(a);
+        wsJson(ws, { type:'dungeon-observe-ended', room:'safe', ts:now });
+        return;
+      }
+      if (cleanRoom(a.room) !== 'safe' || a.arenaMatchId || a.deadLocked) {
+        reject('CITY_ONLY'); return;
+      }
+      const allowedBases = ['dungeon-1-20','dungeon-21-40','dungeon-41-60'];
+      if (!allowedBases.includes(m.base) || m.room != null || m.instance != null) {
+        reject('INVALID_DUNGEON_BASE'); return;
+      }
+      // Choose a genuinely active Telegram dungeon instance on THIS existing
+      // global DO. Do not create one via assignDungeon, trust a client room,
+      // reserve seats, alter player party membership, or simulate combat.
+      const active = this.candidateDungeonRooms(m.base).filter(room =>
+        this.roomSockets(room).some(peer => {
+          const p = attOf(peer);
+          return p.nativePositionOnly !== true && cleanRoom(p.room) === room;
+        }));
+      active.sort((left, right) =>
+        this.countRoom(right) - this.countRoom(left) || left.localeCompare(right));
+      if (!active.length) { reject('NO_ACTIVE_DUNGEON'); return; }
+      const target = active[0];
+      a.observerRoom = target;
+      ws.serializeAttachment(a);
+      wsJson(ws, {
+        type:'dungeon-observe-assigned', base:m.base, room:target,
+        readOnly:true, actionsEnabled:false, ts:now
+      });
+      // Never seed monster state from an untrusted Godot mob catalogue.
+      // The existing players are already maintaining this room's state.
+      this.sendMobAuthoritySnapshot(ws, target, now, true);
       return;
     }
 
@@ -2980,6 +3039,15 @@ export class RealtimeHub extends BaseRealtimeHub {
 
     if (m.type === 'ping') {
       a.lastSeenAt = now;
+      if (a.nativePositionOnly === true && a.observerRoom) {
+        const observed = String(a.observerRoom);
+        if (!this.roomSockets(observed).some(peer =>
+            attOf(peer).nativePositionOnly !== true &&
+            cleanRoom(attOf(peer).room) === observed)) {
+          delete a.observerRoom;
+          wsJson(ws,{type:'dungeon-observe-ended',room:'safe',reason:'ROOM_EMPTY',ts:now});
+        }
+      }
       {
         const pingRoom = cleanRoom(a.room);
         if (isClanBossRoom(pingRoom)&&a.clanBossRoom&&cleanRoom(a.clanBossRoom)===pingRoom&&now-Number(a.lastClanBossStateAt||0)>=5000) {
