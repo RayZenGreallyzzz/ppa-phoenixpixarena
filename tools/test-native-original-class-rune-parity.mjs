@@ -126,7 +126,7 @@ const sourceScript=snippets.join('\n')+
   'vampirism:P.vampirism,physDamagePct:P.physDamagePct,'+
   'magicDamagePct:P.magicDamagePct,armorPen:P.armorPen,'+
   'magicPen:P.magicPen,damageReduction:P.damageReduction});';
-const unlockScript=extractBlock('function syncRuneProgress(')+
+const unlockScript='const RUNE_MAX_SLOTS=10;\n'+extractBlock('function syncRuneProgress(')+
   '\nfunction normalizeRuneState(){}; syncRuneProgress();';
 
 function compare(classKey,lvl,statAlloc,equipped,runeSlots,runeProgress,rebirths){
