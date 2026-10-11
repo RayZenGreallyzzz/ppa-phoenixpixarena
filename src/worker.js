@@ -1,3 +1,5 @@
+import { NATIVE_NPC_SERVICES, projectNativeNpcReadOnly } from './native-npc-readonly.js';
+
 const INIT_DATA_MAX_AGE_SEC = 24 * 60 * 60;
 const encoder = new TextEncoder();
 
@@ -1246,6 +1248,44 @@ async function handlePhoenixGameApi(request, env, url) {
         version: snapshot.version,
         state: snapshot.state,
         updatedAt: snapshot.updatedAt || null
+      });
+    }
+
+    // Existing Phoenix game-state feature gate also controls these READ-ONLY
+    // NPC views. Same signed game session, same linked Telegram identity,
+    // same canonical save; no separate native save, prices or write endpoint.
+    // Keep this as a narrowly scoped main cutover, NOT a merge of experimental
+    // staged merchant/combat routes or production D1 migrations.
+    if (url.pathname.startsWith('/api/game/npc/')) {
+      if (String(env.PPA_GODOT_STATE_READ_ENABLED || '') !== '1') {
+        return apiError('Game API route not found', 404, 'NOT_FOUND');
+      }
+      if (request.method !== 'GET') return apiError('GET required', 405, 'METHOD_NOT_ALLOWED');
+      const service = url.pathname.slice('/api/game/npc/'.length);
+      if (!NATIVE_NPC_SERVICES.includes(service)) {
+        return apiError('Unknown NPC service', 404, 'UNKNOWN_NPC_SERVICE');
+      }
+      const auth = await phoenixGameSessionFromRequest(request, env, true);
+      if (auth.gameId !== 'phoenix-pix-arena') {
+        return apiError('Wrong game session', 403, 'GAME_SESSION_WRONG_GAME');
+      }
+      const account = await phoenixAccountRow(env, auth.accountId);
+      if (!account) return apiError('Phoenix account missing', 404, 'ACCOUNT_NOT_FOUND');
+      const ownerId = account.telegram_id == null ? '' : String(account.telegram_id).trim();
+      if (!ownerId) return apiError('Telegram character not linked', 409, 'TELEGRAM_NOT_LINKED');
+      const saved = await loadSave(env, ownerId);
+      if (!saved.ok) return json(saved, Number(saved.status) || 500);
+      if (saved.bootstrapFromProfile || !saved.state ||
+          typeof saved.state !== 'object' || Array.isArray(saved.state) ||
+          !Number.isSafeInteger(saved.version) || saved.version < 1) {
+        return apiError('Existing PPA character save not ready', 409, 'PPA_CHARACTER_SAVE_NOT_READY');
+      }
+      const data = projectNativeNpcReadOnly(service, saved.state);
+      if (!data) return apiError('NPC view unavailable', 409, 'NPC_VIEW_UNAVAILABLE');
+      return json({
+        ok: true, readOnly: true, gameId: auth.gameId,
+        ownerId, service, version: saved.version,
+        updatedAt: saved.updatedAt || null, data,
       });
     }
 
