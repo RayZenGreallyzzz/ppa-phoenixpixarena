@@ -1,3 +1,5 @@
+import { auditOriginalStatAllocation, auditOriginalEquippedEnhancements } from './native-combat-stat-parity.js';
+
 // Staging-only audit of the ORIGINAL Telegram PPA D1 save for native combat.
 //
 // Do not call this an executable combat profile. Legacy Telegram runtime
@@ -55,6 +57,10 @@ export function projectNativeCombatProfileReadOnly(saved) {
   if (!allocations) failures.push('STAT_ALLOCATIONS_NOT_PRESENT');
   if (!equipment) failures.push('EQUIPPED_LOADOUT_NOT_PRESENT');
   if (!ranks) failures.push('SKILL_RANKS_NOT_PRESENT');
+  const allocationParity = auditOriginalStatAllocation(allocations);
+  const equippedEnhancementParity = auditOriginalEquippedEnhancements(equipment);
+  if (!allocationParity.allStaticCapsSatisfied) failures.push('STAT_ALLOCATION_CAPS_NOT_VERIFIED');
+  if (equippedEnhancementParity.unverified) failures.push('EQUIPPED_ENHANCEMENTS_PARTIALLY_UNVERIFIED');
   // Even when all saved fields are present: cannot attack from this record.
   failures.push('TELEGRAM_RUNTIME_STAT_FORMULAS_NOT_PORTED');
   failures.push('SERVER_SKILL_REGISTRY_AND_COOLDOWNS_NOT_PORTED');
@@ -69,7 +75,10 @@ export function projectNativeCombatProfileReadOnly(saved) {
     candidate:{
       registeredClass:classKey, classMatchesSave:classMatches,
       level, statPointsRemaining:unsigned(state.statPts,100000),
-      allocatedStats, equipped, skillRanks
+      allocatedStats, equipped, skillRanks,
+      // Audit statuses only. These are NOT effective or executable combat
+      // stats, and cannot be trusted to compute actual damage yet.
+      allocationParity, equippedEnhancementParity
     },
     blockedReasons:failures
   };
