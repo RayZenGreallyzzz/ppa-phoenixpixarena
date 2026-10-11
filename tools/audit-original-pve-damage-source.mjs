@@ -35,4 +35,23 @@ for(const [label,needle] of heads){
   }
   console.log('PPA_ORIGINAL_'+label+'_FOUND '+found);
 }
+const explicit=[
+ ['BASIC_ATTACK_ROLL','function basicAttackRoll(',2600],
+ ['BASIC_ATTACK_PLAYER_RANGE','function playerBasicRange(',550],
+ ['BONUS_DAMAGE_MULT','function clanDamageMulFor(',1300],
+ ['SHOP_DAMAGE_MULT','function shopDamageMul(',800],
+ ['BASIC_ATTACK_PLAYER','basicAttackRoll(target)',1400],
+ ['MOB_HIT_APPLY','function hitEnemy(',1100],
+ ['MOB_HIT_HANDLER','function damageEnemy(',1000]
+];
+for(const [label,term,n] of explicit){
+  const at=src.indexOf(term);
+  const found=at>=0;
+  console.log('PPA_DAMAGE_EXACT_'+label+'_FOUND '+found);
+  if(found){
+    const sample=src.slice(at,at+n).replace(/[\\r\\n\\t]+/g,' ')
+      .replace(/data:image\\/[a-z+]+;base64,[A-Za-z0-9+/=]{50,}/gi,'[image]');
+    console.log('PPA_DAMAGE_EXACT_'+label+'_SOURCE '+JSON.stringify(sample));
+  }
+}
 console.log('PPA_ORIGINAL_PVE_DAMAGE_SOURCE_AUDIT_OK sha256='+sha+' bytes='+unpacked.length);
