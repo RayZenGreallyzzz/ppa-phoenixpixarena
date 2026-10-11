@@ -2211,6 +2211,21 @@ export class RealtimeHub extends BaseRealtimeHub {
       const rec = this.mobStores().health.get(this.mobCompound(intent.room,intent.key));
       if (!rec) { deny('MOB_UNCONFIRMED', intent.requestId); return; }
       if (!(Number(rec.hp)>0)) { deny('MOB_DEAD', intent.requestId); return; }
+      // The opt-in dungeon admission stage must validate every native combat
+      // attempt against the SAME server-owned, socket-bound shadow lease.
+      // This is diagnostic replay fencing, NOT authority for damage/rewards.
+      // With the entry gate OFF, preserve original read-only PvE preflight.
+      if (String(this.env.PPA_GODOT_DUNGEON_ENTRY_PREFLIGHT_ENABLED || '') === '1') {
+        const shadow = this.nativeDungeonShadows().recordRequest(ws, {
+          signedNative:a.nativePositionOnly === true,
+          pid:a.pid, ownerId:a.telegramId,
+          currentRoom:cleanRoom(a.room),
+          observerRoom:String(a.observerRoom || '')
+        }, intent.requestId, now);
+        if (shadow.code !== 'SERVER_COMBAT_RUNTIME_REQUIRED') {
+          deny(shadow.code, intent.requestId); return;
+        }
+      }
       if (intent.action === 'skill') {
         // The canonical server skill registry/mana/cooldowns are NOT yet
         // integrated. A syntactically valid id is NOT an authorized ability.
