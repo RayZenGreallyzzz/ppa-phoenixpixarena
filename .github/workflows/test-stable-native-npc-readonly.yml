@@ -4,6 +4,8 @@ on:
     paths:
       - 'src/worker.js'
       - 'src/native-npc-readonly.js'
+      - 'src/native-merchant-readonly.js'
+      - 'tools/test-stable-native-merchant-readonly.mjs'
       - 'tools/test-stable-native-npc-readonly.mjs'
       - '.github/workflows/test-stable-native-npc-readonly.yml'
 permissions:
@@ -21,3 +23,5 @@ jobs:
         run: node --check src/worker.js
       - name: Verify signed-owner-only NPC projection, without mutations
         run: node tools/test-stable-native-npc-readonly.mjs
+      - name: Verify exact PPA merchant stock with no-spend contract
+        run: node tools/test-stable-native-merchant-readonly.mjs
