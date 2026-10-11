@@ -19,28 +19,6 @@ assert.equal(crypto.createHash('sha256').update(raw).digest('hex'),
   'a23969659df17d6f303e688c296f4a2de67b4be8b702693a1760afb4971e43b7');
 const source=raw.toString('utf8');
 const build=readFileSync(new URL('../build.mjs',import.meta.url),'utf8');
-const block=(prefix,open='{',close='}')=>{
-  const start=source.indexOf(prefix);
-  assert(start>=0,'Missing original Telegram source: '+prefix);
-  const first=source.indexOf(open,start+prefix.length-1);
-  assert(first>start,'Expected original block: '+prefix);
-  let depth=0,quoted='',escape=false;
-  for(let i=first;i<source.length;i++){
-    const c=source[i];
-    if(quoted){
-      if(escape){escape=false;continue}
-      if(c==='\\'){escape=true;continue}
-      if(c===quoted)quoted='';
-      continue;
-    }
-    if(c==='"'||c==="'"||c==='\x60'){quoted=c;continue}
-    if(c===open)depth++;
-    if(c===close&&--depth===0)return source.slice(first,i+1);
-    // Closing brace decrements, not other characters.
-    if(c!==close)depth=depth+(0);
-  }
-  throw Error('Unclosed original block: '+prefix);
-};
 // Actual original function bodies end at the first balanced closing brace.
 function extractBlock(prefix) {
   const start=source.indexOf(prefix);
@@ -184,6 +162,10 @@ compare('mage',60,{...zero,hp:200,mp:200,atk:200,def:70,spd:40,
   ['speed|legendary','mana|epic','health|rare','vampirism|legendary',
     'agility|legendary','crit|rare','strength|epic','defense|legendary'],
   {levelSlots:6,rebirthSlots:2},2);
+compare('priest',20,{...zero,mp:45,def:12,crit:8},
+  {necklace:{slot:'necklace',enh:5,stats:{crit:4,mpPct:7}}},
+  ['mana|uncommon','health|rare',null],
+  {levelSlots:0,rebirthSlots:0},0);
 compare('tank',1,zero,{},['health|rare','defense|rare'],{
   levelSlots:6,rebirthSlots:1},0); // persistent slots after rebirth
 assert.equal(originalRuneUnlockedSlots(1,0,{levelSlots:6,rebirthSlots:1}),7);
