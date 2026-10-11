@@ -26,6 +26,46 @@ const keys=[
   ['CLASS_SKILLS','const CLASS_SKILLS=',1500],
   ['GRIMOIRE_CATALOG','const GRIMOIRE_CATALOG=',350],
 ];
+// Exact numeric passive registry. The original client has separate V189
+// passive metadata and an ordered GRIMOIRE_CATALOG class -> skill list.
+const vm=(await import('node:vm')).default;
+const objectLiteral=(prefix)=>{
+  const pos=src.indexOf(prefix);
+  assert(pos>=0,'Original passive symbol missing: '+prefix);
+  const start=src.indexOf('{',pos+prefix.length);
+  let depth=0, quote='',escape=false;
+  for(let i=start;i<src.length;i++){
+    const c=src[i];
+    if(quote){
+      if(escape){escape=false;continue}
+      if(c==='\\\\'){escape=true;continue}
+      if(c===quote)quote='';
+      continue;
+    }
+    if(c==="'"||c==='"'||c==='\\`'){quote=c;continue}
+    if(c==='{')depth++;
+    else if(c==='}' && --depth===0)
+      return src.slice(start,i+1);
+  }
+  throw Error('Unbalanced object: '+prefix);
+};
+const meta=vm.runInNewContext('('+objectLiteral('const PASSIVE_META=')+')',
+  Object.create(null),{timeout:3000});
+const catalog=vm.runInNewContext('('+objectLiteral('const GRIMOIRE_CATALOG=')+')',
+  Object.create(null),{timeout:3000});
+const passiveMap={};
+for(const [ck,cat] of Object.entries(catalog)){
+  if(!Array.isArray(cat.passive))continue;
+  passiveMap[ck]=cat.passive.map(sk=>{
+    const d=meta[sk.id];
+    assert(d&&typeof d.k==='string'&&Array.isArray(d.v)&&
+      d.v.length===3&&d.v.every(Number.isFinite),
+      'Unknown original V189 passive '+ck+'.'+sk.id);
+    return {id:sk.id,k:d.k,v:Array.from(d.v)};
+  });
+}
+console.log('PASSIVE_REGISTRY_JSON='+JSON.stringify(passiveMap));
+console.log('PASSIVE_COUNT='+Object.values(passiveMap).reduce((n,v)=>n+v.length,0));
 console.log('PPA_ORIGINAL_SKILLS_CLAN_CHECKSUM_OK '+hash);
 for(const [name,term,n] of keys){
   const pos=src.indexOf(term);
