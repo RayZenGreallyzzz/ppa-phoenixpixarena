@@ -21,6 +21,7 @@ const needles=[
   ['RUNE_DEFINITION','function runeDefByKey'],
   ['RUNE_BONUS','function runeBonus'],
   ['RUNE_UNLOCK','function runeUnlockedSlots'],
+  ['RUNE_SYNC','function syncRuneProgress'],
   ['RUNE_MAX_SLOTS','const RUNE_MAX_SLOTS'],
   ['CLASS_FROM_NAME','function classKeyFromName'],
   ['CLASS_KEY','function classBaseKey'],
