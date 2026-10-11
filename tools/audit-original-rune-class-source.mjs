@@ -33,7 +33,7 @@ for(const [label,needle] of needles){
   const offset=source.indexOf(needle);
   // Targeted source signatures only. Do not print the full packed game, its
   // user/session data or unrelated source.
-  const max=label==='RECOMPUTE'?6000:label==='CLASS_BASE'?2400:label==='RUNE_TYPES'?2200:2000;
+  const max=label==='RUNE_MAX_SLOTS'?26:label==='RECOMPUTE'?6000:label==='CLASS_BASE'?2400:label==='RUNE_TYPES'?2200:2000;
   const excerpt=offset>=0?source.slice(offset,offset+max):'';
   const signature=crypto.createHash('sha256').update(excerpt).digest('hex').slice(0,16);
   console.log('SOURCE_'+label+'_FOUND='+(offset>=0)+' SIG='+signature+
