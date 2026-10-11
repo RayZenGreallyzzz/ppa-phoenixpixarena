@@ -374,10 +374,7 @@ export class RealtimeHub {
     const pair = new WebSocketPair();
     const client = pair[0], server = pair[1];
     this.ctx.acceptWebSocket(server);
-    // Identity is asserted at the gateway from the HMAC-signed ticket,
-    // never accepted from an ordinary WebSocket message.
-    const nativePositionOnly = request.headers.get('x-ppa-client-kind') === 'godot-city-v1';
-    server.serializeAttachment({ pid, telegramId, name, clanId, classKey, room: 'safe', partyId: '', lastChat: 0, lastMove: 0, q: 0, l: 1, b: 0, nativePositionOnly });
+    server.serializeAttachment({ pid, telegramId, name, clanId, classKey, room: 'safe', partyId: '', lastChat: 0, lastMove: 0, q: 0, l: 1, b: 0 });
     wsJson(server, { type: 'hello', pid, name, clanId, room: 'safe', ts: Date.now() });
     this.sendOnlineCount();
     return new Response(null, { status: 101, webSocket: client });
@@ -391,7 +388,7 @@ export class RealtimeHub {
     const a = attOf(ws), now = Date.now();
 
     if (m.type === 'ping') {
-      const sr = this.syncRoom(ws, a, a.nativePositionOnly ? 'safe' : (m.room || a.room), now);
+      const sr = this.syncRoom(ws, a, m.room || a.room, now);
       if (sr.moved) this.sendOnlineCount();
       this.sendRoomSnapshot(ws, sr.room);
       wsJson(ws, { type: 'pong', room: sr.room, roomCount: this.roomCount(sr.room), ts: now });
@@ -399,7 +396,7 @@ export class RealtimeHub {
     }
 
     if (m.type === 'room') {
-      const sr = this.syncRoom(ws, a, a.nativePositionOnly ? 'safe' : m.room, now);
+      const sr = this.syncRoom(ws, a, m.room, now);
       // Always serialize the canonical room, even when it only differed in formatting.
       a.room = sr.room;
       ws.serializeAttachment(a);
@@ -409,50 +406,7 @@ export class RealtimeHub {
       return;
     }
 
-    if (m.type === 'player-position') {
-      // Only native sockets marked by the signed game ticket use this safe
-      // city protocol. The payload MUST NOT update HP, MP, class, level,
-      // money, inventory, skill state, mob damage or loot.
-      if (a.nativePositionOnly !== true) {
-        wsJson(ws, { type: 'player-position-rejected', code: 'NATIVE_TICKET_REQUIRED', room: 'safe' });
-        return;
-      }
-      const valid = m.room === 'safe' &&
-        typeof m.x === 'number' && Number.isFinite(m.x) && m.x >= 0 && m.x <= 2822 &&
-        typeof m.y === 'number' && Number.isFinite(m.y) && m.y >= 0 && m.y <= 2822 &&
-        typeof m.f === 'number' && Number.isInteger(m.f) && m.f >= 0 && m.f <= 7 &&
-        (m.a === 'idle' || m.a === 'run');
-      if (!valid) {
-        wsJson(ws, { type: 'player-position-rejected', code: 'INVALID_CITY_POSITION', room: 'safe' });
-        return;
-      }
-      if (now - (Number(a.lastMove) || 0) >= 90) {
-        a.lastMove = now;
-        a.x = Math.round(m.x * 10) / 10;
-        a.y = Math.round(m.y * 10) / 10;
-        a.f = m.f;
-        a.a = m.a;
-        a.q = (Number(a.q) || 0) + 1;
-        a.room = 'safe';
-        ws.serializeAttachment(a);
-        this.roomBroadcast('safe', { type: 'move', player: packetFromAtt(a), room: 'safe' }, ws);
-      }
-      // Always acknowledge the canonical position, including throttled
-      // requests. Godot waits for this before declaring shared city online.
-      if (Number.isFinite(a.x) && Number.isFinite(a.y)) {
-        wsJson(ws, { type: 'player-position-ack', room: 'safe',
-          x: a.x, y: a.y, q: a.q, ts: now });
-      }
-      return;
-    }
-
     if (m.type === 'move') {
-      // Never let Godot bypass the safe protocol to forge Telegram combat
-      // health, class, level or a private dungeon room via legacy "move".
-      if (a.nativePositionOnly === true) {
-        wsJson(ws, { type: 'player-position-rejected', code: 'LEGACY_MOVE_NOT_ALLOWED', room: 'safe' });
-        return;
-      }
       const sr = this.syncRoom(ws, a, m.room || a.room, now);
       if (sr.moved) {
         this.sendOnlineCount();
@@ -647,6 +601,8 @@ export async function handleRealtimeRequest(request, env) {
       h.set('x-ppa-clan-id', p.clanId || '');
       h.set('x-ppa-clan-name', p.clanName || '');
       h.set('x-ppa-class-key', p.classKey || '');
+      // Never accept a caller-supplied client kind: derive it only from
+      // the HMAC-verified native ticket before reaching the Durable Object.
       h.set('x-ppa-client-kind', p.clientKind === 'godot-city-v1' ? 'godot-city-v1' : 'telegram');
       return stub.fetch(new Request(request, { headers: h }));
     } catch (e) {
