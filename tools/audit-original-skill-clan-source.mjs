@@ -25,6 +25,11 @@ const keys=[
   ['CLAN_INCOMING','function clanSiegeIncomingMul(',1200],
   ['CLASS_SKILLS','const CLASS_SKILLS=',1500],
   ['GRIMOIRE_CATALOG','const GRIMOIRE_CATALOG=',350],
+  ['ACTIVE_META','const ACTIVE_META=',2500],
+  ['ACTIVE_CASTER','function castV189ClassSkill(',2300],
+  ['CLAN_BONUS_PCT','function clanBonusPct(',2000],
+  ['CLAN_BONUS_KEYS','const CLAN_BONUS_KEYS=',1400],
+  ['CLAN_BONUS_VALUES','const CLAN_BONUS_VALUES=',1400],
 ];
 // Exact numeric passive registry. The original client has separate V189
 // passive metadata and an ordered GRIMOIRE_CATALOG class -> skill list.
@@ -66,6 +71,16 @@ for(const [ck,cat] of Object.entries(catalog)){
 }
 console.log('PASSIVE_REGISTRY_JSON='+JSON.stringify(passiveMap));
 console.log('PASSIVE_COUNT='+Object.values(passiveMap).reduce((n,v)=>n+v.length,0));
+const activeMap={};
+for(const [ck,cat] of Object.entries(catalog)){
+  if(!Array.isArray(cat.active))continue;
+  activeMap[ck]=cat.active.map(sk=>{
+    assert(typeof sk.id==='string'&&sk.id.length<=50);
+    return {id:sk.id};
+  });
+}
+console.log('ACTIVE_REGISTRY_JSON='+JSON.stringify(activeMap));
+console.log('ACTIVE_COUNT='+Object.values(activeMap).reduce((n,v)=>n+v.length,0));
 console.log('PPA_ORIGINAL_SKILLS_CLAN_CHECKSUM_OK '+hash);
 for(const [name,term,n] of keys){
   const pos=src.indexOf(term);
