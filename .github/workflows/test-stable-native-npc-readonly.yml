@@ -1,0 +1,23 @@
+name: Stable PPA native NPC owner-only read cutover
+on:
+  pull_request:
+    paths:
+      - 'src/worker.js'
+      - 'src/native-npc-readonly.js'
+      - 'tools/test-stable-native-npc-readonly.mjs'
+      - '.github/workflows/test-stable-native-npc-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  npc-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check Worker syntax
+        run: node --check src/worker.js
+      - name: Verify signed-owner-only NPC projection, without mutations
+        run: node tools/test-stable-native-npc-readonly.mjs
