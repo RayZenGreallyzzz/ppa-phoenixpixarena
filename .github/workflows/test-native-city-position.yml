@@ -2,6 +2,8 @@ name: Verify native shared city position
 on:
   pull_request:
     paths:
+      - 'src/realtime.js'
+      - 'src/entry.js'
       - 'src/realtime-stable.js'
       - 'tools/test-native-city-position.mjs'
       - '.github/workflows/test-native-city-position.yml'
@@ -16,6 +18,7 @@ jobs:
         with:
           node-version: '24'
       - run: |
+          node --check src/realtime.js
           node --check src/realtime-stable.js
           node tools/test-native-city-position.mjs
           node tools/test-native-realtime-ticket.mjs
