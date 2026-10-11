@@ -2146,14 +2146,14 @@ export class RealtimeHub extends BaseRealtimeHub {
       // This is a non-mutating staging contract ONLY. Native combat cannot
       // use legacy mob-hit-event because that packet includes CLIENT damage.
       if (a.nativePositionOnly !== true) { deny('NATIVE_TICKET_REQUIRED'); return; }
-      if (String(this.env.PPA_GODOT_REALTIME_ENABLED || '') !== '1' ||
-          String(this.env.PPA_GODOT_DUNGEON_OBSERVE_ENABLED || '') !== '1' ||
-          String(this.env.PPA_GODOT_PVE_PREFLIGHT_ENABLED || '') !== '1') {
-        deny('PVE_PREFLIGHT_DISABLED'); return;
-      }
       const validation = validateNativePveIntent(m);
       if (!validation.ok) { deny(validation.code); return; }
       const intent = validation.intent;
+      if (String(this.env.PPA_GODOT_REALTIME_ENABLED || '') !== '1' ||
+          String(this.env.PPA_GODOT_DUNGEON_OBSERVE_ENABLED || '') !== '1' ||
+          String(this.env.PPA_GODOT_PVE_PREFLIGHT_ENABLED || '') !== '1') {
+        deny('PVE_PREFLIGHT_DISABLED', intent.requestId); return;
+      }
       if (cleanRoom(a.room) !== 'safe' ||
           !a.observerRoom || String(a.observerRoom) !== intent.room) {
         deny('UNCONFIRMED_DUNGEON', intent.requestId); return;
