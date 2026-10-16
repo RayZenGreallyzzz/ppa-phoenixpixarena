@@ -15,8 +15,7 @@ async function schema(env){if(ready)return;const qs=[
 `CREATE TABLE IF NOT EXISTS clan_meta(clan_id TEXT PRIMARY KEY,permissions_json TEXT NOT NULL DEFAULT '{}',authority_json TEXT NOT NULL DEFAULT '{}',applications_json TEXT NOT NULL DEFAULT '[]',history_json TEXT NOT NULL DEFAULT '[]',events_json TEXT NOT NULL DEFAULT '[]',storage_json TEXT NOT NULL DEFAULT '[]',progress_json TEXT NOT NULL DEFAULT '{}',siege_reward_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL)`,
 `CREATE TABLE IF NOT EXISTS clan_trades(id TEXT PRIMARY KEY,clan_id TEXT NOT NULL,player_a TEXT NOT NULL,player_b TEXT NOT NULL,offer_a_json TEXT NOT NULL DEFAULT '{"items":[],"gold":0,"ppa":0}',offer_b_json TEXT NOT NULL DEFAULT '{"items":[],"gold":0,"ppa":0}',confirmed_a INTEGER NOT NULL DEFAULT 0,confirmed_b INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'active',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,expires_at INTEGER NOT NULL,completed_at INTEGER NOT NULL DEFAULT 0)`,
 `CREATE INDEX IF NOT EXISTS idx_clan_trades_players ON clan_trades(clan_id,player_a,player_b,status,updated_at)`,
-`CREATE TABLE IF NOT EXISTS clan_trade_guard(id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))`,
-`CREATE TABLE IF NOT EXISTS clan_storage_guard(id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))`
+`CREATE TABLE IF NOT EXISTS clan_trade_guard(id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))`
 ];for(const q of qs)await env.DB.prepare(q).run();ready=true}
 async function ensurePlayer(env,u){const id=String(u.id),now=Date.now();await env.DB.prepare(`INSERT INTO players(telegram_id,telegram_username,telegram_first_name,telegram_last_name,nickname,nickname_key,class_key,created_at,updated_at,last_auth_at) VALUES(?1,?2,?3,?4,NULL,NULL,NULL,?5,?5,?5) ON CONFLICT(telegram_id) DO UPDATE SET telegram_username=excluded.telegram_username,telegram_first_name=excluded.telegram_first_name,telegram_last_name=excluded.telegram_last_name,last_auth_at=excluded.last_auth_at`).bind(id,String(u.username||''),String(u.first_name||''),String(u.last_name||''),now).run();return env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(id).first()}
 async function saveRow(env,id){const r=await env.DB.prepare('SELECT version,state_json FROM saves WHERE telegram_id=?1').bind(id).first();return r?{row:r,state:sj(r.state_json||'{}',{})}:null}
@@ -188,116 +187,6 @@ async function trExecute(env,cid,id,tradeId){
   return{tradeId:String(tr.id),completedAt:now};
 }
 
-
-function warehouseFail(message,status=409){throw Object.assign(new Error(message),{status})}
-function warehouseSame(a,b){
-  if(!a||!b||typeof b!=='object')return false;
-  const ua=trUid(a),ub=trUid(b);
-  // Existing UI normalizes item fields and omits some optional properties,
-  // e.g. refId. Compare those only when the client actually sent them.
-  if(ua||ub){if(!ua||!ub||ua!==ub)return false}
-  let checks=0;
-  for(const key of ['name','slot','rarity','enh','classKey','refId','createdAt','count']){
-    if(b[key]===undefined||b[key]===null||b[key]==='')continue;
-    checks++;
-    const av=(key==='count'?Number(a[key]||1):key==='enh'?Number(a[key]||0):String(a[key]||''));
-    const bv=(key==='count'?Number(b[key]||1):key==='enh'?Number(b[key]||0):String(b[key]||''));
-    if(av!==bv)return false;
-  }
-  return !!ua||checks>=3;
-}
-async function clanWarehouseTransfer(env,id,p,m,c,b){
-  if(!c.storage_unlocked)warehouseFail('Клановый склад не открыт.');
-  // A tap/retry must be committed at most once, including across devices,
-  // WebView reloads and requests concurrently in flight.
-  const requestId=String(b.requestId||'');
-  if(!/^[a-zA-Z0-9_-]{16,80}$/.test(requestId))
-    warehouseFail('Обнови игру: старая версия не защищает склад от повторных запросов.',409);
-  const action=String(b.action||'');
-  const guard='clan-transfer:'+c.id+':'+id+':'+requestId;
-  const previouslyDone=async()=>!!(await env.DB.prepare('SELECT ok FROM clan_storage_guard WHERE id=?1').bind(guard).first());
-  const alreadyProcessed=async()=>jr({ok:true,duplicate:true,reload:true,state:await state(env,id,p),
-    message:'Этот запрос уже выполнен. Повторно предмет не перемещался.'});
-  if(await previouslyDone())return alreadyProcessed();
-  const oldMeta=await metaRow(env,c.id);
-  const oldStorageRaw=String(oldMeta.storage_json||'[]');
-  const oldPermissionsRaw=String(oldMeta.permissions_json||'{}');
-  const oldHistoryRaw=String(oldMeta.history_json||'[]');
-  const storage=sj(oldStorageRaw,null),permissions=sj(oldPermissionsRaw,{}),history=sj(oldHistoryRaw,[]);
-  if(!Array.isArray(storage)||!Array.isArray(history))warehouseFail('Данные склада повреждены: предметы сохранены, сообщи администрации.');
-  const playerSave=await saveRow(env,id);
-  if(!playerSave||!playerSave.state||typeof playerSave.state!=='object')warehouseFail('Облачный сейв персонажа не найден.');
-  const nextState=trClone(playerSave.state),bag=trBag(nextState);
-  const pp=permissions[id]&&typeof permissions[id]==='object'?permissions[id]:{};
-  let item=null;
-  if(action==='put'){
-    if(m.role!=='leader'&&!pp.canDeposit)warehouseFail('Нет права класть вещи.',403);
-    if(storage.length>=500)warehouseFail('Склад заполнен.');
-    const r=trResolveBag(nextState,{item:b.item,bagIndex:b.bagIndex});
-    if(!r||!r.item||!warehouseSame(r.item,b.item))
-      warehouseFail('Выбранный предмет не совпадает с облачным инвентарём. Перезайди в игру.');
-    if(trLocked(r.item))warehouseFail('Этот предмет нельзя передавать в общий склад.',403);
-    item=trClone(r.item);
-    const uid=trUid(item);
-    if(uid&&storage.some(it=>trUid(it)===uid))warehouseFail('Предмет с этим ID уже есть на складе. Повторная выдача заблокирована.');
-    bag.splice(r.i,1);storage.push(item);
-  }else if(action==='take'){
-    const index=Number(b.storageIndex);
-    if(!Number.isInteger(index)||index<0||index>=storage.length)warehouseFail('Список склада изменился. Открой его заново.');
-    if(!warehouseSame(storage[index],b.item))warehouseFail('Предмет на складе изменился. Открой склад заново.');
-    item=trClone(storage[index]);
-    const allowed=pp.allowed&&typeof pp.allowed==='object'?pp.allowed:{};
-    if(m.role!=='leader'&&pp.withdrawMode!=='all'){
-      if(pp.withdrawMode!=='selected'||!trUid(item)||!(Number(allowed[trUid(item)])>0))warehouseFail('Нет права брать эту вещь.',403);
-      const left=Math.max(0,Math.floor(Number(allowed[trUid(item)])||0)-1);
-      if(left)allowed[trUid(item)]=left;else delete allowed[trUid(item)];
-      pp.allowed=allowed;permissions[id]=pp;
-    }
-    if(bag.length>=100)warehouseFail('Инвентарь заполнен: 100 / 100.');
-    const uid=trUid(item);
-    if(uid&&bag.some(it=>trUid(it)===uid))warehouseFail('Этот предмет уже присутствует в инвентаре. Повторная выдача заблокирована.');
-    storage.splice(index,1);bag.push(item);
-  }else warehouseFail('Неизвестное действие со складом.',400);
-  // Personal save contains a legacy clan mirror; keep it in sync too.
-  if(!nextState.storage||typeof nextState.storage!=='object')nextState.storage={};
-  nextState.storage.clan=trClone(storage);
-  const now=Date.now();
-  history.unshift({
-    id:'clog_'+crypto.randomUUID(),playerId:id,
-    playerName:nm((p&&p.nickname)||(p&&p.telegram_first_name)||'Игрок'),
-    action,itemUid:trUid(item),itemName:String(item&&item.name||'Предмет').slice(0,120),
-    rarity:String(item&&item.rarity||'common'),enh:Number(item&&item.enh)||0,qty:1,
-    source:String(b.source||'clanMenu').slice(0,24),ts:now
-  });
-  const newSaveRaw=JSON.stringify(nextState);
-  if(enc.encode(newSaveRaw).byteLength>1_800_000)warehouseFail('Сейв после операции слишком большой. Предмет не перемещён.',413);
-  const nextStorageRaw=JSON.stringify(storage);
-  const nextPermissionsRaw=JSON.stringify(permissions);
-  const nextHistoryRaw=JSON.stringify(history.slice(0,500));
-  const nextVersion=(Number(playerSave.row.version)||0)+1;
-  try{
-    // D1 batch is transactional. A failed guard rolls back both inventory and storage.
-    await env.DB.batch([
-      env.DB.prepare('UPDATE saves SET state_json=?1,version=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5')
-        .bind(newSaveRaw,nextVersion,now,id,nextVersion-1),
-      env.DB.prepare('UPDATE clan_meta SET storage_json=?1,permissions_json=?2,history_json=?3,updated_at=?4 WHERE clan_id=?5 AND storage_json=?6 AND permissions_json=?7 AND history_json=?8')
-        .bind(nextStorageRaw,nextPermissionsRaw,nextHistoryRaw,now,c.id,oldStorageRaw,oldPermissionsRaw,oldHistoryRaw),
-      // Persistent unique key: do NOT delete. A second delivery of the same
-      // request must hit the PRIMARY KEY and roll back the entire D1 batch.
-      env.DB.prepare('INSERT INTO clan_storage_guard(id,ok) VALUES(?1,CASE WHEN EXISTS(SELECT 1 FROM saves WHERE telegram_id=?2 AND version=?3 AND state_json=?4) AND EXISTS(SELECT 1 FROM clan_meta WHERE clan_id=?5 AND storage_json=?6 AND permissions_json=?7 AND history_json=?8) THEN 1 ELSE 0 END)')
-        .bind(guard,id,nextVersion,newSaveRaw,c.id,nextStorageRaw,nextPermissionsRaw,nextHistoryRaw)
-    ]);
-  }catch(err){
-    // Concurrent duplicate attempt may have lost the uniqueness race while
-    // the first request committed. In that case acknowledge without a move.
-    if(await previouslyDone())return alreadyProcessed();
-    console.warn('Clan warehouse transfer rolled back:',err);
-    warehouseFail('Склад или сейв изменились одновременно. Ничего не перемещено — обнови игру и попробуй ещё раз.');
-  }
-  return jr({ok:true,reload:true,saveVersion:nextVersion,state:await state(env,id,p),
-    message:(action==='take'?'Предмет возвращён в облачный инвентарь: ':'Предмет положен в общий склад: ')+String(item.name||'Предмет')});
-}
-
 async function state(env,id,p,includeDirectory=false){const m=await mem(env,id),name=nm((p&&p.nickname)||(p&&p.telegram_first_name)||('ID '+id));const base={connected:true,clan:null,self:{id,name,role:''},members:[],permissions:{},applications:[],authority:{},storageUnlocked:false,storage:{used:0,max:500,items:[]},history:[],events:[],bosses:[],wars:[],tradeSession:null,tradeEligible:false,clanProgress:progUi(prog0(),id),siegeReward:{}};const s=await saveRow(env,id);base.tradeEligible=act(s&&s.state);if(includeDirectory){const d=await clanDirectory(env,id);base.clanDirectory=d;base.clanRanking=d.slice();}if(!m)return base;const c=await env.DB.prepare('SELECT * FROM clans WHERE id=?1').bind(m.clan_id).first();if(!c)return base;const rows=await env.DB.prepare(`SELECT cm.telegram_id,cm.role,cm.joined_at,p.nickname,p.telegram_first_name,p.telegram_username,s.state_json FROM clan_members cm LEFT JOIN players p ON p.telegram_id=cm.telegram_id LEFT JOIN saves s ON s.telegram_id=cm.telegram_id WHERE cm.clan_id=?1 ORDER BY cm.joined_at`).bind(c.id).all(),meta=parseMeta(await metaRow(env,c.id));const members=(rows.results||[]).map(x=>{const activated=act(sj(x.state_json||'{}',{}));return{id:String(x.telegram_id),name:nm(x.nickname||x.telegram_first_name||x.telegram_username||('ID '+x.telegram_id)),role:x.role==='leader'?'Глава':'Участник',joinedAt:Number(x.joined_at)||0,tradeEligible:activated,activated,contribution:Number(meta.progress.personalByMember&&meta.progress.personalByMember[x.telegram_id])||0}});base.clan={id:c.id,name:c.name,leaderId:String(c.leader_id),ownerId:String(c.leader_id),createdAt:Number(c.created_at)||0};base.members=members;base.self=members.find(x=>x.id===id)||base.self;base.permissions=meta.permissions;base.applications=meta.applications;base.authority=meta.authority;base.storageUnlocked=!!c.storage_unlocked;base.storage={used:meta.storage.length,max:500,items:meta.storage};base.history=meta.history;base.events=meta.events;base.clanProgress=progUi(meta.progress,id);base.siegeReward=meta.siegeReward;base.tradeSession=await trView(env,c.id,id);return base}
 function ev(meta,type,id,name,text){meta.events.unshift({id:'ce_'+crypto.randomUUID(),type,playerId:id,playerName:name,text,ts:Date.now()});meta.events=meta.events.slice(0,300)}
 async function action(env,id,p,b){const a=String(b.action||''),pname=nm((p&&p.nickname)||(p&&p.telegram_first_name)||'Игрок');
@@ -324,8 +213,8 @@ async function action(env,id,p,b){const a=String(b.action||''),pname=nm((p&&p.ni
  if(a==='kickMember'){if(!can(m,meta,'manageMembers'))return jr({ok:false,message:'Нет права исключать участников.'},403);const t=String(b.memberId||'');if(t===String(c.leader_id))return jr({ok:false,message:'Главу нельзя исключить.'},409);await env.DB.prepare('DELETE FROM clan_members WHERE clan_id=?1 AND telegram_id=?2').bind(c.id,t).run();delete meta.permissions[t];delete meta.authority[t];await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),message:'Игрок исключён.'})}
  if(a==='unlockStorage'){if(m.role!=='leader')return jr({ok:false,message:'Склад открывает только глава.'},403);if(c.storage_unlocked)return jr({ok:true,state:await state(env,id,p),message:'Склад уже открыт.'});const s=await saveRow(env,id),gold=Math.max(0,Number(s&&s.state&&s.state.gold)||0);if(!s||gold<1000000)return jr({ok:false,message:'Нужно 1 000 000 Gold.'},409);s.state.gold=gold-1000000;await writeSave(env,id,s);await env.DB.prepare('UPDATE clans SET storage_unlocked=1,updated_at=?1 WHERE id=?2').bind(Date.now(),c.id).run();ev(meta,'unlockStorage',id,pname,'Клановый склад открыт');await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),balances:{gold:s.state.gold},message:'Клановый склад открыт.'})}
  if(a==='history'){const e=b.entry&&typeof b.entry==='object'?b.entry:null;if(e){meta.history.unshift(Object.assign({},e,{playerId:id,playerName:pname,ts:Number(e.ts)||Date.now()}));meta.history=meta.history.slice(0,500);await writeMeta(env,c.id,meta)}return jr({ok:true,state:await state(env,id,p)})}
- if(a==='put')return clanWarehouseTransfer(env,id,p,m,c,b);
- if(a==='take')return clanWarehouseTransfer(env,id,p,m,c,b);
+ if(a==='put'){if(!c.storage_unlocked)return jr({ok:false,message:'Склад не открыт.'},409);const pp=meta.permissions[id]||{};if(m.role!=='leader'&&!pp.canDeposit)return jr({ok:false,message:'Нет права класть вещи.'},403);const it=b.item&&typeof b.item==='object'?b.item:null;if(!it)return jr({ok:false,message:'Предмет не найден.'},400);if(meta.storage.length>=500)return jr({ok:false,message:'Склад заполнен.'},409);meta.storage.push(it);await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),message:'Предмет сохранён на сервере.'})}
+ if(a==='take'){if(!c.storage_unlocked)return jr({ok:false,message:'Склад не открыт.'},409);const it=b.item&&typeof b.item==='object'?b.item:null,pp=meta.permissions[id]||{},allow=pp.allowed||{};if(m.role!=='leader'&&pp.withdrawMode!=='all'&&!(pp.withdrawMode==='selected'&&it&&Number(allow[it.uid]||0)>0))return jr({ok:false,message:'Нет права брать эту вещь.'},403);const i=meta.storage.findIndex(x=>it&&((it.uid&&x.uid===it.uid)||(!it.uid&&x.name===it.name)));if(i<0)return jr({ok:false,message:'Предмет уже забран.'},409);meta.storage.splice(i,1);await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),message:'Предмет выдан.'})}
  if(a==='upgradeBonus'){if(m.role!=='leader')return jr({ok:false,message:'Бонусы распределяет только глава.'},403);const k=String(b.bonusKey||''),keys=['mobDamage','bossDamage','hp','mp','xp','gold'];if(!keys.includes(k))return jr({ok:false,message:'Неизвестный бонус.'},400);const pu=progUi(meta.progress);if(pu.freePoints<=0)return jr({ok:false,message:'Нет свободных очков клана.'},409);meta.progress.bonuses=Object.assign(prog0().bonuses,meta.progress.bonuses||{});if((Number(meta.progress.bonuses[k])||0)>=3)return jr({ok:false,message:'Бонус уже максимальный.'},409);meta.progress.bonuses[k]=(Number(meta.progress.bonuses[k])||0)+1;await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),message:'Клановый бонус улучшен.'})}
  if(a==='castleCaptured'){meta.siegeReward=Object.assign({clanKey:c.id,clanName:c.name,capturedAt:Date.now(),expiresAt:Date.now()+3*24*3600000,xpPct:5,goldPct:5,resourcePct:5,movePct:3},b.reward||{});await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),message:'Награда осады сохранена.'})}
  if(a==='startRaid')return jr({ok:false,code:'REALTIME_REQUIRED',message:'Клановый босс запускается через realtime.'},409)

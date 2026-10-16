@@ -263,9 +263,9 @@
       req=Object.assign({},req||{});
       if(req.action==='acceptMember')req.action='acceptApplication';
       if(req.action==='putMany'||req.action==='takeMany'){
-        // Old batches had no stable slot identity or per-item idempotency key.
-        // Refuse rather than silently depositing/taking a second identical item.
-        return {ok:false,message:'Массовое перемещение клановых вещей временно отключено для защиты от дублирования.'};
+        var items=Array.isArray(req.items)?req.items:[],one=req.action==='putMany'?'put':'take',last={ok:true};
+        for(var i=0;i<items.length;i++)last=await clanCall({action:one,item:items[i],source:req.source||'keeper'});
+        return last;
       }
       var r=await clanCall(req);
       if(r&&r.balances&&Number.isFinite(Number(r.balances.gold)))INV.gold=Math.max(0,Number(r.balances.gold));
