@@ -8181,7 +8181,7 @@ if(_ppaClanBossTrackCalls<1){
 ppaPatchRegex(
   'clan warehouse atomic online transfer',
   /function\s+storageMove\(mode,direction,idx,source\)\s*\{/,
-  \`var PPA_CLAN_STORAGE_BUSY=false;
+  `var PPA_CLAN_STORAGE_BUSY=false;
 function ppaClanStorageNotice(msg,err){
   try{
     var frame=typeof clanFrameEl==='function'?clanFrameEl():document.getElementById('clanFrame');
@@ -8222,7 +8222,7 @@ function ppaClanStorageMoveOnline(direction,idx,source){
 function storageMove(mode,direction,idx,source){
   if(mode==='clan'&&CLAN_LOCAL_STATE.connected){
     ppaClanStorageMoveOnline(direction,idx,source);return;
-  }\`
+  }`
 );
 ppaPatchRegex(
   'disable unsafe bulk online clan moves',
