@@ -84,6 +84,27 @@ assert.equal(resp.status,200);
 assert.equal(JSON.parse(deposit.data.meta.storage_json).length,13,'server deposited full gear');
 assert.equal(JSON.parse(deposit.data.save.state_json).bag.length,0,'deposited item removed from cloud bag');
 assert.deepEqual(JSON.parse(deposit.data.meta.storage_json)[12],bag[0],'metadata and stats not stripped');
+const depositOnce=JSON.stringify(deposit.data);
+const again=await transfer({DB:deposit},id,p,m,c,{action:'put',requestId:'operation_000000000006',bagIndex:0,item:bag[0]});
+assert.equal((await again.json()).duplicate,true,'deposit retry acknowledged with no further move');
+assert.equal(JSON.stringify(deposit.data),depositOnce,'one deposit request cannot add the item twice');
+
+const overlapping=makeDb(items,bag);
+const responses=await Promise.all([
+  transfer({DB:overlapping},id,p,m,c,{action:'take',requestId:'concurrent_take_0001',storageIndex:0,item:items[0]}),
+  transfer({DB:overlapping},id,p,m,c,{action:'take',requestId:'concurrent_take_0001',storageIndex:0,item:items[0]})
+]);
+assert.equal(responses.length,2);
+const outcomes=await Promise.all(responses.map(r=>r.json()));
+assert.equal(outcomes.filter(x=>x.duplicate===true).length,1,'one concurrent attempt deduplicated');
+assert.equal(JSON.parse(overlapping.data.meta.storage_json).length,11,'concurrent click removes only one item');
+assert.equal(JSON.parse(overlapping.data.save.state_json).bag.length,2,'concurrent click awards only one item');
+assert.equal(overlapping.data.guard.length,1,'concurrent replay has one persistent key');
+
+const duplicateDeposit=makeDb([{uid:'bag1',name:'Dagger',rarity:'common'}],bag);
+await assert.rejects(()=>transfer({DB:duplicateDeposit},id,p,m,c,{action:'put',requestId:'duplicate_deposit_0001',bagIndex:0,item:bag[0]}),/уже есть на складе/);
+assert.equal(JSON.parse(duplicateDeposit.data.meta.storage_json).length,1,'existing UID on clan storage blocks a repeated deposit');
+
 
 
 const lookalikes=[{uid:'same-a',name:'Кольцо',rarity:'rare',enh:0},{uid:'same-b',name:'Кольцо',rarity:'rare',enh:0}];
