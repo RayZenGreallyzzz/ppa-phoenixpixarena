@@ -16,3 +16,16 @@ function report(label,s){
 }
 report('ORIGINAL',src);
 report('BUILT',generated);
+
+for(const [label,s] of [['ORIGINAL',src],['BUILT',generated]]){
+  console.log('==== STORAGE DETAIL '+label+' ====');
+  for(const needle of [
+    'function clanStorageServerEvent(', 'function clanLocalEnsure(', 'function storageItemForUi(',
+    'function clanCanWithdrawItem(', 'function clanLogStorage(', 'function storageSync(',
+    'function sendStorageState(', 'window.PPA_SET_CLAN_STATE=', 'PPA_SET_CLAN_STATE',
+    "d.type==='storageMove'", 'd.type=&#x27;storageMove&#x27;',
+    'function ppaBuildSaveObject(', 'function trBag(', 'function storageCardHtml('
+  ]){
+    let p=-1,c=0;while((p=s.indexOf(needle,p+1))>=0){c++;if(c>1)continue;console.log('DETAIL '+needle+' @'+p+'\n'+s.slice(Math.max(0,p-300),p+2200)+'\nEND DETAIL')}
+  }
+}
