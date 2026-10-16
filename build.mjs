@@ -8210,9 +8210,15 @@ function ppaClanStorageMoveOnline(direction,idx,source,expectedItem){
   var serverState=window.PPA_SERVER_CLAN_STATE;
   var live=serverState&&serverState.storage&&Array.isArray(serverState.storage.items)?serverState.storage.items:
     (CLAN_LOCAL_STATE.storage&&Array.isArray(CLAN_LOCAL_STATE.storage.items)?CLAN_LOCAL_STATE.storage.items:[]);
-  var it=direction==='put'?(INV.bag||[])[idx]:live[idx];
-  if(!it){ppaClanStorageNotice('Предмет не найден. Открой склад заново.',true);return}
-  if(expectedItem&&!ppaClanStorageSameItem(it,expectedItem)){ppaClanStorageNotice('Содержимое ячейки изменилось. Обнови склад.',true);return}
+  // Both menus may use a different visual order. Resolve the clicked item
+  // against the original server order, never trust a local sorted slot.
+  if(!expectedItem){ppaClanStorageNotice('Нет данных о выбранной вещи. Открой склад заново.',true);return}
+  var list=direction==='put'?(INV.bag||[]):live;
+  var matches=[];
+  for(var k=0;k<list.length;k++)if(ppaClanStorageSameItem(list[k],expectedItem))matches.push(k);
+  if(matches.length!==1){ppaClanStorageNotice('Невозможно однозначно определить вещь — обнови склад.',true);return}
+  idx=matches[0];
+  var it=list[idx];
   if(direction==='take'&&(INV.bag||[]).length>=100){ppaClanStorageNotice('Инвентарь заполнен 100 / 100',true);return}
   var req={action:direction,item:it,source:source||'clanMenu'};
   if(direction==='put')req.bagIndex=idx;else req.storageIndex=idx;
@@ -8231,14 +8237,15 @@ function ppaClanStorageMoveOnline(direction,idx,source,expectedItem){
   });
 }
 function storageMove(mode,direction,idx,source,expectedItem){
-  if(mode==='clan'&&CLAN_LOCAL_STATE.connected){
+  if(mode==='clan'){
+    if(!CLAN_LOCAL_STATE.connected){ppaClanStorageNotice('Нет связи с общим клановым складом. Ничего не перемещено.',true);return}
     ppaClanStorageMoveOnline(direction,idx,source,expectedItem);return;
   }`
 );
 ppaPatchRegex(
   'disable unsafe bulk online clan moves',
   /function\s+storageMoveAll\(mode,direction,source\)\s*\{/,
-  "function storageMoveAll(mode,direction,source){if(mode==='clan'&&CLAN_LOCAL_STATE.connected){ppaClanStorageNotice('В общем клановом складе пока перемещай по одной вещи — так предметы защищены сервером');return;}"
+  "function storageMoveAll(mode,direction,source){if(mode==='clan'){ppaClanStorageNotice('Для общего кланового склада перемещай предметы по одному — сервер проверяет каждую операцию');return;}"
 );
 ppaPatchRegex(
   'clan menu take uses clicked item identity',
@@ -8251,6 +8258,36 @@ ppaPatchRegex(
   "parent.postMessage({type:&#x27;storageMove&#x27;,direction:&#x27;put&#x27;,mode:&#x27;clan&#x27;,idx:idx,item:bag[idx],source:&#x27;clanMenu&#x27;},&#x27;*&#x27;);"
 );
 ppaPatchRegex(
+  'keeper storage put sends clicked item identity',
+  /parent\.postMessage\(\{type:&#x27;storageMove&#x27;,direction:&#x27;put&#x27;,mode:activeStoreMode\(\),idx:selected\.idx,source:&#x27;keeper&#x27;\},&#x27;\*&#x27;\);/,
+  "parent.postMessage({type:&#x27;storageMove&#x27;,direction:&#x27;put&#x27;,mode:activeStoreMode(),idx:selected.idx,item:(ST.bag||[])[selected.idx],source:&#x27;keeper&#x27;},&#x27;*&#x27;);"
+);
+ppaPatchRegex(
+  'keeper storage take sends clicked item identity',
+  /parent\.postMessage\(\{type:&#x27;storageMove&#x27;,direction:&#x27;take&#x27;,mode:activeStoreMode\(\),idx:selected\.idx,source:&#x27;keeper&#x27;\},&#x27;\*&#x27;\);/,
+  "parent.postMessage({type:&#x27;storageMove&#x27;,direction:&#x27;take&#x27;,mode:activeStoreMode(),idx:selected.idx,item:((ST.storage||{})[activeStoreMode()]||[])[selected.idx],source:&#x27;keeper&#x27;},&#x27;*&#x27;);"
+);
+// The online clan storage is held in D1; sorting a local mirror must never
+// save a reordered list over the server's canonical slot order.
+ppaPatchRegex(
+  'clan sorting is visual only and does not cloud-save',
+  /INV\.bag\.sort\(comparator\);\s*INV\.storage\[mode\]\.sort\(comparator\);\s*storageSync\('Сортировка применена','#e9c579'\);/,
+  "if(mode==='clan'){"+
+    "if(!CLAN_LOCAL_STATE.connected){ppaClanStorageNotice('Клановый склад не подключён',true);return;}"+
+    "INV.storage.clan.sort(comparator);sendStorageState();sendClanState();"+
+    "ppaClanStorageNotice('Клановый склад отсортирован для просмотра');return;"+
+  "}"+
+  "INV.bag.sort(comparator);INV.storage[mode].sort(comparator);storageSync('Сортировка применена','#e9c579');"
+);
+// Cloud save is already updated by the server for storage operations.
+// A mere clan-state refresh must not write an older local bag over it.
+ppaPatchRegex(
+  'clan state refresh is read-only for cloud save',
+  /clanStorageSyncRuntime\(\);saveGame\(\);sendStorageState\(\);sendClanState\(\);/,
+  "clanStorageSyncRuntime();sendStorageState();sendClanState();"
+);
+
+ppaPatchRegex(
   'storage move passes clicked identity to server',
   /else if\(d\.type==='storageMove'\)\{storageMove\(d\.mode,d\.direction,d\.idx,d\.source\);\}/,
   "else if(d.type==='storageMove'){storageMove(d.mode,d.direction,d.idx,d.source,d.item);}"
@@ -8258,6 +8295,9 @@ ppaPatchRegex(
 if(!output.includes('function ppaClanStorageMoveOnline(direction,idx,source,expectedItem)')||
    !output.includes('PPA_CLAN_STORAGE_BUSY')||
    !output.includes('ppaClanStorageSameItem')||
+   !output.includes("item:(ST.bag||[])[selected.idx]")||
+   !output.includes("idx:selected.idx,item:((ST.storage||{})[activeStoreMode()]||[])[selected.idx]")||
+   !output.includes('INV.storage.clan.sort(comparator);sendStorageState();sendClanState();')||
    !output.includes("idx:idx,item:it,source:&#x27;clanMenu&#x27;")||
    !output.includes("storageMove(d.mode,d.direction,d.idx,d.source,d.item)")||
    !output.includes('req.storageIndex=idx')||
