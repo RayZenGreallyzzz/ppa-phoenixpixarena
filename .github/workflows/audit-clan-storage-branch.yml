@@ -21,13 +21,13 @@ jobs:
           const packed=Buffer.concat(Array.from({length:12},(_,i)=>fs.readFileSync('PPA'+String(i+1).padStart(2,'0')+'.bin')));
           const source=zlib.gunzipSync(packed).toString('utf8');
           console.log('UNPACKED_LENGTH',source.length);
-          for(const key of ['function renderStorage()', 'clanMoveBtn', 'clanInspectCard', 'PPA_CLAN_STORAGE_HANDLER', "type==='clanAction'", "type==='clanStorageAction'", "type==='clanStorageMove'", 'clanStorageMove', 'clanStorageAction']){
+          for(const key of ['function storageMove(mode,direction,idx,source)', 'function clanStorageSyncRuntime()', 'function storageItemForUi(', 'function clanStorageServerEvent(', 'window.PPA_SET_CLAN_STATE=', "d.type==='storageMove'", 'function sendClanState()', 'function normalizeStorage()', 'function clanSetOnlineState(', 'function clanStorageUnlocked()', 'function clanItemTransfer(']){
             const locs=[];let ix=0;
             while((ix=source.indexOf(key,ix))>=0){locs.push(ix);ix+=key.length;if(locs.length>=40)break}
             console.log('KEY',key,'COUNT',locs.length,'OFFSETS',locs.join(','));
-            for(const at of locs.slice(0,key==='clanMoveBtn'?3:2)){
-              const before=key==='function renderStorage()'?900:800;
-              const after=key==='function renderStorage()'?8500:1800;
+            for(const at of locs.slice(0,2)){
+              const before=650;
+              const after=key==='function storageMove(mode,direction,idx,source)'?10000:(key==='window.PPA_SET_CLAN_STATE='?7500:4800);
               console.log('SNIPPET',key,JSON.stringify(source.slice(Math.max(0,at-before),at+after)));
             }
           }
