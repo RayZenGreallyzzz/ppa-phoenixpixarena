@@ -193,8 +193,18 @@ function warehouseFail(message,status=409){throw Object.assign(new Error(message
 function warehouseSame(a,b){
   if(!a||!b||typeof b!=='object')return false;
   const ua=trUid(a),ub=trUid(b);
+  // Existing UI normalizes item fields and omits some optional properties,
+  // e.g. refId. Compare those only when the client actually sent them.
   if(ua||ub){if(!ua||!ub||ua!==ub)return false}
-  return trSig(a)===trSig(b)&&String(a.createdAt||'')===String(b.createdAt||'')&&Number(a.count||1)===Number(b.count||1);
+  let checks=0;
+  for(const key of ['name','slot','rarity','enh','classKey','refId','createdAt','count']){
+    if(b[key]===undefined||b[key]===null||b[key]==='')continue;
+    checks++;
+    const av=(key==='count'?Number(a[key]||1):key==='enh'?Number(a[key]||0):String(a[key]||''));
+    const bv=(key==='count'?Number(b[key]||1):key==='enh'?Number(b[key]||0):String(b[key]||''));
+    if(av!==bv)return false;
+  }
+  return !!ua||checks>=3;
 }
 async function clanWarehouseTransfer(env,id,p,m,c,b){
   if(!c.storage_unlocked)warehouseFail('Клановый склад не открыт.');
