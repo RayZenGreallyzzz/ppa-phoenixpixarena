@@ -1,0 +1,29 @@
+name: Verify clan storage atomic withdraw (no deployment)
+on:
+  pull_request:
+    paths:
+      - 'src/clan-online.js'
+      - 'build.mjs'
+      - 'tools/test-clan-warehouse-20261017.mjs'
+      - '.github/workflows/test-clan-warehouse-20261017.yml'
+permissions:
+  contents: read
+jobs:
+  storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Check syntax
+        run: |
+          node --check src/clan-online.js
+          node --check build.mjs
+          node --check tools/test-clan-warehouse-20261017.mjs
+      - name: Build game without deploying
+        run: npm run build
+      - name: Test atomic clan withdrawal and existing items
+        run: node tools/test-clan-warehouse-20261017.mjs
