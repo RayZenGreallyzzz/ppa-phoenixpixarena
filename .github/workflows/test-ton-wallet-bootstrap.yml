@@ -1,0 +1,29 @@
+name: Verify TON Connect bootstrap (no deployment)
+on:
+  pull_request:
+    paths:
+      - 'build.mjs'
+      - 'package.json'
+      - 'tools/test-ton-wallet-bootstrap.mjs'
+      - '.github/workflows/test-ton-wallet-bootstrap.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  wallet-bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify build script syntax
+        run: node --check build.mjs
+      - name: Build game without deploying
+        run: npm run build
+      - name: Check TON Connect bootstrap
+        run: node tools/test-ton-wallet-bootstrap.mjs
