@@ -1,0 +1,24 @@
+name: Verify linked clan storage menus (no deployment)
+on:
+  pull_request:
+    paths:
+      - 'build.mjs'
+      - 'src/clan-online.js'
+      - 'tools/test-unified-clan-storage-20261017.mjs'
+      - '.github/workflows/test-unified-clan-storage-20261017.yml'
+permissions:
+  contents: read
+jobs:
+  storage-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: node --check build.mjs
+      - run: npm run build
+      - run: node tools/test-clan-warehouse-20261017.mjs
+      - run: node tools/test-unified-clan-storage-20261017.mjs
