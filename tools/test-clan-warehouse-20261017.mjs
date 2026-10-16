@@ -78,6 +78,6 @@ assert.deepEqual(JSON.parse(deposit.data.meta.storage_json)[12],bag[0],'metadata
 const html=fs.readFileSync('public/index.html','utf8');
 assert.ok(html.includes('function ppaClanStorageMoveOnline(direction,idx,source,expectedItem)'));
 assert.ok(html.includes("req.storageIndex=idx"),'clan withdraw binds exact server slot');
-assert.ok(html.includes("if(mode==='clan'&&CLAN_LOCAL_STATE.connected)"),'online clan move is not speculative local transfer');
+assert.ok(html.includes("if(mode==='clan'){\n    if(!CLAN_LOCAL_STATE.connected)"),'online clan move is not speculative local transfer');
 assert.ok(html.includes("type:'clanStorageNotice'"),'user-visible feedback');
 console.log('Clan warehouse: existing 12 items preserved, atomic take/put, conflicts, permissions, and UI route OK.');
