@@ -8241,12 +8241,12 @@ ppaPatchRegex(
   "function storageMoveAll(mode,direction,source){if(mode==='clan'&&CLAN_LOCAL_STATE.connected){ppaClanStorageNotice('В общем клановом складе пока перемещай по одной вещи — так предметы защищены сервером');return;}"
 );
 ppaPatchRegex(
-  'clan menu take uses clicked item's identity',
+  'clan menu take uses clicked item identity',
   /parent\.postMessage\(\{type:&#x27;storageMove&#x27;,direction:&#x27;take&#x27;,mode:&#x27;clan&#x27;,idx:idx,source:&#x27;clanMenu&#x27;\},&#x27;\*&#x27;\);/,
   "parent.postMessage({type:&#x27;storageMove&#x27;,direction:&#x27;take&#x27;,mode:&#x27;clan&#x27;,idx:idx,item:it,source:&#x27;clanMenu&#x27;},&#x27;*&#x27;);"
 );
 ppaPatchRegex(
-  'clan menu put uses clicked item's identity',
+  'clan menu put uses clicked item identity',
   /parent\.postMessage\(\{type:&#x27;storageMove&#x27;,direction:&#x27;put&#x27;,mode:&#x27;clan&#x27;,idx:idx,source:&#x27;clanMenu&#x27;\},&#x27;\*&#x27;\);/,
   "parent.postMessage({type:&#x27;storageMove&#x27;,direction:&#x27;put&#x27;,mode:&#x27;clan&#x27;,idx:idx,item:bag[idx],source:&#x27;clanMenu&#x27;},&#x27;*&#x27;);"
 );
@@ -8255,7 +8255,7 @@ ppaPatchRegex(
   /else if\(d\.type==='storageMove'\)\{storageMove\(d\.mode,d\.direction,d\.idx,d\.source\);\}/,
   "else if(d.type==='storageMove'){storageMove(d.mode,d.direction,d.idx,d.source,d.item);}"
 );
-if(!output.includes('function ppaClanStorageMoveOnline(direction,idx,source)')||
+if(!output.includes('function ppaClanStorageMoveOnline(direction,idx,source,expectedItem)')||
    !output.includes('PPA_CLAN_STORAGE_BUSY')||
    !output.includes('ppaClanStorageSameItem')||
    !output.includes("idx:idx,item:it,source:&#x27;clanMenu&#x27;")||
