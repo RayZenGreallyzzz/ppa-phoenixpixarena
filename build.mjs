@@ -8274,8 +8274,8 @@ ppaPatchRegex(
   /INV\.bag\.sort\(comparator\);\s*INV\.storage\[mode\]\.sort\(comparator\);\s*storageSync\('Сортировка применена','#e9c579'\);/,
   "if(mode==='clan'){"+
     "if(!CLAN_LOCAL_STATE.connected){ppaClanStorageNotice('Клановый склад не подключён',true);return;}"+
-    "INV.storage.clan.sort(comparator);sendStorageState();sendClanState();"+
-    "ppaClanStorageNotice('Клановый склад отсортирован для просмотра');return;"+
+    "window.PPA_CLAN_SORT_BY=by;INV.storage.clan.sort(comparator);sendStorageState();sendClanState();"+
+    "if(!quiet)ppaClanStorageNotice('Клановый склад отсортирован для просмотра');return;"+
   "}"+
   "INV.bag.sort(comparator);INV.storage[mode].sort(comparator);storageSync('Сортировка применена','#e9c579');"
 );
@@ -8288,6 +8288,17 @@ ppaPatchRegex(
 );
 
 ppaPatchRegex(
+  'persist local clan view sorting during server refresh',
+  /function\s+storageSort\(mode,by\)\s*\{/,
+  "function storageSort(mode,by,quiet){"
+);
+ppaPatchRegex(
+  'restore local clan view sorting on authoritative state update',
+  /clanStorageSyncRuntime\(\);sendStorageState\(\);sendClanState\(\);/,
+  "clanStorageSyncRuntime();if(window.PPA_CLAN_SORT_BY){storageSort('clan',window.PPA_CLAN_SORT_BY,true)}else{sendStorageState();sendClanState();}"
+);
+
+ppaPatchRegex(
   'storage move passes clicked identity to server',
   /else if\(d\.type==='storageMove'\)\{storageMove\(d\.mode,d\.direction,d\.idx,d\.source\);\}/,
   "else if(d.type==='storageMove'){storageMove(d.mode,d.direction,d.idx,d.source,d.item);}"
@@ -8297,7 +8308,8 @@ if(!output.includes('function ppaClanStorageMoveOnline(direction,idx,source,expe
    !output.includes('ppaClanStorageSameItem')||
    !output.includes("item:(ST.bag||[])[selected.idx]")||
    !output.includes("idx:selected.idx,item:((ST.storage||{})[activeStoreMode()]||[])[selected.idx]")||
-   !output.includes('INV.storage.clan.sort(comparator);sendStorageState();sendClanState();')||
+   !output.includes('window.PPA_CLAN_SORT_BY=by;INV.storage.clan.sort(comparator);sendStorageState();sendClanState();')||
+   !output.includes("storageSort('clan',window.PPA_CLAN_SORT_BY,true)")||
    !output.includes("idx:idx,item:it,source:&#x27;clanMenu&#x27;")||
    !output.includes("storageMove(d.mode,d.direction,d.idx,d.source,d.item)")||
    !output.includes('req.storageIndex=idx')||
