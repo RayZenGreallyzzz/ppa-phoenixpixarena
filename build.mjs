@@ -4288,6 +4288,10 @@ ppaPatchRegex(
   el.addEventListener('pointercancel',cancel,{passive:true});
   el.addEventListener('pointerleave',cancel,{passive:true});
 }
+window.addEventListener('message',function(e){
+  var d=e&&e.data;
+  if(d&&d.type==='clanStorageNotice'&&typeof flash==='function')flash(String(d.message||''));
+});
 function renderStorage(){`
 );
 
@@ -8167,6 +8171,98 @@ output=output.replace(/\bclanBossTrackDamage\(/g,function(match,offset,whole){
 });
 if(_ppaClanBossTrackCalls<1){
   throw new Error('Clan boss legacy damage call bridge did not find any call sites');
+}
+/* ======================================================================== */
+
+
+/* === CLAN WAREHOUSE: SERVER-AUTHORITATIVE TRANSFER ======================= */
+// A clan item is stored in D1, not merely in INV.storage.clan. Old optimistic
+// UI mutations caused divergence and item loss on server errors.
+ppaPatchRegex(
+  'clan warehouse atomic online transfer',
+  /function\s+storageMove\(mode,direction,idx,source\)\s*\{/,
+  `var PPA_CLAN_STORAGE_BUSY=false;
+function ppaClanStorageNotice(msg,err){
+  try{
+    var frame=typeof clanFrameEl==='function'?clanFrameEl():document.getElementById('clanFrame');
+    if(frame&&frame.contentWindow)frame.contentWindow.postMessage({type:'clanStorageNotice',message:String(msg||'')},'*');
+    var keeper=document.getElementById('storageFrame');
+    if(keeper&&keeper.style.display!=='none'&&keeper.contentWindow)keeper.contentWindow.postMessage({type:'storageNotice',message:String(msg||'')},'*');
+  }catch(_){}
+  try{showPickup(String(msg||''),err?'#ff9b72':'#8dff9a')}catch(_){}
+}
+function ppaClanStorageSameItem(a,b){
+  if(!a||!b)return false;
+  var ua=String(a.uid||''),ub=String(b.uid||'');
+  if(ua||ub)return !!ua&&ua===ub;
+  return String(a.name||'')===String(b.name||'')&&
+    String(a.slot||'')===String(b.slot||'')&&
+    String(a.rarity||'')===String(b.rarity||'')&&
+    Number(a.enh||0)===Number(b.enh||0)&&
+    String(a.createdAt||'')===String(b.createdAt||'');
+}
+function ppaClanStorageMoveOnline(direction,idx,source,expectedItem){
+  if(PPA_CLAN_STORAGE_BUSY){ppaClanStorageNotice('Склад уже обрабатывает операцию');return}
+  if(typeof window.PPA_CLAN_STORAGE_HANDLER!=='function'){ppaClanStorageNotice('Клановый сервер ещё не подключён',true);return}
+  idx=Number(idx);
+  if(!Number.isInteger(idx)||idx<0){ppaClanStorageNotice('Неверная ячейка склада',true);return}
+  if(direction!=='put'&&direction!=='take'){ppaClanStorageNotice('Неизвестное действие',true);return}
+  var serverState=window.PPA_SERVER_CLAN_STATE;
+  var live=serverState&&serverState.storage&&Array.isArray(serverState.storage.items)?serverState.storage.items:
+    (CLAN_LOCAL_STATE.storage&&Array.isArray(CLAN_LOCAL_STATE.storage.items)?CLAN_LOCAL_STATE.storage.items:[]);
+  var it=direction==='put'?(INV.bag||[])[idx]:live[idx];
+  if(!it){ppaClanStorageNotice('Предмет не найден. Открой склад заново.',true);return}
+  if(expectedItem&&!ppaClanStorageSameItem(it,expectedItem)){ppaClanStorageNotice('Содержимое ячейки изменилось. Обнови склад.',true);return}
+  if(direction==='take'&&(INV.bag||[]).length>=100){ppaClanStorageNotice('Инвентарь заполнен 100 / 100',true);return}
+  var req={action:direction,item:it,source:source||'clanMenu'};
+  if(direction==='put')req.bagIndex=idx;else req.storageIndex=idx;
+  PPA_CLAN_STORAGE_BUSY=true;
+  ppaClanStorageNotice('Проверяю предмет на сервере…');
+  Promise.resolve().then(function(){return window.PPA_CLAN_STORAGE_HANDLER(req)}).then(function(ans){
+    if(!ans||ans.ok!==true)throw new Error(ans&&ans.message||'Сервер не подтвердил действие');
+    ppaClanStorageNotice(ans.message||'Предмет перенесён. Обновляю инвентарь…');
+    // Cloud save version changed atomically on the server; never write a stale
+    // local snapshot over it. Reload the authoritative save before another move.
+    setTimeout(function(){location.reload()},220);
+  }).catch(function(err){
+    PPA_CLAN_STORAGE_BUSY=false;
+    ppaClanStorageNotice('Склад: '+String(err&&err.message||err||'ошибка сервера'),true);
+    try{if(window.PPA&&PPA.ppaClanState)PPA.ppaClanState().then(function(r){if(r&&r.state&&window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state)}).catch(function(){})}catch(_){}
+  });
+}
+function storageMove(mode,direction,idx,source,expectedItem){
+  if(mode==='clan'&&CLAN_LOCAL_STATE.connected){
+    ppaClanStorageMoveOnline(direction,idx,source,expectedItem);return;
+  }`
+);
+ppaPatchRegex(
+  'disable unsafe bulk online clan moves',
+  /function\s+storageMoveAll\(mode,direction,source\)\s*\{/,
+  "function storageMoveAll(mode,direction,source){if(mode==='clan'&&CLAN_LOCAL_STATE.connected){ppaClanStorageNotice('В общем клановом складе пока перемещай по одной вещи — так предметы защищены сервером');return;}"
+);
+ppaPatchRegex(
+  'clan menu take uses clicked item identity',
+  /parent\.postMessage\(\{type:&#x27;storageMove&#x27;,direction:&#x27;take&#x27;,mode:&#x27;clan&#x27;,idx:idx,source:&#x27;clanMenu&#x27;\},&#x27;\*&#x27;\);/,
+  "parent.postMessage({type:&#x27;storageMove&#x27;,direction:&#x27;take&#x27;,mode:&#x27;clan&#x27;,idx:idx,item:it,source:&#x27;clanMenu&#x27;},&#x27;*&#x27;);"
+);
+ppaPatchRegex(
+  'clan menu put uses clicked item identity',
+  /parent\.postMessage\(\{type:&#x27;storageMove&#x27;,direction:&#x27;put&#x27;,mode:&#x27;clan&#x27;,idx:idx,source:&#x27;clanMenu&#x27;\},&#x27;\*&#x27;\);/,
+  "parent.postMessage({type:&#x27;storageMove&#x27;,direction:&#x27;put&#x27;,mode:&#x27;clan&#x27;,idx:idx,item:bag[idx],source:&#x27;clanMenu&#x27;},&#x27;*&#x27;);"
+);
+ppaPatchRegex(
+  'storage move passes clicked identity to server',
+  /else if\(d\.type==='storageMove'\)\{storageMove\(d\.mode,d\.direction,d\.idx,d\.source\);\}/,
+  "else if(d.type==='storageMove'){storageMove(d.mode,d.direction,d.idx,d.source,d.item);}"
+);
+if(!output.includes('function ppaClanStorageMoveOnline(direction,idx,source,expectedItem)')||
+   !output.includes('PPA_CLAN_STORAGE_BUSY')||
+   !output.includes('ppaClanStorageSameItem')||
+   !output.includes("idx:idx,item:it,source:&#x27;clanMenu&#x27;")||
+   !output.includes("storageMove(d.mode,d.direction,d.idx,d.source,d.item)")||
+   !output.includes('req.storageIndex=idx')||
+   !output.includes('function storageMoveAll(mode,direction,source){if(mode')){
+  throw new Error('Online clan warehouse safety patch missing');
 }
 /* ======================================================================== */
 
