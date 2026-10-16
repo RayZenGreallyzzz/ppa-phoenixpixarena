@@ -76,7 +76,7 @@ assert.equal(JSON.parse(deposit.data.save.state_json).bag.length,0,'deposited it
 assert.deepEqual(JSON.parse(deposit.data.meta.storage_json)[12],bag[0],'metadata and stats not stripped');
 
 const html=fs.readFileSync('public/index.html','utf8');
-assert.ok(html.includes('function ppaClanStorageMoveOnline(direction,idx,source)'));
+assert.ok(html.includes('function ppaClanStorageMoveOnline(direction,idx,source,expectedItem)'));
 assert.ok(html.includes("req.storageIndex=idx"),'clan withdraw binds exact server slot');
 assert.ok(html.includes("if(mode==='clan'&&CLAN_LOCAL_STATE.connected)"),'online clan move is not speculative local transfer');
 assert.ok(html.includes("type:'clanStorageNotice'"),'user-visible feedback');
