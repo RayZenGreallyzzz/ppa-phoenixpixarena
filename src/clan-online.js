@@ -198,6 +198,17 @@ function warehouseSame(a,b){
 }
 async function clanWarehouseTransfer(env,id,p,m,c,b){
   if(!c.storage_unlocked)warehouseFail('Клановый склад не открыт.');
+  // A tap/retry must be committed at most once, including across devices,
+  // WebView reloads and requests concurrently in flight.
+  const requestId=String(b.requestId||'');
+  if(!/^[a-zA-Z0-9_-]{16,80}$/.test(requestId))
+    warehouseFail('Обнови игру: старая версия не защищает склад от повторных запросов.',409);
+  const action=String(b.action||'');
+  const guard='clan-transfer:'+c.id+':'+id+':'+requestId;
+  const previouslyDone=async()=>!!(await env.DB.prepare('SELECT ok FROM clan_storage_guard WHERE id=?1').bind(guard).first());
+  const alreadyProcessed=async()=>jr({ok:true,duplicate:true,reload:true,state:await state(env,id,p),
+    message:'Этот запрос уже выполнен. Повторно предмет не перемещался.'});
+  if(await previouslyDone())return alreadyProcessed();
   const oldMeta=await metaRow(env,c.id);
   const oldStorageRaw=String(oldMeta.storage_json||'[]');
   const oldPermissionsRaw=String(oldMeta.permissions_json||'{}');
@@ -208,15 +219,18 @@ async function clanWarehouseTransfer(env,id,p,m,c,b){
   if(!playerSave||!playerSave.state||typeof playerSave.state!=='object')warehouseFail('Облачный сейв персонажа не найден.');
   const nextState=trClone(playerSave.state),bag=trBag(nextState);
   const pp=permissions[id]&&typeof permissions[id]==='object'?permissions[id]:{};
-  const action=String(b.action||'');
   let item=null;
   if(action==='put'){
     if(m.role!=='leader'&&!pp.canDeposit)warehouseFail('Нет права класть вещи.',403);
     if(storage.length>=500)warehouseFail('Склад заполнен.');
     const r=trResolveBag(nextState,{item:b.item,bagIndex:b.bagIndex});
-    if(!r||!r.item)warehouseFail('Предмет уже не найден в облачной сумке. Перезайди в игру.');
+    if(!r||!r.item||!warehouseSame(r.item,b.item))
+      warehouseFail('Выбранный предмет не совпадает с облачным инвентарём. Перезайди в игру.');
     if(trLocked(r.item))warehouseFail('Этот предмет нельзя передавать в общий склад.',403);
-    item=trClone(r.item);bag.splice(r.i,1);storage.push(item);
+    item=trClone(r.item);
+    const uid=trUid(item);
+    if(uid&&storage.some(it=>trUid(it)===uid))warehouseFail('Предмет с этим ID уже есть на складе. Повторная выдача заблокирована.');
+    bag.splice(r.i,1);storage.push(item);
   }else if(action==='take'){
     const index=Number(b.storageIndex);
     if(!Number.isInteger(index)||index<0||index>=storage.length)warehouseFail('Список склада изменился. Открой его заново.');
@@ -230,6 +244,8 @@ async function clanWarehouseTransfer(env,id,p,m,c,b){
       pp.allowed=allowed;permissions[id]=pp;
     }
     if(bag.length>=100)warehouseFail('Инвентарь заполнен: 100 / 100.');
+    const uid=trUid(item);
+    if(uid&&bag.some(it=>trUid(it)===uid))warehouseFail('Этот предмет уже присутствует в инвентаре. Повторная выдача заблокирована.');
     storage.splice(index,1);bag.push(item);
   }else warehouseFail('Неизвестное действие со складом.',400);
   // Personal save contains a legacy clan mirror; keep it in sync too.
@@ -249,7 +265,6 @@ async function clanWarehouseTransfer(env,id,p,m,c,b){
   const nextPermissionsRaw=JSON.stringify(permissions);
   const nextHistoryRaw=JSON.stringify(history.slice(0,500));
   const nextVersion=(Number(playerSave.row.version)||0)+1;
-  const guard='cs_'+crypto.randomUUID();
   try{
     // D1 batch is transactional. A failed guard rolls back both inventory and storage.
     await env.DB.batch([
@@ -257,11 +272,18 @@ async function clanWarehouseTransfer(env,id,p,m,c,b){
         .bind(newSaveRaw,nextVersion,now,id,nextVersion-1),
       env.DB.prepare('UPDATE clan_meta SET storage_json=?1,permissions_json=?2,history_json=?3,updated_at=?4 WHERE clan_id=?5 AND storage_json=?6 AND permissions_json=?7 AND history_json=?8')
         .bind(nextStorageRaw,nextPermissionsRaw,nextHistoryRaw,now,c.id,oldStorageRaw,oldPermissionsRaw,oldHistoryRaw),
+      // Persistent unique key: do NOT delete. A second delivery of the same
+      // request must hit the PRIMARY KEY and roll back the entire D1 batch.
       env.DB.prepare('INSERT INTO clan_storage_guard(id,ok) VALUES(?1,CASE WHEN EXISTS(SELECT 1 FROM saves WHERE telegram_id=?2 AND version=?3 AND state_json=?4) AND EXISTS(SELECT 1 FROM clan_meta WHERE clan_id=?5 AND storage_json=?6 AND permissions_json=?7 AND history_json=?8) THEN 1 ELSE 0 END)')
-        .bind(guard,id,nextVersion,newSaveRaw,c.id,nextStorageRaw,nextPermissionsRaw,nextHistoryRaw),
-      env.DB.prepare('DELETE FROM clan_storage_guard WHERE id=?1').bind(guard)
+        .bind(guard,id,nextVersion,newSaveRaw,c.id,nextStorageRaw,nextPermissionsRaw,nextHistoryRaw)
     ]);
-  }catch(err){console.warn('Clan warehouse transfer rolled back:',err);warehouseFail('Склад или сейв изменились одновременно. Ничего не перемещено — обнови игру и попробуй ещё раз.')}
+  }catch(err){
+    // Concurrent duplicate attempt may have lost the uniqueness race while
+    // the first request committed. In that case acknowledge without a move.
+    if(await previouslyDone())return alreadyProcessed();
+    console.warn('Clan warehouse transfer rolled back:',err);
+    warehouseFail('Склад или сейв изменились одновременно. Ничего не перемещено — обнови игру и попробуй ещё раз.');
+  }
   return jr({ok:true,reload:true,saveVersion:nextVersion,state:await state(env,id,p),
     message:(action==='take'?'Предмет возвращён в облачный инвентарь: ':'Предмет положен в общий склад: ')+String(item.name||'Предмет')});
 }
