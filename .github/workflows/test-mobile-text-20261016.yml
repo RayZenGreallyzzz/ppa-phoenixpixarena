@@ -1,0 +1,49 @@
+name: Verify readable mobile chat and wallet UI (no deployment)
+on:
+  pull_request:
+    paths:
+      - 'gateway/chat-ui.js'
+      - 'gateway/realtime-client.js'
+      - 'gateway/online-client.js'
+      - 'gateway/telegram-safe-ui.js'
+      - '.github/workflows/test-mobile-text-20261016.yml'
+permissions:
+  contents: read
+jobs:
+  mobile-text:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check updated JavaScript syntax
+        run: |
+          node --check gateway/chat-ui.js
+          node --check gateway/realtime-client.js
+          node --check gateway/online-client.js
+          node --check gateway/telegram-safe-ui.js
+      - name: Validate readability patches
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const chat=fs.readFileSync('gateway/chat-ui.js','utf8');
+          const rt=fs.readFileSync('gateway/realtime-client.js','utf8');
+          const wallet=fs.readFileSync('gateway/online-client.js','utf8');
+          const safe=fs.readFileSync('gateway/telegram-safe-ui.js','utf8');
+          assert.ok(chat.includes('font:700 10px system-ui,Arial,sans-serif'));
+          assert.ok(chat.includes('.ppaChatText{font:12px/1.4 system-ui'));
+          assert.ok(!chat.includes('font:700 7.5px monospace'));
+          assert.ok(rt.includes("var s='ОНЛАЙН: '"));
+          assert.ok(rt.includes("el.style.fontSize='12px'"));
+          assert.ok(wallet.includes('function ppaWalletReadableText()'));
+          assert.ok(wallet.includes('setTimeout(ppaWalletReadableText,650)'));
+          assert.ok(safe.includes('html.ppa-tg-mobile-safe #gramWalletPanel:not(iframe)'));
+          console.log('Mobile Cyrillic legibility checks passed');
+          NODE
+      - name: Install build dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build PPA without deploying
+        run: npm run build

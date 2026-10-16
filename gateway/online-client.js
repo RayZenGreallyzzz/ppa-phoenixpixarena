@@ -415,7 +415,45 @@
         return r;
       });
     };
-    var _openWallet=openGramWallet;openGramWallet=function(){_openWallet();setTimeout(refreshWallet,30);setTimeout(refreshWallet,2500);setTimeout(refreshWallet,7000);setTimeout(attachGramResetGesture,120)};window.openGramWallet=openGramWallet;
+    // Gram Wallet content lives in a srcdoc iframe in the compact mobile UI.
+    // Tiny 7-9px embedded text can look corrupted on Telegram Android WebView.
+    // Adjust presentation only; wallet transactions, addresses and records stay untouched.
+    function ppaWalletReadableText(){
+      try{
+        var panel=document.getElementById('gramWalletPanel');
+        if(!panel)return;
+        var frames=[];
+        if(String(panel.tagName||'').toLowerCase()==='iframe')frames.push(panel);
+        if(panel.querySelectorAll)panel.querySelectorAll('iframe').forEach(function(f){frames.push(f)});
+        frames.forEach(function(frame){
+          try{
+            var doc=frame.contentDocument;
+            if(!doc||!doc.head||!doc.body)return;
+            if(!doc.getElementById('ppaWalletReadableStyle')){
+              var style=doc.createElement('style');style.id='ppaWalletReadableStyle';
+              style.textContent="html,body{font-family:system-ui,-apple-system,'Segoe UI',Arial,sans-serif!important;text-rendering:optimizeLegibility}button,input,textarea,select{font-family:system-ui,-apple-system,'Segoe UI',Arial,sans-serif!important}";
+              doc.head.appendChild(style);
+            }
+            var win=frame.contentWindow;
+            if(!win||!win.getComputedStyle)return;
+            doc.body.querySelectorAll('div,span,p,small,label,button,td,th').forEach(function(el){
+              if(el.children.length||!el.textContent||!/[A-Za-zА-Яа-яЁё]/.test(el.textContent))return;
+              var fs=parseFloat(win.getComputedStyle(el).fontSize);
+              if(Number.isFinite(fs)&&fs<11){
+                el.style.setProperty('font-size','11px','important');
+                el.style.setProperty('line-height','1.35','important');
+              }
+            });
+          }catch(_){}
+        });
+      }catch(_){}
+    }
+    var _openWallet=openGramWallet;openGramWallet=function(){
+      _openWallet();
+      setTimeout(refreshWallet,30);setTimeout(refreshWallet,2500);setTimeout(refreshWallet,7000);
+      setTimeout(attachGramResetGesture,120);
+      setTimeout(ppaWalletReadableText,100);setTimeout(ppaWalletReadableText,650);setTimeout(ppaWalletReadableText,1800);
+    };window.openGramWallet=openGramWallet;
     premiumWalletLink=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletDeposit=function(){try{closePremiumStore()}catch(_){};openGramWallet()};premiumWalletWithdraw=function(){try{closePremiumStore()}catch(_){};openGramWallet()};
 
     setTimeout(function(){refreshClan();refreshAuction();refreshWallet();seedAdminEventRewardStock()},200);

@@ -83,8 +83,8 @@
   function badgeText(){
     var siege=false;try{siege=typeof P!=='undefined'&&P&&String(P.scene||'')==='clansiege'}catch(_){}
     if(siege)return Number.isFinite(RT.pingMs)?Math.round(RT.pingMs)+' ms':'… ms';
-    var s='ONLINE · '+Math.max(1,RT.onlineCount||1);
-    if(Number.isFinite(RT.pingMs))s+=' · '+Math.round(RT.pingMs)+' ms';
+    var s='ОНЛАЙН: '+Math.max(1,RT.onlineCount||1);
+    if(Number.isFinite(RT.pingMs))s+=' · '+Math.round(RT.pingMs)+' мс';
     return s;
   }
 
@@ -114,12 +114,12 @@
         el.style.position='fixed';el.style.display='block';el.style.visibility='visible';
         if(_siege){
           el.style.left='auto';el.style.right='8px';el.style.top='58px';el.style.transform='none';
-          el.style.padding='2px 4px';el.style.fontSize='8px';el.style.lineHeight='1.05';el.style.maxWidth='64px';
+          el.style.padding='3px 6px';el.style.fontSize='11px';el.style.lineHeight='1.25';el.style.maxWidth='100px';
         }else{
           el.style.left='50%';el.style.right='auto';el.style.top='8px';el.style.transform='translateX(-50%)';
-          el.style.padding='2px 6px';el.style.fontSize='9px';el.style.lineHeight='1.1';el.style.maxWidth='190px';
+          el.style.padding='4px 9px';el.style.fontSize='12px';el.style.lineHeight='1.25';el.style.maxWidth='250px';
         }
-        el.style.whiteSpace='nowrap';el.style.opacity='0.95';el.style.pointerEvents='none';el.style.zIndex='9999';
+        el.style.fontFamily='system-ui,-apple-system,Segoe UI,Arial,sans-serif';el.style.fontWeight='700';el.style.letterSpacing='0';el.style.whiteSpace='nowrap';el.style.opacity='0.98';el.style.pointerEvents='none';el.style.zIndex='9999';
       }else{
         el.style.position='fixed';
         if(_siege){el.style.left='auto';el.style.right='8px';el.style.top='58px';}
