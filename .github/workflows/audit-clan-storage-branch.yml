@@ -1,0 +1,34 @@
+name: Diagnostic clan storage branch (no deploy)
+on:
+  push:
+    branches:
+      - fix/clan-storage-withdraw-20261016
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect source (read-only)
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import zlib from 'node:zlib';
+          const packed=Buffer.concat(Array.from({length:12},(_,i)=>fs.readFileSync('PPA'+String(i+1).padStart(2,'0')+'.bin')));
+          const source=zlib.gunzipSync(packed).toString('utf8');
+          console.log('UNPACKED_LENGTH',source.length);
+          for(const key of ['function renderStorage()', 'clanMoveBtn', 'clanInspectCard', 'PPA_CLAN_STORAGE_HANDLER', "type==='clanAction'", "type==='clanStorageAction'", "type==='clanStorageMove'", 'clanStorageMove', 'clanStorageAction']){
+            const locs=[];let ix=0;
+            while((ix=source.indexOf(key,ix))>=0){locs.push(ix);ix+=key.length;if(locs.length>=40)break}
+            console.log('KEY',key,'COUNT',locs.length,'OFFSETS',locs.join(','));
+            for(const at of locs.slice(0,key==='clanMoveBtn'?3:2)){
+              const before=key==='function renderStorage()'?900:800;
+              const after=key==='function renderStorage()'?8500:1800;
+              console.log('SNIPPET',key,JSON.stringify(source.slice(Math.max(0,at-before),at+after)));
+            }
+          }
+          NODE
