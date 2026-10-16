@@ -232,6 +232,12 @@
           max-width:calc(100vw - 14px)!important;
         }
 
+        html.ppa-tg-mobile-safe #gramWalletPanel:not(iframe),
+        html.ppa-tg-mobile-safe #gramWalletPanel:not(iframe) button,
+        html.ppa-tg-mobile-safe #gramWalletPanel:not(iframe) input{
+          font-family:system-ui,-apple-system,'Segoe UI',Arial,sans-serif!important;
+        }
+
         html.ppa-tg-mobile-safe #gramWalletPanel.open,
         html.ppa-tg-mobile-safe #eventsPanel.open,
         html.ppa-tg-mobile-safe #premiumPanel.open,
