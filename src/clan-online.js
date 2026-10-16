@@ -15,7 +15,8 @@ async function schema(env){if(ready)return;const qs=[
 `CREATE TABLE IF NOT EXISTS clan_meta(clan_id TEXT PRIMARY KEY,permissions_json TEXT NOT NULL DEFAULT '{}',authority_json TEXT NOT NULL DEFAULT '{}',applications_json TEXT NOT NULL DEFAULT '[]',history_json TEXT NOT NULL DEFAULT '[]',events_json TEXT NOT NULL DEFAULT '[]',storage_json TEXT NOT NULL DEFAULT '[]',progress_json TEXT NOT NULL DEFAULT '{}',siege_reward_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL)`,
 `CREATE TABLE IF NOT EXISTS clan_trades(id TEXT PRIMARY KEY,clan_id TEXT NOT NULL,player_a TEXT NOT NULL,player_b TEXT NOT NULL,offer_a_json TEXT NOT NULL DEFAULT '{"items":[],"gold":0,"ppa":0}',offer_b_json TEXT NOT NULL DEFAULT '{"items":[],"gold":0,"ppa":0}',confirmed_a INTEGER NOT NULL DEFAULT 0,confirmed_b INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'active',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,expires_at INTEGER NOT NULL,completed_at INTEGER NOT NULL DEFAULT 0)`,
 `CREATE INDEX IF NOT EXISTS idx_clan_trades_players ON clan_trades(clan_id,player_a,player_b,status,updated_at)`,
-`CREATE TABLE IF NOT EXISTS clan_trade_guard(id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))`
+`CREATE TABLE IF NOT EXISTS clan_trade_guard(id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))`,
+`CREATE TABLE IF NOT EXISTS clan_storage_reset_backups(id TEXT PRIMARY KEY,clan_id TEXT NOT NULL,actor_id TEXT NOT NULL,storage_json TEXT NOT NULL,created_at INTEGER NOT NULL)`
 ];for(const q of qs)await env.DB.prepare(q).run();ready=true}
 async function ensurePlayer(env,u){const id=String(u.id),now=Date.now();await env.DB.prepare(`INSERT INTO players(telegram_id,telegram_username,telegram_first_name,telegram_last_name,nickname,nickname_key,class_key,created_at,updated_at,last_auth_at) VALUES(?1,?2,?3,?4,NULL,NULL,NULL,?5,?5,?5) ON CONFLICT(telegram_id) DO UPDATE SET telegram_username=excluded.telegram_username,telegram_first_name=excluded.telegram_first_name,telegram_last_name=excluded.telegram_last_name,last_auth_at=excluded.last_auth_at`).bind(id,String(u.username||''),String(u.first_name||''),String(u.last_name||''),now).run();return env.DB.prepare('SELECT * FROM players WHERE telegram_id=?1').bind(id).first()}
 async function saveRow(env,id){const r=await env.DB.prepare('SELECT version,state_json FROM saves WHERE telegram_id=?1').bind(id).first();return r?{row:r,state:sj(r.state_json||'{}',{})}:null}
@@ -24,7 +25,7 @@ function clanBossUiReadyAt(v){return Math.max(0,Number(v)||0)}
 function prog0(){return{coins:0,personalContribution:0,personalByMember:{},bonuses:{mobDamage:0,bossDamage:0,hp:0,mp:0,xp:0,gold:0},bossReadyAt:0}}
 async function metaRow(env,cid){let r=await env.DB.prepare('SELECT * FROM clan_meta WHERE clan_id=?1').bind(cid).first();if(!r){await env.DB.prepare('INSERT INTO clan_meta(clan_id,updated_at) VALUES(?1,?2)').bind(cid,Date.now()).run();r=await env.DB.prepare('SELECT * FROM clan_meta WHERE clan_id=?1').bind(cid).first()}return r}
 function parseMeta(r){return{permissions:sj(r&&r.permissions_json||'{}',{}),authority:sj(r&&r.authority_json||'{}',{}),applications:sj(r&&r.applications_json||'[]',[]),history:sj(r&&r.history_json||'[]',[]),events:sj(r&&r.events_json||'[]',[]),storage:sj(r&&r.storage_json||'[]',[]),progress:Object.assign(prog0(),sj(r&&r.progress_json||'{}',{})),siegeReward:sj(r&&r.siege_reward_json||'{}',{})}}
-async function writeMeta(env,cid,m){await env.DB.prepare(`UPDATE clan_meta SET permissions_json=?1,authority_json=?2,applications_json=?3,history_json=?4,events_json=?5,storage_json=?6,progress_json=?7,siege_reward_json=?8,updated_at=?9 WHERE clan_id=?10`).bind(JSON.stringify(m.permissions||{}),JSON.stringify(m.authority||{}),JSON.stringify((m.applications||[]).slice(0,200)),JSON.stringify((m.history||[]).slice(0,500)),JSON.stringify((m.events||[]).slice(0,300)),JSON.stringify((m.storage||[]).slice(0,500)),JSON.stringify(m.progress||prog0()),JSON.stringify(m.siegeReward||{}),Date.now(),cid).run()}
+async function writeMeta(env,cid,m){/* All non-warehouse clan writes MUST preserve the canonical D1 warehouse. Only the explicit leader reset updates storage_json. */await env.DB.prepare(`UPDATE clan_meta SET permissions_json=?1,authority_json=?2,applications_json=?3,history_json=?4,events_json=?5,progress_json=?6,siege_reward_json=?7,updated_at=?8 WHERE clan_id=?9`).bind(JSON.stringify(m.permissions||{}),JSON.stringify(m.authority||{}),JSON.stringify((m.applications||[]).slice(0,200)),JSON.stringify((m.history||[]).slice(0,500)),JSON.stringify((m.events||[]).slice(0,300)),JSON.stringify(m.progress||prog0()),JSON.stringify(m.siegeReward||{}),Date.now(),cid).run()}
 async function mem(env,id){return env.DB.prepare('SELECT clan_id,role,joined_at FROM clan_members WHERE telegram_id=?1').bind(id).first()}
 async function reqClan(env,id){const m=await mem(env,id);if(!m)throw Object.assign(new Error('Ты не состоишь в клане.'),{status:409});const c=await env.DB.prepare('SELECT * FROM clans WHERE id=?1').bind(m.clan_id).first();if(!c)throw Object.assign(new Error('Клан не найден.'),{status:404});return{m,c}}
 function act(state){if(!state||typeof state!=='object')return false;if(Number(state.lifetimePaidGram)>=1)return true;const b=state.premiumShop&&state.premiumShop.purchasedBundles;return !!(b&&Object.keys(b).some(k=>!!b[k]))}
@@ -208,6 +209,30 @@ async function action(env,id,p,b){const a=String(b.action||''),pname=nm((p&&p.ni
    return jr({ok:true,state:await state(env,id,p,true),message:'Заявка в «'+c.name+'» отправлена.'})
  }
  const {m,c}=await reqClan(env,id),meta=parseMeta(await metaRow(env,c.id));
+ if(a==='clearStorage'){
+   if(m.role!=='leader'||String(c.leader_id)!==id)return jr({ok:false,message:'Полностью очистить склад может только действующий глава клана.'},403);
+   if(String(b.confirm||'')!=='CLEAR_CLAN_STORAGE_ALL')return jr({ok:false,message:'Для очистки необходимо отдельное подтверждение.'},400);
+   const current=await metaRow(env,c.id);
+   const raw=String(current.storage_json||'[]'),items=sj(raw,null);
+   if(!Array.isArray(items))return jr({ok:false,message:'Ошибка списка предметов. Очистка отменена.'},409);
+   if(!items.length)return jr({ok:true,clearedCount:0,alreadyEmpty:true,state:await state(env,id,p),message:'Клановый склад уже пуст (0 / 500).'});
+   const now=Date.now(),backupId='clan_reset_'+crypto.randomUUID();
+   // One D1 atomic batch. Snapshot is taken from the *actual current row*,
+   // not from client input or a potentially stale player save.
+   const result=await env.DB.batch([
+     env.DB.prepare('INSERT INTO clan_storage_reset_backups(id,clan_id,actor_id,storage_json,created_at) SELECT ?1,clan_id,?2,storage_json,?3 FROM clan_meta WHERE clan_id=?4 AND storage_json=?5')
+       .bind(backupId,id,now,c.id,raw),
+     env.DB.prepare("UPDATE clan_meta SET storage_json='[]',updated_at=?1 WHERE clan_id=?2 AND storage_json=?3")
+       .bind(now,c.id,raw)
+   ]);
+   if(Number(result&&result[0]&&result[0].meta&&result[0].meta.changes)!==1||
+      Number(result&&result[1]&&result[1].meta&&result[1].meta.changes)!==1){
+      return jr({ok:false,message:'Склад изменился одновременно. Повтори очистку после обновления.'},409);
+   }
+   return jr({ok:true,clearedCount:items.length,backupId,state:await state(env,id,p),
+     message:'Клановый склад очищен: удалено '+items.length+' позиций, сейчас 0 / 500. Личные и премиум-вещи не тронуты.'});
+ }
+
  if(a==='setPermissions'){if(!can(m,meta,'manageStorageRights'))return jr({ok:false,message:'Нет права менять склад.'},403);const target=String(b.memberId||''),pp=b.permissions&&typeof b.permissions==='object'?b.permissions:{};meta.permissions[target]={canDeposit:!!pp.canDeposit,withdrawMode:['none','all','selected'].includes(pp.withdrawMode)?pp.withdrawMode:'none',allowed:pp.allowed&&typeof pp.allowed==='object'?pp.allowed:{}};await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),message:'Права склада сохранены.'})}
  if(a==='setAuthority'){if(m.role!=='leader')return jr({ok:false,message:'Права назначает только глава.'},403);const t=String(b.memberId||'');if(!t||t===id)return jr({ok:false,message:'Игрок не найден.'},400);const aa=b.authority&&typeof b.authority==='object'?b.authority:{};meta.authority[t]={acceptMembers:!!aa.acceptMembers,viewClanHistory:!!aa.viewClanHistory,manageStorageRights:!!aa.manageStorageRights,manageMembers:!!aa.manageMembers};await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),message:'Права участника сохранены.'})}
  if(a==='transferLeadership'){if(m.role!=='leader')return jr({ok:false,message:'Передать главу может только глава.'},403);const t=String(b.memberId||''),tm=await env.DB.prepare('SELECT telegram_id FROM clan_members WHERE clan_id=?1 AND telegram_id=?2').bind(c.id,t).first();if(!tm)return jr({ok:false,message:'Игрок не найден.'},404);await env.DB.prepare("UPDATE clan_members SET role='member' WHERE clan_id=?1 AND telegram_id=?2").bind(c.id,id).run();await env.DB.prepare("UPDATE clan_members SET role='leader' WHERE clan_id=?1 AND telegram_id=?2").bind(c.id,t).run();await env.DB.prepare('UPDATE clans SET leader_id=?1,updated_at=?2 WHERE id=?3').bind(t,Date.now(),c.id).run();delete meta.authority[t];await writeMeta(env,c.id,meta);return jr({ok:true,state:await state(env,id,p),message:'Права главы переданы.'})}
