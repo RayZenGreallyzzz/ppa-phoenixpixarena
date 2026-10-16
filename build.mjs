@@ -8170,6 +8170,67 @@ if(_ppaClanBossTrackCalls<1){
 }
 /* ======================================================================== */
 
+/* === EMERGENCY: CLAN WAREHOUSE READ-ONLY + OWNER RESET ===================== */
+// Both the Clan Master and the Keeper route 'clan' moves through storageMove.
+// They used to splice the local bag/storage and saveGame *before* server reply.
+if(!ppaPatchRegex(
+  'forbid optimistic clan inventory mutations',
+  /function storageMove\(mode,direction,idx,source\)\{/,
+  "function storageMove(mode,direction,idx,source){if(mode==='clan'){try{showPickup('Клановый склад временно только для просмотра','#ffcf72')}catch(_){};return;}"
+))throw new Error('storageMove read-only intercept missing');
+if(!ppaPatchRegex(
+  'forbid unsafe mass clan inventory mutations',
+  /function storageMoveAll\(mode,direction,source\)\{/,
+  "function storageMoveAll(mode,direction,source){if(mode==='clan'){try{showPickup('Клановый склад временно только для просмотра','#ffcf72')}catch(_){};return;}"
+))throw new Error('storageMoveAll read-only intercept missing');
+
+// Do not send a stale personal game save just because clan metadata refreshed.
+if(!ppaPatchRegex(
+  'clan refresh does not upload personal inventory snapshot',
+  /clanStorageSyncRuntime\(\);saveGame\(\);sendStorageState\(\);sendClanState\(\);/,
+  'clanStorageSyncRuntime();sendStorageState();sendClanState();'
+))throw new Error('clan refresh cloud overwrite intercept missing');
+
+// Add a 2-tap confirmation control inside the Clan Master's own iframe.
+// Button is only rendered for the leader. No client-side list manipulations.
+const ppaClanHeroNeedle=ppaEscapeSrcdocCode("'<div class=\"heroText\">Один общий склад на 500 ячеек. Эта же коллекция открывается у Хранителя склада.</div>'+");
+const ppaClanResetButton=ppaEscapeSrcdocCode("(isLeader()?'<button type=\"button\" class=\"action\" id=\"clanClearStorage\" style=\"margin-top:10px;background:#542727;border:1px solid #c26c65;color:#ffe5df\">ОЧИСТИТЬ ВЕСЬ КЛАНОВЫЙ СКЛАД</button>':'')+");
+if(!output.includes(ppaClanHeroNeedle))throw new Error('Clan warehouse leader controls not found');
+output=output.replace(ppaClanHeroNeedle,ppaClanHeroNeedle+"\n"+ppaClanResetButton);
+const ppaClanButtonsNeedle=ppaEscapeSrcdocCode("  document.querySelectorAll('.clanMoveBtn').forEach");
+const ppaClanBtnHandler=ppaEscapeSrcdocCode(
+"  var reset=document.getElementById('clanClearStorage');\n"+
+"  if(reset)reset.onclick=function(){\n"+
+"    if(!isLeader())return;\n"+
+"    if(reset.dataset.armed!=='yes'){\n"+
+"      reset.dataset.armed='yes';reset.textContent='ПОДТВЕРДИТЬ ОЧИСТКУ ВСЕГО СКЛАДА';return;\n"+
+"    }\n"+
+"    reset.disabled=true;reset.textContent='ОЧИЩАЮ НА СЕРВЕРЕ…';\n"+
+"    parent.postMessage({type:'clanClearStorage'},'*');\n"+
+"  };\n");
+if(!output.includes(ppaClanButtonsNeedle))throw new Error('Clan warehouse button handlers not found');
+output=output.replace(ppaClanButtonsNeedle,ppaClanBtnHandler+ppaClanButtonsNeedle);
+
+// Parent route handles only this explicit command; client cannot choose clan
+// ID, and server checks Telegram auth + clan leader before the D1 operation.
+if(!ppaPatchRegex(
+  'clan reset request from leader UI',
+  /else if\(d\.type==='storageMoveAll'\)\{storageMoveAll\(d\.mode,d\.direction,d\.source\);\}/,
+  "else if(d.type==='storageMoveAll'){storageMoveAll(d.mode,d.direction,d.source);}"+
+  "else if(d.type==='clanClearStorage'){"+
+  " if(typeof window.PPA_CLAN_HANDLER!=='function'){clanNotice('Клановый сервер не подключён');return;}"+
+  " Promise.resolve(window.PPA_CLAN_HANDLER({action:'clearStorage',confirm:'CLEAR_CLAN_STORAGE_ALL'}))"+
+  " .then(function(r){if(!r||!r.ok){clanNotice(r&&r.message||'Не удалось очистить склад');return;}"+
+  " if(r.state&&window.PPA_SET_CLAN_STATE)window.PPA_SET_CLAN_STATE(r.state);"+
+  " clanNotice(r.message||'Клановый склад пуст');"+
+  " try{showPickup(r.message||'Клановый склад очищен','#8dff9a')}catch(_){};"+
+  " setTimeout(function(){location.reload()},700);"+
+  " }).catch(function(e){clanNotice(String(e&&e.message||e||'Ошибка очистки'));});"+
+  "}"
+))throw new Error('Clan reset parent message route not found');
+for(const token of ['clanClearStorage','ОЧИСТИТЬ ВЕСЬ КЛАНОВЫЙ СКЛАД','Клановый склад временно только для просмотра'])if(!output.includes(token))throw new Error('Clan warehouse safety patch missing '+token);
+/* ======================================================================== */
+
 /* === RUNTIME BUILD AUDIT ================================================= */
 {
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
