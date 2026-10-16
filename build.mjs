@@ -91,6 +91,15 @@ fs.rmSync(publicDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
 fs.mkdirSync(gameDir, { recursive: true });
 
+// Bundle the pinned official TON Connect UI SDK in first-party Worker assets.
+const tonSdkFromNpm=path.join(ROOT,'node_modules','@tonconnect','ui','dist','tonconnect-ui.min.js');
+if(!fs.existsSync(tonSdkFromNpm)||fs.statSync(tonSdkFromNpm).size<100000){
+  throw new Error('TON Connect UI SDK missing. Run npm install before building.');
+}
+const tonSdkVendorDir=path.join(publicDir,'vendor');
+fs.mkdirSync(tonSdkVendorDir,{recursive:true});
+fs.copyFileSync(tonSdkFromNpm,path.join(tonSdkVendorDir,'tonconnect-ui.min.js'));
+
 // === DUNGEON MASK LAYOUT TEST =============================================
 // Map + exact walk mask. Dungeon mobs stay disabled while the new geometry is tested.
 const PPA_DUNGEON_TEST_FLOOR_PATH=path.join(ROOT,'данж.png');
@@ -862,7 +871,7 @@ output = output.replace(
   '<script src="https://telegram.org/js/telegram-web-app.js?63"></script>',
   '<script src="https://telegram.org/js/telegram-web-app.js?63"></script>\n'+
   '<script id="ppaBootTelegramReady">(function(){try{var w=window.Telegram&&window.Telegram.WebApp;if(!w)return;try{w.setBackgroundColor(\'#050302\')}catch(_){}try{w.setHeaderColor(\'#050302\')}catch(_){}try{w.ready()}catch(_){}try{w.expand()}catch(_){}}catch(_){}})();<\\/script>\n'+
-  '<script defer src="https://unpkg.com/@tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js" data-ppa-tonconnect="1"></script>'
+  '<script defer src="/vendor/tonconnect-ui.min.js" data-ppa-tonconnect="1"></script>'
 );
 if (!output.includes('data-ppa-tonconnect="1"')) {
   throw new Error('TON Connect preload did not apply');
@@ -1367,6 +1376,8 @@ ppaPatchRegex(
   `window.PPA_TWA_RETURN_URL='https://t.me/PhoenixPixMMORPGbot?startapp';
 var PPA_TON_UI=null;
 var PPA_TON_LOADING=null;
+var PPA_TON_INIT_PROMISE=null;
+var PPA_TON_LAST_ERROR='';
 var PPA_TON_CONNECTED=false;
 var PPA_TON_WALLET_NAME='';
 var PPA_TON_SELECTED_WALLET='';
@@ -1374,20 +1385,47 @@ var PPA_TON_CHAIN_BALANCE=null;
 var PPA_TON_BALANCE_TIMER=0;
 var PPA_TON_PICKER=null;
 
-function ppaWaitTonSdk(){
-  if(window.TON_CONNECT_UI&&typeof window.TON_CONNECT_UI.TonConnectUI==='function')return Promise.resolve(true);
-  if(PPA_TON_LOADING)return PPA_TON_LOADING;
-  PPA_TON_LOADING=new Promise(function(resolve,reject){
-    var n=0,t=setInterval(function(){
-      n++;
-      if(window.TON_CONNECT_UI&&typeof window.TON_CONNECT_UI.TonConnectUI==='function'){
-        clearInterval(t);resolve(true);return;
-      }
-      if(n>=60){
-        clearInterval(t);PPA_TON_LOADING=null;reject(new Error('TON Connect SDK не загрузился'));
-      }
-    },50);
+function ppaTonSdkReady(){
+  return !!(window.TON_CONNECT_UI&&typeof window.TON_CONNECT_UI.TonConnectUI==='function');
+}
+function ppaTonLoadFallback(src,timeoutMs){
+  return new Promise(function(resolve){
+    if(ppaTonSdkReady()){resolve(true);return}
+    var script=document.createElement('script'),done=false;
+    var timer=setTimeout(function(){finish(false)},timeoutMs);
+    function finish(ok){
+      if(done)return;
+      done=true;clearTimeout(timer);script.onload=null;script.onerror=null;
+      if(!ok&&script.parentNode)script.parentNode.removeChild(script);
+      resolve(ppaTonSdkReady());
+    }
+    script.async=true;script.src=src;
+    script.onload=function(){finish(ppaTonSdkReady())};
+    script.onerror=function(){finish(false)};
+    document.head.appendChild(script);
   });
+}
+function ppaWaitTonSdk(){
+  if(ppaTonSdkReady())return Promise.resolve(true);
+  if(PPA_TON_LOADING)return PPA_TON_LOADING;
+  PPA_TON_LOADING=(async function(){
+    // Allow the first-party deferred preload time to complete.
+    for(var n=0;n<60;n++){
+      if(ppaTonSdkReady())return true;
+      await new Promise(function(resolve){setTimeout(resolve,100)});
+    }
+    // Fallback if a Telegram WebView cannot fetch the first-party asset.
+    var paths=[
+      'https://cdn.jsdelivr.net/npm/@tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js',
+      'https://unpkg.com/@tonconnect/ui@3.0.2/dist/tonconnect-ui.min.js'
+    ];
+    for(var i=0;i<paths.length;i++){
+      if(ppaTonSdkReady())return true;
+      if(await ppaTonLoadFallback(paths[i],7000))return true;
+    }
+    throw new Error('SDK TON Connect не загрузился (локальный файл и резервные источники)');
+  })();
+  PPA_TON_LOADING=PPA_TON_LOADING.then(function(ok){PPA_TON_LOADING=null;return ok},function(err){PPA_TON_LOADING=null;throw err});
   return PPA_TON_LOADING;
 }
 
@@ -1418,9 +1456,11 @@ function ppaStartTonBalance(address){
   },15000);
 }
 
-async function ppaTonInit(){
-  if(PPA_TON_UI)return PPA_TON_UI;
-  try{
+function ppaTonInit(){
+  if(PPA_TON_UI)return Promise.resolve(PPA_TON_UI);
+  if(PPA_TON_INIT_PROMISE)return PPA_TON_INIT_PROMISE;
+  PPA_TON_INIT_PROMISE=(async function(){
+    try{
     await ppaWaitTonSdk();
     ppaEnsureTonButtonRoot();
     var ui=new window.TON_CONNECT_UI.TonConnectUI({
@@ -1431,11 +1471,9 @@ async function ppaTonInit(){
     ui.uiOptions={
       language:'ru',
       uiPreferences:{theme:'DARK'},
-      // TON Connect requires twaReturnUrl at the TOP LEVEL for Telegram Mini Apps.
-      // The SDK then chooses the correct return strategy/deep-link itself.
-      twaReturnUrl:window.PPA_TWA_RETURN_URL,
       actionsConfiguration:{
-        returnStrategy:'back'
+        returnStrategy:'back',
+        twaReturnUrl:window.PPA_TWA_RETURN_URL
       }
     };
     PPA_TON_UI=ui;
@@ -1459,12 +1497,23 @@ async function ppaTonInit(){
         }
       }catch(err){gramWalletResult(false,'TON Connect: '+String(err&&err.message||err||'ошибка подключения'))}
     },function(err){gramWalletResult(false,'TON Connect: '+String(err&&err.message||err||'ошибка подключения'))});
-    try{await ui.connectionRestored}catch(_){}
+    // Restoration may be slow; allow connecting without awaiting it.
+    Promise.resolve(ui.connectionRestored).catch(function(err){
+      console.warn('PPA TON connection restore:',err);
+    });
+    PPA_TON_LAST_ERROR='';
     return ui;
-  }catch(err){
-    gramWalletResult(false,'TON Connect не запустился: '+String(err&&err.message||err||'неизвестно'));
-    return null;
-  }
+    }catch(err){
+      PPA_TON_UI=null;
+      PPA_TON_LAST_ERROR='TON Connect: '+String(err&&err.message||err||'неизвестно');
+      console.warn('PPA TON initialization:',err);
+      gramWalletResult(false,PPA_TON_LAST_ERROR);
+      return null;
+    }finally{
+      PPA_TON_INIT_PROMISE=null;
+    }
+  })();
+  return PPA_TON_INIT_PROMISE;
 }
 
 function ppaEnsureTonButtonRoot(){
@@ -1484,7 +1533,7 @@ async function ppaShowTonWalletPicker(){
   if(!tg.id){gramWalletResult(false,'Откройте PPA через Telegram-бота');return}
   try{
     var ui=PPA_TON_UI||await ppaTonInit();
-    if(!ui){gramWalletResult(false,'TON Connect не запустился');return}
+    if(!ui){gramWalletResult(false,PPA_TON_LAST_ERROR||'TON Connect не запустился');return}
     if(ui.connected&&ui.account&&ui.account.address){
       PPA_TON_CONNECTED=true;
       gramWalletLink(String(ui.account.address));
@@ -1550,6 +1599,9 @@ ppaPatchRegex(
 );
 
 if(!output.includes('data-ppa-tonconnect="1"') ||
+   !output.includes('/vendor/tonconnect-ui.min.js') ||
+   !output.includes('PPA_TON_INIT_PROMISE') ||
+   !output.includes('ppaTonLoadFallback') ||
    !output.includes("buttonRootId:'ppaTonConnectButtonRoot'") ||
    !output.includes("twaReturnUrl:window.PPA_TWA_RETURN_URL") ||
    !output.includes("await ui.openModal()") ||
