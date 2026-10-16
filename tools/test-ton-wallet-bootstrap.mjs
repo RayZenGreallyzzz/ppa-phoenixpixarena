@@ -1,0 +1,21 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+
+const sdk='public/vendor/tonconnect-ui.min.js';
+const html='public/index.html';
+assert.ok(fs.existsSync(sdk),'First-party TON Connect bundle missing');
+assert.ok(fs.statSync(sdk).size>100000,'TON Connect bundle appears truncated');
+const page=fs.readFileSync(html,'utf8');
+assert.ok(page.includes('data-ppa-tonconnect="1"'),'TON SDK preload missing');
+assert.ok(page.includes('src="/vendor/tonconnect-ui.min.js"'),'SDK is not self-hosted');
+assert.ok(page.includes('ppaTonLoadFallback'),'CDN fallback missing');
+assert.ok(page.includes('PPA_TON_INIT_PROMISE'),'Single-flight initialization missing');
+assert.ok(page.includes('PPA_TON_LAST_ERROR'),'Error diagnostics missing');
+assert.ok(page.includes("twaReturnUrl:window.PPA_TWA_RETURN_URL"),'Telegram deep-link missing');
+assert.ok(/actionsConfiguration:\s*\{\s*returnStrategy:'back',\s*twaReturnUrl:window\.PPA_TWA_RETURN_URL/.test(page),'twaReturnUrl must be inside actionsConfiguration');
+const start=page.indexOf("window.PPA_TWA_RETURN_URL='https://t.me/PhoenixPixMMORPGbot?startapp'");
+const end=page.indexOf('function gramWalletLink(address){',start);
+assert.ok(start>=0&&end>start,'TON Connect runtime block missing');
+new vm.Script(page.slice(start,end),{filename:'PPA inline TON Connect runtime'});
+console.log('TON Connect: first-party SDK, options, singleton init and inline JS syntax OK.');

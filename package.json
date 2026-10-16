@@ -10,5 +10,8 @@
     "@gltf-transform/cli": "4.5.1",
     "wrangler": "^4.0.0",
     "sharp": "^0.34.0"
+  },
+  "dependencies": {
+    "@tonconnect/ui": "3.0.2"
   }
 }
