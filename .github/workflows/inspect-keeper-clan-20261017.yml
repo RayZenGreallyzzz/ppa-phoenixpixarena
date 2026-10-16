@@ -1,0 +1,20 @@
+name: Inspect both clan storage interfaces
+on:
+  pull_request:
+    paths:
+      - 'tools/inspect-keeper-clan-20261017.mjs'
+      - '.github/workflows/inspect-keeper-clan-20261017.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: node tools/inspect-keeper-clan-20261017.mjs
