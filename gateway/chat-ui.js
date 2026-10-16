@@ -185,45 +185,45 @@
         position:fixed!important;left:8px!important;right:auto!important;
         width:min(350px,calc(100vw - 26px))!important;max-width:calc(100vw - 26px)!important;
         z-index:39!important;transform:none!important;pointer-events:auto!important;display:block!important;
-        font-family:Arial,sans-serif
+        font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif
       }
       #ppaChatRoot.ppaChatV2Root:not(.nativeTyping){top:auto!important;bottom:178px!important}
       #ppaChatRoot.ppaChatV2Root.suppressed{display:none!important}
       #ppaChatRoot.ppaChatV2Root > :not(#ppaChatBoxV2):not(#ppaChatNativeInput):not(#ppaChatLauncher){display:none!important}
       #ppaChatBox{display:none!important;visibility:hidden!important;pointer-events:none!important}
       #ppaChatBoxV2{
-        width:100%;height:278px;box-sizing:border-box;border:1px solid rgba(174,112,50,.72);border-radius:8px;
+        width:100%;height:302px;box-sizing:border-box;border:1px solid rgba(174,112,50,.72);border-radius:8px;
         background:rgba(10,7,6,.78);box-shadow:0 6px 24px rgba(0,0,0,.48),inset 0 0 20px rgba(94,45,14,.12);
         backdrop-filter:blur(3px);overflow:hidden;display:flex;flex-direction:column;color:#eadbc4
       }
       #ppaChatBoxV2.collapsed{display:none}
       #ppaChatLauncher{
         min-width:116px;height:29px;padding:0 10px;border-radius:7px;border:1px solid rgba(155,100,47,.75);
-        background:rgba(18,12,9,.78);color:#e7c99d;font:bold 10px monospace;box-shadow:0 3px 12px rgba(0,0,0,.42)
+        background:rgba(18,12,9,.78);color:#e7c99d;font:700 12px system-ui,Arial,sans-serif;box-shadow:0 3px 12px rgba(0,0,0,.42)
       }
       #ppaChatLauncher.hidden{display:none}
       #ppaChatLauncher.hasUnread{color:#fff0ae;border-color:#c58b44;box-shadow:0 0 10px rgba(219,133,49,.32)}
       #ppaChatBoxV2 .ppaChatTop{display:flex;align-items:center;gap:6px;padding:5px 6px 4px;border-bottom:1px solid rgba(142,90,43,.45)}
-      #ppaChatBoxV2 .ppaChatTitle{font:bold 10px Georgia,serif;color:#e8c98f;letter-spacing:.5px;flex:1}
+      #ppaChatBoxV2 .ppaChatTitle{font:700 12px system-ui,Arial,sans-serif;color:#e8c98f;letter-spacing:.5px;flex:1}
       #ppaChatMin{width:28px;height:24px;border:1px solid #69492f;border-radius:5px;background:#241710;color:#e7c89e;font:bold 15px Arial}
       #ppaChatBoxV2 .ppaChatTabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;padding:4px 5px}
       #ppaChatBoxV2 .ppaChatTab,#ppaChatBoxV2 .ppaFriendsTab{
         min-width:0;height:26px;padding:0 2px;border:1px solid #5f4934;border-radius:4px;background:#1b1410;color:#bca98e;
-        font:700 7.5px monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+        font:700 10px system-ui,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
       }
       #ppaChatBoxV2 .ppaChatTab.active{border-color:#a56f36;background:#352217;color:#ffdda5}
       #ppaChatPrivateTargetRow{display:none;align-items:center;gap:5px;padding:0 5px 4px}
       #ppaChatPrivateTargetRow.show{display:flex}
-      #ppaChatPrivateTargetRow span{font:700 8px monospace;color:#bba88e}
+      #ppaChatPrivateTargetRow span{font:700 11px system-ui,Arial,sans-serif;color:#bba88e}
       #ppaChatPrivateTarget{flex:1;height:27px;min-width:0;box-sizing:border-box;border:1px solid #66503a;border-radius:5px;background:#0d0a08;color:#f1ddbd;padding:0 7px;font-size:12px;outline:none}
       #ppaChatMessages{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:3px 6px 5px;scrollbar-width:thin}
       .ppaChatMsg{padding:3px 2px;border-bottom:1px solid rgba(255,255,255,.035)}
       .ppaChatMsgHead{display:flex;gap:6px;align-items:baseline}
-      .ppaChatWho{font:bold 9px monospace;color:#f2c985;max-width:72%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .ppaChatTime{margin-left:auto;font:7px monospace;color:#726a62}
-      .ppaChatText{font:10px/1.28 Arial,sans-serif;color:#e2d8c9;overflow-wrap:anywhere}
+      .ppaChatWho{font:700 11px system-ui,Arial,sans-serif;color:#f2c985;max-width:72%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .ppaChatTime{margin-left:auto;font:10px system-ui,Arial,sans-serif;color:#726a62}
+      .ppaChatText{font:12px/1.4 system-ui,Arial,sans-serif;color:#e2d8c9;overflow-wrap:anywhere}
       .ppaChatMsg.self .ppaChatWho{color:#8ed6ff}.ppaChatMsg.system .ppaChatWho,.ppaChatMsg.system .ppaChatText{color:#ffcf7d}
-      .ppaChatTo{color:#9ebfd1;font:700 8px monospace}
+      .ppaChatTo{color:#9ebfd1;font:700 11px system-ui,Arial,sans-serif}
       #ppaChatComposer{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:5px;padding:5px;border-top:1px solid rgba(142,90,43,.45)}
       #ppaChatRoot.ppaChatV2Root #ppaChatNativeInput{
         position:fixed!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;
@@ -239,7 +239,7 @@
       }
       #ppaChatVisualInput.empty{color:#766d63}
       #ppaChatVisualInput.focused{border-color:#a8753f;box-shadow:0 0 0 1px rgba(168,117,63,.22) inset}
-      #ppaChatSend{height:31px;border:1px solid #885f32;border-radius:5px;background:linear-gradient(#4b301c,#24170f);color:#ffe0ad;font:bold 9px Georgia,serif}
+      #ppaChatSend{height:31px;border:1px solid #885f32;border-radius:5px;background:linear-gradient(#4b301c,#24170f);color:#ffe0ad;font:700 11px system-ui,Arial,sans-serif}
       @media (max-width:600px){
         #ppaChatRoot.ppaChatV2Root{
           width:min(315px,calc(100vw - 30px))!important;
