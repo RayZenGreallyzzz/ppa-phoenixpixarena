@@ -16,12 +16,13 @@ has(html,"idx:idx,item:it,source:&#x27;clanMenu&#x27;");
 has(html,"storageMove(d.mode,d.direction,d.idx,d.source,d.item)");
 has(html,"if(!CLAN_LOCAL_STATE.connected){ppaClanStorageNotice('Нет связи с общим клановым складом");
 has(html,"if(mode==='clan'){if(!CLAN_LOCAL_STATE.connected)");
-has(html,"INV.storage.clan.sort(comparator);sendStorageState();sendClanState();");
+has(html,"window.PPA_CLAN_SORT_BY=by;INV.storage.clan.sort(comparator);sendStorageState();sendClanState();");
 assert.ok(!html.includes("clanStorageSyncRuntime();saveGame();sendStorageState();sendClanState();"),'Server clan state must not trigger a stale cloud save');
 has(server,'clanWarehouseTransfer(env,id,p,m,c,b)');
 has(server,'clan_storage_guard');
 has(online,'PPA_CLAN_STORAGE_HANDLER');
 has(build,'clan sorting is visual only and does not cloud-save');
+has(html,"storageSort('clan',window.PPA_CLAN_SORT_BY,true)");
 // Sorting cannot change the identity of the selected slot on the server.
 function same(a,b){
   if(!a||!b)return false;
