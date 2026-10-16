@@ -8220,7 +8220,11 @@ function ppaClanStorageMoveOnline(direction,idx,source,expectedItem){
   idx=matches[0];
   var it=list[idx];
   if(direction==='take'&&(INV.bag||[]).length>=100){ppaClanStorageNotice('Инвентарь заполнен 100 / 100',true);return}
-  var req={action:direction,item:it,source:source||'clanMenu'};
+  // Unique ID for one user action. The server persists it; resending the same
+  // action cannot move another identical-looking item.
+  var operationId=(window.crypto&&typeof window.crypto.randomUUID==='function')
+    ?window.crypto.randomUUID():'w_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,13);
+  var req={action:direction,item:it,source:source||'clanMenu',requestId:operationId};
   if(direction==='put')req.bagIndex=idx;else req.storageIndex=idx;
   PPA_CLAN_STORAGE_BUSY=true;
   ppaClanStorageNotice('Проверяю предмет на сервере…');
@@ -8313,6 +8317,7 @@ if(!output.includes('function ppaClanStorageMoveOnline(direction,idx,source,expe
    !output.includes("idx:idx,item:it,source:&#x27;clanMenu&#x27;")||
    !output.includes("storageMove(d.mode,d.direction,d.idx,d.source,d.item)")||
    !output.includes('req.storageIndex=idx')||
+   !output.includes('requestId:operationId')||
    !output.includes('function storageMoveAll(mode,direction,source){if(mode')){
   throw new Error('Online clan warehouse safety patch missing');
 }
