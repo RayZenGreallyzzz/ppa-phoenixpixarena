@@ -325,7 +325,7 @@ async function action(env,id,p,b){const a=String(b.action||''),pname=nm((p&&p.ni
      .bind(c.id,id,enabled?1:0,Date.now()).run();
    return jr({ok:true,state:await state(env,id,p),message:enabled?'Тест склада V2 включён только для главы. Используй недорогие вещи.':'Тест склада отключён. Перемещения заблокированы.'});
  }
- if(a==='put'||a==='take'){
+ if((a==='put'||a==='take')&&/^w2_[A-Za-z0-9_-]{16,90}$/.test(String(b.requestId||''))){
    const m=await mem(env,id);
    if(m&&m.role==='leader'){
      const c=await env.DB.prepare('SELECT id,leader_id FROM clans WHERE id=?1').bind(m.clan_id).first();
