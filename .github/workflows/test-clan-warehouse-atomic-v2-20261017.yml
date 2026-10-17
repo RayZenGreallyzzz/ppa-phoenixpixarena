@@ -1,0 +1,24 @@
+name: Test gated clan warehouse atomic V2
+on:
+  pull_request:
+    paths:
+      - 'src/clan-online.js'
+      - 'tools/test-clan-warehouse-atomic-v2-20261017.mjs'
+      - '.github/workflows/test-clan-warehouse-atomic-v2-20261017.yml'
+permissions:
+  contents: read
+jobs:
+  atomic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: node --check src/clan-online.js
+      - run: npm run build
+      - run: node tools/test-clan-warehouse-atomic-v2-20261017.mjs
+      - run: node tools/test-clan-only-clear-20261017.mjs
+      - run: node tools/test-clan-keeper-failclosed-20261017.mjs
