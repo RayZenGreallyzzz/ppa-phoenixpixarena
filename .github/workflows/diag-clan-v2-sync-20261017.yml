@@ -1,0 +1,20 @@
+name: Diagnose V2 clan bag and Keeper controls
+on:
+  pull_request:
+    paths:
+      - 'tools/diag-clan-v2-sync-20261017.mjs'
+      - '.github/workflows/diag-clan-v2-sync-20261017.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: node tools/diag-clan-v2-sync-20261017.mjs
