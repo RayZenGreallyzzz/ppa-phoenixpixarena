@@ -281,17 +281,23 @@ async function clanWarehouseTransferV2(env,id,p,b){
      playerId:id,playerName:nm((p&&p.nickname)||(p&&p.telegram_first_name)||'Игрок'),source:String(b.source||'keeper').slice(0,32),ts:now},
     ...history
   ].slice(0,500));
-  // CHECK(1) at the end forces a rollback if either CAS update failed.
+  // First CHECK validates the old snapshot; final CHECK validates the new one.
   try{
     const results=await env.DB.batch([
+      // Reserve the request ID only if the OLD save and OLD warehouse both
+      // match. In particular, a new nonce against a stale snapshot fails here.
+      env.DB.prepare('INSERT INTO clan_warehouse_ops_v2(id,clan_id,actor_id,operation,completed_at,ok) VALUES(?1,?2,?3,?4,?5,CASE WHEN EXISTS(SELECT 1 FROM saves WHERE telegram_id=?6 AND version=?7 AND state_json=?8) AND EXISTS(SELECT 1 FROM clan_meta WHERE clan_id=?9 AND storage_json=?10 AND history_json=?11) THEN 1 ELSE 0 END)')
+        .bind(opId,c.id,id,a,now,id,version,oldSave,c.id,oldStorage,oldHistory),
       env.DB.prepare('UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5 AND state_json=?6 AND EXISTS(SELECT 1 FROM clan_meta WHERE clan_id=?7 AND storage_json=?8 AND history_json=?9)')
         .bind(nextVersion,newSave,now,id,version,oldSave,c.id,oldStorage,oldHistory),
       env.DB.prepare('UPDATE clan_meta SET storage_json=?1,history_json=?2,updated_at=?3 WHERE clan_id=?4 AND storage_json=?5 AND history_json=?6 AND EXISTS(SELECT 1 FROM saves WHERE telegram_id=?7 AND version=?8 AND state_json=?9)')
         .bind(newStorage,newHistory,now,c.id,oldStorage,oldHistory,id,nextVersion,newSave),
-      env.DB.prepare('INSERT INTO clan_warehouse_ops_v2(id,clan_id,actor_id,operation,completed_at,ok) VALUES(?1,?2,?3,?4,?5,CASE WHEN EXISTS(SELECT 1 FROM saves WHERE telegram_id=?6 AND version=?7 AND state_json=?8) AND EXISTS(SELECT 1 FROM clan_meta WHERE clan_id=?9 AND storage_json=?10 AND history_json=?11) THEN 1 ELSE 0 END)')
-        .bind(opId,c.id,id,a,now,id,nextVersion,newSave,c.id,newStorage,newHistory)
+      // Confirm only if the NEW save and NEW warehouse both exist. CHECK(ok=1)
+      // aborts the whole transaction if either CAS UPDATE failed.
+      env.DB.prepare('UPDATE clan_warehouse_ops_v2 SET ok=CASE WHEN EXISTS(SELECT 1 FROM saves WHERE telegram_id=?1 AND version=?2 AND state_json=?3) AND EXISTS(SELECT 1 FROM clan_meta WHERE clan_id=?4 AND storage_json=?5 AND history_json=?6) THEN 1 ELSE 0 END WHERE id=?7')
+        .bind(id,nextVersion,newSave,c.id,newStorage,newHistory,opId)
     ]);
-    if(results.length!==3||results.some(r=>Number(r&&r.meta&&r.meta.changes)!==1))
+    if(results.length!==4||results.some(r=>Number(r&&r.meta&&r.meta.changes)!==1))
       warehouseV2Fail('Конфликт сохранения: операция отменена.');
   }catch(e){
     done=await lookup();
