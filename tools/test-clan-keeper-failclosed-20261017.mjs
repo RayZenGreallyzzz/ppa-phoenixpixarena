@@ -6,8 +6,8 @@ const server=fs.readFileSync('src/clan-online.js','utf8');
 function verify(name,present){assert.ok(present,'Missing '+name);}
 verify('server protects inventory even when UI bypassed',server.includes("if(a==='put'||a==='take'||a==='putMany'||a==='takeMany')return jr({ok:false,code:'CLAN_STORAGE_READONLY'"));
 verify('keeper buttons disabled',h.includes('put.disabled=true;putAll.disabled=true;take.disabled=true;takeAll.disabled=true;'));
-verify('clan master callbacks blocked',h.includes('Клановый склад временно только для просмотра&#x27;);return;'));
-verify('parent single transfer guard',h.includes("if(d.mode==='clan'||d.source==='clanMenu'){try{showPickup("));
+verify('clan master callbacks blocked unless pilot',h.includes('if(!STATE.warehouseV2Pilot)')&&h.includes('Клановый склад сейчас только для просмотра'));
+verify('parent single transfer uses dedicated V2 function',h.includes("if(d.mode==='clan'||d.source==='clanMenu'){ppaClanStorageTransferV2("));
 verify('parent mass transfer guard',h.includes("else if(d.type==='storageMoveAll'){if(d.mode==='clan')"));
 verify('parent sorting guard',h.includes("else if(d.type==='storageSort'){if(d.mode==='clan')"));
 verify('personal and premium calls remain',h.includes("else storageMove(d.mode,d.direction,d.idx,d.source);")&&h.includes('else storageMoveAll(d.mode,d.direction,d.source);'));
