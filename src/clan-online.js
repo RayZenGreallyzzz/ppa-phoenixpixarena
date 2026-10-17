@@ -316,7 +316,7 @@ async function action(env,id,p,b){const a=String(b.action||''),pname=nm((p&&p.ni
    const {m,c}=await reqClan(env,id);
    if(m.role!=='leader'||String(c.leader_id)!==id)return jr({ok:false,message:'Тест кланового склада доступен только главе.'},403);
    const enabled=String(b.confirm||'')==='ENABLE_CLAN_PILOT_V2';
-   if(!enabled&&String(b.confirm||'')!=='DISABLE_CLAN_PILOT_V2')return jr({ok:false,message:'Нужно подтверждение переключения.',400);
+   if(!enabled&&String(b.confirm||'')!=='DISABLE_CLAN_PILOT_V2')return jr({ok:false,message:'Нужно подтверждение переключения.'},400);
    if(enabled){
      const meta=await metaRow(env,c.id),stored=sj(meta.storage_json||'[]',null);
      if(!Array.isArray(stored)||stored.length>0)return jr({ok:false,message:'Тест можно включить только на пустом клановом складе.'},409);
