@@ -4,9 +4,10 @@ import sqlite3
 from pathlib import Path
 src=Path('src/clan-online.js').read_text()
 SQL=[
+ 'INSERT INTO clan_warehouse_ops_v2(id,clan_id,actor_id,operation,completed_at,ok) VALUES(?1,?2,?3,?4,?5,CASE WHEN EXISTS(SELECT 1 FROM saves WHERE telegram_id=?6 AND version=?7 AND state_json=?8) AND EXISTS(SELECT 1 FROM clan_meta WHERE clan_id=?9 AND storage_json=?10 AND history_json=?11) THEN 1 ELSE 0 END)',
  'UPDATE saves SET version=?1,state_json=?2,updated_at=?3 WHERE telegram_id=?4 AND version=?5 AND state_json=?6 AND EXISTS(SELECT 1 FROM clan_meta WHERE clan_id=?7 AND storage_json=?8 AND history_json=?9)',
  'UPDATE clan_meta SET storage_json=?1,history_json=?2,updated_at=?3 WHERE clan_id=?4 AND storage_json=?5 AND history_json=?6 AND EXISTS(SELECT 1 FROM saves WHERE telegram_id=?7 AND version=?8 AND state_json=?9)',
- 'INSERT INTO clan_warehouse_ops_v2(id,clan_id,actor_id,operation,completed_at,ok) VALUES(?1,?2,?3,?4,?5,CASE WHEN EXISTS(SELECT 1 FROM saves WHERE telegram_id=?6 AND version=?7 AND state_json=?8) AND EXISTS(SELECT 1 FROM clan_meta WHERE clan_id=?9 AND storage_json=?10 AND history_json=?11) THEN 1 ELSE 0 END)'
+ 'UPDATE clan_warehouse_ops_v2 SET ok=CASE WHEN EXISTS(SELECT 1 FROM saves WHERE telegram_id=?1 AND version=?2 AND state_json=?3) AND EXISTS(SELECT 1 FROM clan_meta WHERE clan_id=?4 AND storage_json=?5 AND history_json=?6) THEN 1 ELSE 0 END WHERE id=?7'
 ]
 assert all(q in src for q in SQL), 'Server SQL changed: update SQLite regression test.'
 def make_db():
@@ -23,10 +24,11 @@ def move(c,nonce='test_op_v2_123456',expected_version=7,expected_history='[]'):
     wh='[{"uid":"hp_medium","kind":"consumable","count":15}]'
     hist='[{"action":"put"}]'
     with c:
-      a=c.execute(SQL[0],(8,after,2,'777',expected_version,before,'alpha','[]',expected_history))
-      b=c.execute(SQL[1],(wh,hist,2,'alpha','[]',expected_history,'777',8,after))
-      d=c.execute(SQL[2],(nonce,'alpha','777','put',2,'777',8,after,'alpha',wh,hist))
-      assert a.rowcount==b.rowcount==d.rowcount==1
+      init=c.execute(SQL[0],(nonce,'alpha','777','put',2,'777',expected_version,before,'alpha','[]',expected_history))
+      a=c.execute(SQL[1],(8,after,2,'777',expected_version,before,'alpha','[]',expected_history))
+      b=c.execute(SQL[2],(wh,hist,2,'alpha','[]',expected_history,'777',8,after))
+      done=c.execute(SQL[3],('777',8,after,'alpha',wh,hist,nonce))
+      assert init.rowcount==a.rowcount==b.rowcount==done.rowcount==1
 def snap(c):
     return (c.execute('select version,state_json from saves').fetchall(),c.execute('select clan_id,storage_json,history_json from clan_meta order by clan_id').fetchall(),c.execute('select id,operation,ok from clan_warehouse_ops_v2').fetchall())
 db=make_db()
