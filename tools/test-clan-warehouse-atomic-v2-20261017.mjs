@@ -42,11 +42,16 @@ function mockDb(bag=[],warehouse=[]){
             if(ok){m.storage_json=nextStorage;m.history_json=nextHistory;m.updated_at=time}
             out.push({meta:{changes:ok?1:0}});
           }else if(sql.startsWith('INSERT INTO clan_warehouse_ops_v2')){
-            const [opId,cid,actor,operation,ts,owner,nextVersion,nextRaw,clanId,nextStore,nextHistory]=a;
+            const [opId,cid,actor,operation,ts,owner,oldVersion,oldRaw,clanId,oldStore,oldHistory]=a;
             const save=this.data.saves[owner],m=this.data.meta[clanId];
             if(this.data.ops[opId])throw Error('UNIQUE: repeated operation ID');
-            if(!(save&&save.version===nextVersion&&save.state_json===nextRaw&&m&&m.storage_json===nextStore&&m.history_json===nextHistory))throw Error('CHECK failed, rollback');
+            if(!(save&&save.version===oldVersion&&save.state_json===oldRaw&&m&&m.storage_json===oldStore&&m.history_json===oldHistory))throw Error('CHECK(old) failed, rollback');
             this.data.ops[opId]={id:opId,actor_id:actor,operation,completed_at:ts,ok:1};out.push({meta:{changes:1}});
+          }else if(sql.startsWith('UPDATE clan_warehouse_ops_v2 SET ok=')){
+            const [owner,nextVersion,nextRaw,clanId,newStore,newHistory,opId]=a;
+            const save=this.data.saves[owner],m=this.data.meta[clanId],op=this.data.ops[opId];
+            if(!(op&&save&&save.version===nextVersion&&save.state_json===nextRaw&&m&&m.storage_json===newStore&&m.history_json===newHistory))throw Error('CHECK(new) failed, rollback');
+            out.push({meta:{changes:1}});
           }else throw Error('Unexpected batch SQL: '+sql);
         }
         return out;
