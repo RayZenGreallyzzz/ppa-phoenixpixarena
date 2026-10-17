@@ -6,6 +6,7 @@ on:
       - 'build.mjs'
       - 'gateway/online-client.js'
       - 'tools/test-clan-v2-client-integration-20261017.mjs'
+      - 'tools/test-clan-warehouse-v2-pilot-20261017.mjs'
       - 'tools/test-clan-warehouse-atomic-v2-20261017.mjs'
       - 'tools/test-clan-warehouse-atomic-v2-sqlite-20261017.py'
       - '.github/workflows/test-clan-warehouse-atomic-v2-20261017.yml'
@@ -25,6 +26,7 @@ jobs:
       - run: npm run build
       - run: node tools/test-clan-warehouse-atomic-v2-20261017.mjs
       - run: node tools/test-clan-v2-client-integration-20261017.mjs
+      - run: node tools/test-clan-warehouse-v2-pilot-20261017.mjs
       - run: python3 tools/test-clan-warehouse-atomic-v2-sqlite-20261017.py
       - run: node tools/test-clan-only-clear-20261017.mjs
       - run: node tools/test-clan-keeper-failclosed-20261017.mjs
