@@ -1,0 +1,20 @@
+name: Diagnose Magister bag sync
+on:
+  pull_request:
+    paths:
+      - 'tools/diag-magister-bag-20261017.mjs'
+      - '.github/workflows/diag-magister-bag-20261017.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: node tools/diag-magister-bag-20261017.mjs
