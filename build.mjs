@@ -8424,6 +8424,7 @@ const ppaMagisterSendNew="try{"+
   "var ppaSnapshot=Object.assign({},CLAN_LOCAL_STATE,{bag:ppaBagSnapshot});"+
   "f.contentWindow.postMessage({type:'clanState',state:ppaSnapshot},'*');"+
   "PPA_CLAN_BAG_LAST_SYNC=JSON.stringify(ppaBagSnapshot);"+
+  "PPA_CLAN_BAG_WAS_VISIBLE=true;"+
   "}catch(e){try{console.warn('Magister bag display sync:',e)}catch(_){}}";
 if(output.split(ppaMagisterSendOld).length!==2)
   throw new Error('Magister frame postMessage target is not unique');
