@@ -8354,8 +8354,13 @@ output=output.slice(0,ppaV2ConnectedAt)+
   "CLAN_LOCAL_STATE.warehouseV2Pilot=!!state.warehouseV2Pilot;\n  "+output.slice(ppaV2ConnectedAt);
 
 const ppaV2KeeperAccess="clanAccess:clanAccessUi()";
-if(output.split(ppaV2KeeperAccess).length!==2)throw new Error('V2 Keeper state anchor missing');
-output=output.replace(ppaV2KeeperAccess,"clanAccess:clanAccessUi(),warehouseV2Pilot:!!CLAN_LOCAL_STATE.warehouseV2Pilot");
+const ppaV2SendStorageStart=output.indexOf("function sendStorageState(){");
+const ppaV2KeeperAccessAt=output.indexOf(ppaV2KeeperAccess,ppaV2SendStorageStart);
+if(ppaV2SendStorageStart<0||ppaV2KeeperAccessAt<ppaV2SendStorageStart||ppaV2KeeperAccessAt>ppaV2SendStorageStart+5500)
+  throw new Error('V2 Keeper state anchor missing in sendStorageState');
+output=output.slice(0,ppaV2KeeperAccessAt)+
+  "clanAccess:clanAccessUi(),warehouseV2Pilot:!!CLAN_LOCAL_STATE.warehouseV2Pilot"+
+  output.slice(ppaV2KeeperAccessAt+ppaV2KeeperAccess.length);
 
 // Keep disabled for members or unapproved clans; for pilot leader restore the
 // old permissions while still passing clicks to the V2 dispatcher only.
