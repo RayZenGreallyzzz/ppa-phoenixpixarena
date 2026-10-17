@@ -8283,6 +8283,129 @@ for(const [label,needle] of [
 
 /* ======================================================================== */
 
+/* === CLAN WAREHOUSE V2 · LEADER OPT-IN · ONE ATOMIC SERVER MOVE ======== */
+// Deliberately keep legacy storageMove('clan') blocked. The only permitted
+// entry point is the dedicated parent dispatcher below, and only when the
+// authenticated leader has explicitly opted in to the server pilot.
+const ppaV2ParentTransfer=String.raw`
+var PPA_CLAN_V2_BUSY=false;
+function ppaClanStorageTransferV2(direction,idx,source,expected){
+  if(!CLAN_LOCAL_STATE.warehouseV2Pilot){try{showPickup('Клановый склад сейчас только для просмотра','#ffcf72')}catch(_){};return;}
+  if(PPA_CLAN_V2_BUSY){try{showPickup('Подожди завершения предыдущего переноса','#ffcf72')}catch(_){};return;}
+  if(typeof window.PPA_CLAN_STORAGE_HANDLER!=='function'){try{showPickup('Клановый сервер не подключён','#ff7777')}catch(_){};return;}
+  idx=Number(idx);
+  if(!Number.isInteger(idx)||idx<0||!['put','take'].includes(direction)){try{showPickup('Ошибка выбора предмета','#ff7777')}catch(_){};return;}
+  var canonical=window.PPA_SERVER_CLAN_STATE&&window.PPA_SERVER_CLAN_STATE.storage&&window.PPA_SERVER_CLAN_STATE.storage.items;
+  if(direction==='take'&&!Array.isArray(canonical)){try{showPickup('Склад ещё не синхронизирован с сервером','#ff7777')}catch(_){};return;}
+  var from=direction==='put'?(INV.bag||[]):canonical;
+  var real=from&&from[idx];
+  if(!real){try{showPickup('Предмет изменился. Переоткрой склад','#ff7777')}catch(_){};return;}
+  if(expected){
+    if(expected.uid&&String(expected.uid)!==String(real.uid||'')){try{showPickup('Список изменился. Переоткрой склад','#ff7777')}catch(_){};return;}
+    if(expected.name&&String(expected.name)!==String(real.name||'')){try{showPickup('Список изменился. Переоткрой склад','#ff7777')}catch(_){};return;}
+    if(expected.count!=null&&Number(expected.count)!==Number(real.count==null?(real.qty==null?1:real.qty):real.count)){try{showPickup('Количество изменилось. Переоткрой склад','#ff7777')}catch(_){};return;}
+  }
+  var requestId='w2_'+(window.crypto&&typeof window.crypto.randomUUID==='function'?
+    window.crypto.randomUUID():Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,18));
+  var item={uid:String(real.uid||''),name:String(real.name||''),kind:String(real.kind||''),
+    refId:String(real.refId||''),slot:String(real.slot||''),rarity:String(real.rarity||''),
+    classKey:String(real.classKey||''),petName:String(real.petName||''),
+    enh:Number(real.enh||0),level:Number(real.level||real.lvl||0),
+    count:Number(real.count==null?(real.qty==null?1:real.qty):real.count)};
+  var req={action:direction,requestId:requestId,item:item,source:source||'keeper'};
+  if(direction==='put')req.bagIndex=idx;else req.storageIndex=idx;
+  PPA_CLAN_V2_BUSY=true;
+  try{showPickup('Сохраняю и проверяю предмет на сервере…','#e9c579')}catch(_){}
+  Promise.resolve().then(function(){return window.PPA_CLAN_STORAGE_HANDLER(req)}).then(function(r){
+    if(!r||!r.ok)throw new Error(r&&r.message||'Сервер не подтвердил перенос');
+    try{showPickup(r.message||'Перенос подтверждён. Загружаю облачный сейв…','#8dff9a')}catch(_){}
+    // Never mutate INV.bag or INV.storage.clan here. The newly committed D1
+    // state is authoritative and will be loaded by a full reload.
+    location.reload();
+  }).catch(function(e){
+    PPA_CLAN_V2_BUSY=false;
+    try{showPickup('Клановый склад: '+String(e&&e.message||e||'ошибка'),'#ff7777')}catch(_){}
+    // A cloud-save/version conflict requires reloading the authoritative
+    // inventory before another click; retain the old local item meanwhile.
+    setTimeout(function(){location.reload()},1800);
+  });
+}
+`;
+const ppaV2StorageFunctionAnchor="function storageMove(mode,direction,idx,source){if(mode==='clan'){try{showPickup('Клановый склад временно только для просмотра','#ffcf72')}catch(_){};return;}";
+if(output.split(ppaV2StorageFunctionAnchor).length!==2)throw new Error('V2 parent function target missing');
+output=output.replace(ppaV2StorageFunctionAnchor,ppaV2ParentTransfer+"\n"+ppaV2StorageFunctionAnchor);
+
+// Never call storageMove('clan'). It contains stale local mutation code.
+const ppaV2PutTakeOld="if(d.mode==='clan'||d.source==='clanMenu'){try{showPickup('Клановый склад временно только для просмотра','#ffcf72')}catch(_){}}";
+const ppaV2PutTakeNew="if(d.mode==='clan'||d.source==='clanMenu'){ppaClanStorageTransferV2(d.direction,d.idx,d.source,d.item)}";
+if(output.split(ppaV2PutTakeOld).length!==2)throw new Error('V2 message dispatcher missing');
+output=output.replace(ppaV2PutTakeOld,ppaV2PutTakeNew);
+
+// Client/server opt-in is visible in both NPC windows and never enabled by
+// locally cached stale clan state.
+const ppaV2StateAnchor="CLAN_LOCAL_STATE.connected=true;";
+if(output.split(ppaV2StateAnchor).length<2)throw new Error('V2 state update anchor missing');
+const ppaV2StateFunctionStart="window.PPA_SET_CLAN_STATE=function(state){";
+const ppaV2StateStart=output.indexOf(ppaV2StateFunctionStart);
+if(ppaV2StateStart<0)throw new Error('V2 state setter missing');
+const ppaV2ConnectedAt=output.indexOf(ppaV2StateAnchor,ppaV2StateStart);
+if(ppaV2ConnectedAt<0||ppaV2ConnectedAt>ppaV2StateStart+200)throw new Error('V2 state setter structure changed');
+output=output.slice(0,ppaV2ConnectedAt)+
+  "CLAN_LOCAL_STATE.warehouseV2Pilot=!!state.warehouseV2Pilot;\n  "+output.slice(ppaV2ConnectedAt);
+
+const ppaV2KeeperAccess="clanAccess:clanAccessUi()";
+if(output.split(ppaV2KeeperAccess).length!==2)throw new Error('V2 Keeper state anchor missing');
+output=output.replace(ppaV2KeeperAccess,"clanAccess:clanAccessUi(),warehouseV2Pilot:!!CLAN_LOCAL_STATE.warehouseV2Pilot");
+
+// Keep disabled for members or unapproved clans; for pilot leader restore the
+// old permissions while still passing clicks to the V2 dispatcher only.
+if(output.split(ppaClanKeeperDisabled).length!==2)throw new Error('Keeper disabled marker missing');
+output=output.replace(ppaClanKeeperDisabled,
+  ppaEscapeSrcdocCode("if(!ST.warehouseV2Pilot){put.disabled=true;putAll.disabled=true;take.disabled=true;takeAll.disabled=true;}else{"+
+  "put.disabled=!canPut;putAll.disabled=true;take.disabled=!canTake;takeAll.disabled=true;}"));
+const ppaV2MasterBlock="flash(&#x27;Клановый склад временно только для просмотра&#x27;);return;";
+if(output.split(ppaV2MasterBlock).length!==2)throw new Error('Clan Master read-only callback missing');
+output=output.replace(ppaV2MasterBlock,
+  ppaEscapeSrcdocCode("if(!STATE.warehouseV2Pilot){flash('Клановый склад сейчас только для просмотра');return;}"));
+
+// The reset control remains available to the leader. Add a separate explicit
+// 2-tap pilot toggle. Only the D1 server can enable it for that clan's leader.
+const ppaV2HeroReset=ppaClanResetButton;
+const ppaV2HeroPilot=ppaEscapeSrcdocCode(
+  "(isLeader()?'<button type=\"button\" class=\"action\" id=\"clanV2Pilot\" style=\"margin-top:8px;background:#243948;border:1px solid #6b9dbc;color:#e1f6ff\">'+"+
+  "(STATE.warehouseV2Pilot?'ОТКЛЮЧИТЬ ТЕСТ СКЛАДА V2':'ВКЛЮЧИТЬ ТЕСТ СКЛАДА V2')+'</button>':'')+");
+if(output.split(ppaV2HeroReset).length!==2)throw new Error('V2 leader pilot hero anchor missing');
+output=output.replace(ppaV2HeroReset,ppaV2HeroReset+"\n"+ppaV2HeroPilot);
+
+const ppaV2ResetHandler=ppaEscapeSrcdocCode("  var reset=document.getElementById('clanClearStorage');");
+const ppaV2PilotHandler=ppaEscapeSrcdocCode(
+  "  var v2=document.getElementById('clanV2Pilot');\n"+
+  "  if(v2)v2.onclick=function(){\n"+
+  "    if(v2.dataset.armed!=='yes'){\n"+
+  "      v2.dataset.armed='yes';v2.textContent='ПОДТВЕРДИТЬ '+(STATE.warehouseV2Pilot?'ОТКЛЮЧЕНИЕ':'ТЕСТ V2 · ТОЛЬКО ГЛАВА');return;\n"+
+  "    }\n"+
+  "    v2.disabled=true;parent.postMessage({type:'clanWarehousePilot',enable:!STATE.warehouseV2Pilot},'*');\n"+
+  "  };\n");
+if(output.split(ppaV2ResetHandler).length!==2)throw new Error('V2 pilot button script anchor missing');
+output=output.replace(ppaV2ResetHandler,ppaV2PilotHandler+ppaV2ResetHandler);
+
+const ppaV2ResetMsg="else if(d.type==='clanClearStorage'){";
+const ppaV2PilotMsg="else if(d.type==='clanWarehousePilot'){"+
+ " if(typeof window.PPA_CLAN_HANDLER!=='function'){clanNotice('Сервер клана не подключён');return;}"+
+ " Promise.resolve(window.PPA_CLAN_HANDLER({action:'warehousePilot',confirm:d.enable?'ENABLE_CLAN_PILOT_V2':'DISABLE_CLAN_PILOT_V2'}))"+
+ " .then(function(r){if(!r||!r.ok){clanNotice(r&&r.message||'Тест не включён');return;}"+
+ " clanNotice(r.message||'Режим склада изменён');location.reload();})"+
+ " .catch(function(e){clanNotice(String(e&&e.message||e||'Ошибка включения'));});"+
+ "}";
+if(output.split(ppaV2ResetMsg).length!==2)throw new Error('V2 parent pilot route missing');
+output=output.replace(ppaV2ResetMsg,ppaV2PilotMsg+ppaV2ResetMsg);
+
+// Defend against accidental missing patches.
+for(const needle of ['function ppaClanStorageTransferV2(','type:&#x27;clanWarehousePilot&#x27;','warehouseV2Pilot:!!CLAN_LOCAL_STATE.warehouseV2Pilot',
+'ENABLE_CLAN_PILOT_V2','PPA_CLAN_V2_BUSY','putAll.disabled=true;take.disabled=!canTake;takeAll.disabled=true;'])
+  if(!output.includes(needle))throw new Error('V2 client integration missing '+needle);
+/* ======================================================================== */
+
 /* === RUNTIME BUILD AUDIT ================================================= */
 {
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
