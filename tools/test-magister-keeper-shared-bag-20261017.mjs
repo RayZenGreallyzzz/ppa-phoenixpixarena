@@ -51,7 +51,7 @@ n=posts.clan.length;
 timers[0].fn();
 assert.equal(posts.clan.length,n,'unchanged bag does not constantly rerender');
 frame.style.display='none';
-inv.bag.splice(0);
+inv.bag.shift();
 timers[0].fn();
 assert.equal(posts.clan.length,n,'hidden Magister is not refreshed');
 frame.style.display='block';
