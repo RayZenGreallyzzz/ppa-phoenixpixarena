@@ -256,6 +256,7 @@ async function clanWarehouseTransferV2(env,id,p,b){
   const real=from[index];
   if(!warehouseV2Same(real,b.item))
     warehouseV2Fail('Выбранный предмет или количество уже изменились на сервере. Обнови игру.');
+  if(!Number.isInteger(warehouseV2Qty(real))||warehouseV2Qty(real)<1||warehouseV2Qty(real)>999999999)warehouseV2Fail('Некорректное количество предметов. Ничего не перемещено.');
   if(trLocked(real))warehouseV2Fail('Этот предмет запрещено передавать.',403);
   if(a==='take'){
     const allow=pp.allowed&&typeof pp.allowed==='object'?pp.allowed:{};
