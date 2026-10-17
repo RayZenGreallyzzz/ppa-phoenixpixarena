@@ -8414,6 +8414,57 @@ for(const needle of ['function ppaClanStorageTransferV2(','type:&#x27;clanWareho
   if(!output.includes(needle))throw new Error('V2 client integration missing '+needle);
 /* ======================================================================== */
 
+/* === CLAN MAGISTER · FRESH BAG SNAPSHOT FROM SAME SOURCE AS KEEPER ======== */
+// This UI-only change never saves or edits inventory. Both Keeper and Clan
+// Master must render the same INV.bag instead of a stale clan-state mirror.
+const ppaMagisterSendOld="try{f.contentWindow.postMessage({type:'clanState',state:CLAN_LOCAL_STATE},'*')}catch(_){}";
+const ppaMagisterSendNew="try{"+
+  "var ppaBagSnapshot=Array.isArray(INV.bag)?INV.bag.map(storageItemForUi):[];"+
+  "CLAN_LOCAL_STATE.bag=ppaBagSnapshot;"+
+  "var ppaSnapshot=Object.assign({},CLAN_LOCAL_STATE,{bag:ppaBagSnapshot});"+
+  "f.contentWindow.postMessage({type:'clanState',state:ppaSnapshot},'*');"+
+  "PPA_CLAN_BAG_LAST_SYNC=JSON.stringify(ppaBagSnapshot);"+
+  "PPA_CLAN_BAG_WAS_VISIBLE=true;"+
+  "}catch(e){try{console.warn('Magister bag display sync:',e)}catch(_){}}";
+if(output.split(ppaMagisterSendOld).length!==2)
+  throw new Error('Magister frame postMessage target is not unique');
+output=output.replace(ppaMagisterSendOld,ppaMagisterSendNew);
+
+// Recheck after opening because some player cloud inventory is hydrated
+// asynchronously. Repaint only when bag values actually change, never on
+// every timer tick (which would reset the player's scroll position).
+const ppaMagisterSendAnchor="function sendClanState(){";
+if(output.split(ppaMagisterSendAnchor).length!==2)
+  throw new Error('Magister sender anchor not unique');
+output=output.replace(ppaMagisterSendAnchor,
+  "var PPA_CLAN_BAG_LAST_SYNC='';var PPA_CLAN_BAG_WAS_VISIBLE=false;\n"+
+  ppaMagisterSendAnchor);
+const ppaMagisterNoticeAnchor="function clanNotice(text){";
+if(output.split(ppaMagisterNoticeAnchor).length!==2)
+  throw new Error('Magister notice anchor not unique');
+output=output.replace(ppaMagisterNoticeAnchor,
+  "setInterval(function(){"+
+  " try{var f=clanFrameEl();"+
+  " if(!f||!f.contentWindow||f.style.display==='none'){PPA_CLAN_BAG_WAS_VISIBLE=false;return;}"+
+  " var current=Array.isArray(INV.bag)?INV.bag.map(storageItemForUi):[];"+
+  " var fingerprint=JSON.stringify(current);"+
+  " if(!PPA_CLAN_BAG_WAS_VISIBLE||fingerprint!==PPA_CLAN_BAG_LAST_SYNC){"+
+  "   PPA_CLAN_BAG_WAS_VISIBLE=true;sendClanState();"+
+  " }"+
+  " }catch(e){try{console.warn('Magister display refresh:',e)}catch(_){}}"+
+  "},1300);\n"+
+  ppaMagisterNoticeAnchor);
+
+// Live mode still transfers only by V2 server request. No old client mutation
+// and no stale save upload have been re-enabled.
+for(const required of ['PPA_CLAN_BAG_LAST_SYNC=JSON.stringify(ppaBagSnapshot)',
+  "if(!PPA_CLAN_BAG_WAS_VISIBLE||fingerprint!==PPA_CLAN_BAG_LAST_SYNC)",
+  "if(mode==='clan'){try{showPickup('Клановый склад временно только для просмотра'",
+  "function ppaClanStorageTransferV2("]){
+  if(!output.includes(required))throw new Error('Missing Magister safety guard '+required);
+}
+/* ======================================================================== */
+
 /* === RUNTIME BUILD AUDIT ================================================= */
 {
   const worldCombat=fs.readFileSync(path.join(ROOT,'gateway/world-combat-client.js'),'utf8');
