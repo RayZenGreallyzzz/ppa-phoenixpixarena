@@ -8364,10 +8364,13 @@ output=output.slice(0,ppaV2KeeperAccessAt)+
 
 // Keep disabled for members or unapproved clans; for pilot leader restore the
 // old permissions while still passing clicks to the V2 dispatcher only.
-if(output.split(ppaClanKeeperDisabled).length!==2)throw new Error('Keeper disabled marker missing');
-output=output.replace(ppaClanKeeperDisabled,
-  ppaEscapeSrcdocCode("if(!ST.warehouseV2Pilot){put.disabled=true;putAll.disabled=true;take.disabled=true;takeAll.disabled=true;}else{"+
-  "put.disabled=!canPut;putAll.disabled=true;take.disabled=!canTake;takeAll.disabled=true;}"));
+const ppaV2KeeperFuncStart=output.indexOf(ppaEscapeSrcdocCode("function updateClanButtons(){"));
+const ppaV2KeeperSetAt=output.lastIndexOf(ppaClanKeeperDisabled);
+if(ppaV2KeeperFuncStart<0||ppaV2KeeperSetAt<ppaV2KeeperFuncStart||ppaV2KeeperSetAt>ppaV2KeeperFuncStart+4500)
+  throw new Error('Keeper disabled marker missing in updateClanButtons');
+const ppaV2KeeperPilot=ppaEscapeSrcdocCode("if(!ST.warehouseV2Pilot){put.disabled=true;putAll.disabled=true;take.disabled=true;takeAll.disabled=true;}else{"+
+  "put.disabled=!canPut;putAll.disabled=true;take.disabled=!canTake;takeAll.disabled=true;}");
+output=output.slice(0,ppaV2KeeperSetAt)+ppaV2KeeperPilot+output.slice(ppaV2KeeperSetAt+ppaClanKeeperDisabled.length);
 const ppaV2MasterBlock="flash(&#x27;Клановый склад временно только для просмотра&#x27;);return;";
 if(output.split(ppaV2MasterBlock).length!==2)throw new Error('Clan Master read-only callback missing');
 output=output.replace(ppaV2MasterBlock,
