@@ -8229,6 +8229,58 @@ if(!ppaPatchRegex(
   "}"
 ))throw new Error('Clan reset parent message route not found');
 for(const token of ['clanClearStorage','ОЧИСТИТЬ ВЕСЬ КЛАНОВЫЙ СКЛАД','Клановый склад временно только для просмотра'])if(!output.includes(token))throw new Error('Clan warehouse safety patch missing '+token);
+
+// Defense in depth: the video demonstrates that a Keeper click still changes
+// local inventory even after the first runtime-function guard. Prevent the
+// message at the parent dispatcher and disable the actual iframe buttons.
+const ppaClanKeeperEnabled=ppaEscapeSrcdocCode(
+  "put.disabled=!canPut;putAll.disabled=!canPut;take.disabled=!canTake;takeAll.disabled=!canTake;");
+const ppaClanKeeperDisabled=ppaEscapeSrcdocCode(
+  "put.disabled=true;putAll.disabled=true;take.disabled=true;takeAll.disabled=true;");
+if(output.split(ppaClanKeeperEnabled).length!==2)
+  throw new Error('Keeper rights button wiring not found exactly once');
+output=output.replace(ppaClanKeeperEnabled,ppaClanKeeperDisabled);
+const ppaClanMenuMoveNeedle=ppaEscapeSrcdocCode(
+  "if(ev&&ev.stopPropagation)ev.stopPropagation();\n    const side=b.dataset.side");
+const ppaClanMenuMoveBlocked=ppaEscapeSrcdocCode(
+  "if(ev&&ev.stopPropagation)ev.stopPropagation();\n"+
+  "    flash('Клановый склад временно только для просмотра');return;\n"+
+  "    const side=b.dataset.side");
+if(output.split(ppaClanMenuMoveNeedle).length!==2)
+  throw new Error('Clan Master move callback not found exactly once');
+output=output.replace(ppaClanMenuMoveNeedle,ppaClanMenuMoveBlocked);
+
+// Critical: even a stale/rogue frame cannot trigger the local storageMove
+// mutation via postMessage. Retain normal personal and premium operations.
+const ppaMoveDispatcherOld="else if(d.type==='storageMove'){storageMove(d.mode,d.direction,d.idx,d.source);}";
+const ppaMoveDispatcherNew="else if(d.type==='storageMove'){"+
+  "if(d.mode==='clan'||d.source==='clanMenu'){try{showPickup('Клановый склад временно только для просмотра','#ffcf72')}catch(_){}}"+
+  "else storageMove(d.mode,d.direction,d.idx,d.source);}";
+if(output.split(ppaMoveDispatcherOld).length!==2)
+  throw new Error('Parent storageMove route not found exactly once');
+output=output.replace(ppaMoveDispatcherOld,ppaMoveDispatcherNew);
+const ppaMoveAllDispatcherOld="else if(d.type==='storageMoveAll'){storageMoveAll(d.mode,d.direction,d.source);}";
+const ppaMoveAllDispatcherNew="else if(d.type==='storageMoveAll'){"+
+  "if(d.mode==='clan'){try{showPickup('Клановый склад временно только для просмотра','#ffcf72')}catch(_){}}"+
+  "else storageMoveAll(d.mode,d.direction,d.source);}";
+if(output.split(ppaMoveAllDispatcherOld).length!==2)
+  throw new Error('Parent storageMoveAll route not found exactly once');
+output=output.replace(ppaMoveAllDispatcherOld,ppaMoveAllDispatcherNew);
+const ppaSortDispatcherOld="else if(d.type==='storageSort'){storageSort(d.mode,d.by);}";
+const ppaSortDispatcherNew="else if(d.type==='storageSort'){if(d.mode==='clan'){"+
+  "try{showPickup('Сортировка кланового склада временно отключена','#ffcf72')}catch(_){}}"+
+  "else storageSort(d.mode,d.by);}";
+if(output.split(ppaSortDispatcherOld).length!==2)
+  throw new Error('Parent storageSort route not found exactly once');
+output=output.replace(ppaSortDispatcherOld,ppaSortDispatcherNew);
+for(const [label,needle] of [
+  ['Keeper disabled',ppaClanKeeperDisabled],
+  ['Clan Master click blocked',ppaClanMenuMoveBlocked],
+  ['Parent put/take denied',ppaMoveDispatcherNew],
+  ['Parent mass move denied',ppaMoveAllDispatcherNew],
+  ['Parent sorting denied',ppaSortDispatcherNew]
+])if(!output.includes(needle))throw new Error('Emergency clan warehouse guard missing: '+label);
+
 /* ======================================================================== */
 
 /* === RUNTIME BUILD AUDIT ================================================= */
