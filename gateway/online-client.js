@@ -263,9 +263,18 @@
       req=Object.assign({},req||{});
       if(req.action==='acceptMember')req.action='acceptApplication';
       if(req.action==='putMany'||req.action==='takeMany'){
-        var items=Array.isArray(req.items)?req.items:[],one=req.action==='putMany'?'put':'take',last={ok:true};
-        for(var i=0;i<items.length;i++)last=await clanCall({action:one,item:items[i],source:req.source||'keeper'});
-        return last;
+        return {ok:false,message:'Массовое перемещение клановых вещей отключено для защиты от дублирования.'};
+      }
+      if(req.action==='put'||req.action==='take'){
+        // Flush the CURRENT local bag to D1 first so purchases and other actions
+        // are never lost. Fail closed on cloud-save CAS conflict.
+        await flushClanTradeSave();
+        var moved=await PPA.ppaClanAction(req);
+        // The D1 transfer just advanced saves.version. Do NOT push clan state
+        // into the old game's inventory or cloud-save the stale snapshot.
+        // The parent performs a full authoritative reload on success.
+        if(moved&&moved.ok&&window.PPA_CLOUD)window.PPA_CLOUD.ready=false;
+        return moved;
       }
       var r=await clanCall(req);
       if(r&&r.balances&&Number.isFinite(Number(r.balances.gold)))INV.gold=Math.max(0,Number(r.balances.gold));
