@@ -8421,7 +8421,7 @@ const ppaMagisterSendOld="try{f.contentWindow.postMessage({type:'clanState',stat
 const ppaMagisterSendNew="try{"+
   "var ppaBagSnapshot=Array.isArray(INV.bag)?INV.bag.map(storageItemForUi):[];"+
   "CLAN_LOCAL_STATE.bag=ppaBagSnapshot;"+
-  "var ppaSnapshot=Object.assign({},CLAN_LOCAL_STATE,{bag:ppaBagSnapshot});"+
+  "var ppaSnapshot=Object.assign({},CLAN_LOCAL_STATE,{bag:ppaBagSnapshot,ppaClanBagSeq:++PPA_CLAN_BAG_SEND_SEQ});"+
   "f.contentWindow.postMessage({type:'clanState',state:ppaSnapshot},'*');"+
   "PPA_CLAN_BAG_LAST_SYNC=JSON.stringify(ppaBagSnapshot);"+
   "PPA_CLAN_BAG_WAS_VISIBLE=true;"+
@@ -8437,7 +8437,8 @@ const ppaMagisterSendAnchor="function sendClanState(){";
 if(output.split(ppaMagisterSendAnchor).length!==2)
   throw new Error('Magister sender anchor not unique');
 output=output.replace(ppaMagisterSendAnchor,
-  "var PPA_CLAN_BAG_LAST_SYNC='';var PPA_CLAN_BAG_WAS_VISIBLE=false;\n"+
+  "var PPA_CLAN_BAG_LAST_SYNC='';var PPA_CLAN_BAG_WAS_VISIBLE=false;"+
+  "var PPA_CLAN_BAG_SEND_SEQ=0;var PPA_CLAN_BAG_ACK_SEQ=0;\n"+
   ppaMagisterSendAnchor);
 const ppaMagisterNoticeAnchor="function clanNotice(text){";
 if(output.split(ppaMagisterNoticeAnchor).length!==2)
@@ -8448,17 +8449,37 @@ output=output.replace(ppaMagisterNoticeAnchor,
   " if(!f||!f.contentWindow||f.style.display==='none'){PPA_CLAN_BAG_WAS_VISIBLE=false;return;}"+
   " var current=Array.isArray(INV.bag)?INV.bag.map(storageItemForUi):[];"+
   " var fingerprint=JSON.stringify(current);"+
-  " if(!PPA_CLAN_BAG_WAS_VISIBLE||fingerprint!==PPA_CLAN_BAG_LAST_SYNC){"+
+  " if(!PPA_CLAN_BAG_WAS_VISIBLE||fingerprint!==PPA_CLAN_BAG_LAST_SYNC||PPA_CLAN_BAG_ACK_SEQ!==PPA_CLAN_BAG_SEND_SEQ){"+
   "   PPA_CLAN_BAG_WAS_VISIBLE=true;sendClanState();"+
   " }"+
   " }catch(e){try{console.warn('Magister display refresh:',e)}catch(_){}}"+
   "},1300);\n"+
   ppaMagisterNoticeAnchor);
 
+// A postMessage() call can succeed before an iframe installs its event listener.
+// Only the frame may confirm receipt *after* it rendered the updated bag.
+// Until the confirmation arrives, the 1300ms refresh retries the same live bag.
+const ppaClanIFrameStateOld=ppaEscapeSrcdocCode("if(d.type==='clanState'){STATE=Object.assign(STATE,d.state||{});render()}");
+const ppaClanIFrameStateNew=ppaEscapeSrcdocCode(
+  "if(d.type==='clanState'){STATE=Object.assign(STATE,d.state||{});render();"+
+  "parent.postMessage({type:'clanBagAck',seq:Number(STATE.ppaClanBagSeq)||0},'*')}");
+if(output.split(ppaClanIFrameStateOld).length!==2)throw new Error('Clan iframe state reception hook not unique');
+output=output.replace(ppaClanIFrameStateOld,ppaClanIFrameStateNew);
+
+const ppaClanReadyOld="else if(d.type==='clanReady'){sendClanState();}";
+const ppaClanReadyNew="else if(d.type==='clanReady'){PPA_CLAN_BAG_ACK_SEQ=0;sendClanState();}"+
+  "else if(d.type==='clanBagAck'){"+
+  "var q=Number(d.seq)||0;"+
+  "if(q>0&&q===PPA_CLAN_BAG_SEND_SEQ)PPA_CLAN_BAG_ACK_SEQ=q;"+
+  "}";
+if(output.split(ppaClanReadyOld).length!==2)throw new Error('Clan parent message acknowledgment hook not unique');
+output=output.replace(ppaClanReadyOld,ppaClanReadyNew);
+
 // Live mode still transfers only by V2 server request. No old client mutation
 // and no stale save upload have been re-enabled.
 for(const required of ['PPA_CLAN_BAG_LAST_SYNC=JSON.stringify(ppaBagSnapshot)',
-  "if(!PPA_CLAN_BAG_WAS_VISIBLE||fingerprint!==PPA_CLAN_BAG_LAST_SYNC)",
+  "PPA_CLAN_BAG_ACK_SEQ!==PPA_CLAN_BAG_SEND_SEQ",
+  "type:&#x27;clanBagAck&#x27;",
   "if(mode==='clan'){try{showPickup('Клановый склад временно только для просмотра'",
   "function ppaClanStorageTransferV2("]){
   if(!output.includes(required))throw new Error('Missing Magister safety guard '+required);

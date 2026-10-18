@@ -1,0 +1,27 @@
+name: Verify Magister iframe bag acknowledgement
+on:
+  pull_request:
+    paths:
+      - 'build.mjs'
+      - 'tools/test-magister-keeper-shared-bag-20261017.mjs'
+      - 'tools/test-magister-bag-ack-20261018.mjs'
+      - '.github/workflows/test-magister-bag-ack-20261018.yml'
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: node --check build.mjs
+      - run: npm run build
+      - run: node tools/test-magister-keeper-shared-bag-20261017.mjs
+      - run: node tools/test-magister-bag-ack-20261018.mjs
+      - run: node tools/test-clan-v2-client-integration-20261017.mjs
+      - run: node tools/test-clan-warehouse-atomic-v2-20261017.mjs
+      - run: python3 tools/test-clan-warehouse-atomic-v2-sqlite-20261017.py
