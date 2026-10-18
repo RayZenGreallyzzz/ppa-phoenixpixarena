@@ -8459,10 +8459,10 @@ output=output.replace(ppaMagisterNoticeAnchor,
 // A postMessage() call can succeed before an iframe installs its event listener.
 // Only the frame may confirm receipt *after* it rendered the updated bag.
 // Until the confirmation arrives, the 1300ms refresh retries the same live bag.
-const ppaClanIFrameStateOld=ppaEscapeSrcdocCode("STATE=Object.assign(STATE,d.state||{});render()");
+const ppaClanIFrameStateOld=ppaEscapeSrcdocCode("if(d.type==='clanState'){STATE=Object.assign(STATE,d.state||{});render()}");
 const ppaClanIFrameStateNew=ppaEscapeSrcdocCode(
-  "STATE=Object.assign(STATE,d.state||{});render();"+
-  "parent.postMessage({type:'clanBagAck',seq:Number(STATE.ppaClanBagSeq)||0},'*')");
+  "if(d.type==='clanState'){STATE=Object.assign(STATE,d.state||{});render();"+
+  "parent.postMessage({type:'clanBagAck',seq:Number(STATE.ppaClanBagSeq)||0},'*')}");
 if(output.split(ppaClanIFrameStateOld).length!==2)throw new Error('Clan iframe state reception hook not unique');
 output=output.replace(ppaClanIFrameStateOld,ppaClanIFrameStateNew);
 
